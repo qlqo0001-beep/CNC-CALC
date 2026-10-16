@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BMT 표식. 적응형 아이콘 108dp 안의 가운데 66dp 에 들어가도록 200 칸 그림을 줄여 놓음 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:scaleX="0.33" android:scaleY="0.33" android:translateX="21" android:translateY="20">
+        <path android:fillColor="#0A4AA6"
+            android:pathData="M50,180 A140,140 0 0,1 190,40 L190,95 A85,85 0 0,0 105,180 Z" />
+        <path android:fillColor="#0A4AA6"
+            android:pathData="M48,52 A24,24 0 1,1 96,52 A24,24 0 1,1 48,52 Z" />
+        <path android:fillColor="#0A4AA6"
+            android:pathData="M138,152 A20,20 0 1,1 178,152 A20,20 0 1,1 138,152 Z" />
+    </group>
+</vector>
