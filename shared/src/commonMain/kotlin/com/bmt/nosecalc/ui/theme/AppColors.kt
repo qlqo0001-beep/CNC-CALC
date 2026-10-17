@@ -39,6 +39,7 @@ data class FeatureColors(val title: List<Color>, val menu: Color)
  * | viewLabelT2 | 4.9 | 9.9 | 뷰어 |
  * | onToast / toast | 12.8 | 13.1 | 토스트 |
  * | info.label · info.value | 6.2 · 9.5 | 6.6 · 11.8 | info.bg |
+ * | warn.label · error.label (띠 머리말 글) | 4.8 · 5.7 | 9.4 · 6.3 | 각 띠 bg |
  */
 @Immutable
 data class AppColors(
@@ -204,8 +205,8 @@ val LightColors = AppColors(
     fieldStart = RoleColors(Color(0xFFFFFBEB), Color(0xFFFDE68A), Color(0xFFD97706), Color(0xFF92400E)),
     fieldEnd = RoleColors(Color(0xFFFFF1F2), Color(0xFFFECDD3), Color(0xFFE11D48), Color(0xFFBE123C)),
     fieldDim = RoleColors(Color(0xFFFEFCE8), Color(0xFFFEF08A), Color(0xFFB45309), Color(0xFF0F172A)),
-    warn = RoleColors(Color(0xFFFFFBEB), Color(0xFFFCD34D), Color(0xFFD97706), Color(0xFF78350F)),
-    error = RoleColors(Color(0xFFFFF1F2), Color(0xFFFDA4AF), Color(0xFFE11D48), Color(0xFF881337)),
+    warn = RoleColors(Color(0xFFFFFBEB), Color(0xFFFCD34D), Color(0xFFB45309), Color(0xFF78350F)),
+    error = RoleColors(Color(0xFFFFF1F2), Color(0xFFFDA4AF), Color(0xFFBE123C), Color(0xFF881337)),
     info = RoleColors(Color(0xFFEFF6FF), Color(0xFFBFDBFE), Color(0xFF1D4ED8), Color(0xFF1E3A8A)),
     toast = Color(0xF21E293B),
     onToast = Color(0xFFFFFFFF),
