@@ -1,5 +1,23 @@
 # 화면 명세 (스토어 스크린샷 기준)
 
+> **화면 글은 한글(사용자 결정 10-17).** 아래 명세의 영어 글(원본 그대로)은 만들 때 이 표대로 바꾼다. 그대로 두는 것은
+> NC·치수 기호(X · Z · T1 · R · D · L · G00~G03 · G41/G42/G40 · G76 · G12.1 …)와 단위(mm, °, RPM). 표에 없는 글도 같은 원칙으로 한글로.
+>
+> | 원본 | 화면 |
+> |---|---|
+> | CNC TAPER CALC (헤더) | CNC 테이퍼 계산 — 부제 "단일·복합 테이퍼 노즈R 보정" |
+> | APPS (헤더 버튼) · APP MENU · CLOSE | 메뉴 · 메뉴 · 닫기 |
+> | 메뉴 카드: MATERIAL & CUTTING CALC · CNC ROUND CALC · CNC Master SIMULATOR · RIGHT TRIANGLE CALC · TURN-MILL POLAR POLYGON · CNC THREAD CALC | 재료·절삭조건 계산 · 라운드 R 계산 · G코드 시뮬레이터 · 직각삼각형 계산 · 턴밀 극좌표 다각가공 · 나사 G76 계산 (테이퍼는 "테이퍼 계산"). 부제는 지금 한글 그대로 |
+> | 기능 헤더 제목 | 메뉴 카드 제목과 같게(테이퍼만 "CNC 테이퍼 계산") |
+> | Outer Dia · Inner Dia · Outer Groove · Outer Double Taper · Inner Double Taper | 외경 · 내경 · 외경 홈 · 외경 2중 테이퍼 · 내경 2중 테이퍼 |
+> | ⏩ 정방향 가공(Forward Cut) · 역방향전환(Rev.) | ⏩ 정방향 가공 · 역방향 전환 (반대는 역방향 가공 · 정방향 전환) |
+> | TYPE n · TYPE 다시 고르기 · SELECT MACHINING TYPE | 형상 n · 형상 다시 고르기 · 가공 형태 선택 |
+> | CNC ROUND CALC · Main R · Corner R | 라운드 R 계산 · 주 R · 모서리 R |
+> | RIGHT TRIANGLE CALC | 직각삼각형 계산 |
+> | 결과 카드의 대문자 라벨(POSITION 등)·준비 중 화면·도움말·토스트·경고 | 한글로(예: POSITION → 위치) |
+> | 노즈 R 칸 | 노즈 R (공구 반경, mm) |
+> | NC 프로그램 고르기(테이퍼) | G41/G42 보정 프로그램 · 직접 보정 (G40) |
+
 - **근거**: `docs/store/01.jpg`~`12.jpg`, `11.png`. "CNC Master CALC" 스토어 스크린샷 12장과 장마다 낸 분석이다. 애매한 곳은 원본을 다시 열거나 잘라서 확인했다.
 - **표기**
   - **확인**: 사진에 직접 보인다.

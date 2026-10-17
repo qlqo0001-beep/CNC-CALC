@@ -1,0 +1,191 @@
+package com.bmt.nosecalc.ui
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
+import com.bmt.nosecalc.Feature
+import com.bmt.nosecalc.ui.theme.AppTheme
+
+/**
+ * 기능 헤더(1.4): 왼쪽 영문 제목(기능색·그라데이션) + 한글 부제, 오른쪽 원형 버튼들.
+ * dimmed = APP MENU 가 열려 헤더가 어두워진 상태(01).
+ */
+@Composable
+fun FeatureHeader(feature: Feature, dimmed: Boolean = false, actions: @Composable RowScope.() -> Unit) {
+    val c = AppTheme.colors
+    val bg by animateColorAsState(if (dimmed) c.headerDim else c.page)
+    Column(Modifier.fillMaxWidth().background(bg).windowInsetsPadding(WindowInsets.statusBars)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 66.dp).padding(start = 17.dp, end = 18.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                HeaderTitle(feature)
+                Spacer(Modifier.height(3.dp))
+                BasicText(
+                    feature.sub,
+                    style = TextStyle(color = c.textBody, fontFamily = AppTheme.sans, fontWeight = FontWeight.Medium),
+                    maxLines = 1,
+                    autoSize = TextAutoSize.StepBased(10.sp, 12.5.sp, 0.5.sp),
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(13.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(if (dimmed) Color.Transparent else c.lineHeader.copy(alpha = 0.6f)))
+    }
+}
+
+@Composable
+private fun HeaderTitle(f: Feature) {
+    val colors = AppTheme.colors.features.getValue(f).title
+    val lines = f.title.count { it == '\n' } + 1
+    val size = TextAutoSize.StepBased(12.sp, f.titleSize.sp, 0.5.sp)
+    val style = TextStyle(
+        fontFamily = AppTheme.sans,
+        fontWeight = f.titleWeight,
+        letterSpacing = f.titleTracking.em,
+        lineHeight = 1.18.em,
+        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+    )
+    when {
+        f.accentFrom >= 0 -> BasicText(
+            buildAnnotatedString {
+                withStyle(SpanStyle(color = colors[0])) { append(f.title.substring(0, f.accentFrom)) }
+                withStyle(SpanStyle(color = colors[1])) { append(f.title.substring(f.accentFrom)) }
+            },
+            style = style,
+            maxLines = lines,
+            autoSize = size,
+        )
+        colors.size == 1 -> BasicText(f.title, style = style.copy(color = colors[0]), maxLines = lines, autoSize = size)
+        else -> BasicText(f.title, style = style.copy(brush = Brush.horizontalGradient(colors)), maxLines = lines, autoSize = size)
+    }
+}
+
+/** 헤더 원형 아이콘 버튼(지름 38dp). glow = 도움말 버튼처럼 민트 링 + 빛 번짐 */
+@Composable
+fun CircleIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    tint: Color = AppTheme.colors.icon,
+    glow: Boolean = false,
+    size: Dp = 39.dp,
+) {
+    val c = AppTheme.colors
+    val ring = c.helpRing
+    Box(
+        Modifier
+            .size(size)
+            .then(
+                if (glow) Modifier.drawBehind {
+                    val r = this.size.minDimension * 0.78f
+                    drawCircle(Brush.radialGradient(listOf(ring.copy(alpha = 0.55f), ring.copy(alpha = 0f)), center, r), r)
+                } else Modifier,
+            )
+            .shadow(if (c.dark) 0.dp else 2.dp, CircleShape)
+            .clip(CircleShape)
+            .background(c.circleBg)
+            .then(
+                when {
+                    glow -> Modifier.border(2.dp, ring, CircleShape)
+                    c.dark -> Modifier.border(1.dp, c.lineCard, CircleShape)
+                    else -> Modifier
+                },
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription, Modifier.size(size * 0.52f), tint = tint)
+    }
+}
+
+/** 테이퍼 헤더의 메뉴 버튼(원본 APPS, 햄버거 + 글자). 닫힘 = 채움, 열림 = 외곽선 */
+@Composable
+fun AppsButton(open: Boolean, onClick: () -> Unit) {
+    val c = AppTheme.colors
+    val shape = RoundedCornerShape(9.dp)
+    val fg = if (open) c.teal else c.onAccent
+    Row(
+        Modifier
+            .height(37.dp)
+            .shadow(if (open || c.dark) 0.dp else 1.dp, shape)
+            .clip(shape)
+            .background(if (open) c.appsOpenBg else c.appsFill)
+            .border(1.5.dp, if (open) c.appsBorder.copy(alpha = 0.55f) else c.appsBorder, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(AppIcons.Menu, null, Modifier.size(19.dp), tint = fg)
+        Spacer(Modifier.width(6.dp))
+        Text("메뉴", color = fg, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+/** 둥근 끝 알약 버튼(01·07 CLOSE). danger = 연한 빨강 판 */
+@Composable
+fun PillButton(text: String, icon: ImageVector?, onClick: () -> Unit, danger: Boolean = false) {
+    val c = AppTheme.colors
+    val shape = RoundedCornerShape(50)
+    val fg = if (danger) c.error.label else c.textBody
+    Row(
+        Modifier
+            .height(32.dp)
+            .clip(shape)
+            .background(if (danger) c.error.bg else c.card)
+            .border(1.5.dp, if (danger) c.error.border else c.lineCard, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            Icon(icon, null, Modifier.size(14.dp), tint = fg)
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(text, color = fg, fontSize = 11.5.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.1.em)
+    }
+}
