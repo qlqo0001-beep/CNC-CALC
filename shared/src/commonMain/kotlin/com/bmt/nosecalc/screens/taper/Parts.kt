@@ -208,7 +208,7 @@ internal fun TipSheet(tip: Int, standard: Int, onPick: (Int?) -> Unit, onDismiss
 
 /**
  * 팁 번호 그림(FANUC 1~9, 0): 가운데 노즈 원, 둘레에 번호. 이 앱의 그림 방향(오른쪽 Z+, 위 X+) 그대로다.
- * selected 는 가상 인선 자리를 빨간 점과 두 접선으로 보인다. onSelect = null 이면 보기만(도움말).
+ * selected 는 가상 인선 자리를 점과 두 접선으로 보인다. onSelect = null 이면 보기만(도움말).
  */
 @Composable
 internal fun TipDiagram(selected: Int?, standard: Int?, onSelect: ((Int) -> Unit)?) {
@@ -272,7 +272,7 @@ internal fun TipHelp() {
         Text("팁 번호 그림 (T3 = 외경 정방향 표준)", color = c.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         TipDiagram(3, null, null)
         Text(
-            "가운데 원이 노즈, 빨간 점이 T3 의 가상 인선입니다(원에 Z·X 방향으로 접하는 두 선의 교점). " +
+            "가운데 원이 노즈, 원에 Z·X 방향으로 접하는 두 점선이 만나는 점이 T3 의 가상 인선입니다. " +
                 "번호는 노즈 중심에서 가상 인선으로 가는 방향입니다: 3 외경 정방향, 4 외경 역방향, 2 내경 정방향, 1 내경 역방향, " +
                 "5·6·7·8 은 변 가운데, 0(9)은 노즈 중심. 방향은 X+·Z+ 로 정해져 있어 그림이 위아래로 뒤집힌 기계(전방 공구대)에서도 번호는 같습니다.",
             color = c.textBody,

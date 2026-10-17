@@ -16,6 +16,29 @@ data class FeatureColors(val title: List<Color>, val menu: Color)
 /**
  * 색 토큰. 이름·라이트 값은 docs/screens.md 1.1 (11.png 의 Tailwind slate 계열 값을 우선).
  * 다크("딥 다크")는 우리가 정한 것 — 3D 뷰포트 #09111D 계열 짙은 남색 바탕, 강조색은 같은 색상을 밝게.
+ *
+ * 색의 뜻은 고정이다: 빨강 = 계산 멈춤·지우기, 노랑 = 확인할 것, 파랑 = 안내. 기준선·시작/끝점·각도 같은 보통 요소에는
+ * 빨강·노랑을 쓰지 않는다. 숫자 글자는 바탕 대비 4.5:1 이상(결과 좌표 약 7:1), 뜻 있는 그림 선은 3:1 이상.
+ *
+ * 대비(WCAG, 라이트 / 다크) — 바탕: 카드 #FFFFFF / #142032, 뷰어 #EFF2F7 / #0B1421
+ * | 토큰 | 라이트 | 다크 | 바탕 |
+ * |---|---|---|---|
+ * | valueComp | 7.0 | 9.8 | 카드 |
+ * | drawRef | 4.8 | 6.4 | 카드 |
+ * | drawAngle | 5.9 | 9.1 | 카드 |
+ * | drawToolLine | 7.6 | 11.0 | 카드 |
+ * | drawToolBody (면) | 1.5 | 2.4 | 카드 |
+ * | drawMetalEdge | 10.4 | 11.0 | 카드 |
+ * | drawStock · drawHatch (면 · 빗금) | 1.2 · 1.5 | 1.2 · 1.6 | 카드 |
+ * | viewportAxis | 4.2 | 3.9 | 뷰어 |
+ * | viewNose | 5.3 | 8.6 | 뷰어 |
+ * | viewPath | 5.6 | 7.5 | 뷰어 |
+ * | viewRapid | 4.2 | 7.2 | 뷰어 |
+ * | viewGridMajor (보조선) | 1.4 | 1.5 | 뷰어 |
+ * | viewLabelT1 | 4.5 | 11.1 | 뷰어 |
+ * | viewLabelT2 | 4.9 | 9.9 | 뷰어 |
+ * | onToast / toast | 12.8 | 13.1 | 토스트 |
+ * | info.label · info.value | 6.2 · 9.5 | 6.6 · 11.8 | info.bg |
  */
 @Immutable
 data class AppColors(
@@ -84,12 +107,17 @@ data class AppColors(
     val fieldDim: RoleColors,
     val warn: RoleColors,
     val error: RoleColors,
+    /** 안내 띠(파랑): 경고가 아닌 알림 */
+    val info: RoleColors,
     val toast: Color,
+    val onToast: Color,
     // 형상 그림
     val drawProfile: Color,
+    /** 기준선 · 보조선 · 중심선(보통 요소라 빨강이 아닌 회색) */
     val drawRef: Color,
     val drawT1: Color,
     val drawT2: Color,
+    /** 치수 · 각도(칸 라벨의 파랑과 같은 계열) */
     val drawAngle: Color,
     val drawToolBody: Color,
     val drawToolLine: Color,
@@ -101,6 +129,21 @@ data class AppColors(
     /** 라운드 TYPE 그림(04 자리)의 금속 몸통: 위 → 아래 그라데이션 5단, 윤곽·모서리선 */
     val drawMetal: List<Color>,
     val drawMetalEdge: Color,
+    /** 소재 단면: 바탕 면 · 45° 빗금 */
+    val drawStock: Color,
+    val drawHatch: Color,
+    // 형상 보기(ShapeViewer)
+    /** 노즈 원 · 노즈 중심 경로 */
+    val viewNose: Color,
+    /** 프로그램 경로 */
+    val viewPath: Color,
+    /** 급송(G00) */
+    val viewRapid: Color,
+    /** 굵은 격자선 */
+    val viewGridMajor: Color,
+    /** 뷰어 안 T1 · T2 이름표 */
+    val viewLabelT1: Color,
+    val viewLabelT2: Color,
     /** 라운드 TYPE 칩(04): 홀수 하늘 · 짝수 민트(bg · border · label = 글자) */
     val chipSky: RoleColors,
     val chipMint: RoleColors,
@@ -109,8 +152,8 @@ data class AppColors(
 
 val LightColors = AppColors(
     dark = false,
-    page = Color(0xFFCBD5E1),
-    headerDim = Color(0xFFBCC5CE),
+    page = Color(0xFFE8EDF3),
+    headerDim = Color(0xFFD5DCE4),
     card = Color(0xFFFFFFFF),
     subtle = Color(0xFFF8FAFC),
     field = Color(0xFFF1F5F9),
@@ -120,7 +163,7 @@ val LightColors = AppColors(
     scrim = Color(0x9940444A),
     viewport = Color(0xFFEFF2F7),
     viewportGrid = Color(0xFFDCE1E8),
-    viewportAxis = Color(0xFF94A3B8),
+    viewportAxis = Color(0xFF64748B),
     viewport3d = Color(0xFF09111D),
     lineHeader = Color(0xFF94A3B8),
     lineCard = Color(0xFFE2E8F0),
@@ -155,7 +198,7 @@ val LightColors = AppColors(
     bmtBlue = Color(0xFF0A4AA6),
     bmtBanner = listOf(Color(0xFF0A4AA6), Color(0xFF2563EB)),
     bmtBannerBorder = Color(0xFF7FB0F5),
-    valueComp = Color(0xFF2E7DA6),
+    valueComp = Color(0xFF0F5E8C),
     valuePos = Color(0xFF2F8A5E),
     fieldNormal = RoleColors(Color(0xFFF1F5F9), Color(0xFFCBD5E1), Color(0xFF0284C7), Color(0xFF0F172A)),
     fieldStart = RoleColors(Color(0xFFFFFBEB), Color(0xFFFDE68A), Color(0xFFD97706), Color(0xFF92400E)),
@@ -163,12 +206,14 @@ val LightColors = AppColors(
     fieldDim = RoleColors(Color(0xFFFEFCE8), Color(0xFFFEF08A), Color(0xFFB45309), Color(0xFF0F172A)),
     warn = RoleColors(Color(0xFFFFFBEB), Color(0xFFFCD34D), Color(0xFFD97706), Color(0xFF78350F)),
     error = RoleColors(Color(0xFFFFF1F2), Color(0xFFFDA4AF), Color(0xFFE11D48), Color(0xFF881337)),
-    toast = Color(0xE60EA5E9),
+    info = RoleColors(Color(0xFFEFF6FF), Color(0xFFBFDBFE), Color(0xFF1D4ED8), Color(0xFF1E3A8A)),
+    toast = Color(0xF21E293B),
+    onToast = Color(0xFFFFFFFF),
     drawProfile = Color(0xFF334155),
-    drawRef = Color(0xFFDC2626),
+    drawRef = Color(0xFF64748B),
     drawT1 = Color(0xFFD97706),
     drawT2 = Color(0xFF0D9488),
-    drawAngle = Color(0xFFB45309),
+    drawAngle = Color(0xFF0369A1),
     drawToolBody = Color(0xFFCBD5E1),
     drawToolLine = Color(0xFF475569),
     drawInsert = Color(0xFFFBBF24),
@@ -176,8 +221,16 @@ val LightColors = AppColors(
     simToolpath = Color(0xFFC026D3),
     simRapid = Color(0xFF94A3B8),
     simArc = Color(0xFF2563EB),
-    drawMetal = listOf(Color(0xFF7D838B), Color(0xFFCDD2D8), Color(0xFF8E949C), Color(0xFF5A6068), Color(0xFF3A3F46)),
-    drawMetalEdge = Color(0xFF24282E),
+    drawMetal = listOf(Color(0xFFCBD5E1), Color(0xFFF1F5F9), Color(0xFFE2E8F0), Color(0xFFCBD5E1), Color(0xFFA9B6C8)),
+    drawMetalEdge = Color(0xFF334155),
+    drawStock = Color(0xFFE6EBF2),
+    drawHatch = Color(0xFFC8D2DF),
+    viewNose = Color(0xFF0369A1),
+    viewPath = Color(0xFFA21CAF),
+    viewRapid = Color(0xFF64748B),
+    viewGridMajor = Color(0xFFC8D0DB),
+    viewLabelT1 = Color(0xFFB45309),
+    viewLabelT2 = Color(0xFF0F766E),
     chipSky = RoleColors(Color(0xFFFFFFFF), Color(0xFFA5F3FC), Color(0xFF155E75), Color(0xFF155E75)),
     chipMint = RoleColors(Color(0xFFFFFFFF), Color(0xFFA7F3D0), Color(0xFF065F46), Color(0xFF065F46)),
     features = mapOf(
@@ -210,7 +263,7 @@ val DarkColors = AppColors(
     scrim = Color(0x73000000),
     viewport = Color(0xFF0B1421),
     viewportGrid = Color(0xFF1C2838),
-    viewportAxis = Color(0xFF4B5D78),
+    viewportAxis = Color(0xFF64748B),
     viewport3d = Color(0xFF09111D),
     lineHeader = Color(0xFF2A3A52),
     lineCard = Color(0xFF24344C),
@@ -253,21 +306,31 @@ val DarkColors = AppColors(
     fieldDim = RoleColors(Color(0xFF26240F), Color(0xFF6E6417), Color(0xFFFBBF24), Color(0xFFF3F6FB)),
     warn = RoleColors(Color(0xFF2A2210), Color(0xFF8A6516), Color(0xFFFBBF24), Color(0xFFFDE68A)),
     error = RoleColors(Color(0xFF2E1520), Color(0xFF9F2F4E), Color(0xFFFB7185), Color(0xFFFECDD3)),
-    toast = Color(0xE60284C7),
+    info = RoleColors(Color(0xFF0F1E33), Color(0xFF1E3A8A), Color(0xFF60A5FA), Color(0xFFBFDBFE)),
+    toast = Color(0xF2E2E8F0),
+    onToast = Color(0xFF0F172A),
     drawProfile = Color(0xFFCBD5E1),
-    drawRef = Color(0xFFF87171),
+    drawRef = Color(0xFF94A3B8),
     drawT1 = Color(0xFFFBBF24),
     drawT2 = Color(0xFF2DD4BF),
-    drawAngle = Color(0xFFFCD34D),
-    drawToolBody = Color(0xFF334155),
-    drawToolLine = Color(0xFF94A3B8),
+    drawAngle = Color(0xFF93C5FD),
+    drawToolBody = Color(0xFF4B5B73),
+    drawToolLine = Color(0xFFCBD5E1),
     drawInsert = Color(0xFFFBBF24),
     simProgram = Color(0xFF4ADE80),
     simToolpath = Color(0xFFE879F9),
     simRapid = Color(0xFF64748B),
     simArc = Color(0xFF60A5FA),
-    drawMetal = listOf(Color(0xFF59606A), Color(0xFFA3AAB4), Color(0xFF6C737D), Color(0xFF454B54), Color(0xFF2C3138)),
-    drawMetalEdge = Color(0xFF9AA4B2),
+    drawMetal = listOf(Color(0xFF2B3B53), Color(0xFF4A5B75), Color(0xFF34455E), Color(0xFF26354B), Color(0xFF1C2839)),
+    drawMetalEdge = Color(0xFFCBD5E1),
+    drawStock = Color(0xFF1E2D44),
+    drawHatch = Color(0xFF2D4060),
+    viewNose = Color(0xFF38BDF8),
+    viewPath = Color(0xFFE879F9),
+    viewRapid = Color(0xFF94A3B8),
+    viewGridMajor = Color(0xFF26364D),
+    viewLabelT1 = Color(0xFFFBBF24),
+    viewLabelT2 = Color(0xFF2DD4BF),
     chipSky = RoleColors(Color(0xFF10242E), Color(0xFF1E6A80), Color(0xFF67E8F9), Color(0xFF67E8F9)),
     chipMint = RoleColors(Color(0xFF0E241F), Color(0xFF1C7A5C), Color(0xFF6EE7B7), Color(0xFF6EE7B7)),
     features = mapOf(

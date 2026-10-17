@@ -166,7 +166,7 @@ fun Modal(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope
     }
 }
 
-/** [AppState.toast] 를 화면 위쪽에 2초 띄운다(10.jpg: 하늘색, 모서리 10dp, 가운데 흰 글자) */
+/** [AppState.toast] 를 화면 위쪽에 2초 띄운다(10.jpg 자리 · 모서리 10dp · 가운데 글자). 바탕은 짙은 띠(다크는 밝은 띠) */
 @Composable
 internal fun ToastHost(state: AppState) {
     val t = state.toast ?: return
@@ -180,7 +180,7 @@ internal fun ToastHost(state: AppState) {
             Text(
                 t.text,
                 Modifier.clip(RoundedCornerShape(10.dp)).background(AppTheme.colors.toast).padding(horizontal = 18.dp, vertical = 11.dp),
-                color = AppTheme.colors.onAccent,
+                color = AppTheme.colors.onToast,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,

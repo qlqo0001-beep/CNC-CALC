@@ -8,6 +8,7 @@ import kotlin.math.roundToInt
 
 /**
  * 헤드리스 스크린샷: 컴포저블을 폰 크기(412×915dp, 밀도 2.625 = 1082×2402px)로 PNG 를 찍는다.
+ * 좁은 폰(widthDp = 360)·큰 글꼴(fontScale = 1.3f)도 찍는다.
  * 저장: build/shots/<이름>-light.png · -dark.png (`gw.bat :shared:jvmTest`). 찍은 것은 docs/store 원본과 나란히 본다.
  */
 object Shots {
@@ -25,10 +26,12 @@ object Shots {
         heightDp: Int = HEIGHT_DP,
         frames: Int = 40,
         setup: (AppState) -> Unit = {},
+        widthDp: Int = WIDTH_DP,
+        fontScale: Float = 1f,
         content: @Composable (AppState) -> Unit,
     ) {
-        take(name, dark = false, heightDp, frames, setup, content)
-        take(name, dark = true, heightDp, frames, setup, content)
+        take(name, dark = false, heightDp, frames, setup, widthDp, fontScale, content)
+        take(name, dark = true, heightDp, frames, setup, widthDp, fontScale, content)
     }
 
     fun take(
@@ -37,15 +40,17 @@ object Shots {
         heightDp: Int = HEIGHT_DP,
         frames: Int = 40,
         setup: (AppState) -> Unit = {},
+        widthDp: Int = WIDTH_DP,
+        fontScale: Float = 1f,
         content: @Composable (AppState) -> Unit,
     ): File {
         val state = AppState(KeyValueStore(File.createTempFile("bmt-kv", ".properties").apply { delete() }))
         state.setDark(dark)
         setup(state)
         val scene = ImageComposeScene(
-            width = (WIDTH_DP * DENSITY).roundToInt(),
+            width = (widthDp * DENSITY).roundToInt(),
             height = (heightDp * DENSITY).roundToInt(),
-            density = Density(DENSITY),
+            density = Density(DENSITY, fontScale),
         ) { content(state) }
         try {
             // 글꼴 리소스는 비동기로 읽혀 몇 프레임 뒤에 바뀐다. 프레임마다 0.1초씩 흘려 애니메이션도 끝낸다
