@@ -29,11 +29,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -48,20 +51,24 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.toSize
 import com.bmt.nosecalc.calc.Arc
 import com.bmt.nosecalc.calc.Contour
 import com.bmt.nosecalc.calc.Line
 import com.bmt.nosecalc.calc.Pt
+import com.bmt.nosecalc.ui.theme.AppColors
 import com.bmt.nosecalc.ui.theme.AppTheme
 import kotlin.math.PI
 import kotlin.math.abs
@@ -73,15 +80,53 @@ import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.round
 import kotlin.math.sin
 
-/** 형상 뷰어에 그릴 윤곽 하나 */
-@Immutable
-data class ViewerLine(val contour: Contour, val color: Color, val width: Dp = 2.dp, val dashed: Boolean = false)
+/** 윤곽의 진행 방향 화살: 없음 · 채운 화살(경로) · 빈 화살(급송) */
+enum class Arrow { None, Filled, Hollow }
 
-/** 형상 뷰어의 점(T 점·보정점 등). 라벨은 점 오른쪽 위(앞 라벨과 겹치면 다른 모서리로) */
+/**
+ * 형상 뷰어에 그릴 윤곽 하나. dashed = 끊은 선(노즈 중심), dotted = 둥근 점 줄(급송),
+ * arrows = 화면에서 40dp 넘는 토막마다 가운데에 진행 방향 화살(그런 토막이 없으면 끝에 하나), fill = 닫힌 윤곽의 면 색
+ */
 @Immutable
-data class ViewerMark(val at: Pt, val color: Color, val label: String? = null)
+data class ViewerLine(
+    val contour: Contour,
+    val color: Color,
+    val width: Dp = 2.dp,
+    val dashed: Boolean = false,
+    val dotted: Boolean = false,
+    val arrows: Arrow = Arrow.None,
+    val fill: Color? = null,
+)
+
+/** 점 모양. 라벨은 이 순서로 자리를 먼저 잡는다 — T 점(Ring) → 노드(Dot) → 진입·후퇴(Square) → 원호 중심(Cross) */
+enum class MarkKind { Ring, Dot, Square, Cross }
+
+/**
+ * 형상 뷰어의 점(T 점·보정점 등). 라벨은 점 둘레 알약으로([labels]).
+ * info 는 점을 눌러 좌표를 보는 기능(나중)에 쓸 줄들 — 지금은 그리지 않는다
+ */
+@Immutable
+data class ViewerMark(
+    val at: Pt,
+    val color: Color,
+    val label: String? = null,
+    val kind: MarkKind = MarkKind.Ring,
+    val info: List<String> = emptyList(),
+)
+
+/**
+ * 소재 단면. 뷰어가 가장 먼저 면 + 45° 빗금으로 칠한다: 외경은 profile 과 중심선 사이, 내경(inner)은 profile 위(뷰어 위 끝까지).
+ * 화면 왼쪽 끝(척 쪽)은 extendLeft 면, 오른쪽 끝은 extendRight 면 뷰어 밖까지 늘린다
+ */
+@Immutable
+data class ViewerStock(val profile: Contour, val inner: Boolean, val extendLeft: Boolean = true, val extendRight: Boolean = false)
+
+/** 소재 위에 칠하는 면(깎을 부분 등). 윤곽은 닫힌 것으로 본다 */
+@Immutable
+data class ViewerFill(val contour: Contour, val color: Color)
 
 /** 직접 정한 보기: 맞춤의 몇 배(zoom)이고 어느 점(center, mm)이 화면 가운데에 오는가 */
 @Immutable
@@ -168,7 +213,8 @@ fun rememberViewerState(): ViewerState = remember { ViewerState() }
  * calc 의 윤곽을 그리는 2D 뷰어. 그림 약속은 calc 와 같다 — Z 오른쪽 +, X(반경) 위 +.
  * 처음엔 모두 보이게 맞추고, 두 손가락 확대·이동 · PC 는 Ctrl + 휠 확대와 끌어 이동, 두 번 누르면 다시 맞춤.
  * 한 손가락 끌기와 Ctrl 없는 휠은 페이지 스크롤로 넘기고 안내만 띄운다(oneFingerPan 이면 한 손가락 · 휠도 뷰어가 쓴다).
- * 격자 간격은 1·2·5 단위로 확대에 따라 바뀌고 왼쪽 아래에 적는다. 중심선(X0)·Z0 은 보일 때만 긋는다.
+ * 그리는 순서: 격자(1·2·5 간격, 다섯째 줄 굵게) → 소재(stock) → 면(fills) → 중심선 X0 · Z0(1점 쇄선, 보일 때만) → 윤곽 → 점 →
+ * 뷰어 알약([viewerPills]: 척 쪽 · Z0 · 중심 · 축척 막대) → 점 라벨([labels]).
  */
 @Composable
 fun ShapeViewer(
@@ -177,6 +223,8 @@ fun ShapeViewer(
     marks: List<ViewerMark> = emptyList(),
     state: ViewerState = rememberViewerState(),
     oneFingerPan: Boolean = false,
+    stock: ViewerStock? = null,
+    fills: List<ViewerFill> = emptyList(),
 ) {
     val c = AppTheme.colors
     val bounds = remember(lines, marks) { boundsOf(lines, marks) }
@@ -184,8 +232,7 @@ fun ShapeViewer(
     val density = LocalDensity.current
     SideEffect { state.follow(bounds, density.fitArea(viewSize.width.toFloat(), viewSize.height.toFloat()), viewSize) }
     val measurer = rememberTextMeasurer()
-    val label = TextStyle(fontFamily = AppTheme.sans, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = c.textMuted)
-    val markStyle = label.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    val sans = TextStyle(fontFamily = AppTheme.sans, fontWeight = FontWeight.Bold)
     Box(modifier.clipToBounds()) {
         Canvas(
             Modifier
@@ -196,41 +243,74 @@ fun ShapeViewer(
                 .pointerInput(state) { detectTapGestures(onDoubleTap = { state.fit() }) },
         ) {
             val v = state.xf(fitArea(size.width, size.height))
-            val step = grid(v, c.viewportGrid)
+            val step = grid(v, c.viewportGrid, c.viewGridMajor)
+            stock?.let { stockSection(it, v, c.drawStock, c.drawHatch) }
+            for (f in fills) drawPath(pathOf(f.contour, v), f.color)
             axes(v, c.viewportAxis)
-            for (l in lines) {
-                drawPath(
-                    pathOf(l.contour, v),
-                    l.color,
-                    style = Stroke(
-                        l.width.toPx(),
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                        pathEffect = if (l.dashed) PathEffect.dashPathEffect(floatArrayOf(7.dp.toPx(), 5.dp.toPx())) else null,
-                    ),
-                )
-            }
-            // 라벨은 점 오른쪽 위. 앞서 둔 라벨과 겹치면(T1 과 진입처럼 가까운 점) 오른쪽 아래 · 왼쪽 위 · 왼쪽 아래 순으로 옮긴다
-            val placed = mutableListOf<Rect>()
-            for (m in marks) {
-                val p = v.toScreen(m.at)
-                drawCircle(c.viewport, 4.dp.toPx(), p)
-                drawCircle(m.color, 4.dp.toPx(), p, style = Stroke(2.dp.toPx()))
-                val text = m.label ?: continue
-                val t = measurer.measure(text, markStyle.copy(color = m.color))
-                val w = t.size.width.toFloat()
-                val gap = 7.dp.toPx()
-                val up = -19.dp.toPx()
-                val down = 3.dp.toPx()
-                val spots = listOf(Offset(gap, up), Offset(gap, down), Offset(-gap - w, up), Offset(-gap - w, down)).map { p + it }
-                val at = spots.firstOrNull { o -> placed.none { it.overlaps(Rect(o, t.size.toSize())) } } ?: spots[0]
-                placed += Rect(at, t.size.toSize())
-                drawText(t, topLeft = at)
-            }
-            drawText(measurer, "격자 ${stepText(step)} mm", Offset(8.dp.toPx(), size.height - 20.dp.toPx()), label)
+            for (l in lines) viewerLine(l, v, c.viewport)
+            // 라벨 없는 점(보정점 등)을 먼저 — T 점 표시가 그 밑에 묻히지 않게
+            for (m in marks.sortedBy { it.label != null }) mark(m.kind, v.toScreen(m.at), m.color, c.viewport)
+            val pills = viewerPills(v, step, stock != null, measurer, sans, c)
+            labels(marks, v, measurer, sans.copy(fontSize = 13.sp), inkOf(lines, v), pills, c.card.copy(alpha = .92f))
         }
         state.hint?.let { HintPill(state, it, Modifier.align(Alignment.TopCenter).padding(top = 10.dp)) }
     }
+}
+
+/**
+ * 뷰어 알약(카드색 α .9, 둥근 6dp)을 긋고 그 칸들을 돌려준다 — 라벨이 피한다. 왼쪽 위 "◀ 척 쪽"(소재가 있을 때),
+ * Z0 선 위 끝 "Z0" · 중심선 왼쪽 "중심"(보일 때), 왼쪽 아래 축척(격자 한 칸 길이 막대 2dp, 양 끝 6dp 눈금 + "2 mm · X 반경")
+ */
+private fun DrawScope.viewerPills(v: ViewXf, step: Double, chuckSide: Boolean, measurer: TextMeasurer, sans: TextStyle, c: AppColors): List<Rect> {
+    val bg = c.card.copy(alpha = .9f)
+    val corner = CornerRadius(6.dp.toPx())
+    val pad = 8.dp.toPx()
+    val scale = measurer.measure(
+        buildAnnotatedString {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = c.textStrong)) { append("${stepText(step)} mm") }
+            append(" · X 반경")
+        },
+        sans.copy(fontSize = 12.sp, fontWeight = FontWeight.Normal, color = c.textMuted),
+    )
+    val bar = (step * v.s).toFloat()
+    val scaleBox = Rect(
+        Offset(pad, size.height - pad - scale.size.height - 6.dp.toPx()),
+        Size(bar + scale.size.width + 24.dp.toPx(), scale.size.height + 6.dp.toPx()),
+    )
+    drawRoundRect(bg, scaleBox.topLeft, scaleBox.size, corner)
+    val y = scaleBox.center.y
+    val x0 = scaleBox.left + 8.dp.toPx()
+    val bw = 2.dp.toPx()
+    drawLine(c.textStrong, Offset(x0, y), Offset(x0 + bar, y), bw)
+    for (x in listOf(x0, x0 + bar)) drawLine(c.textStrong, Offset(x, y - 3.dp.toPx()), Offset(x, y + 3.dp.toPx()), bw)
+    drawText(scale, topLeft = Offset(x0 + bar + 8.dp.toPx(), scaleBox.top + 3.dp.toPx()))
+
+    val boxes = mutableListOf(scaleBox)
+    fun pill(text: String, style: TextStyle, at: (Size) -> Offset): Rect {
+        val t = measurer.measure(text, style)
+        val sz = Size(t.size.width + 12.dp.toPx(), t.size.height + 4.dp.toPx())
+        val r = Rect(at(sz), sz)
+        drawRoundRect(bg, r.topLeft, r.size, corner)
+        drawText(t, topLeft = r.topLeft + Offset(6.dp.toPx(), 2.dp.toPx()))
+        return r.also { boxes += it }
+    }
+    val chuck = if (chuckSide) pill("◀ 척 쪽", sans.copy(fontSize = 12.sp, color = c.textMuted)) { Offset(pad, pad) } else null
+    // 축 이름 글은 textMuted — 다크의 viewportAxis 는 알약 위 대비가 4.5:1 에 못 미친다(라이트는 같은 색)
+    val axis = sans.copy(fontSize = 11.sp, color = c.textMuted)
+    if (v.t.x in 0f..size.width) {
+        pill("Z0", axis) { sz ->
+            val top = chuck?.takeIf { it.right > v.t.x - sz.width / 2 }?.let { it.bottom + 4.dp.toPx() } ?: pad
+            Offset((v.t.x - sz.width / 2).coerceIn(pad, max(pad, size.width - pad - sz.width)), top)
+        }
+    }
+    if (v.t.y in 0f..size.height) {
+        pill("중심", axis) { sz ->
+            val mid = Rect(Offset(pad, v.t.y - sz.height / 2), sz)
+            // 축척 · 척 쪽 알약과 겹치면 중심선 위로
+            if (listOfNotNull(scaleBox, chuck).any { it.overlaps(mid) }) Offset(pad, v.t.y - sz.height - 3.dp.toPx()) else mid.topLeft
+        }
+    }
+    return boxes
 }
 
 /**
@@ -384,11 +464,12 @@ private fun pathOf(c: Contour, v: ViewXf): Path = Path().apply {
     }
 }
 
-/** 격자를 긋고 간격(mm)을 돌려준다 */
-private fun DrawScope.grid(v: ViewXf, color: Color): Double {
+/** 격자를 긋고 간격(mm)을 돌려준다. 0 에서 다섯째 줄마다 major 색 */
+private fun DrawScope.grid(v: ViewXf, color: Color, major: Color): Double {
     val raw = 30.dp.toPx() / v.s
     val p = 10.0.pow(floor(log10(raw.toDouble())))
     val step = listOf(1.0, 2.0, 5.0, 10.0).map { it * p }.first { it >= raw }
+    fun tone(at: Double) = if (round(at / step).toLong() % 5 == 0L) major else color
     val z0 = -v.t.x / v.s
     val z1 = (size.width - v.t.x) / v.s
     val x0 = (v.t.y - size.height) / v.s
@@ -396,29 +477,243 @@ private fun DrawScope.grid(v: ViewXf, color: Color): Double {
     var z = floor(z0 / step) * step
     while (z <= z1) {
         val sx = v.t.x + z.toFloat() * v.s
-        drawLine(color, Offset(sx, 0f), Offset(sx, size.height), 1f)
+        drawLine(tone(z), Offset(sx, 0f), Offset(sx, size.height), 1f)
         z += step
     }
     var x = floor(x0 / step) * step
     while (x <= ceil(x1 / step) * step) {
         val sy = v.t.y - x.toFloat() * v.s
-        drawLine(color, Offset(0f, sy), Offset(size.width, sy), 1f)
+        drawLine(tone(x), Offset(0f, sy), Offset(size.width, sy), 1f)
         x += step
     }
     return step
 }
 
-/** 중심선(X0, 1점 쇄선)과 Z0(점선) */
+/** 중심선(X0)과 Z0 — 둘 다 1점 쇄선(기준선, 1.2dp). 끊은 선 · 점선은 노즈 중심 · 급송이라 쓰지 않는다 */
 private fun DrawScope.axes(v: ViewXf, color: Color) {
-    val w = 1.2.dp.toPx()
     val y = v.t.y
-    if (y in 0f..size.height) {
-        drawLine(color, Offset(0f, y), Offset(size.width, y), w, pathEffect = PathEffect.dashPathEffect(floatArrayOf(14.dp.toPx(), 4.dp.toPx(), 3.dp.toPx(), 4.dp.toPx())))
-    }
+    if (y in 0f..size.height) centerLine(Offset(0f, y), Offset(size.width, y), color, 1.2f)
     val x = v.t.x
-    if (x in 0f..size.width) {
-        drawLine(color, Offset(x, 0f), Offset(x, size.height), w, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())))
+    if (x in 0f..size.width) centerLine(Offset(x, 0f), Offset(x, size.height), color, 1.2f)
+}
+
+/** 윤곽 하나: 닫혔으면 면(fill) → 선(실선 · 끊은 선 7/5dp · 둥근 점 5dp 간격) → 진행 화살 */
+private fun DrawScope.viewerLine(l: ViewerLine, v: ViewXf, bg: Color) {
+    val path = pathOf(l.contour, v)
+    val segs = l.contour.segs
+    if (l.fill != null && segs.isNotEmpty() && (segs.last().end - segs.first().start).length < 1e-6) drawPath(path, l.fill)
+    val effect = when {
+        l.dotted -> PathEffect.dashPathEffect(floatArrayOf(0.1.dp.toPx(), 5.dp.toPx()))
+        l.dashed -> PathEffect.dashPathEffect(floatArrayOf(7.dp.toPx(), 5.dp.toPx()))
+        else -> null
     }
+    drawPath(path, l.color, style = Stroke(l.width.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = effect))
+    if (l.arrows == Arrow.None || segs.isEmpty()) return
+    // (화살 가운데, 화면 방향): 화면에서 40dp 넘는 토막의 가운데. 그런 토막이 없으면 촉이 끝점에 닿게 하나
+    val half = 5.dp.toPx()
+    val at = segs.mapNotNull { seg ->
+        when (seg) {
+            is Line -> {
+                val a = v.toScreen(seg.start)
+                val b = v.toScreen(seg.end)
+                if ((b - a).getDistance() >= 40.dp.toPx()) (a + b) / 2f to (b - a) else null
+            }
+            is Arc -> if (seg.radius * seg.sweepDeg * PI / 180 * v.s >= 40.dp.toPx()) {
+                val t = arcAngle(seg, .5)
+                v.toScreen(seg.center + Pt(cos(t), sin(t)) * seg.radius) to tangent(seg, t)
+            } else {
+                null
+            }
+        }
+    }.ifEmpty {
+        val last = segs.last()
+        val d = if (last is Arc) tangent(last, arcAngle(last, 1.0)) else v.toScreen(last.end) - v.toScreen(last.start)
+        listOf(v.toScreen(last.end) - d / max(d.getDistance(), 1e-3f) * half to d)
+    }
+    // 촉 길이 10dp · 밑변 7dp 이등변 삼각형. 빈 화살은 바탕색으로 속을 채우고 1.5dp 테두리
+    for ((mid, d) in at) {
+        val u = d / max(d.getDistance(), 1e-3f)
+        val n = Offset(-u.y, u.x) * 3.5.dp.toPx()
+        val tip = mid + u * half
+        val base = mid - u * half
+        val tri = Path().apply {
+            moveTo(tip.x, tip.y)
+            lineTo(base.x + n.x, base.y + n.y)
+            lineTo(base.x - n.x, base.y - n.y)
+            close()
+        }
+        if (l.arrows == Arrow.Filled) {
+            drawPath(tri, l.color)
+        } else {
+            drawPath(tri, bg)
+            drawPath(tri, l.color, style = Stroke(1.5.dp.toPx(), join = StrokeJoin.Round))
+        }
+    }
+}
+
+/** 원호의 시작각 + 쓸기 × f 인 각(라디안, Z 축에서 X 쪽으로) */
+private fun arcAngle(a: Arc, f: Double) = atan2(a.start.x - a.center.x, a.start.z - a.center.z) + a.sweepDeg * PI / 180 * f * (if (a.cw) -1 else 1)
+
+/** 원호가 각 t 에서 나아가는 화면 방향: 반시계면 (−sin, cos), 시계면 그 반대. 화면은 y 가 아래라 y 를 뒤집는다 */
+private fun tangent(a: Arc, t: Double): Offset {
+    val k = if (a.cw) -1f else 1f
+    return Offset(-sin(t).toFloat() * k, -cos(t).toFloat() * k)
+}
+
+/**
+ * 점 하나. Ring = 반지름 5dp 빈 원(2.5dp) · Dot = 3dp 채운 점(바탕색 1dp 테) · Square = 8dp 빈 네모(1.8dp) · Cross = 팔 6dp 십자(1.5dp).
+ * bg 는 빈 모양의 속과 테 색(뷰어는 뷰어 바탕, 범례는 카드)
+ */
+internal fun DrawScope.mark(kind: MarkKind, p: Offset, color: Color, bg: Color) {
+    when (kind) {
+        MarkKind.Ring -> {
+            drawCircle(bg, 5.dp.toPx(), p)
+            drawCircle(color, 5.dp.toPx(), p, style = Stroke(2.5.dp.toPx()))
+        }
+        MarkKind.Dot -> {
+            drawCircle(bg, 4.dp.toPx(), p)
+            drawCircle(color, 3.dp.toPx(), p)
+        }
+        MarkKind.Square -> {
+            val r = Rect(p, 4.dp.toPx())
+            drawRect(bg, r.topLeft, r.size)
+            drawRect(color, r.topLeft, r.size, style = Stroke(1.8.dp.toPx()))
+        }
+        MarkKind.Cross -> {
+            val a = 6.dp.toPx()
+            val w = 1.5.dp.toPx()
+            drawLine(color, p - Offset(a, 0f), p + Offset(a, 0f), w)
+            drawLine(color, p - Offset(0f, a), p + Offset(0f, a), w)
+        }
+    }
+}
+
+/**
+ * 소재 단면: profile(원호는 3° 마다 꺾은선)의 화면 왼쪽 끝을 x = −10px 까지(extendLeft), 오른쪽 끝을 뷰어 밖까지(extendRight) 늘리고
+ * 외경은 중심선을 따라, 내경은 뷰어 위 밖(y = −10px)을 따라 닫아 면 + 45° 빗금(9dp 간격)으로 칠한다
+ */
+private fun DrawScope.stockSection(st: ViewerStock, v: ViewXf, fill: Color, hatch: Color) {
+    val pts = st.profile.segs.flatMap { seg ->
+        if (seg is Arc) arcPoints(seg, max(1, ceil(seg.sweepDeg / 3).toInt())) else listOf(seg.start, seg.end)
+    }.map(v::toScreen)
+    if (pts.size < 2) return
+    val p = if (pts.first().x <= pts.last().x) pts else pts.reversed()
+    val out = 10f
+    val left = if (st.extendLeft) Offset(min(p.first().x, -out), p.first().y) else p.first()
+    val right = if (st.extendRight) Offset(max(p.last().x, size.width + out), p.last().y) else p.last()
+    val close = if (st.inner) -out else v.t.y
+    val section = Path().apply {
+        moveTo(left.x, close)
+        for (q in listOf(left) + p + right) lineTo(q.x, q.y)
+        lineTo(right.x, close)
+        close()
+    }
+    // 크게 확대하면 면이 화면보다 훨씬 커진다 — 뷰어 칸으로 잘라 빗금 수를 묶는다
+    val view = Path().apply { addRect(Rect(-out, -out, size.width + out, size.height + out)) }
+    hatchFill(Path().apply { op(section, view, PathOperation.Intersect) }, fill, hatch, 1.5f)
+}
+
+/** 라벨이 피할 선: 윤곽(원호는 16 토막)과 보이는 중심선 X0 · Z0 의 화면 선분 */
+private fun DrawScope.inkOf(lines: List<ViewerLine>, v: ViewXf): List<Pair<Offset, Offset>> =
+    lines.flatMap { l ->
+        l.contour.segs.flatMap { seg -> if (seg is Arc) arcPoints(seg, 16) else listOf(seg.start, seg.end) }.map(v::toScreen).zipWithNext()
+    } + listOfNotNull(
+        (Offset(0f, v.t.y) to Offset(size.width, v.t.y)).takeIf { v.t.y in 0f..size.height },
+        (Offset(v.t.x, 0f) to Offset(v.t.x, size.height)).takeIf { v.t.x in 0f..size.width },
+    )
+
+/**
+ * 점 라벨 = 알약(둥근 5dp · 바탕 bg · 점 색 α .55 테두리 1dp · 13sp 굵은 점 색 글). 점에서 9dp 띄운 여덟 곳
+ * (오른쪽 위 · 오른쪽 · 오른쪽 아래 · 아래 · 왼쪽 아래 · 왼쪽 · 왼쪽 위 · 위)에 점수를 매겨 가장 낮은 곳(같으면 앞 순서)에 둔다:
+ * 뷰어 4dp 안쪽을 벗어나는 곳은 빼고, 겹친 것마다 앞서 둔 라벨 4 · 다른 점(10dp 칸) 3 · 뷰어 알약(avoid) 4,
+ * 제 점보다 다른 점에 더 가까우면 0.75(옆 점 라벨로 읽힌다), 지나는 선 토막마다 0.5(1 까지 — 선은 알약 밑으로 지나도 읽힌다).
+ * 가까운 곳이 다 막히면 16dp 씩 더 띄운 바깥 세 겹(겹마다 1)까지 보고, 점에서 16dp 넘게 떨어지면 점 색 α .6 의 1dp 지시선을 긋는다.
+ * 모두 뷰어를 벗어나면 가장 나은 곳을 뷰어 안으로 당긴다.
+ * [MarkKind] 순서(T 점 → 노드 → 진입·후퇴 → 원호 중심)로 자리를 잡는다. 화면 밖 점은 라벨도 없다
+ */
+private fun DrawScope.labels(
+    marks: List<ViewerMark>,
+    v: ViewXf,
+    measurer: TextMeasurer,
+    style: TextStyle,
+    ink: List<Pair<Offset, Offset>>,
+    avoid: List<Rect>,
+    bg: Color,
+) {
+    val view = Rect(Offset.Zero, size)
+    val inside = view.deflate(4.dp.toPx())
+    val pts = marks.map { v.toScreen(it.at) }
+    val dots = pts.map { Rect(it, 5.dp.toPx()) }
+    val placed = mutableListOf<Rect>()
+    for ((i, m) in marks.withIndex().sortedBy { it.value.kind }) {
+        val text = m.label ?: continue
+        val p = pts[i]
+        if (!view.contains(p)) continue
+        val t = measurer.measure(text, style.copy(color = m.color))
+        val sz = Size(t.size.width + 10.dp.toPx(), t.size.height + 3.dp.toPx())
+        val w = sz.width
+        val h = sz.height
+        // (자리, 겹): 9dp · 25 · 41 · 57dp 띄운 여덟 곳씩
+        val spots = (0..3).flatMap { k ->
+            val g = (9 + 16 * k).dp.toPx()
+            listOf(
+                Offset(p.x + g, p.y - g - h), Offset(p.x + g, p.y - h / 2), Offset(p.x + g, p.y + g), Offset(p.x - w / 2, p.y + g),
+                Offset(p.x - g - w, p.y + g), Offset(p.x - g - w, p.y - h / 2), Offset(p.x - g - w, p.y - g - h), Offset(p.x - w / 2, p.y - g - h),
+            ).map { Rect(it, sz) to k }
+        }
+        fun score(s: Pair<Rect, Int>): Double {
+            val r = s.first
+            val own = r.distanceTo(p)
+            return 4.0 * placed.count { it.overlaps(r) } +
+                3.0 * dots.withIndex().count { (j, d) -> j != i && d.overlaps(r) } +
+                4.0 * avoid.count { it.overlaps(r) } +
+                (if (pts.withIndex().any { (j, q) -> j != i && r.distanceTo(q) < own - 1f }) 0.75 else 0.0) +
+                0.5 * min(2, ink.count { (a, b) -> r.crossedBy(a, b) }) +
+                s.second
+        }
+        val box = spots.filter { (r) -> inside.contains(r.topLeft) && inside.contains(r.bottomRight) }.minByOrNull(::score)?.first
+            ?: spots.minBy(::score).first.let { r ->
+                r.translate(
+                    (inside.left - r.left).coerceAtLeast(0f) + (inside.right - r.right).coerceAtMost(0f),
+                    (inside.top - r.top).coerceAtLeast(0f) + (inside.bottom - r.bottom).coerceAtMost(0f),
+                )
+            }
+        placed += box
+        val near = box.nearest(p)
+        val far = (near - p).getDistance()
+        if (far > 16.dp.toPx()) drawLine(m.color.copy(alpha = .6f), p + (near - p) * (6.dp.toPx() / far), near, 1.dp.toPx())
+        val r = CornerRadius(5.dp.toPx())
+        drawRoundRect(bg, box.topLeft, box.size, r)
+        drawRoundRect(m.color.copy(alpha = .55f), box.topLeft, box.size, r, style = Stroke(1.dp.toPx()))
+        drawText(t, topLeft = box.topLeft + Offset(5.dp.toPx(), 1.5.dp.toPx()))
+    }
+}
+
+/** 칸에서 p 에 가장 가까운 곳 */
+private fun Rect.nearest(p: Offset) = Offset(p.x.coerceIn(left, right), p.y.coerceIn(top, bottom))
+
+private fun Rect.distanceTo(p: Offset) = (nearest(p) - p).getDistance()
+
+/** 화면 선분 a–b 가 칸을 지나는가(Liang–Barsky 자르기) */
+private fun Rect.crossedBy(a: Offset, b: Offset): Boolean {
+    val d = b - a
+    var t0 = 0f
+    var t1 = 1f
+    for ((p, q) in listOf(-d.x to a.x - left, d.x to right - a.x, -d.y to a.y - top, d.y to bottom - a.y)) {
+        if (p == 0f) {
+            if (q < 0f) return false
+            continue
+        }
+        val r = q / p
+        if (p < 0f) {
+            if (r > t1) return false
+            t0 = max(t0, r)
+        } else {
+            if (r < t0) return false
+            t1 = min(t1, r)
+        }
+    }
+    return true
 }
 
 private fun stepText(step: Double): String {
