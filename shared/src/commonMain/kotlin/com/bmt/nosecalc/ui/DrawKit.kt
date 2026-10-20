@@ -112,7 +112,7 @@ internal fun DrawScope.haloText(
  * 이름은 치수선 가운데를 끊고 바로 놓는다(글은 늘 가로). 치수선이 이름 + 화살 둘 + 4dp 보다 짧으면 화살을 보조선 바깥에서
  * 안으로 겨누고(꼬리 9dp) 이름은 오른쪽 끝(세로 치수면 위쪽 끝) 너머에 둔다 — 그림 칸을 벗어나면 두 보조선 사이에(들어가면),
  * 아니면 칸 안(가장자리 2dp)으로 밀고, 밀려서 끝 화살을 덮으면 치수선의 + 쪽 옆으로 비킨다.
- * 이름은 늘 halo 를 두른다(pill 이면 halo 색 알약도 — haloText). 이름 칸을 돌려준다
+ * 이름은 늘 halo 를 두른다(pill 이면 halo 색 알약도 — haloText). 이름 칸을 돌려준다(a = b 면 빈 칸)
  */
 internal fun DrawScope.linearDim(
     a: Offset,
