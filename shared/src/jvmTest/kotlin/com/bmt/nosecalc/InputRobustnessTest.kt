@@ -199,7 +199,7 @@ class InputRobustnessTest {
             draw { TaperScreen(TaperState(TaperKind.GROOVE, type = 1, open = true).example().apply { setShared("width", v) }) }
             draw { RoundScreen(roundExample(3, open = true).apply { setDim(3, "mainR", v) }) }
             draw { RoundScreen(roundExample(MANUAL, open = true).apply { setPoint("x2", v) }) }
-            draw { TriangleScreen(TriangleState().apply { set(TriField.A_SIDE, v) }) }
+            draw { TriangleScreen(TriangleState(mapOf("angA" to "25")).apply { set(TriField.A_SIDE, v) }) }
         }
     }
 }

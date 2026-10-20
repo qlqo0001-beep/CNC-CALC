@@ -102,17 +102,11 @@ class UiGoldenTest {
 
     @Test
     fun triangle() {
-        triangle("triangle", TriangleState())
+        triangle("triangle-empty", TriangleState())
+        triangle("triangle", TriangleState(mapOf("a" to "10", "angA" to "25")))
         triangle("triangle-swap", TriangleState(mapOf("b" to "12", "c" to "13"), baseIsZ = false))
         triangle("triangle-steep", TriangleState(mapOf("a" to "3", "b" to "12")))
-        triangle(
-            "triangle-error",
-            TriangleState().apply {
-                clear()
-                set(TriField.ANGLE_A, "30")
-                set(TriField.ANGLE_B, "60")
-            },
-        )
+        triangle("triangle-error", TriangleState(mapOf("angA" to "30", "angB" to "60")))
     }
 
     /** SlopeScreen 의 입력 → SlopeForm 그대로 */

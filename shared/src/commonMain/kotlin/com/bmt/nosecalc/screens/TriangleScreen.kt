@@ -24,14 +24,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.Feature
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.RightTriangle
 import com.bmt.nosecalc.calc.TriangleSolution
+import com.bmt.nosecalc.calc.TriangleWarning
 import com.bmt.nosecalc.screens.triangle.TriField
 import com.bmt.nosecalc.screens.triangle.TriangleFigure
 import com.bmt.nosecalc.screens.triangle.TriangleState
@@ -49,7 +53,10 @@ import com.bmt.nosecalc.ui.theme.AppTheme
 @Composable
 fun TriangleScreen() = TriangleScreen(TriangleState())
 
-/** 그림 → 아는 값 다섯 칸 → 경고 → 결과 → X · Z 연동. 값이 바뀌면 바로 다시 푼다. initial = 시험이 정한 처음 상태 */
+/**
+ * 그림 → 경고(그림 바로 아래, 값 부족은 파랑 안내) → 아는 값 다섯 칸 → 결과 → X · Z 연동. 값이 바뀌면 바로 다시 푼다.
+ * initial = 시험이 정한 처음 상태
+ */
 @Composable
 internal fun TriangleScreen(initial: TriangleState) {
     val s = rememberSaveable(saver = TriangleState.Saver) { initial }
@@ -57,16 +64,17 @@ internal fun TriangleScreen(initial: TriangleState) {
         val input = s.input()
         val result = remember(input) { RightTriangle.calc(input) }
         val sol = result.solution
+        val w = result.warnings.firstOrNull()
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 5.dp).padding(top = 6.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             AppCard(Modifier.fillMaxWidth(), padding = 12.dp) {
-                TriangleFigure(s, sol)
+                TriangleFigure(s, result)
                 FigureLegend()
             }
-            InputCard(s, sol)
-            result.warnings.forEach { WarningBanner(triangleWarningText(it), level = WarnLevel.Error) }
+            if (w != null) WarningBanner(triangleWarningText(w), level = if (w == TriangleWarning.MISSING_INPUT) WarnLevel.Info else WarnLevel.Error)
+            InputCard(s, sol, s.wrong(w))
             if (sol != null) {
                 ResultTable(s, sol)
                 CoordCard(s, sol)
@@ -85,7 +93,7 @@ private fun FigureLegend() {
         Swatch(accent().copy(alpha = if (c.dark) .22f else .12f), accent())
         Text("넣은 값", Modifier.padding(start = 6.dp), color = c.textMuted, fontSize = 12.sp)
         Spacer(Modifier.width(18.dp))
-        Swatch(c.card, c.lineField)
+        Swatch(c.card, if (c.dark) c.lineStrong else c.lineField)
         Text("계산값", Modifier.padding(start = 6.dp), color = c.textMuted, fontSize = 12.sp)
     }
 }
@@ -96,9 +104,9 @@ private fun Swatch(bg: Color, border: Color) {
     Box(Modifier.size(16.dp, 12.dp).clip(shape).background(bg).border(1.5.dp, border, shape))
 }
 
-/** 다섯 칸 가운데 아는 둘. 빈칸은 계산값을 자리표시로 */
+/** 다섯 칸 가운데 아는 둘. 빈칸은 계산값을 자리표시로(못 풀면 "0"). wrong = 빨강으로 짚을 칸 */
 @Composable
-private fun InputCard(s: TriangleState, sol: TriangleSolution?) {
+private fun InputCard(s: TriangleState, sol: TriangleSolution?, wrong: Set<TriField>) {
     val c = AppTheme.colors
     val count = TriField.entries.count { s.given(it) }
     val ok = count == 2 && sol != null
@@ -118,20 +126,21 @@ private fun InputCard(s: TriangleState, sol: TriangleSolution?) {
         Spacer(Modifier.height(10.dp))
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TriNumberField(s, sol, TriField.A_SIDE, Modifier.weight(1f))
-                TriNumberField(s, sol, TriField.B_SIDE, Modifier.weight(1f))
+                TriNumberField(s, sol, TriField.A_SIDE, TriField.A_SIDE in wrong, Modifier.weight(1f))
+                TriNumberField(s, sol, TriField.B_SIDE, TriField.B_SIDE in wrong, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TriNumberField(s, sol, TriField.C_SIDE, Modifier.weight(1f))
+                TriNumberField(s, sol, TriField.C_SIDE, TriField.C_SIDE in wrong, Modifier.weight(1f))
                 Spacer(Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TriNumberField(s, sol, TriField.ANGLE_A, Modifier.weight(1f))
-                TriNumberField(s, sol, TriField.ANGLE_B, Modifier.weight(1f))
+                TriNumberField(s, sol, TriField.ANGLE_A, TriField.ANGLE_A in wrong, Modifier.weight(1f))
+                TriNumberField(s, sol, TriField.ANGLE_B, TriField.ANGLE_B in wrong, Modifier.weight(1f))
             }
         }
+        // 수식은 줄바꿈 없는 공백(\u00A0)으로 — 줄 끝에서 "=" 뒤가 끊기지 않게
         Text(
-            "각도 A 는 밑변과 빗변 사이, 각도 B 는 높이와 빗변 사이입니다(A + B = 90°). 각도 둘만으로는 크기를 알 수 없어 변 하나는 꼭 넣습니다. " +
+            "각도 A 는 밑변과 빗변 사이, 각도 B 는 높이와 빗변 사이입니다(A\u00A0+\u00A0B\u00A0=\u00A090°). 각도 둘만으로는 크기를 알 수 없어 변 하나는 꼭 넣습니다. " +
                 "셋 이상 넣으면 서로 맞는지 확인합니다.",
             Modifier.padding(top = 12.dp),
             color = c.textMuted, fontSize = 12.5.sp, lineHeight = 18.sp,
@@ -140,12 +149,14 @@ private fun InputCard(s: TriangleState, sol: TriangleSolution?) {
 }
 
 @Composable
-private fun TriNumberField(s: TriangleState, sol: TriangleSolution?, f: TriField, modifier: Modifier) {
+private fun TriNumberField(s: TriangleState, sol: TriangleSolution?, f: TriField, error: Boolean, modifier: Modifier) {
     val v = s.value(f)
     NumberField(
         f.label, v, { s.set(f, it) }, modifier,
         unit = f.unit,
+        placeholder = "0",
         autoValue = if (v.isEmpty() && sol != null) Fmt.fixed3(f.of(sol)) else null,
+        error = error,
     )
 }
 
@@ -162,7 +173,11 @@ private fun ResultTable(s: TriangleState, sol: TriangleSolution) {
             Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(f.label, Modifier.weight(1f), color = c.textBody, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    Fmt.fixed3(f.of(sol)) + if (f.unit == "°") "°" else "",
+                    // 길이 줄에도 ° 한 칸을 투명하게 남겨 각도 줄과 소수점 자리를 맞춘다(고정폭)
+                    buildAnnotatedString {
+                        append(Fmt.fixed3(f.of(sol)))
+                        withStyle(SpanStyle(color = if (f.unit == "°") Color.Unspecified else Color.Transparent)) { append("°") }
+                    },
                     color = if (given) c.textValue else c.valueComp,
                     fontFamily = AppTheme.mono, fontSize = 21.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End,
                 )
@@ -214,9 +229,9 @@ private fun CoordCard(s: TriangleState, sol: TriangleSolution) {
 /** 헤더 도움말 버튼의 사용법 */
 internal val TriangleHelp = listOf(
     "밑변 a · 높이 b · 빗변 c · 각도 A · 각도 B 가운데 아는 값 둘을 넣으면 나머지가 바로 나옵니다. 빈칸에는 계산값이 '자동' 표와 함께 보입니다. 칸을 비우려면 키패드에서 C, 모두 비우려면 '모두 지우기'.",
-    "각도 A 는 밑변과 빗변 사이, 각도 B 는 높이와 빗변 사이입니다(A + B = 90°). 각도 둘만으로는 크기를 알 수 없어 변 하나는 꼭 넣어야 합니다.",
-    "셋 이상 넣으면 서로 맞는지 봅니다(길이 0.001 mm · 각도 0.001° 안). 맞지 않거나 빗변이 변보다 짧으면 빨간 띠가 뜨고 계산을 멈춥니다.",
-    "그림에는 넣은 값(보라 칸)과 계산값(흰 칸)이 제자리에 적힙니다. 모양은 각도 A 를 따르되, 22° 보다 납작하거나 58° 보다 가파르면 보기 좋게 눌러 그립니다.",
-    "X · Z 연동: 밑변을 Z, 높이를 X(반경)로 보면 Z 이동량 = 밑변, X 변화량 = 높이 × 2(직경값)입니다. 높이가 Z 쪽이면 '밑변 = X · 높이 = Z' 를 고릅니다. 그림 왼쪽 위 화살이 어느 변이 Z · X 인지 보여 줍니다.",
+    "각도 A 는 밑변과 빗변 사이, 각도 B 는 높이와 빗변 사이입니다(A\u00A0+\u00A0B\u00A0=\u00A090°). 각도 둘만으로는 크기를 알 수 없어 변 하나는 꼭 넣어야 합니다.",
+    "셋 이상 넣으면 서로 맞는지 봅니다(길이 0.001 mm · 각도 0.001° 안). 맞지 않거나 빗변이 변보다 짧으면 그림 아래에 빨간 띠가 뜨고 계산을 멈춥니다.",
+    "그림에는 넣은 값(보라 칸)과 계산값(흰 칸)이 치수선 위에 적힙니다. 모양은 각도 A 를 따르되, 22° 보다 납작하거나 58° 보다 가파르면 보기 좋게 눌러 그리고 왼쪽 위에 '그림 비율 아님' 을 적습니다.",
+    "X · Z 연동: 밑변을 Z, 높이를 X(반경)로 보면 Z 이동량 = 밑변, X 변화량 = 높이 × 2(직경값)입니다. 높이가 Z 쪽이면 '밑변 = X · 높이 = Z' 를 고릅니다. 그림의 밑변 · 높이 칸에 Z · X 가 적혀 있습니다.",
     "예: 테이퍼 길이 Z 20 에 지름이 Ø30 → Ø40 이면 밑변 20, 높이 5(반경 차) → 각도 A 14.036°, 빗변 20.616.",
 )
