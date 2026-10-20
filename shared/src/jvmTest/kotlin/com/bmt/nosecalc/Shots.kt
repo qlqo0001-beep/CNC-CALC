@@ -20,6 +20,8 @@ object Shots {
     /**
      * 라이트·다크 두 장. setup 은 그리기 전에 앱 상태를 맞춘다(메뉴 열기·화면 이동 등).
      * content 는 App(state) 이거나, 부품만 볼 때는 AppHost(state) { … } 로 감싼다.
+     * frameMs = 한 프레임에 흘리는 시간. 키패드가 고치는 칸을 시트 위로 끌어올리는 스크롤처럼 프레임마다 다시 겨누는 애니메이션은
+     * 0.1초 걸음이면 출렁여 자리가 매번 달라진다 — 그런 장면은 16(폰 프레임)으로 frames 를 늘려 찍는다
      */
     fun both(
         name: String,
@@ -28,10 +30,11 @@ object Shots {
         setup: (AppState) -> Unit = {},
         widthDp: Int = WIDTH_DP,
         fontScale: Float = 1f,
+        frameMs: Long = 100,
         content: @Composable (AppState) -> Unit,
     ) {
-        take(name, dark = false, heightDp, frames, setup, widthDp, fontScale, content)
-        take(name, dark = true, heightDp, frames, setup, widthDp, fontScale, content)
+        take(name, dark = false, heightDp, frames, setup, widthDp, fontScale, frameMs, content)
+        take(name, dark = true, heightDp, frames, setup, widthDp, fontScale, frameMs, content)
     }
 
     fun take(
@@ -42,6 +45,7 @@ object Shots {
         setup: (AppState) -> Unit = {},
         widthDp: Int = WIDTH_DP,
         fontScale: Float = 1f,
+        frameMs: Long = 100,
         content: @Composable (AppState) -> Unit,
     ): File {
         val state = AppState(KeyValueStore(File.createTempFile("bmt-kv", ".properties").apply { delete() }))
@@ -53,12 +57,12 @@ object Shots {
             density = Density(DENSITY, fontScale),
         ) { content(state) }
         try {
-            // 글꼴 리소스는 비동기로 읽혀 몇 프레임 뒤에 바뀐다. 프레임마다 0.1초씩 흘려 애니메이션도 끝낸다
+            // 글꼴 리소스는 비동기로 읽혀 몇 프레임 뒤에 바뀐다. 프레임마다 frameMs(보통 0.1초)씩 흘려 애니메이션도 끝낸다
             var t = 0L
             var img = scene.render(t)
             repeat(frames) {
                 Thread.sleep(15)
-                t += 100_000_000L
+                t += frameMs * 1_000_000L
                 // 프레임마다 화면 크기 그림(네이티브 메모리)이 생긴다. 바로 닫아야 긴 스크린샷에서 모자라지 않는다
                 img.close()
                 img = scene.render(t)

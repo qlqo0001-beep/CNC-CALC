@@ -106,7 +106,9 @@ enum class MarkKind { Ring, Dot, Square, Cross }
 
 /**
  * 형상 뷰어의 점(T 점·보정점 등). 라벨은 점 둘레 알약으로([labels]).
- * info 는 점을 눌러 좌표를 보는 기능(나중)에 쓸 줄들 — 지금은 그리지 않는다
+ * info 는 점을 눌러 좌표를 보는 기능(나중)에 쓸 줄들 — 지금은 그리지 않는다.
+ * arc = 이 점이 중심인 원호(원호 중심 표시): 중심에서 원호 가운데까지 끊은 지시선(점 색 α .6, 1dp)을 긋고,
+ * 화면에서 그 반지름이 14dp 보다 작으면 점 · 지시선 · 라벨을 모두 뺀다(작은 모서리 R 에 몰리지 않게)
  */
 @Immutable
 data class ViewerMark(
@@ -115,6 +117,7 @@ data class ViewerMark(
     val label: String? = null,
     val kind: MarkKind = MarkKind.Ring,
     val info: List<String> = emptyList(),
+    val arc: Arc? = null,
 )
 
 /**
@@ -213,7 +216,7 @@ fun rememberViewerState(): ViewerState = remember { ViewerState() }
  * calc 의 윤곽을 그리는 2D 뷰어. 그림 약속은 calc 와 같다 — Z 오른쪽 +, X(반경) 위 +.
  * 처음엔 모두 보이게 맞추고, 두 손가락 확대·이동 · PC 는 Ctrl + 휠 확대와 끌어 이동, 두 번 누르면 다시 맞춤.
  * 한 손가락 끌기와 Ctrl 없는 휠은 페이지 스크롤로 넘기고 안내만 띄운다(oneFingerPan 이면 한 손가락 · 휠도 뷰어가 쓴다).
- * 그리는 순서: 격자(1·2·5 간격, 다섯째 줄 굵게) → 소재(stock) → 면(fills) → 중심선 X0 · Z0(1점 쇄선, 보일 때만) → 윤곽 → 점 →
+ * 그리는 순서: 격자(1·2·5 간격, 다섯째 줄 굵게) → 소재(stock) → 면(fills) → 중심선 X0 · Z0(1점 쇄선, 보일 때만) → 윤곽 → 원호 중심 지시선 → 점 →
  * 뷰어 알약([viewerPills]: 척 쪽 · Z0 · 중심 · 축척 막대) → 점 라벨([labels]).
  */
 @Composable
@@ -248,10 +251,12 @@ fun ShapeViewer(
             for (f in fills) drawPath(pathOf(f.contour, v), f.color)
             axes(v, c.viewportAxis)
             for (l in lines) viewerLine(l, v, c.viewport)
+            val shown = marks.filter { m -> m.arc == null || m.arc.radius * v.s >= 14.dp.toPx() }
+            for (m in shown) m.arc?.let { arcLeader(v, m.at, it, m.color) }
             // 라벨 없는 점(보정점 등)을 먼저 — T 점 표시가 그 밑에 묻히지 않게
-            for (m in marks.sortedBy { it.label != null }) mark(m.kind, v.toScreen(m.at), m.color, c.viewport)
+            for (m in shown.sortedBy { it.label != null }) mark(m.kind, v.toScreen(m.at), m.color, c.viewport)
             val pills = viewerPills(v, step, stock != null, measurer, sans, c)
-            labels(marks, v, measurer, sans.copy(fontSize = 13.sp), inkOf(lines, v), pills, c.card.copy(alpha = .92f))
+            labels(shown, v, measurer, sans.copy(fontSize = 13.sp), inkOf(lines, v), pills, c.card.copy(alpha = .92f))
         }
         state.hint?.let { HintPill(state, it, Modifier.align(Alignment.TopCenter).padding(top = 10.dp)) }
     }
@@ -549,6 +554,13 @@ private fun DrawScope.viewerLine(l: ViewerLine, v: ViewXf, bg: Color) {
             drawPath(tri, l.color, style = Stroke(1.5.dp.toPx(), join = StrokeJoin.Round))
         }
     }
+}
+
+/** 원호 중심 at 에서 원호 a 의 가운데까지 끊은 지시선(1dp · 4/3dp, 색 α .6) */
+private fun DrawScope.arcLeader(v: ViewXf, at: Pt, a: Arc, color: Color) {
+    val t = arcAngle(a, .5)
+    val mid = a.center + Pt(cos(t), sin(t)) * a.radius
+    drawLine(color.copy(alpha = .6f), v.toScreen(at), v.toScreen(mid), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())))
 }
 
 /** 원호의 시작각 + 쓸기 × f 인 각(라디안, Z 축에서 X 쪽으로) */

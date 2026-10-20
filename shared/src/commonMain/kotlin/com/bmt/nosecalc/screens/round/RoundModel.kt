@@ -72,6 +72,9 @@ internal class RoundState(
 
     /** true = 합성 R 궤적(보정), false = 접점 모드(도면) */
     var comp by mutableStateOf(comp)
+
+    /** 입력 화면을 열 때 키패드를 열어 둘 칸 id(치수 key · zClear · leg · x1 · z1 …). 화면이 처음 그려질 때 한 번 읽는다(스크린샷 시험) */
+    var editing by mutableStateOf<String?>(null)
     private val values = mutableStateMapOf<String, String>().apply { putAll(values) }
 
     /** 도면 치수. 처음 값은 모두 0(예시 치수 없음) */

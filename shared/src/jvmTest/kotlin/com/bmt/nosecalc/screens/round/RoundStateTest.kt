@@ -1,10 +1,13 @@
 package com.bmt.nosecalc.screens.round
 
 import androidx.compose.runtime.saveable.SaverScope
+import androidx.compose.ui.graphics.Color
 import com.bmt.nosecalc.calc.L2Ref
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundWarning
 import com.bmt.nosecalc.calc.Arc
+import com.bmt.nosecalc.ui.DockStatus
+import com.bmt.nosecalc.ui.oneLine
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -115,6 +118,21 @@ class RoundStateTest {
         assertEquals(20.0, i.d1)
         s.setShared("noseR", "")
         assertEquals(listOf(RoundWarning.BAD_INPUT), RoundCalc.calc(s.input(3)).warnings)
+    }
+
+    /** 결과 띠 · 키패드 한 줄: 지금 모드의 노드 좌표(처음 · 끝 · 외 n점), 멈추면 경고 첫 문장, 값이 모자라면 없음 */
+    @Test
+    fun dock() {
+        val r = RoundCalc.calc(roundExample().input(1))
+        val comp = roundDock(r.solution, shownWarnings(r), 1, comp = true, name = Color.Unspecified)
+        // 형상 1 의 바이트 반대쪽 면은 파란 안내라 '확인 필요' 로 세지 않는다
+        assertTrue(comp is DockStatus.Ok)
+        assertEquals("P1 X-0.800 Z0.000 · P6 X-0.800 Z-12.800 · 외 4점", comp.oneLine())
+        assertEquals("P1 X0.000 Z0.000 · P6 X0.000 Z-12.000 · 외 4점", roundDock(r.solution, shownWarnings(r), 1, comp = false, name = Color.Unspecified)!!.oneLine())
+        val bad = RoundCalc.calc(roundExample().apply { setDim(2, "l2", "30") }.input(2))
+        assertEquals(DockStatus.Error("치수가 서로 맞지 않습니다(0.001 mm 넘게)."), roundDock(bad.solution, shownWarnings(bad), 2, comp = true, name = Color.Unspecified))
+        val fresh = RoundCalc.calc(RoundState().input(3))
+        assertNull(roundDock(fresh.solution, shownWarnings(fresh), 3, comp = true, name = Color.Unspecified))
     }
 
     /** 그림은 견본 치수로 만든 윤곽을 그린다 — 풀리지 않으면 카드가 빈다 */

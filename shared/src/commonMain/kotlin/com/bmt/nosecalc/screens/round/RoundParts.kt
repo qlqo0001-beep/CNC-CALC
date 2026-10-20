@@ -2,7 +2,6 @@ package com.bmt.nosecalc.screens.round
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,7 +21,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -36,17 +37,28 @@ import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.calc.Arc
 import com.bmt.nosecalc.calc.Contour
 import com.bmt.nosecalc.calc.Fmt
+import com.bmt.nosecalc.calc.Line
+import com.bmt.nosecalc.calc.NoseComp
+import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RoundSolution
-import com.bmt.nosecalc.screens.taper.Legend
-import com.bmt.nosecalc.screens.taper.ViewerCard
 import com.bmt.nosecalc.screens.taper.circle
 import com.bmt.nosecalc.ui.AppCard
+import com.bmt.nosecalc.ui.Arrow
+import com.bmt.nosecalc.ui.CardHeader
+import com.bmt.nosecalc.ui.LabeledValue
+import com.bmt.nosecalc.ui.LegendGlyph
+import com.bmt.nosecalc.ui.LegendItem
+import com.bmt.nosecalc.ui.MarkKind
 import com.bmt.nosecalc.ui.PillButton
 import com.bmt.nosecalc.ui.Segmented
+import com.bmt.nosecalc.ui.ShapeViewerCard
 import com.bmt.nosecalc.ui.ViewerLine
 import com.bmt.nosecalc.ui.ViewerMark
+import com.bmt.nosecalc.ui.ViewerStock
 import com.bmt.nosecalc.ui.arrowHead
+import com.bmt.nosecalc.ui.haloText
 import com.bmt.nosecalc.ui.theme.AppTheme
+import com.bmt.nosecalc.ui.theme.AppType
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -55,9 +67,10 @@ import kotlin.math.sin
  * 수동(3점호) 그림: 볼록 원호 위 세 점 P1(시작) · P2 · P3(끝), 중심과 R, 원호 바깥의 가공 방향 호(화살), 왼쪽 아래 X · Z 축.
  * inner = 위아래(내경), reverse = 좌우(역방향)를 뒤집은 모양 — 글자는 뒤집지 않는다. 뒤집은 그림은 같은 축에서의 모양이라
  * 축 표시는 그대로(Z → 오른쪽, X ↑ 위)다. withText = 오른쪽에 설명(고르기 화면의 넓은 카드 · 입력 화면의 세 점 카드).
+ * focus = 키패드 그림: 그 점(1~3) 하나만 초점색 · 굵은 테 · 알약 이름으로, 다른 점은 옅게
  */
 @Composable
-internal fun ManualArt(withText: Boolean, inner: Boolean = false, reverse: Boolean = false, modifier: Modifier = Modifier.fillMaxSize()) {
+internal fun ManualArt(withText: Boolean, inner: Boolean = false, reverse: Boolean = false, focus: Int? = null, modifier: Modifier = Modifier.fillMaxSize()) {
     val c = AppTheme.colors
     val measurer = rememberTextMeasurer()
     val sans = AppTheme.sans
@@ -92,15 +105,27 @@ internal fun ManualArt(withText: Boolean, inner: Boolean = false, reverse: Boole
             val end = 38 * PI / 180
             arrowHead(on(38.0, ra), Offset(-sx * sin(end).toFloat(), -sy * cos(end).toFloat()), c.viewPath, d(6f))
             val style = TextStyle(fontFamily = sans, fontSize = (11.5f * k).sp, fontWeight = FontWeight.Bold)
-            fun label(t: String, at: Offset, color: Color) {
+            // 초점 이름: 13sp 이상 진한 글, 초점색 α .16 을 카드에 섞은 알약 위(RoundTypeArt 의 초점과 같다)
+            val pill = c.lineFocus.copy(alpha = .16f).compositeOver(c.card)
+            fun label(t: String, at: Offset, color: Color, focused: Boolean = false) {
+                if (focused) {
+                    haloText(measurer, AnnotatedString(t), style.copy(color = c.textValue, fontSize = maxOf(13f, 11.5f * k).sp), pill, 1f, center = at, pill = true)
+                    return
+                }
                 val l = measurer.measure(t, style.copy(color = color))
                 drawText(l, topLeft = at - Offset(l.size.width / 2f, l.size.height / 2f))
             }
-            listOf(Triple(p1, "P1", c.drawT1), Triple(p2, "P2", c.drawT2), Triple(p3, "P3", c.indigo)).forEach { (p, t, col) ->
-                drawCircle(c.card, d(3.6f), p)
-                drawCircle(col, d(3.6f), p, style = Stroke(d(1.6f)))
+            listOf(Triple(p1, "P1", c.drawT1), Triple(p2, "P2", c.drawT2), Triple(p3, "P3", c.indigo)).forEachIndexed { i, (p, t, own) ->
+                val on = focus == i + 1
+                val col = when {
+                    on -> c.lineFocus
+                    focus != null -> own.copy(alpha = .45f)
+                    else -> own
+                }
+                drawCircle(c.card, d(if (on) 4.4f else 3.6f), p)
+                drawCircle(col, d(if (on) 4.4f else 3.6f), p, style = Stroke(d(if (on) 2.2f else 1.6f)))
                 val out = (p - o) / r
-                label(t, p + out * d(13f), col)
+                label(t, p + out * d(if (on) 15f else 13f), col, on)
             }
             label("R", o + (p2 - o) * .5f + Offset(sx * d(7f), sy * d(7f)), c.drawAngle)
             // 축: 왼쪽 아래 Z → · X ↑ (14dp 화살, 글 10.5sp)
@@ -169,44 +194,45 @@ internal fun ModeCard(comp: Boolean, onChange: (Boolean) -> Unit) {
 }
 
 /**
- * 노드 표: 요소 끝점마다 도면 X · Z(접점)와 보정 X · Z(가상 인선 = 프로그램 좌표), 가공 순서.
- * 점 사이 줄에 그 요소의 G01 / G02 · G03 과 R(도면 → 보정). 지금 모드의 열을 진하게 보인다.
+ * 노드 표: 요소 끝점마다 한 덩어리, 가공 순서. 윗줄은 지금 모드의 X · Z(합성 R = 보정 = 프로그램 좌표 valueComp, 접점 = 도면 좌표 textValue)를
+ * 크게(numLarge), 아랫줄은 다른 모드 값을 작게 흐리게('도면 X… Z…' / '보정 X… Z…'). 머리 줄(X (직경) · Z)은 한 번, 왼쪽 끝에 큰 값의 모드 이름.
+ * 점 사이 줄에 그 요소의 G01 / G02 · G03 과 R(도면 → 보정)
  */
 @Composable
-internal fun NodeTable(sol: RoundSolution, comp: Boolean) {
+internal fun NodeTable(sol: RoundSolution, comp: Boolean, modifier: Modifier = Modifier) {
     val c = AppTheme.colors
-    val drawnColor = if (comp) c.textMuted else c.textValue
-    val progColor = if (comp) c.valueComp else c.textMuted
-    AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text("노드 좌표", color = c.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(8.dp))
-            Text("가공 순서 · X 직경 · ${sol.side} · 팁 ${sol.tip}번", color = c.textMuted, fontSize = 12.5.sp)
-        }
-        Spacer(Modifier.height(10.dp))
-        Row {
-            Spacer(Modifier.width(POINT_COL))
-            Head("도면 (접점)", !comp, Modifier.weight(2f))
-            Head("보정 (가상 인선)", comp, Modifier.weight(2f))
-        }
-        Row(Modifier.padding(top = 2.dp, bottom = 4.dp)) {
-            Text("점", Modifier.width(POINT_COL), color = c.textMuted, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-            listOf("X" to !comp, "Z" to !comp, "X" to comp, "Z" to comp).forEach { (t, on) ->
-                Text(
-                    t, Modifier.weight(1f), color = if (on) c.textStrong else c.textMuted,
-                    fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End,
-                )
+    val main = if (comp) c.valueComp else c.textValue
+    AppCard(modifier.fillMaxWidth(), padding = 14.dp) {
+        CardHeader("노드 좌표", "가공 순서 · X 직경 · 팁 ${sol.tip}번")
+        Row(Modifier.padding(bottom = 4.dp)) {
+            Text(if (comp) "보정" else "도면", Modifier.width(POINT_COL), color = main, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            listOf("X (직경)", "Z").forEach {
+                Text(it, Modifier.weight(1f), color = c.textMuted, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
             }
         }
         Box(Modifier.fillMaxWidth().height(1.5.dp).background(c.lineField))
         val arcs = sol.arcs.associateBy { it.index }
         sol.nodes.forEachIndexed { i, n ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("P${nodeNo(sol, i)}", Modifier.width(POINT_COL), color = c.textStrong, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Mono(Fmt.fixed3(n.drawn.xDia), drawnColor, Modifier.weight(1f))
-                Mono(Fmt.fixed3(n.drawn.z), drawnColor, Modifier.weight(1f))
-                Mono(Fmt.fixed3(n.prog.xDia), progColor, Modifier.weight(1f))
-                Mono(Fmt.fixed3(n.prog.z), progColor, Modifier.weight(1f))
+            val (big, small) = if (comp) n.prog to n.drawn else n.drawn to n.prog
+            Column(Modifier.padding(vertical = 6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("P${nodeNo(sol, i)}", Modifier.width(POINT_COL), color = c.textStrong, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    listOf(big.xDia, big.z).forEach {
+                        Text(Fmt.fixed3(it), Modifier.weight(1f), style = AppType.numLarge, color = main, textAlign = TextAlign.End, maxLines = 1)
+                    }
+                }
+                Text(
+                    buildAnnotatedString {
+                        // 이름은 한글 글꼴로(고정폭 글꼴에 한글이 없다)
+                        withStyle(SpanStyle(fontFamily = AppTheme.sans, fontWeight = FontWeight.SemiBold)) { append(if (comp) "도면 " else "보정 ") }
+                        append("X${Fmt.fixed3(small.xDia)}  Z${Fmt.fixed3(small.z)}")
+                    },
+                    Modifier.fillMaxWidth(),
+                    style = AppType.numSmall,
+                    color = c.textMuted,
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                )
             }
             if (i < sol.drawing.segs.size) {
                 val a = arcs[i]
@@ -228,81 +254,89 @@ internal fun NodeTable(sol: RoundSolution, comp: Boolean) {
                     },
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(c.subtle).padding(start = POINT_COL, top = 3.dp, bottom = 3.dp),
                     color = c.textBody,
-                    fontSize = 12.5.sp,
+                    fontSize = 13.sp,
                     fontFamily = AppTheme.mono,
                 )
             }
         }
         Box(Modifier.padding(top = 6.dp, bottom = 8.dp).fillMaxWidth().height(1.dp).background(c.lineCard))
-        Text(
-            if (comp) "진입점 (G00)  X${Fmt.fixed3(sol.entry.xDia)}  Z${Fmt.fixed3(sol.entry.z)}"
-            else "도면 점 · 원호 R 은 모서리 R 을 접하게 끼운 윤곽입니다(접점은 직선 위 수선의 발, 원 위에서는 두 중심을 잇는 선 위).",
-            color = if (comp) c.textValue else c.textMuted,
-            fontFamily = if (comp) AppTheme.mono else AppTheme.sans,
-            fontSize = if (comp) 14.sp else 12.5.sp,
-            fontWeight = if (comp) FontWeight.Bold else FontWeight.Normal,
-            lineHeight = 18.sp,
-        )
+        if (comp) {
+            LabeledValue("진입점 (G00)", "X${Fmt.fixed3(sol.entry.xDia)}  Z${Fmt.fixed3(sol.entry.z)}")
+        } else {
+            Text(
+                "도면 점 · 원호 R 은 모서리 R 을 접하게 끼운 윤곽입니다(접점은 직선 위 수선의 발, 원 위에서는 두 중심을 잇는 선 위).",
+                color = c.textMuted,
+                fontSize = 12.5.sp,
+                lineHeight = 18.sp,
+            )
+        }
     }
 }
 
 private val POINT_COL = 34.dp
 
 /** 노드 번호. 3점호(filled == null)는 노드가 시작 · 끝 둘뿐이라 입력 칸 P1 · P3 와 이름을 맞춘다 */
-private fun nodeNo(sol: RoundSolution, i: Int) = if (sol.filled == null && i == sol.nodes.lastIndex) 3 else i + 1
-
-@Composable
-private fun Head(text: String, on: Boolean, modifier: Modifier) {
-    val c = AppTheme.colors
-    Text(
-        text,
-        modifier.padding(start = 6.dp).clip(RoundedCornerShape(4.dp)).background(if (on) c.teal.copy(alpha = .12f) else Color.Transparent).padding(vertical = 2.dp),
-        color = if (on) c.tealDeep else c.textMuted,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        textAlign = TextAlign.Center,
-        maxLines = 1,
-    )
-}
-
-@Composable
-private fun Mono(text: String, color: Color, modifier: Modifier) {
-    Text(text, modifier, color = color, fontFamily = AppTheme.mono, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End, maxLines = 1)
-}
+internal fun nodeNo(sol: RoundSolution, i: Int) = if (sol.filled == null && i == sol.nodes.lastIndex) 3 else i + 1
 
 /**
- * 형상 뷰어. 접점 = 도면 윤곽 + 접점 번호. 합성 R = 도면(가늘게) · 노즈 중심 궤적 · 꺾임점의 노즈 원 · 프로그램(가상 인선) · 진입점.
- * NC 는 G00 으로 진입점까지 온 뒤 G01 로 첫 보정점에 가므로, 그 사이는 프로그램(이송) 선으로 긋는다.
+ * 형상 확인. 소재(빗금) 위에 도면(3.5dp), 그 위에 NC 의 프로그램 경로(1.8dp, 진행 화살). 진입점 □ 에서 첫 점까지는 NC 처럼 이송(G01)이라
+ * 경로에 넣는다 — 라운드 NC 는 G00 으로 진입점에 온 뒤 끝까지 이송이라 그릴 급송 토막이 없다.
+ * 접점 = 도면 좌표 프로그램(drawn, 노즈R 0 으로 푼 것) · 접점 ○ 번호. 합성 R = 꺾임점의 노즈 원(옅게 칠함)과 가상 인선 꺾쇠 · 노즈 중심(끊은 선) ·
+ * 가상 인선 프로그램 · 보정점 • 번호. 원호 중심은 + 와 원호 가운데까지 끊은 지시선, 'R10.000 G02'(합성 R 은 'R10.000 → 10.400 G02') 알약 —
+ * 화면 반지름이 14dp 보다 작으면 뷰어가 뺀다. inner = 소재가 구멍 쪽(3점호 내경)
  */
 @Composable
-internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double) {
+internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: RoundSolution?, inner: Boolean) {
     val c = AppTheme.colors
-    if (!comp) {
-        ViewerCard(
-            listOf(ViewerLine(sol.drawing, c.drawProfile, 2.5.dp)),
-            sol.nodes.mapIndexed { i, n -> ViewerMark(n.drawn, c.drawT1, "${nodeNo(sol, i)}") } +
-                sol.arcs.map { ViewerMark(it.center, c.simArc) },
-            listOf(Legend(c.drawProfile, "도면 윤곽"), Legend(c.drawT1, "접점 (번호 = 노드 표)"), Legend(c.simArc, "원호 중심")),
-        )
-        return
-    }
-    val centerNodes = (listOf(sol.center.segs.first().start) + sol.center.segs.map { it.end }).distinct()
+    val path = if (comp) sol else drawn
+    val nose = comp && r > 0
     val lines = buildList {
-        add(ViewerLine(sol.drawing, c.drawProfile, 1.6.dp))
-        add(ViewerLine(sol.center, c.sky, 1.4.dp, dashed = true))
-        if (r > 0) centerNodes.forEach { add(ViewerLine(circle(it, r), c.sky.copy(alpha = .7f), 1.dp)) }
-        add(ViewerLine(Contour.polyline(sol.entry, sol.program.segs.first().start), c.simToolpath, 2.2.dp)) // G01 진입 — NC 와 같게 이송
-        add(ViewerLine(sol.program, c.simToolpath, 2.2.dp))
+        add(ViewerLine(sol.drawing, c.drawProfile, 3.5.dp))
+        if (nose) {
+            val tv = NoseComp.tipVector(sol.tip, r)
+            for (o in (listOf(sol.center.segs.first().start) + sol.center.segs.map { it.end }).distinct()) {
+                add(ViewerLine(circle(o, r), c.viewNose, 1.2.dp, fill = c.viewNose.copy(alpha = .10f)))
+                // 가상 인선 꺾쇠: 노즈 원에 Z · X 방향으로 접하는 두 선이 가상 인선에서 만난다(팁 1~4)
+                if (tv.z != 0.0 && tv.x != 0.0) add(ViewerLine(Contour.polyline(o + Pt(tv.z, 0.0), o + tv, o + Pt(0.0, tv.x)), c.viewNose.copy(alpha = .8f), 1.2.dp))
+            }
+            add(ViewerLine(sol.center, c.viewNose, 1.4.dp, dashed = true))
+        }
+        if (path != null) add(ViewerLine(Contour(listOf(Line(path.entry, path.program.segs.first().start)) + path.program.segs), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
     }
-    // 진입 글은 급송선 색(simRapid)이면 바탕에 흐리다
-    val marks = sol.nodes.mapIndexed { i, n -> ViewerMark(n.prog, c.simToolpath, "${nodeNo(sol, i)}") } + ViewerMark(sol.entry, c.textBody, "진입")
-    ViewerCard(
-        lines, marks,
+    val points = if (comp) {
+        sol.nodes.mapIndexed { i, n -> ViewerMark(n.prog, c.viewPath, "${nodeNo(sol, i)}", MarkKind.Dot) }
+    } else {
+        sol.nodes.mapIndexed { i, n -> ViewerMark(n.drawn, c.viewLabelT1, "${nodeNo(sol, i)}") }
+    }
+    val centers = sol.arcs.map { a ->
+        val g = if (a.cw) "G02" else "G03"
+        val text = if (!comp) "R${Fmt.fixed3(a.r)} $g"
+        else a.progR?.let { "R${Fmt.fixed3(a.r)} → ${Fmt.fixed3(it)} $g" } ?: "R${Fmt.fixed3(a.r)} $g · 보정 R 없음"
+        ViewerMark(a.center, c.simArc, text, MarkKind.Cross, arc = sol.drawing.segs[a.index] as Arc)
+    }
+    val entry = listOfNotNull(path?.let { ViewerMark(it.entry, c.viewRapid, "진입", MarkKind.Square) })
+    val legend = if (comp) {
+        listOfNotNull(
+            LegendItem(c.drawProfile, "도면"),
+            LegendItem(c.viewNose, "노즈 중심", LegendGlyph.Dashed).takeIf { nose },
+            LegendItem(c.viewNose, "노즈 R${Fmt.nc(r).removeSuffix(".")} · 가상 인선 ${sol.tip}번", LegendGlyph.Circle).takeIf { nose },
+            LegendItem(c.viewPath, "프로그램 경로"),
+            LegendItem(c.viewPath, "보정점 (번호 = 노드 표)", LegendGlyph.Dot),
+            LegendItem(c.drawHatch, "소재", LegendGlyph.Fill),
+        )
+    } else {
         listOf(
-            Legend(c.drawProfile, "도면"),
-            Legend(c.sky, "노즈 중심 (합성 R)", dashed = true),
-            Legend(c.simToolpath, "프로그램"),
-        ),
+            LegendItem(c.drawProfile, "도면"),
+            LegendItem(c.viewPath, "프로그램 경로"),
+            LegendItem(c.viewLabelT1, "접점 (번호 = 노드 표)", LegendGlyph.Ring),
+            LegendItem(c.simArc, "원호 중심", LegendGlyph.Cross),
+            LegendItem(c.drawHatch, "소재", LegendGlyph.Fill),
+        )
+    }
+    ShapeViewerCard(
+        lines, points + centers + entry, legend,
+        subtitle = if (comp) "합성 R 궤적 · 팁 ${sol.tip}번" else "접점 모드 · 도면 좌표",
+        stock = ViewerStock(sol.drawing, inner),
     )
 }
 
@@ -313,27 +347,17 @@ internal fun ArcCard(sol: RoundSolution) {
     val a = sol.arcs.firstOrNull() ?: return
     val seg = sol.drawing.segs[a.index] as Arc
     AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
-        Text("원호", color = c.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
+        CardHeader("원호")
         Row {
-            Stat("방향", "${if (a.cw) "G02" else "G03"} ${if (a.cw) "시계" else "반시계"}", Modifier.weight(1f), c.simArc)
-            Stat("원호 각", "${Fmt.fixed3(seg.sweepDeg)}°", Modifier.weight(1f), c.textValue)
+            LabeledValue("방향", "${if (a.cw) "G02" else "G03"} ${if (a.cw) "시계" else "반시계"}", Modifier.weight(1f), c.simArc)
+            LabeledValue("원호 각", "${Fmt.fixed3(seg.sweepDeg)}°", Modifier.weight(1f))
         }
         Spacer(Modifier.height(8.dp))
         Row {
-            Stat("도면 R", Fmt.fixed3(a.r), Modifier.weight(1f), c.textValue)
-            Stat("보정 R (합성)", a.progR?.let { Fmt.fixed3(it) } ?: "없음", Modifier.weight(1f), c.valueComp)
+            LabeledValue("도면 R", Fmt.fixed3(a.r), Modifier.weight(1f))
+            LabeledValue("보정 R (합성)", a.progR?.let { Fmt.fixed3(it) } ?: "없음", Modifier.weight(1f), c.valueComp)
         }
         Spacer(Modifier.height(8.dp))
-        Stat("중심 (X 직경 · Z)", "X${Fmt.fixed3(a.center.xDia)}  Z${Fmt.fixed3(a.center.z)}", Modifier.fillMaxWidth(), c.textValue)
-    }
-}
-
-@Composable
-private fun Stat(label: String, value: String, modifier: Modifier, color: Color) {
-    val c = AppTheme.colors
-    Column(modifier) {
-        Text(label, color = c.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        Text(value, color = color, fontFamily = AppTheme.mono, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        LabeledValue("중심 (X 직경 · Z)", "X${Fmt.fixed3(a.center.xDia)}  Z${Fmt.fixed3(a.center.z)}", Modifier.fillMaxWidth())
     }
 }
