@@ -60,7 +60,7 @@ class ScreenShotTest {
     fun keypad() = Shots.both("keypad") {
         AppHost(it) {
             TaperScreen()
-            NumberPad("Z축 시작점", "mm", "5.0", onDone = {}, onDismiss = {})
+            NumberPad("Z축 시작점", "mm", "5.0", onChange = {}, onClose = {})
         }
     }
 

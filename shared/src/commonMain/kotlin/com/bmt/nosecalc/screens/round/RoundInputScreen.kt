@@ -136,7 +136,7 @@ internal fun ManualScreen(s: RoundState) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 listOf(Triple(1, "시작", FieldRole.Start), Triple(2, "가운데", FieldRole.Normal), Triple(3, "끝", FieldRole.End)).forEach { (i, name, role) ->
                     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PointBadge("P$i", pointColor(i), Modifier.size(38.dp, 48.dp))
+                        PointBadge("P$i", pointColor(i), Modifier.size(38.dp, 52.dp))
                         NumberField("X$i $name (직경)", s.point("x$i"), { s.setPoint("x$i", it) }, Modifier.weight(1f), unit = "mm", role = role)
                         NumberField("Z$i", s.point("z$i"), { s.setPoint("z$i", it) }, Modifier.weight(1f), unit = "mm", role = role)
                     }
@@ -206,7 +206,7 @@ private fun Results(result: RoundResult, type: Int, comp: Boolean, noseR: Double
     }
 }
 
-/** 비운 칸에 흐리게 보일 계산된 값("자동" 표는 칸 라벨 줄에) */
+/** 비운 칸에 보일 계산된 값(칸에 청록 글로, "자동" 표는 칸 라벨 줄에) */
 private fun autoText(f: RoundInput, key: String): String {
     val v = when (key) {
         "mainR" -> f.mainR

@@ -81,7 +81,7 @@ class AppState(private val store: KeyValueStore) {
         private set
     private var toastSeq = 0
 
-    /** 화면 위쪽에 잠깐 뜨는 안내 */
+    /** 화면 아래쪽에 잠깐 뜨는 안내 */
     fun toast(text: String) {
         toast = Toast(++toastSeq, text)
     }

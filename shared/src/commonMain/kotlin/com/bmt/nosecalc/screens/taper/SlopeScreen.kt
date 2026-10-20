@@ -90,7 +90,7 @@ internal fun SlopeScreen(s: TaperState) {
                 for (i in 0 until n) {
                     val p = sol?.points?.get(i)?.vertex
                     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PointBadge("T${i + 1}", pointColor(c, i), Modifier.size(38.dp, 48.dp))
+                        PointBadge("T${i + 1}", pointColor(c, i), Modifier.size(38.dp, 52.dp))
                         NumberField(
                             "X${i + 1} (직경)", xs[i], { s.setPoint("x${i + 1}", it) }, Modifier.weight(1f),
                             unit = "mm", autoValue = auto(xs[i], p?.xDia),
@@ -143,7 +143,7 @@ internal fun SlopeScreen(s: TaperState) {
             Text(
                 (
                     if (kind.double) "세 점의 X·Z 를 모두 넣습니다. 각도는 결과로 나옵니다. "
-                    else "X1·Z1·X2·Z2·각도 가운데 하나를 비우면(키패드 C → 확인) 나머지 넷으로 계산합니다. 보통 각도를 비워 둡니다. "
+                    else "X1·Z1·X2·Z2·각도 가운데 하나를 비우면(키패드 C) 나머지 넷으로 계산합니다. 보통 각도를 비워 둡니다. "
                     ) +
                     "모서리 R 은 비우면 0(날카로운 꼭짓점). 시작점·끝점은 앞뒤 요소의 바깥 끝 좌표(단면이면 X, 수평이면 Z)입니다 — " +
                     "끝점에 척·턱 쪽 실제 끝좌표를 넣으면 인선이 거기서 멈춥니다. 시작점을 비우면 그 요소는 깎지 않고 경사(또는 그 요소) 연장선에서 들어갑니다.",
@@ -179,7 +179,7 @@ internal fun SlopeScreen(s: TaperState) {
     }
 }
 
-/** 빈칸이면 계산된 값(흐리게 칸에, "자동" 표는 라벨 줄에) */
+/** 빈칸이면 계산된 값(칸에 청록 글로, "자동" 표는 라벨 줄에). 못 풀면 "" */
 private fun auto(text: String, v: Double?): String? = if (text.isNotEmpty()) null else v?.let { Fmt.fixed3(it) } ?: ""
 
 /**

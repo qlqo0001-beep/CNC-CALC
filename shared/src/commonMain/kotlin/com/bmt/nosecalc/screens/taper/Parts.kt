@@ -55,6 +55,7 @@ import com.bmt.nosecalc.ui.ShapeViewer
 import com.bmt.nosecalc.ui.ViewerLine
 import com.bmt.nosecalc.ui.ViewerMark
 import com.bmt.nosecalc.ui.theme.AppTheme
+import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.onFill
 
 /** B 화면 맨 위: 고른 형상의 작은 그림 + 종류·형상 번호·이름·방향/팁 + 형상 다시 고르기 */
@@ -94,7 +95,7 @@ internal fun PointBadge(text: String, color: Color, modifier: Modifier = Modifie
 /** 필드 위 라벨(NumberField 와 같은 모양) */
 @Composable
 internal fun FieldLabel(text: String) {
-    Text(text, color = AppTheme.colors.fieldNormal.label, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+    Text(text, style = AppType.label, color = AppTheme.colors.fieldNormal.label, maxLines = 1)
 }
 
 /** 노즈R(= 인서트 날끝 반경 = 기계 공구 보정 화면 R 칸의 공구 반경): 0.2·0.4·0.8·1.2 고르기 + 직접(키패드) */
@@ -115,14 +116,9 @@ internal fun NoseRPicker(value: String, onChange: (String) -> Unit) {
         }
     }
     if (editing) {
-        NumberPad(
-            "노즈 R (공구 반경)", "mm", value,
-            onDone = {
-                if (it.isNotEmpty()) onChange(it)
-                editing = false
-            },
-            onDismiss = { editing = false },
-        )
+        // 노즈 R 은 비울 수 없다 — 비우면 연 때 값으로
+        val start = remember { value }
+        NumberPad("노즈 R (공구 반경)", "mm", value, onChange = { onChange(it.ifEmpty { start }) }, onClose = { editing = false })
     }
     if (custom && v == null) Text("노즈 R 을 넣으세요", color = c.error.label, fontSize = 12.sp)
 }
@@ -156,7 +152,7 @@ internal fun TipField(tip: Int, standard: Int, onPick: (Int?) -> Unit, modifier:
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(52.dp)
                 .clip(shape)
                 .background(c.fieldNormal.bg)
                 .border(1.5.dp, c.fieldNormal.border, shape)
