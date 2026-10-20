@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.bmt.nosecalc.screens.TaperHelp
 import com.bmt.nosecalc.screens.TaperScreen
 import com.bmt.nosecalc.screens.taper.TaperState
+import com.bmt.nosecalc.screens.taper.example
 import com.bmt.nosecalc.screens.taper.TipHelp
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.AppIcons
@@ -119,7 +120,7 @@ class ShellShotsTest {
     /** 넓은 PC 창(1280dp): 본문은 가운데 640dp 에 머물고 카드 · 그림은 폰과 같은 크기, 헤더만 창 폭 */
     @Test
     fun wideWindow() = Shots.both("taper-b-wide", heightDp = 1400, widthDp = 1280) {
-        AppHost(it) { TaperScreen(TaperState(type = 1, open = true)) }
+        AppHost(it) { TaperScreen(TaperState(type = 1, open = true).example()) }
     }
 
     @Test

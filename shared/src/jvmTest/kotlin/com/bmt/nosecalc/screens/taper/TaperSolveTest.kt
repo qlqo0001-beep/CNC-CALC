@@ -1,8 +1,10 @@
 package com.bmt.nosecalc.screens.taper
 
 import com.bmt.nosecalc.calc.DoubleTaperInput
+import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.GrooveCalc
 import com.bmt.nosecalc.calc.GrooveInput
+import com.bmt.nosecalc.calc.GrooveRef
 import com.bmt.nosecalc.calc.NoseR
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.Side
@@ -49,6 +51,7 @@ class TaperSolveTest {
         assertEquals(f.tip, u.tip, "$what 팁")
         assertEquals(f.side, u.side, "$what 보정 쪽")
         assertEquals(f.fromStart, u.fromStart, "$what 시작 요소")
+        assertEquals(f.toEnd, u.toEnd, "$what 끝 요소")
         near(f.entry, u.entry, "$what 진입점")
         near(f.exit, u.exit, "$what 후퇴점")
         assertEquals(f.program.segs.size, u.program.segs.size)
@@ -125,8 +128,8 @@ class TaperSolveTest {
         for (kind in listOf(TaperKind.OUTER_DOUBLE, TaperKind.INNER_DOUBLE)) {
             for (type in 1..4) {
                 for (r in listOf(0.2, 0.4, 0.8)) {
-                    val x = (1..3).map { TaperDefaults.point(kind, type, true, "x$it").toDouble() }
-                    val z = (1..3).map { TaperDefaults.point(kind, type, true, "z$it").toDouble() }
+                    val x = (1..3).map { TaperExample.point(kind, type, true, "x$it").toDouble() }
+                    val z = (1..3).map { TaperExample.point(kind, type, true, "z$it").toDouble() }
                     for (cr in listOf(listOf(0.0, 0.0, 0.0), listOf(0.5, 1.0, 0.3))) {
                         val ui = TaperSolve.solve(form(kind, type, true, x, z, r, corners = cr, start = -40.0, end = -16.0))
                         val ref = TaperCalc.calcDouble(
@@ -199,9 +202,9 @@ class TaperSolveTest {
     @Test
     fun forwardIsCalcAsIs() {
         val ui = TaperSolve.solve(form(TaperKind.OUTER, 1, false, listOf(40.0, 50.0), listOf(0.0, -5.0)))
-        assertEquals(listOf("G00 X37.531 Z1.", "G01 X39.531 Z0.", "G01 X50. Z-5.234", "G01 Z-10.", "G00 X52."), ui.solution!!.ncG40)
+        assertEquals(listOf("G00 X37.531 Z1.", "G01 X39.531 Z0.", "G01 X50. Z-5.234", "G00 X52."), ui.solution!!.ncG40)
         assertEquals(
-            listOf("(R0.4 T3)", "G00 X38. Z1.", "G42 G01 X40. Z0.", "G01 X50. Z-5.", "G01 Z-10.", "G40 G00 X52."),
+            listOf("(R0.4 T3)", "G00 X38. Z1.", "G42 G01 X40. Z0.", "G01 X50. Z-5.", "G40 G00 X52. Z-6."),
             ui.solution!!.ncG41G42,
         )
         // 모서리 R·끝점도 그대로 넘긴다
@@ -223,29 +226,103 @@ class TaperSolveTest {
         assertNull(TaperSolve.solve(form(TaperKind.INNER_DOUBLE, 1, false, x, z)).solution)
     }
 
-    /** 처음 값은 모든 종류·형상·방향에서 바로 답이 나와야 한다 */
+    /** 예(2단계 처음 값)는 모든 종류·형상·방향에서 바로 답이 나와야 한다 — 스크린샷 · 골든이 쓴다 */
     @Test
-    fun defaultsSolve() {
+    fun examplesSolve() {
         for (kind in TaperKind.entries.filter { !it.groove }) {
             for (type in 1..kind.types) {
                 for (rev in listOf(false, true)) {
-                    val x = (1..kind.points).map { TaperDefaults.point(kind, type, rev, "x$it").toDouble() }
-                    val z = (1..kind.points).map { TaperDefaults.point(kind, type, rev, "z$it").toDouble() }
-                    for (name in listOf("ang", "r1", "start", "end")) assertEquals("", TaperDefaults.point(kind, type, rev, name))
+                    val x = (1..kind.points).map { TaperExample.point(kind, type, rev, "x$it").toDouble() }
+                    val z = (1..kind.points).map { TaperExample.point(kind, type, rev, "z$it").toDouble() }
                     val res = TaperSolve.solve(form(kind, type, rev, x, z))
                     assertNotNull(res.solution, "${kind.label} 형상 $type ${if (rev) "역" else "정"}: ${res.warnings}")
                     if (rev) assertTrue(z[0] < z[1], "역방향 T1 은 왼쪽")
                 }
             }
         }
+        val e = TaperExample.groove
         val g = GrooveCalc.calc(
             GrooveInput(
-                TaperDefaults.shared("zStart").toDouble(), TaperDefaults.shared("width").toDouble(),
-                TaperDefaults.shared("od").toDouble(), TaperDefaults.shared("bottom").toDouble(),
+                e.getValue("zStart").toDouble(), e.getValue("width").toDouble(), e.getValue("od").toDouble(), e.getValue("bottom").toDouble(),
                 TaperDefaults.shared("insert").toDouble(), TaperDefaults.shared("overlap").toDouble(),
             ),
         )
         assertEquals(listOf(-13.0, -15.5, -18.0), g.solution!!.steps.map { it.z })
+    }
+
+    /** 처음 값: 도면 치수는 0, 각도 · 모서리 R · 시작 · 끝점은 빈칸 → 계산 전이라 멈춤이 아닌 안내(waiting) */
+    @Test
+    fun defaultsWaitForDimensions() {
+        for (kind in TaperKind.entries.filter { !it.groove }) {
+            for (type in 1..kind.types) {
+                for (rev in listOf(false, true)) {
+                    val s = TaperState(kind, rev, type, open = true)
+                    val n = kind.points
+                    for (i in 1..n) assertEquals("0" to "0", s.point("x$i") to s.point("z$i"))
+                    for (name in listOf("ang", "r1", "start", "end")) assertEquals("", s.point(name))
+                    val f = form(kind, type, rev, List(n) { 0.0 }, List(n) { 0.0 })
+                    assertNull(TaperSolve.solve(f).solution)
+                    assertTrue(f.waiting)
+                }
+            }
+        }
+        val g = TaperState(TaperKind.GROOVE, type = 1, open = true)
+        val input = GrooveInput(
+            g.shared("zStart").toDouble(), g.shared("width").toDouble(), g.shared("od").toDouble(), g.shared("bottom").toDouble(),
+            g.shared("insert").toDouble(), g.shared("overlap").toDouble(), xClear = g.shared("xClear").toDouble(),
+        )
+        assertNull(GrooveCalc.calc(input).solution)
+        assertTrue(input.waiting)
+        assertEquals("0", g.shared("xClear"))
+        assertEquals("0", g.shared("zClear"))
+    }
+
+    /**
+     * 현장: "Z 여유를 바꿔도 G00 이 따라오지 않는다". 화면의 모든 종류 · 형상 · 방향(모서리 R · 시작점 유무)에서 Z 여유 0 ~ 3 을 바꾸면
+     * 두 NC 의 G00 진입과 화면의 진입점(직접 보정 G00)이 첫 깎는 점에서 Z 로 꼭 max(Z 여유, 노즈 R) — 정방향은 +Z(척 반대쪽),
+     * 역방향은 −Z — 떨어진다. 첫 깎는 점 = 직접 보정은 첫 보정점(시작점을 넣었으면 시작점′), G41/G42 는 첫 도면점.
+     * 홈은 단마다 G00 X = 외경 + 2 × X 여유
+     */
+    @Test
+    fun entryFollowsZClearance() {
+        val clear = listOf(0.0, 0.2, 0.5, 1.0, 2.0, 3.0)
+        var n = 0
+        for (kind in TaperKind.entries.filter { !it.groove }) for (type in 1..kind.types) for (rev in listOf(false, true)) {
+            val x = (1..kind.points).map { TaperExample.point(kind, type, rev, "x$it").toDouble() }
+            val z = (1..kind.points).map { TaperExample.point(kind, type, rev, "z$it").toDouble() }
+            val (frontV, _) = legsVertical(kind, type)
+            // 시작 요소 6 mm: 단면은 그 요소가 T1 에서 뻗는 쪽으로 X, 수평은 T1 바깥쪽 Z
+            val dx = if (kind.inner) 12.0 else -12.0
+            val start = if (frontV) x[0] + dx else z[0] + (if (rev) -6.0 else 6.0)
+            for (r in listOf(0.4, 0.8)) for (r1 in listOf(0.0, 1.0)) for (lead in listOf(false, true)) for (zc in clear) {
+                val corners = List(kind.points) { if (it == 0) r1 else 0.0 }
+                val f = SlopeForm(kind, type, rev, r, null, x, z, null, zc, corners, if (lead) start else null)
+                val what = "${kind.label} 형상 $type ${if (rev) "역" else "정"} r$r R$r1 시작점 $lead Z 여유 $zc"
+                val s = assertNotNull(TaperSolve.solve(f).solution, what)
+                val c = maxOf(zc, r)
+                val dir = if (rev) -1.0 else 1.0
+                val skip = if (s.fromStart) 0 else 1
+                assertEquals("G00 X${Fmt.nc(s.entry.xDia)} Z${Fmt.nc(s.entry.z)}", s.ncG40.first(), "$what 화면 진입점 = G00")
+                assertEquals(s.program.segs[skip].start.z + dir * c, s.entry.z, 1e-9, "$what 직접 보정 ${s.ncG40}")
+                val g00 = s.ncG41G42[1]
+                assertTrue(g00.startsWith("G00 "), "$what ${s.ncG41G42}")
+                assertTrue(g00.endsWith(" Z${Fmt.nc(s.drawing.segs[skip].start.z + dir * c)}"), "$what G41/G42 ${s.ncG41G42}")
+                n++
+            }
+        }
+        assertTrue(n > 1500, "확인한 사례 $n")
+        val e = TaperExample.groove
+        for (xc in clear) for (ref in GrooveRef.entries) {
+            val g = GrooveCalc.calc(
+                GrooveInput(
+                    e.getValue("zStart").toDouble(), e.getValue("width").toDouble(), e.getValue("od").toDouble(), e.getValue("bottom").toDouble(),
+                    3.0, 0.5, ref, xc,
+                ),
+            ).solution!!
+            val rapids = g.nc.filter { it.startsWith("G00") }
+            assertTrue(rapids.isNotEmpty() && rapids.all { "X${Fmt.nc(40 + 2 * xc)}" in it || "X" !in it }, "홈 X 여유 $xc ${g.nc}")
+            assertEquals(40 + 2 * xc, g.retractXDia, 1e-12)
+        }
     }
 
     @Test

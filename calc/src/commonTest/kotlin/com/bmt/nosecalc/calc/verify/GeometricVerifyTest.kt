@@ -361,18 +361,21 @@ class GeometricVerifyTest {
         val warned = TaperWarning.CONCAVE_R_LE_NOSE in res.warnings
         if (warned != small.isNotEmpty()) rep.bad(id, "오목경고", "CONCAVE_R_LE_NOSE=$warned, R ≤ r 인 오목 원호 $small")
         // 직접 보정 NC 는 진입 · 형상 · 후퇴. 시작·끝은 인선을 그 좌표에 둬서 노즈 접점이 바깥 끝에서 r 까지 안쪽일 수 있다.
-        // 시작점을 비우면 시작 요소는 깎지 않는다(진입점에서 첫 꺾임점′ 으로)
+        // 시작점을 비우면 시작 요소는 깎지 않는다(진입점에서 첫 꺾임점′ 으로). 끝점을 비우면 끝 요소도 깎지 않는다(마지막 꺾임점′ 에서 후퇴)
+        val skip = (if (sol.fromStart) emptySet() else setOf(0)) + (if (sol.toEnd) emptySet() else setOf(drawing.lastIndex))
         checkPath(
             rep, id, drawing, reg, leftMat, sol.program.segs.map(::el), sol.center.segs.map(::el), sol.tip, r,
-            sol.ncG40, ncSkip = if (sol.fromStart) emptySet() else setOf(0), looseApproach = false, legTrim = r, exitMove = true,
+            sol.ncG40, ncSkip = skip, looseApproach = false, legTrim = r, exitMove = true,
         ) { it in small && warned }
         checkEnds(rep, id, sol, drawing, sign, r)
-        checkG4x(rep, id, sol.ncG41G42, drawing, reg, expSide, sol.tip, r, sol.tip == physicalTip(inner, reverse), sol.fromStart)
+        checkG4x(rep, id, sol.ncG41G42, drawing, reg, expSide, sol.tip, r, sol.tip == physicalTip(inner, reverse), sol.fromStart, sol.toEnd)
     }
 
     /**
      * 직접 보정 NC 의 시작·끝(진입 G00 다음 첫 형상 점, 후퇴 앞 점)이 인선을 시작·끝점 좌표에 둔 점인지:
      * 앞뒤 요소를 공구 쪽으로 r 밀고 팁 벡터를 더한 선 위에서 시작·끝점에 내린 발. 시작점을 비웠으면 끝만 본다.
+     * 끝점을 비웠으면 끝 요소의 보정선 위, 마지막 꺾임점 곁(끝 요소에 노즈가 닿기 시작하는 자리)에서 멈춰야 한다 —
+     * 경사가 끝까지 깎였는지는 [checkPath] 가 본다.
      */
     private fun checkEnds(rep: Report, id: String, sol: TaperSolution, drawing: List<El>, sign: Double, r: Double) {
         val tv = tipVec(sol.tip, r)
@@ -389,17 +392,30 @@ class GeometricVerifyTest {
         val b = pts[1]
         val onEntry = abs((b - a).unit() cross (s0 - a)) <= NC_TOL && ((s0 - a) dot (b - s0)) >= -NC_TOL
         if (sol.fromStart && (b - s0).len > NC_TOL && !onEntry) rep.bad(id, "시작점", "NC 첫 형상 점 $b, 인선을 시작점에 둔 점은 $s0  NC=${sol.ncG40}")
-        if ((pts[pts.size - 2] - e0).len > NC_TOL) rep.bad(id, "끝점", "NC 끝 점 ${pts[pts.size - 2]}, 인선을 끝점에 둔 점은 $e0  NC=${sol.ncG40}")
+        val end = pts[pts.size - 2]
+        if (sol.toEnd) {
+            if ((end - e0).len > NC_TOL) rep.bad(id, "끝점", "NC 끝 점 $end, 인선을 끝점에 둔 점은 $e0  NC=${sol.ncG40}")
+        } else {
+            val l = drawing.last()
+            val u = l.tangent(0.0)
+            val off = l.leftNormal(0.0) * (sign * r) + tv
+            // 보정점은 요소를 따라 꼭짓점에서 많아야 r + |팁 벡터| 밀린다
+            val along = (end - (l.a + off)) dot u
+            if (abs(u cross (end - (l.a + off))) > NC_TOL || along > (1 + sqrt(2.0)) * r + NC_TOL) {
+                rep.bad(id, "끝점", "끝점을 비웠는데 NC 끝 점 $end 가 끝 요소 보정선의 처음이 아니다  NC=${sol.ncG40}")
+            }
+        }
     }
 
     /**
      * G41/G42 프로그램: 첫 줄 주석 (R… T…) = 노즈R·팁, G00 진입 → G4x G01 시작점(길이 ≥ r) → 형상(도면 좌표) → G40 G00 후퇴(길이 ≥ r).
      * 형상 줄은 도면 위에 있고 도면의 꼭짓점을 모두 지난다(시작점을 비웠으면 시작 요소는 빼고). 첫 형상 줄만은 시작 요소의 연장선 위여도 된다
      * (공구 쪽으로 띄운 G00 점에서 그 선에 직각으로 들어간 뒤 선을 따라가는 줄). 표준 팁이면 진입점·후퇴점(G40 상태의 인선)에서 노즈가 재료 밖이다.
+     * 끝점을 비웠으면(toEnd = false) 끝 요소는 프로그램에 없다.
      */
     private fun checkG4x(
         rep: Report, id: String, nc: List<String>, drawing: List<El>, reg: Region, side: Side, tip: Int, r: Double, standard: Boolean,
-        fromStart: Boolean,
+        fromStart: Boolean, toEnd: Boolean,
     ) {
         val m = Regex("""\(R([\d.]+) T(\d)\)""").matchEntire(nc.firstOrNull() ?: "")
         if (m == null || abs(m.groupValues[1].toDouble() - r) > 0.0005 || m.groupValues[2].toInt() != tip) {
@@ -423,8 +439,9 @@ class GeometricVerifyTest {
             if (dev > NC_TOL && !onLead) rep.bad(id, "G41/G42", "형상 줄이 도면에서 ${fmt(dev)} mm 벗어남  NC=$nc")
         }
         val ncPts = listOf(shape.first().a) + shape.map { it.b }
-        // 시작점을 비웠으면 시작 요소는 프로그램에 없다
-        for (q in (if (fromStart) listOf(drawing.first().a) else emptyList()) + drawing.drop(if (fromStart) 0 else 1).map { it.b }) {
+        // 시작·끝점을 비웠으면 그 요소는 프로그램에 없다
+        val cut = drawing.drop(if (fromStart) 0 else 1).dropLast(if (toEnd) 0 else 1)
+        for (q in (if (fromStart) listOf(drawing.first().a) else emptyList()) + cut.map { it.b }) {
             if (ncPts.none { (it - q).len <= NC_TOL }) rep.bad(id, "G41/G42", "도면 꼭짓점 $q 가 NC 에 없다  NC=$nc")
         }
         if (standard) {

@@ -155,7 +155,7 @@ T1 = 그림 오른쪽(Z 큰 쪽) 점, T2 = 왼쪽 점. 점 사이는 경사, 앞
 | 4 | 작은 외경 → 테이퍼 → 어깨 단면 | 큰 내경 → 테이퍼 → 단면(안쪽 바닥) | 수평 | 단면 |
 | 5 | 역테이퍼: 척 쪽으로 지름이 작아짐 | 역테이퍼: 안쪽으로 지름이 커짐(외경 5 와 대칭, 원본엔 그림 없음) | 수평 | 수평 |
 
-- 앞뒤 요소의 바깥 끝 = 시작점·끝점(`start`·`end`, 아래 절). 비우면 5 mm, 중심 쪽으로 내려가는 단면은 X0 에서 멈춘다.
+- 앞뒤 요소의 바깥 끝 = 시작점·끝점(`start`·`end`, 아래 절). 비우면 그림은 5 mm(중심 쪽으로 내려가는 단면은 X0 에서 멈춤)이고 그 요소는 깎지 않는다.
 - T 점마다 모서리 R(`cornerR1`…, 아래 절).
 - 겹테이퍼: T1 오른쪽, T2 가운데, T3 왼쪽, 경사 둘, 앞뒤 요소는 수평. 세 점의 X·Z 를 모두 넣고 각도는 결과로 나온다
   (빈 X 를 각도로 풀면 오르내림 방향을 알 수 없어서).
@@ -208,7 +208,8 @@ T1 = 그림 오른쪽(Z 큰 쪽) 점, T2 = 왼쪽 점. 점 사이는 경사, 앞
 
 ### 시작점·끝점 (`start`·`end`, 앞뒤 요소의 바깥 끝 좌표)
 - 앞(T1 앞)·뒤(T2 뒤, 겹테이퍼는 T3 뒤) 요소가 **단면이면 X(직경), 수평이면 Z** 를 받는다. 예: 내경 TYPE 1 의 끝점 = 구멍 깊이 Z-20.
-- 비우면 T 점에서 5 mm(`LEG_DEFAULT`, 단면은 반경 5 — 중심 쪽 단면은 X0 에서 멈춤) 떨어진 곳으로 그린다.
+- 비우면 T 점에서 5 mm(`LEG_DEFAULT`, 단면은 반경 5 — 중심 쪽 단면은 X0 에서 멈춤) 떨어진 곳으로 그린다. **그 요소는 넣었을 때만 깎는다**
+  (현장 요청 2026-10-20): 끝점을 비우면 마지막 꺾임점(모서리 R 이면 그 끝)′ 에서 끝나고(`toEnd` = false), 화면 끝점 칸의 자동 값은 그 도면 점이다.
 - 잘못된 값은 `BAD_LEG` 로 멈춘다: T 점의 반대쪽이거나 같은 자리, X < 0, 그리고 노즈R 보정 때문에 생기는 두 경우 —
   ① 보정점이 이미 그 좌표를 지나 공구가 되돌아가야 할 때, ② 인선을 그 좌표에 두면 노즈가 그 요소에 한 번도 닿지 않을 때
   (요소가 노즈R 쯤보다 짧다. 예: 외경 TYPE 3 의 끝 Z 가 T2 에서 0.3, 0.4R → 노즈 중심이 Z-4.9 라 외경에 안 닿는다).
@@ -242,9 +243,16 @@ G40 상태로 쓴다(모서리 원호는 보정 R = R ± r).
   진입점은 첫 꺾임점(정방향 T1′, 역방향 T2′ — 겹테이퍼는 T3′)에서 바깥으로(시작점을 비웠을 때):
   - 그 꺾임이 **볼록**(재료 모서리가 공구 쪽으로 나옴: 정방향 TYPE 1·2·5, 역방향 TYPE 1·3)이고 모서리 R 이 없으면
     **보정 경사선을 연장**한 위, Z 로 c 바깥. 경사각을 따라가므로 X 가 정확하다.
-  - **오목**이거나 모서리 R 이 있으면 **시작 요소의 보정선**을 따라 c 바깥(단면이면 X 로).
-  - 진입점이 X0 아래로 가면 `ENTRY_PAST_AXIS`.
-  - 후퇴: 끝 요소가 수평이면 공구 쪽으로 직각, 단면이면 그대로 이어서 c(직각으로 빼면 G41/G42 제어기가 안쪽 모서리 교점을 잡아 단면 끝을 덜 깎는다).
+  - **오목**이거나 모서리 R 이 있으면 수평 시작 요소는 **그 보정선**을 따라 c 바깥, 단면은 **공구 쪽에서 Z 로** c(G41/G42 는 단면 선 위
+    lead 에 직각으로 들어가 선을 따라 첫 T 점으로 — 노즈가 교점 규칙대로 lead 보다 r 앞, 곧 직접 보정의 첫 깎는 점에 선다).
+  - 그래서 진입은 늘 첫 깎는 점(직접 보정은 첫 보정점·시작점′, G41/G42 는 첫 도면점)에서 **Z 로 c = max(Z 여유, r)** 떨어진다
+    (현장: "Z 여유를 바꿔도 G00 이 따라오지 않는다" — 테스트 `entryFollowsZClearance`). Z 여유 0 도 된다(진입 거리 = r), 노즈R 과 Z 여유가
+    둘 다 0 이면 진입 이동이 없어 `BAD_INPUT`.
+  - 진입점이나 후퇴점이 X0 아래로 가면 `ENTRY_PAST_AXIS`.
+  - 후퇴(끝점을 넣었을 때): 끝 요소가 수평이면 공구 쪽으로 직각, 단면이면 그대로 이어서 c(직각으로 빼면 G41/G42 제어기가 안쪽 모서리 교점을 잡아 단면 끝을 덜 깎는다).
+  - 후퇴(끝점을 비웠을 때): 직접 보정은 마지막 보정점에서 끝 요소의 공구 쪽으로 c. G41/G42 는 시작과 거울로 마지막 꺾임이 날카로운 볼록이면
+    경사를 Z 로 c 더 늘인 점, 아니면 끝 요소 선을 따라 c(제어기가 끝 요소와의 안쪽 모서리 교점을 잡는다). 바이트 반대쪽 모양이면 노즈가
+    꺾임을 벗어나게 경사 쪽은 lift, 끝 요소 쪽은 직접 보정의 마지막 점이 꺾임에서 끝 요소를 따라 간 만큼 더 간다.
 - 두 프로그램의 끝 블록은 일부러 다르다: G41/G42 는 마지막 블록 끝에서 제어기가 그 요소의 법선으로 보정해 **노즈 접점**이 끝좌표에
   오고(표준 팁이 수평 끝 요소를 따라가면 인선은 r 더 감 — 뒤에 어깨가 있으면 깎아 들어간다), 직접 보정은 **인선**을 끝좌표에 멈춘다.
   화면 도움말·NC 카드 아래에 한 줄로 알린다.
@@ -254,9 +262,10 @@ G40 상태로 쓴다(모서리 원호는 보정 R = R ± r).
   (보정은 반올림 전 도면으로 한다 — 글을 다시 읽은 원호는 접선이 0.001 만큼 틀어져 거의 접한 이음이 흔들린다.)
   `GeometricVerifyTest` 는 G41/G42 글의 형상이 도면 위에 있고 도면 꼭짓점을 모두 지나는지, 시작·취소 이동 ≥ r, 표준 팁이면
   진입점·후퇴점(G40 상태)에서 노즈가 재료 밖인지 무작위로 본다.
-- 손 계산(`outerType1Numbers`, 외경 TYPE 1 X40 Z0 / X50 Z-5 / 0.4R, 시작·끝점 비움 = 끝 Z-10):
-  - G41/G42: `(R0.4 T3)` `G00 X38. Z1.` `G42 G01 X40. Z0.` `G01 X50. Z-5.` `G01 Z-10.` `G40 G00 X52.`
-  - 직접 보정: `G00 X37.531 Z1.` `G01 X39.531 Z0.` `G01 X50. Z-5.234` `G01 Z-10.` `G00 X52.`
+- 손 계산(`outerType1Numbers`, 외경 TYPE 1 X40 Z0 / X50 Z-5 / 0.4R, 시작·끝점 비움):
+  - G41/G42: `(R0.4 T3)` `G00 X38. Z1.` `G42 G01 X40. Z0.` `G01 X50. Z-5.` `G40 G00 X52. Z-6.`
+  - 직접 보정: `G00 X37.531 Z1.` `G01 X39.531 Z0.` `G01 X50. Z-5.234` `G00 X52.`
+  - 끝점 Z-10: … `G01 X50. Z-5.` `G01 Z-10.` `G40 G00 X52.` / 직접 보정 … `G01 X50. Z-5.234` `G01 Z-10.` `G00 X52.`
   - 시작점 X30(단면부터): `G00 X30. Z1.` `G42 G01 Z0.` `G01 X40.` … / 직접 보정 `G00 X30. Z1.` `G01 Z0.` `G01 X39.531` …
   - 띄운 진입 예(외경 TYPE 2 역방향 X60 Z0 / X64.368 Z-6, 0.8R, `AGAINST_TOOL`): `G00 X69.088 Z-3.4` `G41 G01 Z-6.`
     `G01 X64.368` `G01 X60. Z0.` `G01 X50.` `G40 G00 X48. Z1.6`.
@@ -284,7 +293,7 @@ data class TaperInput(val inner: Boolean = false, val type: Int = 1 /*1~5*/, val
     val x1: Double? = null, val z1: Double? = null, val x2: Double? = null, val z2: Double? = null, // X 직경
     val angleDeg: Double? = null, val zClear: Double = 1.0,
     val cornerR1: Double = 0.0, val cornerR2: Double = 0.0,
-    val start: Double? = null, val end: Double? = null)  // 앞뒤 요소 바깥 끝: 단면이면 X(직경), 수평이면 Z. null = 5 mm
+    val start: Double? = null, val end: Double? = null)  // 앞뒤 요소 바깥 끝: 단면이면 X(직경), 수평이면 Z. null = 안 깎음(그림 5 mm)
 data class DoubleTaperInput(val inner: Boolean = false, val reverse: Boolean = false, val noseR: Double = 0.4,
     val tip: Int? = null, val x1/z1/x2/z2/x3/z3: Double? = null, val zClear: Double = 1.0,
     val cornerR1/cornerR2/cornerR3: Double = 0.0, val start: Double? = null, val end: Double? = null)  // start·end 는 Z
@@ -294,7 +303,7 @@ data class TaperPoint(val vertex: Pt, val nodes: List<CompPoint> /*1 또는 R �
 data class TaperSolution(
     val points: List<TaperPoint>,    // T1, T2(, T3) 그림 오른쪽부터. 비웠던 값도 vertex 에 채워짐
     val anglesDeg: List<Double>,     // 경사마다
-    val tip: Int, val side: Side, val entry: Pt, val exit: Pt /*직접 보정의 G00 점*/, val fromStart: Boolean,
+    val tip: Int, val side: Side, val entry: Pt, val exit: Pt /*직접 보정의 G00 점*/, val fromStart: Boolean, val toEnd: Boolean,
     val ncG41G42: List<String>, val ncG40: List<String>,
     val drawing: Contour, val center: Contour, val program: Contour)  // 가공 순서, segs[k] 끼리 대응
 data class TaperResult(val solution: TaperSolution?, val warnings: List<TaperWarning>)

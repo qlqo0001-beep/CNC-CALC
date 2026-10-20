@@ -19,6 +19,8 @@ import com.bmt.nosecalc.screens.taper.SlopeForm
 import com.bmt.nosecalc.screens.taper.TaperKind
 import com.bmt.nosecalc.screens.taper.TaperSolve
 import com.bmt.nosecalc.screens.taper.TaperState
+import com.bmt.nosecalc.screens.taper.cutEnd
+import com.bmt.nosecalc.screens.taper.example
 import com.bmt.nosecalc.screens.taper.signed
 import com.bmt.nosecalc.screens.triangle.TriField
 import com.bmt.nosecalc.screens.triangle.TriangleState
@@ -48,12 +50,13 @@ class UiGoldenTest {
         assertEquals(f.readText().replace("\r\n", "\n"), text, "$name: 화면 숫자·NC 가 골든과 다르다")
     }
 
+    /** 화면은 도면 치수 0 에서 시작하므로 [example] 값(2단계 처음 값)을 넣은 상태 — 스크린샷과 같다 */
     @Test
     fun taper() {
-        slope("taper-b", TaperState(type = 1, open = true))
+        slope("taper-b", TaperState(type = 1, open = true).example())
         slope(
             "taper-b-corner",
-            TaperState(type = 1, open = true).apply {
+            TaperState(type = 1, open = true).example().apply {
                 setPoint("r1", "1")
                 setPoint("start", "30")
                 ncTab = 1
@@ -61,28 +64,28 @@ class UiGoldenTest {
         )
         slope(
             "taper-b-outer3",
-            TaperState(type = 3, open = true).apply {
+            TaperState(type = 3, open = true).example().apply {
                 setPoint("r2", "0.5")
                 setPoint("end", "-20")
             },
         )
-        slope("taper-b-inner1", TaperState(TaperKind.INNER, type = 1, open = true).apply { setPoint("end", "-20") })
+        slope("taper-b-inner1", TaperState(TaperKind.INNER, type = 1, open = true).example().apply { setPoint("end", "-20") })
         slope(
             "taper-b-auto",
-            TaperState(type = 1, open = true).apply {
+            TaperState(type = 1, open = true).example().apply {
                 setPoint("z2", "")
                 setPoint("ang", "34.1")
             },
         )
-        slope("taper-b-reverse", TaperState(TaperKind.INNER, reverse = true, type = 1, open = true))
-        slope("taper-b-double", TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).apply { setPoint("r2", "1") })
-        slope("taper-b-error", TaperState(type = 3, open = true).apply { setPoint("ang", "30") })
+        slope("taper-b-reverse", TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example())
+        slope("taper-b-double", TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1") })
+        slope("taper-b-error", TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") })
     }
 
     @Test
     fun groove() {
-        groove("taper-groove", TaperState(TaperKind.GROOVE, type = 1, open = true))
-        groove("taper-groove-error", TaperState(TaperKind.GROOVE, type = 2, open = true).apply { setShared("insert", "9") })
+        groove("taper-groove", TaperState(TaperKind.GROOVE, type = 1, open = true).example())
+        groove("taper-groove-error", TaperState(TaperKind.GROOVE, type = 2, open = true).example().apply { setShared("insert", "9") })
     }
 
     @Test
@@ -124,7 +127,7 @@ class UiGoldenTest {
             (1..n).map { s.point("x$it").toDoubleOrNull() },
             (1..n).map { s.point("z$it").toDoubleOrNull() },
             s.point("ang").toDoubleOrNull(),
-            s.shared("zClear").toDoubleOrNull() ?: 1.0,
+            s.shared("zClear").toDoubleOrNull() ?: 0.0,
             (1..n).map { s.point("r$it").toDoubleOrNull() ?: 0.0 },
             s.point("start").toDoubleOrNull(),
             s.point("end").toDoubleOrNull(),
@@ -134,7 +137,7 @@ class UiGoldenTest {
             line("표준 팁 T${NoseComp.standardTip(kind.inner, s.reverse)} · ${Side.of(kind.inner, s.reverse)}")
             line("경고 ${r.warnings}")
             val sol = r.solution ?: return@buildString
-            line("팁 T${sol.tip} · ${sol.side} · 시작 요소 깎음 ${sol.fromStart}")
+            line("팁 T${sol.tip} · ${sol.side} · 시작 요소 깎음 ${sol.fromStart} · 끝 요소 깎음 ${sol.toEnd}")
             sol.points.forEachIndexed { i, p ->
                 line("T${i + 1} 꼭짓점 ${xz(p.vertex)}")
                 p.nodes.forEach { line("  도면 ${xz(it.drawn)} → 보정 ${xz(it.prog)}  ΔX ${signed(it.dXDia)} ΔZ ${signed(it.dZ)}") }
@@ -144,7 +147,7 @@ class UiGoldenTest {
             }
             line("각도 ${sol.anglesDeg.map(::f)}")
             line("진입점 ${xz(sol.entry)} 후퇴점 ${xz(sol.exit)}")
-            line("도면 끝 ${xz(sol.drawing.segs.last().end)}")
+            line("도면 끝 ${xz(sol.drawing.segs.last().end)} · 깎는 끝 ${xz(sol.cutEnd)}")
             line("NC G41/G42")
             sol.ncG41G42.forEach { line("  $it") }
             line("NC G40")
@@ -164,7 +167,7 @@ class UiGoldenTest {
             insert = v("insert").toDoubleOrNull(),
             overlap = v("overlap").toDoubleOrNull() ?: 0.5,
             ref = if (s.type == 1) GrooveRef.LEFT else GrooveRef.RIGHT,
-            xClear = v("xClear").toDoubleOrNull() ?: 1.0,
+            xClear = v("xClear").toDoubleOrNull() ?: 0.0,
         )
         val r = GrooveCalc.calc(input)
         val text = buildString {

@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.bmt.nosecalc.screens.TaperScreen
 import com.bmt.nosecalc.screens.taper.TaperKind
 import com.bmt.nosecalc.screens.taper.TaperState
+import com.bmt.nosecalc.screens.taper.example
 import com.bmt.nosecalc.screens.taper.TypeArt
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.BottomSheet
@@ -53,7 +54,7 @@ class KeypadShotsTest {
     fun keypadAuto() = Shots.both("keypad-auto") {
         AppHost(it) {
             TaperScreen(
-                TaperState(type = 1, open = true).apply {
+                TaperState(type = 1, open = true).example().apply {
                     setPoint("z2", "")
                     setPoint("ang", "34.1")
                 },

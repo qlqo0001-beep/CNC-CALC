@@ -33,6 +33,7 @@ import com.bmt.nosecalc.calc.GrooveCalc
 import com.bmt.nosecalc.calc.GrooveInput
 import com.bmt.nosecalc.calc.GrooveRef
 import com.bmt.nosecalc.calc.GrooveSolution
+import com.bmt.nosecalc.calc.GrooveWarning
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.NumberField
@@ -45,8 +46,9 @@ import com.bmt.nosecalc.ui.theme.AppTheme
 import kotlin.math.max
 
 /**
- * B 화면 — Outer Groove: 기준 인선(TYPE 1 왼쪽 T3 / TYPE 2 오른쪽 T4) → 치수 → 침범 경고 → 다단 진입 표 → 형상 → NC.
- * 벽·바닥이 축에 평행해 노즈R 보정은 0 이다(calc-design.md 홈 계산).
+ * B 화면 — Outer Groove: 그림 요약 → (침범 경고 · 값을 넣으라는 안내) → 기준 인선(TYPE 1 왼쪽 팁 3번 / TYPE 2 오른쪽 팁 4번) · 치수 →
+ * 다단 진입 표 → 형상 → NC.
+ * 벽·바닥이 X·Z 축에 평행해 노즈R 보정은 0 이다(calc-design.md 홈 계산).
  */
 @Composable
 internal fun GrooveScreen(s: TaperState) {
@@ -62,43 +64,52 @@ internal fun GrooveScreen(s: TaperState) {
         insert = v("insert").toDoubleOrNull(),
         overlap = v("overlap").toDoubleOrNull() ?: 0.5,
         ref = ref,
-        xClear = v("xClear").toDoubleOrNull() ?: 1.0,
+        xClear = v("xClear").toDoubleOrNull() ?: 0.0,
     )
     val result = remember(input) { GrooveCalc.calc(input) }
     val sol = result.solution
+    // 폭 · 외경이 아직 0 이면 빨간 멈춤 대신 파란 안내. 멈춘 경고는 그 칸들을 빨간 테로 짚는다
+    val waiting = sol == null && (GrooveWarning.MISSING_INPUT in result.warnings || input.waiting)
+    val flagged = if (waiting) emptySet() else result.warnings.flatMap { grooveWarningFields(it, input) }.toSet()
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 5.dp).padding(top = 6.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SummaryCard(TaperKind.GROOVE, type, false, "기준 인선 팁 T${ref.tip} · 노즈R 보정 0") { s.open = false }
+        SummaryCard(TaperKind.GROOVE, type, false, "기준 인선 팁 ${ref.tip}번 · 노즈R 보정 0") { s.open = false }
+        // 멈춘 까닭은 입력 카드 위에(폰 첫 화면 안에)
+        if (waiting) {
+            WarningBanner(grooveWarningText(GrooveWarning.MISSING_INPUT), level = WarnLevel.Info)
+        } else {
+            result.warnings.forEach { WarningBanner(grooveWarningText(it), level = WarnLevel.Error) }
+        }
 
         AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
             FieldLabel("기준 인선 (프로그램 기준 모서리)")
             Spacer(Modifier.height(6.dp))
-            Segmented(listOf("왼쪽 인선 (T3)", "오른쪽 인선 (T4)"), type - 1, { s.type = it + 1 }, height = 46.dp, fontSize = 15)
+            Segmented(listOf("왼쪽 인선 (팁 3번)", "오른쪽 인선 (팁 4번)"), type - 1, { s.type = it + 1 }, height = 46.dp, fontSize = 15)
             Spacer(Modifier.height(14.dp))
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Field(s, "zStart", "시작 Z (오른쪽 벽)", Modifier.weight(1f))
-                    Field(s, "width", "홈 폭 W", Modifier.weight(1f))
+                    Field(s, "zStart", "시작 Z (오른쪽 벽)", Modifier.weight(1f), flagged)
+                    Field(s, "width", "홈 폭 W", Modifier.weight(1f), flagged)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Field(s, "od", "외경 D (직경)", Modifier.weight(1f))
-                    Field(s, "bottom", "바닥 지름 d", Modifier.weight(1f))
+                    Field(s, "od", "외경 D (직경)", Modifier.weight(1f), flagged)
+                    Field(s, "bottom", "바닥 지름 d", Modifier.weight(1f), flagged)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Field(s, "insert", "인서트 폭 T", Modifier.weight(1f))
-                    Field(s, "overlap", "단 겹침", Modifier.weight(1f), placeholder = "0.5")
+                    Field(s, "insert", "인서트 폭 T", Modifier.weight(1f), flagged)
+                    Field(s, "overlap", "단 겹침", Modifier.weight(1f), flagged, placeholder = "0.5")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Field(s, "xClear", "X 여유 (반경)", Modifier.weight(1f), placeholder = "1.0")
+                    Field(s, "xClear", "X 여유 (반경)", Modifier.weight(1f), flagged, placeholder = "0")
                     Spacer(Modifier.weight(1f))
                 }
             }
             Text(
                 "피치 = T − 겹침. 첫 단은 날 오른쪽을 오른쪽 벽에, 마지막 단은 날 왼쪽을 왼쪽 벽에 정확히 맞춥니다. " +
-                    "단마다 외경 + 2×X 여유 로 빠집니다.",
+                    "단마다 외경 + 2×X 여유로 빠집니다(X 여유 0 이면 외경까지).",
                 Modifier.padding(top = 12.dp),
                 color = c.textMuted,
                 fontSize = 12.5.sp,
@@ -106,24 +117,25 @@ internal fun GrooveScreen(s: TaperState) {
             )
         }
 
-        result.warnings.forEach { WarningBanner(grooveWarningText(it), level = WarnLevel.Error) }
         if (sol != null) {
             val t = input.insert!!
             StepsCard(sol, ref)
             GrooveViewer(sol, input, t)
             NcCard(
                 sol.nc,
-                "단마다 G00 빠짐 → G01 바닥 → G00 빠짐, 끝에 벽·바닥 정삭. 기준 인선 좌표 그대로(G40) 깎습니다 — 벽·바닥이 축에 평행해 " +
+                "단마다 G00 빠짐 → G01 바닥 → G00 빠짐, 끝에 벽·바닥 정삭. 기준 인선 좌표 그대로(G40) 깎습니다 — 벽·바닥이 X·Z 축에 평행해 " +
                     "노즈R 보정량이 0 이고, 반대쪽 벽은 다른 날 모서리가 깎아 공구 보정 하나(G41/G42)로는 맡을 수 없어 G41/G42 프로그램은 따로 없습니다. " +
                     "이송 F 는 넣지 않았습니다.",
+                programName = "홈 가공 프로그램",
+                facts = listOf(NcFact("기준 인선 팁 ${ref.tip}번 · 노즈R 보정 0"), NcFact("이송 F 없음")),
             )
         }
     }
 }
 
 @Composable
-private fun Field(s: TaperState, name: String, label: String, modifier: Modifier, placeholder: String = "") {
-    NumberField(label, s.shared(name), { s.setShared(name, it) }, modifier, unit = "mm", placeholder = placeholder)
+private fun Field(s: TaperState, name: String, label: String, modifier: Modifier, flagged: Set<String>, placeholder: String = "") {
+    NumberField(label, s.shared(name), { s.setShared(name, it) }, modifier, unit = "mm", placeholder = placeholder, error = name in flagged)
 }
 
 /** 다단 진입 표: 단 수·피치·빠짐, 단마다 진입 Z·목표 X, 정삭 경로 */
@@ -136,7 +148,7 @@ private fun StepsCard(sol: GrooveSolution, ref: GrooveRef) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text("다단 진입", color = c.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(8.dp))
-            Text("기준 인선 T${ref.tip} (${if (ref == GrooveRef.LEFT) "왼쪽" else "오른쪽"}) 의 프로그램 좌표", color = c.textMuted, fontSize = 12.5.sp)
+            Text("기준 인선 ${ref.tip}번 (${if (ref == GrooveRef.LEFT) "왼쪽" else "오른쪽"}) 의 프로그램 좌표", color = c.textMuted, fontSize = 12.5.sp)
         }
         Spacer(Modifier.height(10.dp))
         Row {
@@ -189,8 +201,8 @@ private fun StepsCard(sol: GrooveSolution, ref: GrooveRef) {
             }
         }
         Text(
-            "벽·바닥이 축에 평행해 노즈R 보정은 0 입니다. 바닥 두 모서리에는 인서트 노즈R 만큼 R 이 남습니다. " +
-                "인서트 ${if (ref == GrooveRef.LEFT) "왼쪽" else "오른쪽"} 모서리에 공구 길이를 맞추고 팁 번호는 T${ref.tip} 으로 둡니다.",
+            "벽·바닥이 X·Z 축에 평행해 노즈R 보정은 0 입니다. 바닥 두 모서리에는 인서트 노즈R 만큼 R 이 남습니다. " +
+                "인서트 ${if (ref == GrooveRef.LEFT) "왼쪽" else "오른쪽"} 모서리에 공구 길이를 맞추고 팁 번호는 ${ref.tip}번으로 둡니다.",
             Modifier.padding(top = 8.dp),
             color = c.textMuted,
             fontSize = 12.5.sp,

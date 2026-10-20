@@ -20,6 +20,8 @@ import com.bmt.nosecalc.screens.taper.SlopeForm
 import com.bmt.nosecalc.screens.taper.TaperKind
 import com.bmt.nosecalc.screens.taper.TaperSolve
 import com.bmt.nosecalc.screens.taper.TaperState
+import com.bmt.nosecalc.screens.taper.cutEnd
+import com.bmt.nosecalc.screens.taper.example
 import com.bmt.nosecalc.screens.triangle.TriField
 import com.bmt.nosecalc.screens.triangle.TriangleState
 import java.io.File
@@ -71,7 +73,7 @@ class InputRobustnessTest {
         val kinds = listOf(TaperKind.OUTER, TaperKind.INNER, TaperKind.OUTER_DOUBLE, TaperKind.INNER_DOUBLE)
         repeat(60_000) {
             val kind = kinds[rnd.nextInt(kinds.size)]
-            val st = TaperState(kind, rnd.nextBoolean(), 1 + rnd.nextInt(kind.types), open = true)
+            val st = TaperState(kind, rnd.nextBoolean(), 1 + rnd.nextInt(kind.types), open = true).example()
             val n = kind.points
             val names = (1..n).flatMap { listOf("x$it", "z$it", "r$it") } + listOf("ang", "start", "end")
             for (name in names) if (rnd.nextInt(3) == 0) st.setPoint(name, nudge(st.point(name)))
@@ -86,7 +88,7 @@ class InputRobustnessTest {
                 (1..n).map { st.point("x$it").toDoubleOrNull() },
                 (1..n).map { st.point("z$it").toDoubleOrNull() },
                 st.point("ang").toDoubleOrNull(),
-                st.shared("zClear").toDoubleOrNull() ?: 1.0,
+                st.shared("zClear").toDoubleOrNull() ?: 0.0,
                 (1..n).map { st.point("r$it").toDoubleOrNull() ?: 0.0 },
                 st.point("start").toDoubleOrNull(),
                 st.point("end").toDoubleOrNull(),
@@ -104,6 +106,7 @@ class InputRobustnessTest {
                 show(s.exit)
                 show(s.drawing.segs.first().start)
                 show(s.drawing.segs.last().end)
+                show(s.cutEnd)
             }
         }
         assertTrue(solved > 10_000, "결과가 나온 사례가 너무 적다: $solved")
@@ -184,7 +187,7 @@ class InputRobustnessTest {
         for (v in listOf(big, tiny, "-$big", "0")) {
             draw {
                 TaperScreen(
-                    TaperState(type = 1, open = true).apply {
+                    TaperState(type = 1, open = true).example().apply {
                         setPoint("x2", v)
                         setPoint("r1", v)
                         setPoint("start", v)
@@ -192,8 +195,8 @@ class InputRobustnessTest {
                     },
                 )
             }
-            draw { TaperScreen(TaperState(TaperKind.OUTER_DOUBLE, type = 1, open = true).apply { setPoint("z3", v) }) }
-            draw { TaperScreen(TaperState(TaperKind.GROOVE, type = 1, open = true).apply { setShared("width", v) }) }
+            draw { TaperScreen(TaperState(TaperKind.OUTER_DOUBLE, type = 1, open = true).example().apply { setPoint("z3", v) }) }
+            draw { TaperScreen(TaperState(TaperKind.GROOVE, type = 1, open = true).example().apply { setShared("width", v) }) }
             draw { RoundScreen(roundExample(3, open = true).apply { setDim(3, "mainR", v) }) }
             draw { RoundScreen(roundExample(MANUAL, open = true).apply { setPoint("x2", v) }) }
             draw { TriangleScreen(TriangleState().apply { set(TriField.A_SIDE, v) }) }
