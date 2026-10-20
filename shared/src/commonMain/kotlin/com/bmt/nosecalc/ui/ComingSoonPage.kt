@@ -32,7 +32,7 @@ import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.Space
 
 /** 준비 중 기능의 도움말 — 없는 화면을 설명하지 않는다 */
-internal val ComingSoonHelp = listOf("이 기능은 준비 중입니다. 나오면 여기에 사용법이 들어갑니다.")
+internal val ComingSoonHelp = listOf(HelpSection("", listOf("이 기능은 준비 중입니다. 나오면 여기에 사용법이 들어갑니다.")))
 
 /** 아직 안 만든 기능 화면: 위쪽 카드에 준비 중 안내 + 지금 쓸 수 있는 계산으로 바로 가기 */
 @Composable

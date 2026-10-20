@@ -25,9 +25,12 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -50,18 +53,23 @@ import com.bmt.nosecalc.Feature
 import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.OnBack
 import com.bmt.nosecalc.ui.theme.AppTheme
+import com.bmt.nosecalc.ui.theme.AppType
+
+/** 도움말 시트의 한 묶음: 제목(빈 글이면 없이) → 그림(extra, 제목 바로 아래 — 그림 먼저) → 글머리표 문단들 */
+data class HelpSection(val title: String, val items: List<String>, val extra: (@Composable () -> Unit)? = null)
 
 /**
  * 기능 화면 틀: 헤더 + 본문. 헤더 버튼은
  * 테이퍼(첫 화면) = APPS · 테마 · 도움말, 나머지 = 테마 · 도움말 · 홈.
  * 테이퍼에서 APPS 를 누르면 헤더 아래로 APP MENU 가 펼쳐지고 본문은 흐려진다(01).
- * help = 도움말 바텀시트에 보일 문단들, helpExtra = 문단 뒤에 붙일 그림(테이퍼의 팁 번호 그림 등).
+ * help = 도움말 시트의 묶음들(끝에 '장갑을 끼고 쓸 때' 가 늘 붙는다), helpStart = 시트를 열면 먼저 보일 묶음(입력 화면이면 값 넣기 등).
+ * 본문은 가운데 최대 640dp — 넓은 PC 창에서 카드 · 칸이 늘어나지 않게. 헤더는 창 폭 그대로.
  */
 @Composable
 fun FeatureScaffold(
     feature: Feature,
-    help: List<String>,
-    helpExtra: (@Composable () -> Unit)? = null,
+    help: List<HelpSection>,
+    helpStart: Int = 0,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val state = LocalAppState.current
@@ -80,8 +88,17 @@ fun FeatureScaffold(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) { Body(menuOpen, content) }
     }
-    if (state.helpOpen) HelpSheet(feature, help, helpExtra) { state.helpOpen = false }
+    if (state.helpOpen) HelpSheet(feature, help, helpStart) { state.helpOpen = false }
 }
+
+/** 예전 꼴(문단 목록 + 끝 그림): 제목 없는 한 묶음으로 싼다 — 그림은 묶음 맨 위로 간다 */
+@Composable
+fun FeatureScaffold(
+    feature: Feature,
+    help: List<String>,
+    helpExtra: (@Composable () -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit,
+) = FeatureScaffold(feature, listOf(HelpSection("", help, helpExtra)), content = content)
 
 /** 본문 + (테이퍼) 헤더 아래로 펼쳐지는 APP MENU. 메뉴가 열리면 본문은 흐려지고 덮개를 누르면 닫힌다 */
 @Composable
@@ -89,7 +106,9 @@ private fun Body(menuOpen: Boolean, content: @Composable BoxScope.() -> Unit) {
     val state = LocalAppState.current
     val c = AppTheme.colors
     val blur by animateDpAsState(if (menuOpen) 5.dp else 0.dp)
-    Box(Modifier.fillMaxSize().blur(blur).windowInsetsPadding(WindowInsets.navigationBars), content = content)
+    Box(Modifier.fillMaxSize().blur(blur).windowInsetsPadding(WindowInsets.navigationBars), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.widthIn(max = 640.dp).fillMaxSize(), content = content)
+    }
     AnimatedVisibility(menuOpen, enter = fadeIn(), exit = fadeOut()) {
         Box(
             Modifier
@@ -210,35 +229,46 @@ private fun MenuFooter() {
     }
 }
 
-/** 헤더 도움말 버튼 → 화면별 사용법 */
+/** 모든 화면 도움말 끝에 붙는 묶음 */
+private val GloveHelp = HelpSection(
+    "장갑을 끼고 쓸 때",
+    listOf("장갑을 낀 채 누르려면 휴대폰 설정 > 디스플레이 > 터치 민감도(삼성)를 켜고, 터치되는 장갑을 쓰세요."),
+)
+
+/** 헤더 도움말 버튼 → 화면별 사용법. 머리(아이콘 · 사용법 · 닫기) 아래 묶음들을 창 높이 85% 까지, start 묶음부터 보인다 */
 @Composable
-private fun HelpSheet(feature: Feature, help: List<String>, extra: (@Composable () -> Unit)?, onDismiss: () -> Unit) {
+private fun HelpSheet(feature: Feature, help: List<HelpSection>, start: Int, onDismiss: () -> Unit) {
     val c = AppTheme.colors
-    BottomSheet(onDismiss) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
+    val sections = help + GloveHelp
+    BottomSheet(onDismiss, maxHeightFraction = 0.85f) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             FeatureIcon(feature, Modifier.size(28.dp))
             Spacer(Modifier.width(12.dp))
-            Column {
-                Text("사용법", color = c.textStrong, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                Text(feature.menuSub, color = c.textMuted, fontSize = 13.sp)
+            Column(Modifier.weight(1f)) {
+                Text("사용법", style = AppType.sheetTitle, color = c.textStrong)
+                Text(feature.menuSub, color = c.textMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.width(8.dp))
+            PillButton("닫기", AppIcons.Close, onDismiss)
+        }
+        LazyColumn(Modifier.weight(1f, fill = false), state = rememberLazyListState(start.coerceIn(sections.indices))) {
+            items(sections) { HelpBlock(it) }
+        }
+    }
+}
+
+/** 묶음 하나: 위 16dp 띄우고 제목(15sp) → 그림 → 글머리표 문단(14.5sp / 22sp) */
+@Composable
+private fun HelpBlock(s: HelpSection) {
+    val c = AppTheme.colors
+    Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (s.title.isNotEmpty()) Text(s.title, color = c.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        s.extra?.invoke()
+        s.items.forEach { p ->
+            Row {
+                Text("•", Modifier.width(16.dp), color = c.teal, fontSize = 14.5.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold)
+                Text(p, color = c.textBody, fontSize = 14.5.sp, lineHeight = 22.sp)
             }
         }
-        Column(
-            Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            help.forEachIndexed { i, p ->
-                Row {
-                    Box(
-                        Modifier.padding(top = 1.dp).size(22.dp).clip(CircleShape).background(c.field).border(1.dp, c.lineField, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) { Text("${i + 1}", color = c.teal, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-                    Spacer(Modifier.width(10.dp))
-                    Text(p, color = c.textBody, fontSize = 15.sp, lineHeight = 23.sp)
-                }
-            }
-            extra?.invoke()
-        }
-        Spacer(Modifier.height(8.dp))
     }
 }

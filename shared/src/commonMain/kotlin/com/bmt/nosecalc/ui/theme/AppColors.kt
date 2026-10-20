@@ -9,9 +9,9 @@ import com.bmt.nosecalc.Feature
 @Immutable
 data class RoleColors(val bg: Color, val border: Color, val label: Color, val value: Color)
 
-/** 기능 하나의 색. title 이 2색 이상이면 헤더 제목을 가로 그라데이션으로 칠한다 */
+/** 기능 하나의 색: 헤더 제목(한 색) · 메뉴 아이콘 */
 @Immutable
-data class FeatureColors(val title: List<Color>, val menu: Color)
+data class FeatureColors(val title: Color, val menu: Color)
 
 /**
  * 색 토큰. 이름·라이트 값은 docs/screens.md 1.1 (11.png 의 Tailwind slate 계열 값을 우선).
@@ -60,7 +60,6 @@ data class AppColors(
     val viewportAxis: Color,
     val viewport3d: Color,
     // 선
-    val lineHeader: Color,
     val lineCard: Color,
     val lineField: Color,
     val lineStrong: Color,
@@ -162,7 +161,6 @@ val LightColors = AppColors(
     viewportGrid = Color(0xFFDCE1E8),
     viewportAxis = Color(0xFF64748B),
     viewport3d = Color(0xFF09111D),
-    lineHeader = Color(0xFF94A3B8),
     lineCard = Color(0xFFE2E8F0),
     lineField = Color(0xFFCBD5E1),
     lineStrong = Color(0xFF94A3B8),
@@ -228,13 +226,13 @@ val LightColors = AppColors(
     chipSky = RoleColors(Color(0xFFFFFFFF), Color(0xFFA5F3FC), Color(0xFF155E75), Color(0xFF155E75)),
     chipMint = RoleColors(Color(0xFFFFFFFF), Color(0xFFA7F3D0), Color(0xFF065F46), Color(0xFF065F46)),
     features = mapOf(
-        Feature.TAPER to FeatureColors(listOf(Color(0xFF0D9488)), Color(0xFF0D9488)),
-        Feature.CUTTING to FeatureColors(listOf(Color(0xFF0369A1), Color(0xFF0F766E), Color(0xFF1D4ED8)), Color(0xFFBE123C)),
-        Feature.ROUND to FeatureColors(listOf(Color(0xFF0891B2), Color(0xFF2563EB)), Color(0xFF0F766E)),
-        Feature.SIMULATOR to FeatureColors(listOf(Color(0xFF1E293B), Color(0xFF0284C7)), Color(0xFF4338CA)),
-        Feature.TRIANGLE to FeatureColors(listOf(Color(0xFF6D28D9), Color(0xFF4338CA)), Color(0xFF6D28D9)),
-        Feature.POLAR to FeatureColors(listOf(Color(0xFF0D9488), Color(0xFF0E7490)), Color(0xFFB45309)),
-        Feature.THREAD to FeatureColors(listOf(Color(0xFFEA580C), Color(0xFFD97706)), Color(0xFF047857)),
+        Feature.TAPER to FeatureColors(Color(0xFF0D9488), Color(0xFF0D9488)),
+        Feature.CUTTING to FeatureColors(Color(0xFF0369A1), Color(0xFFBE123C)),
+        Feature.ROUND to FeatureColors(Color(0xFF0891B2), Color(0xFF0F766E)),
+        Feature.SIMULATOR to FeatureColors(Color(0xFF1E293B), Color(0xFF4338CA)),
+        Feature.TRIANGLE to FeatureColors(Color(0xFF6D28D9), Color(0xFF6D28D9)),
+        Feature.POLAR to FeatureColors(Color(0xFF0D9488), Color(0xFFB45309)),
+        Feature.THREAD to FeatureColors(Color(0xFFEA580C), Color(0xFF047857)),
     ),
 )
 
@@ -259,7 +257,6 @@ val DarkColors = AppColors(
     viewportGrid = Color(0xFF1C2838),
     viewportAxis = Color(0xFF64748B),
     viewport3d = Color(0xFF09111D),
-    lineHeader = Color(0xFF2A3A52),
     lineCard = Color(0xFF24344C),
     lineField = Color(0xFF30435F),
     lineStrong = Color(0xFF41587A),
@@ -325,12 +322,12 @@ val DarkColors = AppColors(
     chipSky = RoleColors(Color(0xFF10242E), Color(0xFF1E6A80), Color(0xFF67E8F9), Color(0xFF67E8F9)),
     chipMint = RoleColors(Color(0xFF0E241F), Color(0xFF1C7A5C), Color(0xFF6EE7B7), Color(0xFF6EE7B7)),
     features = mapOf(
-        Feature.TAPER to FeatureColors(listOf(Color(0xFF2DD4BF)), Color(0xFF2DD4BF)),
-        Feature.CUTTING to FeatureColors(listOf(Color(0xFF38BDF8), Color(0xFF2DD4BF), Color(0xFF60A5FA)), Color(0xFFFB7185)),
-        Feature.ROUND to FeatureColors(listOf(Color(0xFF22D3EE), Color(0xFF60A5FA)), Color(0xFF5EEAD4)),
-        Feature.SIMULATOR to FeatureColors(listOf(Color(0xFFE2E8F0), Color(0xFF38BDF8)), Color(0xFFA5B4FC)),
-        Feature.TRIANGLE to FeatureColors(listOf(Color(0xFFA78BFA), Color(0xFF818CF8)), Color(0xFFC4B5FD)),
-        Feature.POLAR to FeatureColors(listOf(Color(0xFF2DD4BF), Color(0xFF22D3EE)), Color(0xFFFBBF24)),
-        Feature.THREAD to FeatureColors(listOf(Color(0xFFFB923C), Color(0xFFFBBF24)), Color(0xFF34D399)),
+        Feature.TAPER to FeatureColors(Color(0xFF2DD4BF), Color(0xFF2DD4BF)),
+        Feature.CUTTING to FeatureColors(Color(0xFF38BDF8), Color(0xFFFB7185)),
+        Feature.ROUND to FeatureColors(Color(0xFF22D3EE), Color(0xFF5EEAD4)),
+        Feature.SIMULATOR to FeatureColors(Color(0xFFE2E8F0), Color(0xFFA5B4FC)),
+        Feature.TRIANGLE to FeatureColors(Color(0xFFA78BFA), Color(0xFFC4B5FD)),
+        Feature.POLAR to FeatureColors(Color(0xFF2DD4BF), Color(0xFFFBBF24)),
+        Feature.THREAD to FeatureColors(Color(0xFFFB923C), Color(0xFF34D399)),
     ),
 )

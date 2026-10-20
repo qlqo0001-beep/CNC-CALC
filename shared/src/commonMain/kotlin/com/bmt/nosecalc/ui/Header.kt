@@ -32,38 +32,40 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.Feature
 import com.bmt.nosecalc.ui.theme.AppTheme
+import com.bmt.nosecalc.ui.theme.AppType
 
 /**
- * 기능 헤더(1.4): 왼쪽 영문 제목(기능색·그라데이션) + 한글 부제, 오른쪽 원형 버튼들.
- * dimmed = APP MENU 가 열려 헤더가 어두워진 상태(01).
+ * 기능 헤더(1.4): 왼쪽 제목(기능색 한 색 · 20sp 굵게, 모든 기능 같은 꼴) + 한글 부제, 오른쪽 원형 버튼들.
+ * 카드색 띠 + 아래 1dp 선으로 본문과 갈린다. dimmed = APP MENU 가 열려 헤더가 어두워진 상태(01).
  */
 @Composable
 fun FeatureHeader(feature: Feature, dimmed: Boolean = false, actions: @Composable RowScope.() -> Unit) {
     val c = AppTheme.colors
-    val bg by animateColorAsState(if (dimmed) c.headerDim else c.page)
+    val bg by animateColorAsState(if (dimmed) c.headerDim else c.card)
     Column(Modifier.fillMaxWidth().background(bg).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 66.dp).padding(start = 17.dp, end = 18.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                HeaderTitle(feature)
+                // 좁은 폰 · 큰 글꼴이면 16sp 까지 줄이고, 그래도 넘치면 … 로
+                BasicText(
+                    feature.title,
+                    style = AppType.screenTitle.copy(color = c.features.getValue(feature).title),
+                    overflow = TextOverflow.Ellipsis,
+                    maxLines = 1,
+                    autoSize = TextAutoSize.StepBased(16.sp, 20.sp, 0.5.sp),
+                )
                 Spacer(Modifier.height(3.dp))
                 BasicText(
                     feature.sub,
@@ -76,34 +78,7 @@ fun FeatureHeader(feature: Feature, dimmed: Boolean = false, actions: @Composabl
             Spacer(Modifier.width(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(if (dimmed) Color.Transparent else c.lineHeader.copy(alpha = 0.6f)))
-    }
-}
-
-@Composable
-private fun HeaderTitle(f: Feature) {
-    val colors = AppTheme.colors.features.getValue(f).title
-    val lines = f.title.count { it == '\n' } + 1
-    val size = TextAutoSize.StepBased(12.sp, f.titleSize.sp, 0.5.sp)
-    val style = TextStyle(
-        fontFamily = AppTheme.sans,
-        fontWeight = f.titleWeight,
-        letterSpacing = f.titleTracking.em,
-        lineHeight = 1.18.em,
-        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
-    )
-    when {
-        f.accentFrom >= 0 -> BasicText(
-            buildAnnotatedString {
-                withStyle(SpanStyle(color = colors[0])) { append(f.title.substring(0, f.accentFrom)) }
-                withStyle(SpanStyle(color = colors[1])) { append(f.title.substring(f.accentFrom)) }
-            },
-            style = style,
-            maxLines = lines,
-            autoSize = size,
-        )
-        colors.size == 1 -> BasicText(f.title, style = style.copy(color = colors[0]), maxLines = lines, autoSize = size)
-        else -> BasicText(f.title, style = style.copy(brush = Brush.horizontalGradient(colors)), maxLines = lines, autoSize = size)
+        Box(Modifier.fillMaxWidth().height(1.dp).background(if (dimmed) Color.Transparent else c.lineCard))
     }
 }
 

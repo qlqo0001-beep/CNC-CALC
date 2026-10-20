@@ -32,10 +32,15 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.bmt.nosecalc.screens.TaperHelp
+import com.bmt.nosecalc.screens.TaperScreen
+import com.bmt.nosecalc.screens.taper.TaperState
+import com.bmt.nosecalc.screens.taper.TipHelp
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.AppIcons
 import com.bmt.nosecalc.ui.FeatureIcon
 import com.bmt.nosecalc.ui.FeatureScaffold
+import com.bmt.nosecalc.ui.HelpSection
 import com.bmt.nosecalc.ui.PillButton
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
@@ -47,7 +52,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** 앱 틀(헤더 단추 · 기능 아이콘 · 준비 중 화면)을 라이트/다크로 → build/shots */
+/** 앱 틀(헤더 단추 · 기능 아이콘 · 준비 중 화면 · 도움말 시트 · 넓은 PC 창)을 라이트/다크로 → build/shots */
 class ShellShotsTest {
     /**
      * 헤더 단추(테이퍼 · 다른 화면)와 알약 단추: 누르는 자리(레이아웃 크기)를 재어 48dp 이상인지 보고,
@@ -89,6 +94,34 @@ class ShellShotsTest {
     fun comingSoonNarrow() =
         Shots.both("feature-polar-w360", widthDp = 360, fontScale = 1.3f, setup = { it.open(Feature.POLAR) }) { App(it) }
 
+    /** 도움말 시트: 머리의 닫기 · 묶음 제목 · 끝에 늘 붙는 장갑 묶음(준비 중 화면은 짧아 한눈에 보인다) */
+    @Test
+    fun helpSheet() = Shots.both(
+        "help-polar",
+        setup = {
+            it.open(Feature.POLAR)
+            it.helpOpen = true
+        },
+    ) { App(it) }
+
+    /** 묶음 제목 · 그림 먼저 · helpStart: 둘째 묶음(그림 + 문단)부터 열린다. 첫 묶음 제목은 위로 밀려 안 보여야 한다 */
+    @Test
+    fun helpSections() = Shots.both("help-sections", setup = { it.helpOpen = true }) {
+        AppHost(it) {
+            val help = listOf(
+                HelpSection("형상 고르기", TaperHelp.take(2)),
+                HelpSection("값 넣기", TaperHelp.drop(2), extra = { TipHelp() }),
+            )
+            FeatureScaffold(Feature.TAPER, help, helpStart = 1) {}
+        }
+    }
+
+    /** 넓은 PC 창(1280dp): 본문은 가운데 640dp 에 머물고 카드 · 그림은 폰과 같은 크기, 헤더만 창 폭 */
+    @Test
+    fun wideWindow() = Shots.both("taper-b-wide", heightDp = 1400, widthDp = 1280) {
+        AppHost(it) { TaperScreen(TaperState(type = 1, open = true)) }
+    }
+
     @Test
     fun comingSoonJosa() {
         assertEquals("은", topicJosa(Feature.CUTTING.menuTitle))
@@ -108,8 +141,8 @@ class ShellShotsTest {
 @Composable
 private fun HeaderGallery() {
     Column(Modifier.fillMaxWidth()) {
-        Box(Modifier.height(80.dp)) { FeatureScaffold(Feature.TAPER, emptyList()) {} }
-        Box(Modifier.height(80.dp)) { FeatureScaffold(Feature.ROUND, emptyList()) {} }
+        Box(Modifier.height(80.dp)) { FeatureScaffold(Feature.TAPER, emptyList<HelpSection>()) {} }
+        Box(Modifier.height(80.dp)) { FeatureScaffold(Feature.ROUND, emptyList<HelpSection>()) {} }
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton("닫기", AppIcons.Close, {})
             PillButton("형상 다시 고르기", null, {})

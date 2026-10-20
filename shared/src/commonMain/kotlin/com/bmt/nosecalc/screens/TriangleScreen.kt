@@ -190,7 +190,7 @@ private fun CoordCard(s: TriangleState, sol: TriangleSolution) {
         Spacer(Modifier.height(10.dp))
         Segmented(
             listOf("밑변 = Z · 높이 = X", "밑변 = X · 높이 = Z"), if (s.baseIsZ) 0 else 1, { s.baseIsZ = it == 0 },
-            Modifier.fillMaxWidth(), color = c.features.getValue(Feature.TRIANGLE).title[0], height = 42.dp, fontSize = 14,
+            Modifier.fillMaxWidth(), color = c.features.getValue(Feature.TRIANGLE).title, height = 42.dp, fontSize = 14,
         )
         Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             listOf("X" to sol.dxDia, "Z" to sol.dz).forEach { (axis, v) ->
