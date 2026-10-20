@@ -43,21 +43,6 @@ object AppIcons {
             close()
         }
     }
-    val Doc by lazy {
-        line("doc") {
-            moveTo(14f, 2.5f); lineTo(6.5f, 2.5f)
-            arcTo(2f, 2f, 0f, false, false, 4.5f, 4.5f)
-            lineTo(4.5f, 19.5f)
-            arcTo(2f, 2f, 0f, false, false, 6.5f, 21.5f)
-            lineTo(17.5f, 21.5f)
-            arcTo(2f, 2f, 0f, false, false, 19.5f, 19.5f)
-            lineTo(19.5f, 8f); close()
-            moveTo(14f, 2.5f); lineTo(14f, 8f); lineTo(19.5f, 8f)
-            moveTo(8.5f, 9f); lineTo(10.5f, 9f)
-            moveTo(8.5f, 13f); lineTo(15.5f, 13f)
-            moveTo(8.5f, 17f); lineTo(15.5f, 17f)
-        }
-    }
     val Home by lazy {
         line("home") {
             moveTo(3f, 10.5f); lineTo(12f, 3f); lineTo(21f, 10.5f)

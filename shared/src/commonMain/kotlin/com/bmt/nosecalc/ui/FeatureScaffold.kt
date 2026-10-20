@@ -6,7 +6,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,16 +36,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.Feature
 import com.bmt.nosecalc.LocalAppState
@@ -77,7 +75,7 @@ fun FeatureScaffold(
             } else {
                 CircleIconButton(AppIcons.Sun, "어두운 테마로", { state.setDark(true) }, tint = c.sun)
             }
-            CircleIconButton(AppIcons.Doc, "도움말", { state.helpOpen = true }, tint = c.green, glow = true)
+            CircleIconButton(AppIcons.Help, "도움말", { state.helpOpen = true }, outlined = true)
             if (feature != Feature.TAPER) CircleIconButton(AppIcons.Home, "처음 화면", { state.home() })
         }
         Box(Modifier.weight(1f).fillMaxWidth()) { Body(menuOpen, content) }
@@ -110,7 +108,7 @@ private fun Body(menuOpen: Boolean, content: @Composable BoxScope.() -> Unit) {
     }
 }
 
-/** APP MENU 패널(01): 머리(BMT 로고 · CLOSE) → 기능 카드 6장 → BMT 배너 */
+/** APP MENU 패널(01): 머리(BMT 로고 · CLOSE) → 기능 카드 6장 → 조용한 BMT 바닥글 */
 @Composable
 private fun AppMenu(onPick: (Feature) -> Unit, onClose: () -> Unit) {
     val c = AppTheme.colors
@@ -132,16 +130,19 @@ private fun AppMenu(onPick: (Feature) -> Unit, onClose: () -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(7.5.dp)) {
             Feature.menu.forEach { f -> MenuCard(f) { onPick(f) } }
         }
-        Spacer(Modifier.height(32.dp))
-        BmtBanner()
+        MenuFooter()
     }
 }
 
+/**
+ * 기능 카드: 40dp 아이콘 판(기능색 옅게) + 제목(중립색) · 부제 + 꺾쇠.
+ * 아직 안 만든 기능은 아이콘·제목을 흐리게 하고 꺾쇠 자리에 '준비 중' 표시(눌러도 준비 중 화면이 열린다)
+ */
 @Composable
 private fun MenuCard(f: Feature, onClick: () -> Unit) {
     val c = AppTheme.colors
-    val color = c.features.getValue(f).menu
     val shape = RoundedCornerShape(10.dp)
+    val dim = if (f.ready) 1f else 0.6f
     Row(
         Modifier
             .fillMaxWidth()
@@ -151,43 +152,61 @@ private fun MenuCard(f: Feature, onClick: () -> Unit) {
             .background(c.card)
             .border(1.dp, c.lineCard, shape)
             .clickable(onClick = onClick)
-            .padding(start = 18.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+            .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FeatureIcon(f, Modifier.size(29.dp))
-        Spacer(Modifier.width(17.dp))
+        Box(
+            Modifier
+                .alpha(dim)
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(c.features.getValue(f).menu.copy(alpha = if (c.dark) .18f else .12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            FeatureIcon(f, Modifier.size(24.dp))
+        }
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(f.menuTitle, color = color, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                f.menuTitle,
+                color = c.textStrong.copy(alpha = dim),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Spacer(Modifier.height(2.dp))
             Text(f.menuSub, color = c.textBody, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Icon(AppIcons.ChevronRight, null, Modifier.size(15.dp), tint = color.copy(alpha = 0.3f))
+        Spacer(Modifier.width(8.dp))
+        if (f.ready) {
+            Icon(AppIcons.ChevronRight, null, Modifier.size(16.dp), tint = c.textHint)
+        } else {
+            val tag = RoundedCornerShape(6.dp)
+            Text(
+                "준비 중",
+                Modifier.clip(tag).background(c.field).border(1.dp, c.lineField, tag).padding(horizontal = 8.dp, vertical = 3.dp),
+                color = c.textMuted,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
     }
 }
 
-/** 원본의 프리미엄 배너 자리 — BMT 사내 앱 표시 */
+/** 메뉴 맨 아래 BMT 사내 앱 표시(원본의 프리미엄 배너 자리). 눌리는 단추처럼 보이지 않게 바탕 없이 흐린 글 */
 @Composable
-private fun BmtBanner() {
+private fun MenuFooter() {
     val c = AppTheme.colors
-    val shape = RoundedCornerShape(12.dp)
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .height(87.dp)
-            .shadow(if (c.dark) 0.dp else 6.dp, shape, spotColor = c.bmtBanner.first())
-            .clip(shape)
-            .background(Brush.horizontalGradient(c.bmtBanner))
-            .border(2.dp, c.bmtBannerBorder, shape),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+    Row(
+        Modifier.fillMaxWidth().padding(top = 24.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Image(BmtMark, null, Modifier.size(22.dp), colorFilter = ColorFilter.tint(c.onAccent))
-            Spacer(Modifier.width(10.dp))
-            Text("BMT 노즈R 계산기", color = c.onAccent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.06.em)
-        }
-        Spacer(Modifier.height(5.dp))
-        Text("사내 전용", color = c.onAccent.copy(alpha = 0.88f), fontSize = 12.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.1.em)
+        Icon(BmtMark, null, Modifier.size(16.dp), tint = c.textMuted)
+        Spacer(Modifier.width(6.dp))
+        Text("BMT 노즈R 계산기 · 사내 전용", color = c.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 

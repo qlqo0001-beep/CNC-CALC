@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.bmt.nosecalc.Feature
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.RoleColors
@@ -497,23 +496,5 @@ fun WarningBanner(
                 }
             }
         }
-    }
-}
-
-/** 아직 안 만든 기능 화면의 자리표시 */
-@Composable
-fun ComingSoon(feature: Feature, modifier: Modifier = Modifier) {
-    val c = AppTheme.colors
-    Column(modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        FeatureIcon(feature, Modifier.size(64.dp))
-        Spacer(Modifier.height(18.dp))
-        Text("준비 중", color = c.textStrong, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "${feature.menuSub} 화면은 다음 단계에서 채웁니다.",
-            color = c.textMuted,
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center,
-        )
     }
 }
