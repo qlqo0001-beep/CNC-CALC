@@ -19,8 +19,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.calc.Arc
@@ -33,6 +35,9 @@ import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.CardHeader
+import com.bmt.nosecalc.ui.CoordPair
+import com.bmt.nosecalc.ui.ExpandableHint
+import com.bmt.nosecalc.ui.LabeledValue
 import com.bmt.nosecalc.ui.NumberField
 import com.bmt.nosecalc.ui.ViewerLine
 import com.bmt.nosecalc.ui.ViewerMark
@@ -40,6 +45,7 @@ import com.bmt.nosecalc.ui.WarnLevel
 import com.bmt.nosecalc.ui.WarningBanner
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
+import com.bmt.nosecalc.ui.theme.Space
 
 /**
  * B 화면 — 테이퍼(외경·내경 · 2중 테이퍼): 그림 요약 → (멈춘 까닭 · 값을 넣으라는 안내) → 입력 → 경고 → 보정 좌표 → 형상 → NC(G41/G42 · 직접 보정).
@@ -83,8 +89,8 @@ internal fun SlopeScreen(s: TaperState) {
     val r = if (form.noseR.isFinite()) Fmt.nc(form.noseR).removeSuffix(".") else "—"
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 5.dp).padding(top = 6.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.gutter).padding(top = 8.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(Space.cardGap),
     ) {
         val dir = if (s.reverse) "역방향 가공 (Z+)" else "정방향 가공 (Z−)"
         SummaryCard(kind, type, s.reverse, "$dir · 노즈 R$r · 팁 ${tip}번") { s.open = false }
@@ -95,37 +101,42 @@ internal fun SlopeScreen(s: TaperState) {
             result.warnings.forEach { WarningBanner(taperWarningText(it, form), level = WarnLevel.Error) }
         }
 
-        AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
+        AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
             NoseRPicker(noseR, error = "noseR" in flagged) { s.setShared("noseR", it) }
             Spacer(Modifier.height(14.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // 단일 테이퍼는 다섯 값 가운데 하나를 비워 계산한다(키패드 '비우기 · 자동 계산')
+            val blankable = !kind.double
+            Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                 for (i in 0 until n) {
                     val p = sol?.points?.get(i)?.vertex
                     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PointBadge("T${i + 1}", pointColor(c, i), Modifier.size(38.dp, 52.dp))
                         NumberField(
-                            "X${i + 1} (직경)", xs[i], { s.setPoint("x${i + 1}", it) }, Modifier.weight(1f),
+                            "X${i + 1}", xs[i], { s.setPoint("x${i + 1}", it) }, Modifier.weight(1f),
                             unit = "mm", autoValue = auto(xs[i], p?.xDia), error = "x${i + 1}" in flagged,
+                            tag = "Ø직경", hint = "직경값 — 도면 Ø 그대로 (Ø40 → 40)", blankable = blankable,
                         )
                         NumberField(
                             "Z${i + 1}", zs[i], { s.setPoint("z${i + 1}", it) }, Modifier.weight(1f),
                             unit = "mm", autoValue = auto(zs[i], p?.z), error = "z${i + 1}" in flagged,
+                            hint = "Z0 = 부품 오른쪽 끝면 · 척 쪽은 − (예: −5)", blankable = blankable,
                         )
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(if (n == 3) 8.dp else 12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(if (n == 3) 8.dp else Space.fieldGap)) {
                     for (i in 0 until n) {
                         NumberField(
                             "T${i + 1} 모서리 R", rs[i], { s.setPoint("r${i + 1}", it) }, Modifier.weight(1f),
-                            unit = "mm", placeholder = "0", error = "r${i + 1}" in flagged,
+                            unit = "mm", placeholder = "기본 0", error = "r${i + 1}" in flagged, hint = "비우면 0 (날카로운 꼭짓점)",
                         )
                     }
                 }
                 if (!kind.double) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                         NumberField(
-                            "각도", ang, { s.setPoint("ang", it) }, Modifier.weight(1f),
+                            "각도 (Z축 기준)", ang, { s.setPoint("ang", it) }, Modifier.weight(1f),
                             unit = "°", autoValue = auto(ang, sol?.anglesDeg?.first()), error = "ang" in flagged,
+                            hint = "Z축(가로선)에서 잰 한쪽 각 · 도면이 꼭지각이면 ÷2 · X축 기준이면 90 − 값", blankable = true,
                         )
                         ZClearField(zClear, "zClear" in flagged, Modifier.weight(1f)) { s.setShared("zClear", it) }
                     }
@@ -134,18 +145,26 @@ internal fun SlopeScreen(s: TaperState) {
                 // 시작점·끝점: 그 요소가 단면이면 X(직경), 수평이면 Z. 넣었을 때만 그 요소를 깎는다.
                 // 끝점을 비우면 마지막 T 점(모서리 R 이면 그 끝)에서 끝나 그 좌표를 자동 값으로, 시작점을 비우면 "안 깎음"
                 val last = sol?.cutEnd
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                     NumberField(
-                        "시작점 ${if (frontV) "X" else "Z"} (T1 앞)", start, { s.setPoint("start", it) }, Modifier.weight(1f),
+                        if (frontV) "시작 X (단면 바깥 Ø)" else "시작 Z (앞 끝)", start, { s.setPoint("start", it) }, Modifier.weight(1f),
                         unit = "mm", placeholder = "안 깎음", error = "start" in flagged,
+                        hint = "T1 앞 요소가 시작하는 좌표 · 비우면 그 요소는 안 깎고 연장선에서 진입",
                     )
+                    // 역방향은 끝 요소가 척 반대쪽이다
                     NumberField(
-                        "끝점 ${if (backV) "X" else "Z"} (T$n 뒤)", end, { s.setPoint("end", it) }, Modifier.weight(1f),
+                        when {
+                            backV -> "끝 X (단면 끝 Ø)"
+                            s.reverse -> "끝 Z (뒤 끝)"
+                            else -> "끝 Z (뒤 끝 · 척 쪽)"
+                        },
+                        end, { s.setPoint("end", it) }, Modifier.weight(1f),
                         unit = "mm", autoValue = auto(end, last?.let { if (backV) it.xDia else it.z }), error = "end" in flagged,
+                        hint = (if (s.reverse) "T$n 뒤 요소의 실제 끝 좌표" else "척·턱 쪽 실제 끝 좌표") + " · 비우면 T$n 에서 끝남 (자동 값)",
                     )
                 }
                 if (kind.double) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                         ZClearField(zClear, "zClear" in flagged, Modifier.weight(1f)) { s.setShared("zClear", it) }
                         TipField(tip, standard, { s.tip = it }, Modifier.weight(1f))
                     }
@@ -154,18 +173,17 @@ internal fun SlopeScreen(s: TaperState) {
                     TipField(tip, standard, { s.tip = it })
                 }
             }
-            Text(
+            ExpandableHint(
+                if (kind.double) "세 점의 X · Z 를 모두 넣습니다. 각도는 결과로 나옵니다."
+                else "빈칸 하나는 나머지 넷으로 자동 계산합니다 (보통 각도를 비움).",
                 (
-                    if (kind.double) "세 점의 X·Z 를 모두 넣습니다. 각도는 결과로 나옵니다. "
-                    else "X1·Z1·X2·Z2·각도 가운데 하나를 비우면(키패드 C) 나머지 넷으로 계산합니다. 보통 각도를 비워 둡니다. "
+                    if (kind.double) ""
+                    else "X1·Z1·X2·Z2·각도 가운데 하나를 비우면(키패드의 '비우기 · 자동 계산') 나머지 넷으로 계산합니다. 보통 각도를 비워 둡니다. "
                     ) +
                     "모서리 R 은 비우면 0(날카로운 꼭짓점). 시작점·끝점은 앞뒤 요소의 바깥 끝 좌표(단면이면 X, 수평이면 Z)로, 넣었을 때만 그 요소를 깎습니다 — " +
                     "끝점을 비우면 마지막 T 점에서 끝나고, 넣으면 인선이 그 좌표까지 갑니다. 시작점을 비우면 첫 T 점에서 시작합니다. " +
                     "Z 여유는 첫 깎는 점에서 Z 로 띄운 진입 거리입니다(노즈 R 보다 작으면 노즈 R).",
-                Modifier.padding(top = 12.dp),
-                color = c.textMuted,
-                fontSize = 12.5.sp,
-                lineHeight = 18.sp,
+                Modifier.padding(top = 4.dp),
             )
         }
 
@@ -207,7 +225,10 @@ internal fun SlopeScreen(s: TaperState) {
 
 @Composable
 private fun ZClearField(value: String, error: Boolean, modifier: Modifier, onChange: (String) -> Unit) {
-    NumberField("Z 여유 (진입)", value, onChange, modifier, unit = "mm", placeholder = "0", error = error)
+    NumberField(
+        "Z 여유 (진입)", value, onChange, modifier, unit = "mm", placeholder = "기본 0", error = error,
+        hint = "진입점까지 Z 거리 (+ 값) · 노즈 R 보다 작으면 노즈 R 만큼",
+    )
 }
 
 /** Z 여유가 노즈 R 보다 작으면 진입은 노즈 R 만큼 띄운다(G41/G42 시작 이동 ≥ 노즈 R) — 왜 G00 이 그대로인지 알린다 */
@@ -225,14 +246,14 @@ private fun eulReul(s: String): String = if (s.last() in "013678") "을" else "�
 private fun autoValue(text: String, v: Double?): String? = if (text.isNotEmpty()) null else v?.let { Fmt.fixed3(it) } ?: ""
 
 /**
- * 보정 좌표(가상 인선 = 직접 보정 프로그램 좌표): 점마다 X·Z 큰 숫자 + ΔX·ΔZ.
- * 모서리 R 이 있는 점은 R 시작·끝 접점 둘(도면 좌표를 아래에)과 원호 방향·도면 R·보정 R. 아래 각도·진입점.
+ * 보정 좌표(가상 인선 = 직접 보정 프로그램 좌표): 점마다 X | Z 좌표 쌍 + "ΔX(직경) · ΔZ" 줄.
+ * 모서리 R 이 있는 점은 R 시작·끝 접점 둘(도면 좌표를 아래에)과 원호 방향·도면 R·보정 R. 아래 각도·G00 진입점.
  * g41 = 아래 NC 가 G41/G42 프로그램 — 이 좌표를 그 프로그램에 넣으면 노즈R 이 두 번 들어간다고 위에 알린다
  */
 @Composable
 private fun CompCard(sol: TaperSolution, g41: Boolean) {
     val c = AppTheme.colors
-    AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
+    AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
         CardHeader("보정 좌표", "직접 보정(G40) 프로그램 좌표 · 팁 ${sol.tip}번") {
             Text("단위 mm · X 직경", style = AppType.caption, color = c.textMuted)
         }
@@ -243,77 +264,83 @@ private fun CompCard(sol: TaperSolution, g41: Boolean) {
             )
         }
         sol.points.forEachIndexed { i, p ->
-            Box(Modifier.padding(vertical = 9.dp).fillMaxWidth().height(1.dp).background(c.lineCard))
+            Rule()
             Row(verticalAlignment = if (p.corner == null) Alignment.CenterVertically else Alignment.Top) {
                 PointBadge("T${i + 1}′", pointColor(c, i), Modifier.size(44.dp, 40.dp))
                 Spacer(Modifier.width(12.dp))
-                PointRows(p)
+                PointRows(p, Modifier.weight(1f))
             }
         }
-        Box(Modifier.padding(vertical = 9.dp).fillMaxWidth().height(1.dp).background(c.lineCard))
-        Row {
-            Column(Modifier.weight(1f)) {
-                SmallLabel("각도")
-                sol.anglesDeg.forEachIndexed { i, a ->
-                    Text(
-                        (if (sol.anglesDeg.size > 1) "각${i + 1} " else "") + "${Fmt.fixed3(a)}°",
-                        color = c.textValue, fontFamily = AppTheme.mono, fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                    )
+        Rule()
+        val size = AppType.numLarge.fontSize
+        val entry = "X${Fmt.fixed3(sol.entry.xDia)}  Z${Fmt.fixed3(sol.entry.z)}"
+        val angles = sol.anglesDeg
+        if (angles.size == 1) {
+            Row {
+                LabeledValue("각도 (Z축 기준)", "${Fmt.fixed3(angles[0])}°", Modifier.weight(1f), size = size)
+                LabeledValue("G00 진입점", entry, Modifier.weight(1.5f), size = size)
+            }
+        } else {
+            // 2중 테이퍼: 경사 둘(그림의 각1 = T1–T2 · 각2 = T2–T3)을 나란히, 진입점은 아랫줄
+            Row {
+                angles.forEachIndexed { i, a ->
+                    LabeledValue("각${i + 1} (Z축 기준)", "${Fmt.fixed3(a)}°", Modifier.weight(1f), size = size)
                 }
             }
-            Column(Modifier.weight(1.5f)) {
-                SmallLabel("진입점 (직접 보정 G00)")
-                Text(
-                    "X${Fmt.fixed3(sol.entry.xDia)}  Z${Fmt.fixed3(sol.entry.z)}",
-                    color = c.textValue, fontFamily = AppTheme.mono, fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                )
-            }
+            LabeledValue("G00 진입점", entry, Modifier.padding(top = 10.dp), size = size)
         }
     }
 }
 
 @Composable
-private fun PointRows(p: TaperPoint) {
+private fun Rule() {
+    Box(Modifier.padding(vertical = 9.dp).fillMaxWidth().height(1.dp).background(AppTheme.colors.lineCard))
+}
+
+@Composable
+private fun PointRows(p: TaperPoint, modifier: Modifier) {
     val c = AppTheme.colors
     val corner = p.corner
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         p.nodes.forEachIndexed { k, node ->
+            if (k > 0) Spacer(Modifier.height(6.dp))
             if (corner != null) SmallLabel(if (k == 0) "R 시작 (접점)" else "R 끝 (접점)")
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BigValue("X", Fmt.fixed3(node.prog.xDia))
-                Spacer(Modifier.width(16.dp))
-                BigValue("Z", Fmt.fixed3(node.prog.z))
+            CoordPair(Fmt.fixed3(node.prog.xDia), Fmt.fixed3(node.prog.z), c.valueComp)
+            if (corner == null) {
+                SubLine("ΔX(직경)" to signed(node.dXDia), "ΔZ" to signed(node.dZ))
+            } else {
+                SubLine("도면" to "X${Fmt.fixed3(node.drawn.xDia)}  Z${Fmt.fixed3(node.drawn.z)}")
             }
-            Text(
-                // 부호 없는 0.000 도 6칸으로 맞춰 줄마다 ΔZ 자리를 같게
-                if (corner == null) "ΔX ${signed(node.dXDia).padStart(6)}   ΔZ ${signed(node.dZ).padStart(6)}"
-                else "도면 X${Fmt.fixed3(node.drawn.xDia)}  Z${Fmt.fixed3(node.drawn.z)}",
-                color = c.textMuted,
-                fontFamily = AppTheme.mono,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-            )
         }
         if (corner != null) {
             Text(
                 "${if (corner.cw) "G02 시계" else "G03 반시계"} · 도면 R${Fmt.fixed3(corner.r)} → 보정 R" +
                     (corner.progR?.let { Fmt.fixed3(it) } ?: " 없음 (R ≤ 노즈R)"),
                 Modifier.padding(top = 2.dp),
+                style = AppType.label,
                 color = c.simArc,
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.Bold,
             )
         }
     }
 }
 
+/**
+ * 좌표 쌍 아래 작은 줄: 이름(sans) + 값(고정폭) 쌍을 " · " 로 잇는다.
+ * 한글 이름까지 고정폭으로 쓰면 줄 가운데서 대체 글꼴로 빠지므로 글꼴을 나눈다
+ */
 @Composable
-private fun BigValue(axis: String, v: String) {
-    val color = AppTheme.colors.valueComp
-    Text(axis, color = color, fontFamily = AppTheme.mono, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+private fun SubLine(vararg parts: Pair<String, String>) {
+    val sans = AppTheme.sans
     Text(
-        v, Modifier.width(112.dp), color = color, fontFamily = AppTheme.mono, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-        textAlign = TextAlign.End, maxLines = 1,
+        buildAnnotatedString {
+            parts.forEachIndexed { i, (name, v) ->
+                if (i > 0) append("  ·  ")
+                withStyle(SpanStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold)) { append(name) }
+                append(" $v")
+            }
+        },
+        style = AppType.numSmall,
+        color = AppTheme.colors.textMuted,
     )
 }
 

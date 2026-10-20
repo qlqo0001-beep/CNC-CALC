@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.calc.Contour
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.GrooveCalc
@@ -36,6 +35,9 @@ import com.bmt.nosecalc.calc.GrooveSolution
 import com.bmt.nosecalc.calc.GrooveWarning
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.ui.AppCard
+import com.bmt.nosecalc.ui.CardHeader
+import com.bmt.nosecalc.ui.ExpandableHint
+import com.bmt.nosecalc.ui.LabeledValue
 import com.bmt.nosecalc.ui.NumberField
 import com.bmt.nosecalc.ui.Segmented
 import com.bmt.nosecalc.ui.ViewerLine
@@ -43,6 +45,8 @@ import com.bmt.nosecalc.ui.ViewerMark
 import com.bmt.nosecalc.ui.WarnLevel
 import com.bmt.nosecalc.ui.WarningBanner
 import com.bmt.nosecalc.ui.theme.AppTheme
+import com.bmt.nosecalc.ui.theme.AppType
+import com.bmt.nosecalc.ui.theme.Space
 import kotlin.math.max
 
 /**
@@ -73,8 +77,8 @@ internal fun GrooveScreen(s: TaperState) {
     val flagged = if (waiting) emptySet() else result.warnings.flatMap { grooveWarningFields(it, input) }.toSet()
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 5.dp).padding(top = 6.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.gutter).padding(top = 8.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(Space.cardGap),
     ) {
         SummaryCard(TaperKind.GROOVE, type, false, "기준 인선 팁 ${ref.tip}번 · 노즈R 보정 0") { s.open = false }
         // 멈춘 까닭은 입력 카드 위에(폰 첫 화면 안에)
@@ -84,36 +88,39 @@ internal fun GrooveScreen(s: TaperState) {
             result.warnings.forEach { WarningBanner(grooveWarningText(it), level = WarnLevel.Error) }
         }
 
-        AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
+        AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
             FieldLabel("기준 인선 (프로그램 기준 모서리)")
             Spacer(Modifier.height(6.dp))
-            Segmented(listOf("왼쪽 인선 (팁 3번)", "오른쪽 인선 (팁 4번)"), type - 1, { s.type = it + 1 }, height = 46.dp, fontSize = 15)
+            Segmented(listOf("왼쪽 인선 (팁 3번)", "오른쪽 인선 (팁 4번)"), type - 1, { s.type = it + 1 }, color = c.teal, height = 46.dp, fontSize = 15)
             Spacer(Modifier.height(14.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // 후퇴 X(직경) = 외경 + 2 × X 여유(반경) — X 여유 칸 키패드에 지금 값으로 보인다
+            val retract = input.od?.takeIf { it > 0 }?.let { " · 지금 후퇴 Ø" + Fmt.nc(it + 2 * input.xClear).removeSuffix(".") }.orEmpty()
+            Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                     Field(s, "zStart", "시작 Z (오른쪽 벽)", Modifier.weight(1f), flagged)
                     Field(s, "width", "홈 폭 W", Modifier.weight(1f), flagged)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Field(s, "od", "외경 D (직경)", Modifier.weight(1f), flagged)
-                    Field(s, "bottom", "바닥 지름 d", Modifier.weight(1f), flagged)
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
+                    Field(s, "od", "외경 ØD", Modifier.weight(1f), flagged, tag = "Ø직경")
+                    Field(s, "bottom", "바닥 Ød", Modifier.weight(1f), flagged, tag = "Ø직경")
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                     Field(s, "insert", "인서트 폭 T", Modifier.weight(1f), flagged)
                     Field(s, "overlap", "단 겹침", Modifier.weight(1f), flagged, placeholder = "0.5")
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Field(s, "xClear", "X 여유 (반경)", Modifier.weight(1f), flagged, placeholder = "0")
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
+                    Field(
+                        s, "xClear", "X 여유", Modifier.weight(1f), flagged, placeholder = "기본 0", tag = "반경",
+                        hint = "반경값 — 한쪽 거리 · 0 이면 외경까지$retract",
+                    )
                     Spacer(Modifier.weight(1f))
                 }
             }
-            Text(
+            ExpandableHint(
+                "피치 = 인서트 폭 T − 겹침. 마지막 단은 왼쪽 벽에 맞춥니다.",
                 "피치 = T − 겹침. 첫 단은 날 오른쪽을 오른쪽 벽에, 마지막 단은 날 왼쪽을 왼쪽 벽에 정확히 맞춥니다. " +
-                    "단마다 외경 + 2×X 여유로 빠집니다(X 여유 0 이면 외경까지).",
-                Modifier.padding(top = 12.dp),
-                color = c.textMuted,
-                fontSize = 12.5.sp,
-                lineHeight = 18.sp,
+                    "단마다 외경 + 2×X 여유로 후퇴합니다(X 여유 0 이면 외경까지).",
+                Modifier.padding(top = 4.dp),
             )
         }
 
@@ -123,7 +130,7 @@ internal fun GrooveScreen(s: TaperState) {
             GrooveViewer(sol, input, t)
             NcCard(
                 sol.nc,
-                "단마다 G00 빠짐 → G01 바닥 → G00 빠짐, 끝에 벽·바닥 정삭. 기준 인선 좌표 그대로(G40) 깎습니다 — 벽·바닥이 X·Z 축에 평행해 " +
+                "단마다 G00 후퇴 → G01 바닥 → G00 후퇴, 끝에 벽·바닥 정삭. 기준 인선 좌표 그대로(G40) 깎습니다 — 벽·바닥이 X·Z 축에 평행해 " +
                     "노즈R 보정량이 0 이고, 반대쪽 벽은 다른 날 모서리가 깎아 공구 보정 하나(G41/G42)로는 맡을 수 없어 G41/G42 프로그램은 따로 없습니다. " +
                     "이송 F 는 넣지 않았습니다.",
                 programName = "홈 가공 프로그램",
@@ -134,33 +141,43 @@ internal fun GrooveScreen(s: TaperState) {
 }
 
 @Composable
-private fun Field(s: TaperState, name: String, label: String, modifier: Modifier, flagged: Set<String>, placeholder: String = "") {
-    NumberField(label, s.shared(name), { s.setShared(name, it) }, modifier, unit = "mm", placeholder = placeholder, error = name in flagged)
+private fun Field(
+    s: TaperState,
+    name: String,
+    label: String,
+    modifier: Modifier,
+    flagged: Set<String>,
+    placeholder: String = "",
+    tag: String? = null,
+    hint: String? = null,
+) {
+    NumberField(
+        label, s.shared(name), { s.setShared(name, it) }, modifier,
+        unit = "mm", placeholder = placeholder, error = name in flagged, tag = tag, hint = hint,
+    )
 }
 
-/** 다단 진입 표: 단 수·피치·빠짐, 단마다 진입 Z·목표 X, 정삭 경로 */
+/** 다단 진입 표: 단 수·피치·후퇴 X, 단마다 진입 Z·목표 X, 정삭 경로 */
 @Composable
 private fun StepsCard(sol: GrooveSolution, ref: GrooveRef) {
     val c = AppTheme.colors
     var all by rememberSaveable { mutableStateOf(false) }
     val n = sol.steps.size
-    AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text("다단 진입", color = c.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(8.dp))
-            Text("기준 인선 ${ref.tip}번 (${if (ref == GrooveRef.LEFT) "왼쪽" else "오른쪽"}) 의 프로그램 좌표", color = c.textMuted, fontSize = 12.5.sp)
-        }
-        Spacer(Modifier.height(10.dp))
+    val side = if (ref == GrooveRef.LEFT) "왼쪽" else "오른쪽"
+    val head = AppType.caption.copy(fontWeight = FontWeight.SemiBold)
+    AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
+        CardHeader("다단 진입", "$side 인선 팁 ${ref.tip}번 기준 좌표")
         Row {
-            Stat("단 수", "$n", Modifier.weight(0.8f))
-            Stat("피치", Fmt.fixed3(sol.pitch), Modifier.weight(1f))
-            Stat("빠짐 X", Fmt.fixed3(sol.retractXDia), Modifier.weight(1.1f))
+            val size = AppType.numLarge.fontSize
+            LabeledValue("단 수", "$n", Modifier.weight(0.8f), color = c.valueComp, size = size)
+            LabeledValue("피치", Fmt.fixed3(sol.pitch), Modifier.weight(1f), color = c.valueComp, size = size)
+            LabeledValue("후퇴 X (직경)", Fmt.fixed3(sol.retractXDia), Modifier.weight(1.1f), color = c.valueComp, size = size)
         }
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth().background(c.field).padding(horizontal = 10.dp, vertical = 6.dp)) {
-            Text("단", Modifier.width(34.dp), color = c.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Text("진입 Z", Modifier.weight(1f), color = c.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
-            Text("목표 X", Modifier.weight(1f), color = c.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
+            Text("단", Modifier.width(34.dp), style = head, color = c.textMuted)
+            Text("진입 Z", Modifier.weight(1f), style = head, color = c.textMuted, textAlign = TextAlign.End)
+            Text("목표 X", Modifier.weight(1f), style = head, color = c.textMuted, textAlign = TextAlign.End)
             Text("", Modifier.width(78.dp))
         }
         val rows = if (all || n <= SHOWN) sol.steps.indices.toList() else (0 until SHOWN - 1) + (n - 1)
@@ -169,7 +186,7 @@ private fun StepsCard(sol: GrooveSolution, ref: GrooveRef) {
                 Text(
                     "… ${i - rows[k - 1] - 1}단 더 보기",
                     Modifier.fillMaxWidth().clickable { all = true }.padding(vertical = 6.dp),
-                    color = c.teal, fontSize = 13.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                    style = AppType.label, color = c.teal, textAlign = TextAlign.Center,
                 )
             }
             val st = sol.steps[i]
@@ -180,10 +197,10 @@ private fun StepsCard(sol: GrooveSolution, ref: GrooveRef) {
                 else -> ""
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${i + 1}", Modifier.width(34.dp), color = c.textBody, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("${i + 1}", Modifier.width(34.dp), style = AppType.label, color = c.textBody)
                 Mono(Fmt.fixed3(st.z), Modifier.weight(1f))
                 Mono(Fmt.fixed3(st.xDia), Modifier.weight(1f))
-                Text(note, Modifier.width(78.dp), color = c.tealDeep, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
+                Text(note, Modifier.width(78.dp), style = head, color = c.tealDeep, textAlign = TextAlign.End, maxLines = 1)
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.lineCard))
         }
@@ -193,20 +210,16 @@ private fun StepsCard(sol: GrooveSolution, ref: GrooveRef) {
         val names = listOf("오른쪽 벽 위", "바닥", "왼쪽 벽", "위로")
         f.forEachIndexed { i, p ->
             Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(names[i], Modifier.width(92.dp), color = c.textBody, fontSize = 13.sp)
-                Text(
-                    "X${Fmt.fixed3(p.xDia)}  Z${Fmt.fixed3(p.z)}",
-                    color = c.textValue, fontFamily = AppTheme.mono, fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                )
+                Text(names[i], Modifier.width(92.dp), style = AppType.body, color = c.textBody)
+                Text("X${Fmt.fixed3(p.xDia)}  Z${Fmt.fixed3(p.z)}", style = AppType.numBody, color = c.textValue)
             }
         }
         Text(
             "벽·바닥이 X·Z 축에 평행해 노즈R 보정은 0 입니다. 바닥 두 모서리에는 인서트 노즈R 만큼 R 이 남습니다. " +
-                "인서트 ${if (ref == GrooveRef.LEFT) "왼쪽" else "오른쪽"} 모서리에 공구 길이를 맞추고 팁 번호는 ${ref.tip}번으로 둡니다.",
+                "인서트 $side 모서리에 공구 길이를 맞추고 팁 번호는 ${ref.tip}번으로 둡니다.",
             Modifier.padding(top = 8.dp),
+            style = AppType.caption,
             color = c.textMuted,
-            fontSize = 12.5.sp,
-            lineHeight = 18.sp,
         )
     }
 }
@@ -214,16 +227,8 @@ private fun StepsCard(sol: GrooveSolution, ref: GrooveRef) {
 private const val SHOWN = 12
 
 @Composable
-private fun Stat(label: String, value: String, modifier: Modifier) {
-    Column(modifier) {
-        SmallLabel(label)
-        Text(value, color = AppTheme.colors.valueComp, fontFamily = AppTheme.mono, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
 private fun Mono(text: String, modifier: Modifier) {
-    Text(text, modifier, color = AppTheme.colors.textValue, fontFamily = AppTheme.mono, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+    Text(text, modifier, style = AppType.numBody, color = AppTheme.colors.textValue, textAlign = TextAlign.End)
 }
 
 /** 외경 + 홈 도면선, 단마다 날 자리(점선), 정삭 경로(기준 인선) */

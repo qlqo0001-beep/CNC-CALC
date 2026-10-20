@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.bmt.nosecalc.screens.TaperScreen
 import com.bmt.nosecalc.screens.taper.TaperKind
@@ -22,11 +23,14 @@ class TaperShotsTest {
     @Test
     fun pick() {
         shot("taper-a-inner") { TaperState(TaperKind.INNER) }
-        shot("taper-a-reverse") { TaperState(reverse = true) }
+        // 고른 형상(B 에서 돌아온 때): 청록 테두리 + 체크
+        shot("taper-a-reverse") { TaperState(reverse = true, type = 2) }
         shot("taper-a-inner-reverse") { TaperState(TaperKind.INNER, reverse = true) }
         shot("taper-a-double") { TaperState(TaperKind.OUTER_DOUBLE) }
         shot("taper-a-inner-double") { TaperState(TaperKind.INNER_DOUBLE) }
         shot("taper-a-groove") { TaperState(TaperKind.GROOVE) }
+        // 넓은 창(본문 640dp)은 형상 카드 3열
+        Shots.both("taper-a-wide", heightDp = 900, widthDp = 700) { AppHost(it) { TaperScreen(TaperState(TaperKind.OUTER_DOUBLE)) } }
     }
 
     /** 결과 화면은 [example] 값(2단계 처음 값)으로 — 화면은 이제 도면 치수 · 여유 0 에서 시작한다. 끝점을 비우면 마지막 T 점에서 끝난다 */
@@ -60,7 +64,7 @@ class TaperShotsTest {
             }
         }
         shot("taper-b-reverse", 2280) { TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example() }
-        shot("taper-b-double", 2560) { TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1") } }
+        shot("taper-b-double", 2640) { TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1") } }
         // 각도 30 ≠ 두 점의 45° → CONTRADICTION: 빨간 띠는 요약 바로 아래, X1 · Z1 · X2 · Z2 · 각도에 빨간 테
         shot("taper-b-error", 1150) { TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") } }
         // 정방향인데 Z2 를 + 로(척 반대쪽) → Z 부호 글, Z 칸만 빨간 테
@@ -73,9 +77,21 @@ class TaperShotsTest {
             }
         }
         shot("taper-groove-empty") { TaperState(TaperKind.GROOVE, type = 1, open = true) }
-        shot("taper-groove", 2200) { TaperState(TaperKind.GROOVE, type = 1, open = true).example() }
+        shot("taper-groove", 2280) { TaperState(TaperKind.GROOVE, type = 1, open = true).example() }
         // 인서트 폭 9 > 홈 폭 8 → 두 칸에 빨간 테
         shot("taper-groove-error") { TaperState(TaperKind.GROOVE, type = 2, open = true).example().apply { setShared("insert", "9") } }
+    }
+
+    /** 각도 칸(taper-b 의 (114, 692)dp)을 눌러 연 키패드: 안내 줄(Z축 기준 · 꼭지각 ÷2 · X축 기준 90 − 값) · '비우기 · 자동 계산' */
+    @Test
+    fun keypadHint() = Shots.both("taper-b-keypad-ang", tapDp = Offset(114f, 692f)) {
+        AppHost(it) { TaperScreen(TaperState(type = 1, open = true).example()) }
+    }
+
+    /** 입력 화면에서 연 도움말: '값 넣기' 묶음과 팁 번호 그림이 스크롤 없이 보인다 */
+    @Test
+    fun help() = Shots.both("taper-help", setup = { it.helpOpen = true }) {
+        AppHost(it) { TaperScreen(TaperState(type = 1, open = true).example()) }
     }
 
     @Test

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,6 +41,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -59,6 +60,7 @@ import com.bmt.nosecalc.calc.TaperCalc
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.AppIcons
 import com.bmt.nosecalc.ui.BottomSheet
+import com.bmt.nosecalc.ui.CardHeader
 import com.bmt.nosecalc.ui.ExpandableHint
 import com.bmt.nosecalc.ui.NumberPad
 import com.bmt.nosecalc.ui.PillButton
@@ -71,6 +73,7 @@ import com.bmt.nosecalc.ui.WarnLevel
 import com.bmt.nosecalc.ui.arrowHead
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
+import com.bmt.nosecalc.ui.theme.Space
 import com.bmt.nosecalc.ui.theme.onFill
 import kotlinx.coroutines.delay
 import kotlin.math.PI
@@ -78,15 +81,24 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** B 화면 맨 위: 고른 형상의 작은 그림 + 종류·형상 번호·이름·방향/팁 + 형상 다시 고르기 */
+/**
+ * B 화면 맨 위: 고른 형상의 작은 그림(요약 꼴 — 글 12sp · 각도 글 없이) + 종류·형상 번호·이름·방향/팁 + 형상 다시 고르기.
+ * 그림을 눌러도 형상을 다시 고른다
+ */
 @Composable
 internal fun SummaryCard(kind: TaperKind, type: Int, mirrored: Boolean, info: String, onBack: () -> Unit) {
     val c = AppTheme.colors
-    AppCard(Modifier.fillMaxWidth(), padding = 10.dp) {
+    AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val shape = RoundedCornerShape(8.dp)
-            Box(Modifier.width(132.dp).aspectRatio(1.08f).clip(shape).background(c.subtle).border(1.5.dp, c.lineStrong, shape)) {
-                TypeArt(kind, type, mirrored)
+            Box(
+                Modifier
+                    .size(132.dp, 122.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(c.subtle)
+                    .clickable(onClick = onBack)
+                    .semantics { contentDescription = "형상 다시 고르기" },
+            ) {
+                TypeArt(kind, type, mirrored, compact = true)
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
@@ -426,7 +438,7 @@ internal fun signed(v: Double): String {
 internal data class NcFact(val text: String, val tone: WarnLevel? = null)
 
 /**
- * NC 블록 카드: 머리(제목 · 줄 수 · 복사 아이콘) → 프로그램 고르기(tabs, 테이퍼: G41/G42 · 직접 보정) → 꼭 알 것(facts) →
+ * NC 블록 카드: 머리(제목 · 복사 아이콘) → 프로그램 고르기(tabs, 테이퍼: G41/G42 · 직접 보정) → 꼭 알 것(facts) →
  * 줄 번호 + 고정폭 줄(골라 복사할 수 있고, 줄은 접지 않고 옆으로 민다 · 줄 번호는 복사되지 않음) →
  * 큰 복사 단추(프로그램 이름 · 줄 수, 누르면 2초 "복사됨") → 설명(첫 문장 + 자세히). 복사하면 토스트
  */
@@ -457,12 +469,8 @@ internal fun NcCard(
         copied = true
     }
     val shown = lines.take(MAX_NC_SHOWN)
-    AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("NC 프로그램", style = AppType.cardTitle, color = c.textStrong)
-            Spacer(Modifier.width(8.dp))
-            Text("${lines.size}줄", color = c.textMuted, fontSize = 12.5.sp)
-            Spacer(Modifier.weight(1f))
+    AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
+        CardHeader("NC 프로그램") {
             Box(
                 Modifier
                     .minimumInteractiveComponentSize()
@@ -476,17 +484,15 @@ internal fun NcCard(
             }
         }
         if (tabs.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            Segmented(tabs, tab, onTab, Modifier.fillMaxWidth(), color = c.teal, height = 44.dp, fontSize = 14)
+            Segmented(tabs, tab, onTab, Modifier.fillMaxWidth().padding(bottom = 10.dp), color = c.teal, height = 44.dp, fontSize = 14)
         }
         if (facts.isNotEmpty()) {
             FlowRow(
-                Modifier.padding(top = 10.dp),
+                Modifier.padding(bottom = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) { facts.forEach { FactChip(it) } }
         }
-        Spacer(Modifier.height(10.dp))
         val shape = RoundedCornerShape(8.dp)
         Column(Modifier.fillMaxWidth().clip(shape).background(c.field).border(1.dp, c.lineField, shape).padding(vertical = 10.dp)) {
             Row {
@@ -601,10 +607,8 @@ internal data class Legend(val color: Color, val label: String, val dashed: Bool
 internal fun ViewerCard(lines: List<ViewerLine>, marks: List<ViewerMark>, legend: List<Legend>) {
     val c = AppTheme.colors
     AppCard(Modifier.fillMaxWidth(), padding = 0.dp) {
-        Row(Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("형상 확인", color = c.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.weight(1f))
-            Text("확대·이동 · 두 번 눌러 맞춤", color = c.textMuted, fontSize = 11.5.sp)
+        CardHeader("형상 확인", modifier = Modifier.padding(start = Space.cardPad, end = Space.cardPad, top = 14.dp)) {
+            Text("확대·이동 · 두 번 눌러 맞춤", style = AppType.caption, color = c.textMuted)
         }
         ShapeViewer(lines, Modifier.fillMaxWidth().height(300.dp), marks)
         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

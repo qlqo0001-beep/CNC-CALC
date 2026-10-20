@@ -60,6 +60,15 @@ internal fun typeName(kind: TaperKind, type: Int): String = when (kind) {
     TaperKind.GROOVE -> listOf("왼쪽 인선 기준 (팁 3번)", "오른쪽 인선 기준 (팁 4번)")
 }[type - 1]
 
+/** 형상 카드 머리 띠의 짧은 이름(A 화면). 긴 이름은 [typeName] */
+internal fun typeShort(kind: TaperKind, type: Int): String = when (kind) {
+    TaperKind.OUTER -> listOf("끝 면취", "경사 단차", "테이퍼", "테이퍼·어깨", "역테이퍼")
+    TaperKind.INNER -> listOf("입구 면취", "경사 단차", "테이퍼", "테이퍼·안쪽 턱", "역테이퍼")
+    TaperKind.OUTER_DOUBLE -> listOf("2단 커짐", "가운데 큼", "가운데 작음", "2단 작아짐")
+    TaperKind.INNER_DOUBLE -> listOf("2단 작아짐", "가운데 작음", "가운데 큼", "2단 커짐")
+    TaperKind.GROOVE -> listOf("왼쪽 인선", "오른쪽 인선")
+}[type - 1]
+
 /**
  * 테이퍼 화면 상태. 입력값은 쓴 그대로의 글로 둔다.
  * 점 칸(X·Z·각도·모서리 R·시작점·끝점)은 (종류, TYPE, 방향)마다 따로다 — 방향을 바꾸면 그림이 좌우로 뒤집혀 T1·T2 의
@@ -326,7 +335,7 @@ internal fun grooveWarningText(w: GrooveWarning): String = when (w) {
     GrooveWarning.MISSING_INPUT -> "시작 Z · 홈 폭 · 외경 · 바닥 지름 · 인서트 폭을 넣으면 바로 계산합니다."
     GrooveWarning.BAD_INPUT -> "입력이 잘못됐습니다. 폭은 0 보다 크고, 바닥 지름·겹침·X 여유는 0 이상, 모든 값은 ±${MAX_MM.toInt()} mm 안이어야 합니다."
     GrooveWarning.TOOL_WIDER_THAN_GROOVE -> "침범: 인서트 폭 T 가 홈 폭 W 보다 큽니다. 홈이 도면보다 넓어집니다."
-    GrooveWarning.BOTTOM_NOT_BELOW_OD -> "침범: 바닥 지름 d 가 외경 D 보다 작지 않습니다."
+    GrooveWarning.BOTTOM_NOT_BELOW_OD -> "침범: 바닥 Ød 가 외경 ØD 보다 작지 않습니다."
     GrooveWarning.OVERLAP_TOO_BIG -> "겹침이 인서트 폭 이상입니다. 옆으로 나아가지 못합니다."
     GrooveWarning.TOO_MANY_STEPS -> "단이 1000 개를 넘습니다. 겹침·폭 값을 확인하세요."
 }

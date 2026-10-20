@@ -36,7 +36,6 @@ import com.bmt.nosecalc.screens.TaperHelp
 import com.bmt.nosecalc.screens.TaperScreen
 import com.bmt.nosecalc.screens.taper.TaperState
 import com.bmt.nosecalc.screens.taper.example
-import com.bmt.nosecalc.screens.taper.TipHelp
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.AppIcons
 import com.bmt.nosecalc.ui.FeatureIcon
@@ -108,13 +107,7 @@ class ShellShotsTest {
     /** 묶음 제목 · 그림 먼저 · helpStart: 둘째 묶음(그림 + 문단)부터 열린다. 첫 묶음 제목은 위로 밀려 안 보여야 한다 */
     @Test
     fun helpSections() = Shots.both("help-sections", setup = { it.helpOpen = true }) {
-        AppHost(it) {
-            val help = listOf(
-                HelpSection("형상 고르기", TaperHelp.take(2)),
-                HelpSection("값 넣기", TaperHelp.drop(2), extra = { TipHelp() }),
-            )
-            FeatureScaffold(Feature.TAPER, help, helpStart = 1) {}
-        }
+        AppHost(it) { FeatureScaffold(Feature.TAPER, TaperHelp, helpStart = 1) {} }
     }
 
     /** 넓은 PC 창(1280dp): 본문은 가운데 640dp 에 머물고 카드 · 그림은 폰과 같은 크기, 헤더만 창 폭 */
