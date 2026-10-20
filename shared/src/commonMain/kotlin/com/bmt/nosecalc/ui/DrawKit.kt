@@ -1,7 +1,9 @@
 package com.bmt.nosecalc.ui
 
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -77,7 +79,7 @@ internal fun DrawScope.arrowHead(tip: Offset, dir: Offset, color: Color, len: Fl
 
 /**
  * 바탕색 테(halo, 둥근 이음 3dp × ks)를 먼저 긋고 글을 쓴다 — 선 위에 놓여도 또렷하다. 흐린 그림자는 쓰지 않는다.
- * 자리는 center 나 topLeft 하나로 준다. 그린 칸을 돌려준다
+ * 자리는 center 나 topLeft 하나로 준다. pill = 글 뒤에 halo 색 알약(양옆 4dp · 모서리 4dp)을 깐다(초점 표시). 그린 칸을 돌려준다
  */
 internal fun DrawScope.haloText(
     measurer: TextMeasurer,
@@ -87,10 +89,15 @@ internal fun DrawScope.haloText(
     ks: Float,
     center: Offset? = null,
     topLeft: Offset? = null,
+    pill: Boolean = false,
 ): Rect {
     val layout = measurer.measure(text, style)
     val size = layout.size.toSize()
     val tl = topLeft ?: requireNotNull(center) { "center 나 topLeft 가 필요하다" }.let { it - Offset(size.width / 2, size.height / 2) }
+    if (pill) {
+        val bg = 4.dp.toPx()
+        drawRoundRect(halo, tl - Offset(bg, 0f), Size(size.width + 2 * bg, size.height), CornerRadius(bg))
+    }
     // 글자마다 색을 따로 준 부분("L2(B)" 의 B)도 테는 바탕색. 테 색 · 획은 그릴 때 넘긴다 —
     // drawText(measurer, …, style) 는 같은 글이면 먼저 잰 배치를 색째 다시 써서 테가 글자색으로 그려졌다
     val plain = AnnotatedString(text.text, text.spanStyles.map { AnnotatedString.Range(it.item.copy(color = Color.Unspecified), it.start, it.end) })
@@ -103,7 +110,9 @@ internal fun DrawScope.haloText(
  * 치수 하나: a·b 에서 offset(px)만큼 띄운 치수선 + 보조선(점에서 틈을 두고, 치수선을 조금 넘게) + 양 끝 채운 화살 + 이름.
  * offset 의 + 쪽은 a→b 를 화면에서 시계 방향으로 90° 돌린 쪽(왼→오른 가로 치수면 아래, 아래→위 세로 치수면 오른쪽).
  * 이름은 치수선 가운데를 끊고 바로 놓는다(글은 늘 가로). 치수선이 이름 + 화살 둘 + 4dp 보다 짧으면 화살을 보조선 바깥에서
- * 안으로 겨누고(꼬리 9dp) 이름은 오른쪽 끝(세로 치수면 위쪽 끝) 너머에 둔다. 이름은 늘 halo 를 두른다.
+ * 안으로 겨누고(꼬리 9dp) 이름은 오른쪽 끝(세로 치수면 위쪽 끝) 너머에 둔다 — 그림 칸을 벗어나면 두 보조선 사이에(들어가면),
+ * 아니면 칸 안(가장자리 2dp)으로 밀고, 밀려서 끝 화살을 덮으면 치수선의 + 쪽 옆으로 비킨다.
+ * 이름은 늘 halo 를 두른다(pill 이면 halo 색 알약도 — haloText). 이름 칸을 돌려준다
  */
 internal fun DrawScope.linearDim(
     a: Offset,
@@ -115,9 +124,10 @@ internal fun DrawScope.linearDim(
     measurer: TextMeasurer,
     style: TextStyle,
     halo: Color,
-) {
+    pill: Boolean = false,
+): Rect {
     val span = (b - a).getDistance()
-    if (span < 1e-3f) return
+    if (span < 1e-3f) return Rect.Zero
     val u = (b - a) / span
     val n = Offset(-u.y, u.x)
     val dimW = DrawSpec.dim.toPx() * ks
@@ -133,29 +143,47 @@ internal fun DrawScope.linearDim(
     }
     val pa = a + n * offset
     val pb = b + n * offset
-    val size = measurer.measure(label, style).size
+    val text = measurer.measure(label, style).size.toSize()
     // 치수선 방향으로 이름이 차지하는 길이
-    val along = abs(u.x) * size.width + abs(u.y) * size.height
-    if (span >= along + 2 * arrow + 2 * pad) {
+    val along = abs(u.x) * text.width + abs(u.y) * text.height
+    val center = if (span >= along + 2 * arrow + 2 * pad) {
         val mid = (pa + pb) / 2f
         val half = along / 2 + pad
         drawLine(color, pa, mid - u * half, dimW)
         drawLine(color, mid + u * half, pb, dimW)
         arrowHead(pa, pa - pb, color, arrow)
         arrowHead(pb, pb - pa, color, arrow)
-        haloText(measurer, label, style, halo, ks, center = mid)
+        mid
     } else {
         val tail = arrow + 9.dp.toPx() * ks
         val out = -u
-        drawLine(color, pa + out * tail, pb - out * tail, dimW)
         arrowHead(pa, u, color, arrow)
         arrowHead(pb, -u, color, arrow)
-        // 이름은 오른쪽(세로에 가까우면 위쪽) 끝 너머
+        // 이름은 오른쪽(세로에 가까우면 위쪽) 끝 너머. 그림 칸을 벗어나면 두 보조선 사이(들어가면 — 치수선은 바깥 꼬리만),
+        // 아니면 칸 안으로 밀고, 밀려서 끝 화살을 덮으면 치수선 옆(+ 쪽)으로
         val bEnd = if (abs(u.x) >= abs(u.y)) u.x > 0 else u.y < 0
         val end = if (bEnd) pb else pa
         val dir = if (bEnd) u else out
-        haloText(measurer, label, style, halo, ks, center = end + dir * (tail + pad + along / 2))
+        val bg = if (pill) 4.dp.toPx() else 0f
+        val m = 2.dp.toPx() + bg
+        fun inside(p: Offset) = Offset(
+            p.x.coerceAtMost(size.width - m - text.width / 2).coerceAtLeast(m + text.width / 2),
+            p.y.coerceAtMost(size.height - m - text.height / 2).coerceAtLeast(m + text.height / 2),
+        )
+        val far = end + dir * (tail + pad + along / 2)
+        val p = inside(far)
+        if (p != far && span >= along + 2 * (pad + bg)) {
+            drawLine(color, pa + out * tail, pa, dimW)
+            drawLine(color, pb, pb - out * tail, dimW)
+            (pa + pb) / 2f
+        } else {
+            drawLine(color, pa + out * tail, pb - out * tail, dimW)
+            // 끝에서 이름(알약) 가장자리까지
+            val clear = (p.x - end.x) * dir.x + (p.y - end.y) * dir.y - along / 2 - bg
+            if (clear >= arrow + pad) p else inside(p + n * (abs(n.x) * text.width / 2 + abs(n.y) * text.height / 2 + pad))
+        }
     }
+    return haloText(measurer, label, style, halo, ks, center = center, pill = pill)
 }
 
 /** 소재 단면: 면을 칠하고 그 안에만 45° 빗금(선 사이 6dp · 굵기 0.75dp, × ks) */
