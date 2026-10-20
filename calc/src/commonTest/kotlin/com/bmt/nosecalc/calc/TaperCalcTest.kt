@@ -689,7 +689,7 @@ class TaperCalcTest {
     /** NcLines 처럼 90° 넘는 원호를 같은 각으로 나눈다 — 글의 줄과 점을 맞춰 보려고 */
     private fun splitArcs(c: List<Seg>): List<Seg> = c.flatMap { a ->
         if (a !is Arc) return@flatMap listOf(a)
-        val k = max(1, ceil(a.sweepDeg / 90 - 1e-6).toInt())
+        val k = max(1, ceil(a.sweepDeg / 90 - 1e-3).toInt())
         val a0 = angleOf(a.start - a.center)
         val step = (if (a.cw) -1 else 1) * a.sweepRad() / k
         val pts = listOf(a.start) + (1 until k).map { q -> a.center + Pt(cos(a0 + step * q), sin(a0 + step * q)) * a.radius } + a.end

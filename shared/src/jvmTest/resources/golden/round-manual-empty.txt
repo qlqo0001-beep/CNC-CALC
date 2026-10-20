@@ -1,0 +1,2 @@
+표준 팁 T3
+경고 [SHAPE_MISMATCH]

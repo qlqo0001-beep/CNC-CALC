@@ -321,6 +321,23 @@ class RoundCalcTest {
         assertTrue(w.isEmpty(), "${w}")
     }
 
+    /** Z 여유가 노즈R 보다 작아도(0 포함) 진입점은 첫 보정점에서 노즈R 만큼 띄운다 — 테이퍼와 같다. 3점호도 */
+    @Test
+    fun entryStaysNoseRAway() {
+        val i = RoundInput(type = 3, mainR = 12.5, d1 = 20.0, cornerR1 = 1.0, noseR = 0.4)
+        for (zc in listOf(0.0, 0.2)) {
+            val s = ok(RoundCalc.calc(i.copy(zClear = zc)))
+            near(Pt(0.4, -0.4), s.entry, "진입점 Z 여유 $zc")
+            assertEquals("G00 X-0.8 Z0.4", s.nc.first())
+        }
+        near(Pt(1.0, -0.4), ok(RoundCalc.calc(i.copy(zClear = 1.0))).entry, "Z 여유가 크면 그대로")
+        val cen = Pt(-10.0, 15.0)
+        val p = listOf(30.0, 90.0, 150.0).map { onCircle(cen, 5.0, it) }
+        val a = RoundCalc.arc3(Arc3Input(false, 0.4, null, p[0].xDia, p[0].z, p[1].xDia, p[1].z, p[2].xDia, p[2].z, zClear = 0.0))
+        val s = ok(a)
+        assertEquals(s.nodes[0].prog + Pt(0.4, 0.0), s.entry)
+    }
+
     /** NC 를 따라가면 보정 경로의 끝점(찍힌 글)과 G02/G03·R 이 그대로다 */
     @Test
     fun ncFollowsProgram() {
@@ -348,7 +365,7 @@ class RoundCalcTest {
             val moving = s.program.segs.filter { (it.end - it.start).length > 1e-9 }
             var k = 1
             for (seg in moving) {
-                val parts = if (seg is Arc) max(1, ceil(seg.sweepDeg / 90 - 1e-6).toInt()) else 1
+                val parts = if (seg is Arc) max(1, ceil(seg.sweepDeg / 90 - 1e-3).toInt()) else 1
                 repeat(parts) {
                     val e = ends[k++]
                     when (seg) {
@@ -659,13 +676,17 @@ class RoundCalcTest {
     }
 
     /**
-     * 화면 처음 값: 단면에서 외경으로 도는 볼록 R10(X30 Z0 → X50 Z−10)을 CAD 점처럼 넷째 자리로 넣는다. 접점은 사분면 경계(45°)
-     * 위라 바이트 반대쪽이 아니다 — 반올림으로 중심이 1e-5 흔들려 경고가 나던 것. 2° 넘게 단면 뒤로 돌면 경고
+     * 화면 예시 값: 단면에서 외경으로 도는 볼록 R10(X30 Z0 → X50 Z−10)을 CAD 점처럼 넷째 자리로 넣는다. 접점은 사분면 경계(45°)
+     * 위라 바이트 반대쪽이 아니다 — 반올림으로 중심이 1e-5 흔들려 경고가 나던 것. 2° 넘게 단면 뒤로 돌면 경고.
+     * 원호 각이 90° 를 조금(0.0003°) 넘어도 NC 는 R 한 줄이다
      */
     @Test
     fun threePointQuarterRoundTypedFromCad() {
-        val (_, w) = solved(arc3(Pt.ofDia(0.0, 30.0), Pt.ofDia(-2.9289, 44.1421), Pt.ofDia(-10.0, 50.0)))
+        val (s, w) = solved(arc3(Pt.ofDia(0.0, 30.0), Pt.ofDia(-2.9289, 44.1421), Pt.ofDia(-10.0, 50.0)))
         assertTrue(RoundWarning.AGAINST_TOOL !in w, "$w")
+        // 90.0003° 원호는 나누지 않고 한 줄
+        assertTrue((s.drawing.segs.single() as Arc).sweepDeg > 90.0)
+        assertEquals(listOf("G00 X29.2 Z1.", "G01 Z0.", "G03 X50. Z-10.4 R10.4"), s.nc)
         val cen = Pt(-10.0, 15.0)
         val past = arc3(onCircle(cen, 10.0, -2.0), onCircle(cen, 10.0, 45.0), onCircle(cen, 10.0, 90.0))
         assertTrue(RoundWarning.AGAINST_TOOL in past.warnings, "${past.warnings}")

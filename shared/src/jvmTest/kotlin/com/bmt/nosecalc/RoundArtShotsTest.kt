@@ -28,6 +28,7 @@ import com.bmt.nosecalc.screens.round.RoundState
 import com.bmt.nosecalc.screens.round.RoundTypeArt
 import com.bmt.nosecalc.screens.round.blankable
 import com.bmt.nosecalc.screens.round.dims
+import com.bmt.nosecalc.screens.round.roundExample
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.Space
@@ -48,15 +49,15 @@ class RoundArtShotsTest {
     }
 
     /**
-     * 입력 화면 그림에 값(300dp): 형상 1~6 처음 값(비운 칸은 자동) + 형상 2 L2 기준 A · 서로 맞지 않는 치수(round-b2-error) ·
+     * 입력 화면 그림에 값(300dp): 형상 1~6 예시 값(비운 칸은 자동) + 형상 2 L2 기준 A · 서로 맞지 않는 치수(round-b2-error) ·
      * 값이 모자란 형상 5(빈칸 '?')
      */
     @Test
     fun labels() {
-        val cases = (1..6).map { "형상 $it" to Case(it, RoundState()) } + listOf(
-            "형상 2 · L2 기준 A" to Case(2, RoundState().apply { l2Ref = L2Ref.A }),
-            "형상 2 · 치수 모순" to Case(2, RoundState().apply { setDim(2, "l2", "30") }),
-            "형상 5 · 빈칸 둘" to Case(5, RoundState().apply { setDim(5, "mainR", "") }),
+        val cases = (1..6).map { "형상 $it" to Case(it, roundExample()) } + listOf(
+            "형상 2 · L2 기준 A" to Case(2, roundExample().apply { l2Ref = L2Ref.A }),
+            "형상 2 · 치수 모순" to Case(2, roundExample().apply { setDim(2, "l2", "30") }),
+            "형상 5 · 빈칸 둘" to Case(5, roundExample().apply { setDim(5, "mainR", "") }),
         )
         Shots.both("art-round-labels", heightDp = 1680, widthDp = 632) { AppHost(it) { Grid(cases, 300.dp) } }
     }
@@ -65,7 +66,7 @@ class RoundArtShotsTest {
     @Test
     fun focus() {
         val cases = listOf(2, 5).flatMap { t ->
-            (dims(t).map { it.key to it.label } + ("leg" to "끝 직선 길이")).map { (key, label) -> "형상 $t · $label" to Case(t, RoundState(), focus = key) }
+            (dims(t).map { it.key to it.label } + ("leg" to "끝 직선 길이")).map { (key, label) -> "형상 $t · $label" to Case(t, roundExample(), focus = key) }
         }
         Shots.both("art-round-focus", heightDp = 1000, widthDp = 632) { AppHost(it) { Grid(cases, 153.dp) } }
     }

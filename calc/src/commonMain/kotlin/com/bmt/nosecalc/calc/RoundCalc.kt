@@ -3,6 +3,7 @@ package com.bmt.nosecalc.calc
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
@@ -67,7 +68,7 @@ data class RoundInput(
     val noseR: Double = 0.4,
     /** 가상 인선 번호(외경 정방향 표준 3) */
     val tip: Int = 3,
-    /** 진입 여유: 첫 보정점에서 Z+ 로 이만큼 */
+    /** 진입 여유: 첫 보정점에서 Z+ 로 이만큼(노즈R 보다 작으면 노즈R — 테이퍼와 같다) */
     val zClear: Double = 1.0,
     /** 마지막 원통·축(TYPE 2~6) 길이 — 그림과 마지막 NC 줄에만 쓰인다 */
     val legLen: Double = 5.0,
@@ -87,7 +88,7 @@ data class Arc3Input(
     val z3: Double? = null,
     /**
      * 진입 여유: 첫 보정점에서 Z 로 이만큼 바깥(역방향은 −Z 쪽). 그쪽으로 물러나면 노즈 원이 시작점 옆을 파는 원호
-     * (시작 접선이 재료로 가파르게 내려가는 오목 홈 등)는 시작 접선을 거꾸로 따라 이만큼
+     * (시작 접선이 재료로 가파르게 내려가는 오목 홈 등)는 시작 접선을 거꾸로 따라 이만큼. 노즈R 보다 작으면 노즈R
      */
     val zClear: Double = 1.0,
 )
@@ -143,7 +144,8 @@ object RoundCalc {
             else -> type6(i)
         }
         val drawing = Contour(Corners.insert(s.segs, s.corners)?.segs ?: stop(RoundWarning.CORNER_R_TOO_BIG))
-        finish(drawing, i.noseR, Side.G42, i.tip, Pt(i.zClear, 0.0), s.filled)
+        // Z 여유 0 이어도 진입점은 노즈R 만큼 띄운다(테이퍼와 같다)
+        finish(drawing, i.noseR, Side.G42, i.tip, Pt(max(i.zClear, i.noseR), 0.0), s.filled)
     }
 
     fun arc3(i: Arc3Input): RoundResult = guarded {
@@ -169,12 +171,13 @@ object RoundCalc {
         if ((side == Side.G41) != arc.cw && arc.radius < i.noseR - EPS) stop(RoundWarning.NOSE_UNREACHABLE)
         val tip = i.tip ?: NoseComp.standardTip(i.inner, reverse)
         // 진입: 첫 보정점에서 Z 로 zClear 바깥. 그쪽이 공구 쪽 법선과 반대면(시작 접선이 재료로 가파르게 내려가는 오목 홈 등)
-        // Z 로 물러난 노즈 원이 시작점 옆 재료를 판다 → 그때는 시작 접선을 거꾸로 따라 zClear 만큼
+        // Z 로 물러난 노즈 원이 시작점 옆 재료를 판다 → 그때는 시작 접선을 거꾸로 따라 zClear 만큼(노즈R 보다 작으면 노즈R)
+        val clear = max(i.zClear, i.noseR)
         val away = Pt(if (reverse) -1.0 else 1.0, 0.0)
         val radial = (p1 - c).unit()
         val toTool = if ((side == Side.G41) == arc.cw) radial else radial * -1.0
         val back = radial.left() * (if (arc.cw) 1.0 else -1.0)
-        val entryShift = if ((away dot toTool) >= 0) away * i.zClear else back * i.zClear
+        val entryShift = if ((away dot toTool) >= 0) away * clear else back * clear
         finish(Contour(listOf(arc)), i.noseR, side, tip, entryShift, null)
     }
 

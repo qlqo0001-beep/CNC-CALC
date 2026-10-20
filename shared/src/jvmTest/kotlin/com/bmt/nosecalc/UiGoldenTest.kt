@@ -13,6 +13,8 @@ import com.bmt.nosecalc.calc.RoundResult
 import com.bmt.nosecalc.calc.Side
 import com.bmt.nosecalc.screens.round.MANUAL
 import com.bmt.nosecalc.screens.round.RoundState
+import com.bmt.nosecalc.screens.round.roundExample
+import com.bmt.nosecalc.screens.round.roundManualInnerRev
 import com.bmt.nosecalc.screens.taper.SlopeForm
 import com.bmt.nosecalc.screens.taper.TaperKind
 import com.bmt.nosecalc.screens.taper.TaperSolve
@@ -85,15 +87,14 @@ class UiGoldenTest {
 
     @Test
     fun round() {
-        for (t in 1..6) roundType("round-b$t", RoundState(type = t, open = true), t)
-        roundType("round-b3-contact", RoundState(type = 3, open = true, comp = false), 3)
-        roundType("round-b2-error", RoundState(type = 2, open = true).apply { setDim(2, "l2", "30") }, 2)
-        val m = RoundState(type = MANUAL, open = true)
-        val input = m.arc3()
-        roundText(
-            "round-manual", RoundCalc.arc3(input), RoundCalc.arc3(input.copy(noseR = 0.0)).solution?.nc,
-            "표준 팁 T${m.manualStandardTip()}",
-        )
+        // 화면은 0 에서 시작한다 — 스크린샷과 같은 예시 치수로
+        for (t in 1..6) roundType("round-b$t", roundExample(t, open = true), t)
+        roundType("round-b3-contact", roundExample(3, open = true, comp = false), 3)
+        roundType("round-b2-error", roundExample(2, open = true).apply { setDim(2, "l2", "30") }, 2)
+        roundType("round-b3-empty", RoundState(type = 3, open = true), 3)
+        manual("round-manual", roundExample(MANUAL, open = true))
+        manual("round-manual-inner-rev", roundManualInnerRev())
+        manual("round-manual-empty", RoundState(type = MANUAL, open = true))
     }
 
     @Test
@@ -182,6 +183,12 @@ class UiGoldenTest {
     private fun roundType(name: String, s: RoundState, type: Int) {
         val input = s.input(type)
         roundText(name, RoundCalc.calc(input), RoundCalc.calc(input.copy(noseR = 0.0)).solution?.nc, "팁 T${input.tip}")
+    }
+
+    /** ManualScreen: RoundState.arc3(), 도면 좌표 NC = 노즈R 0 */
+    private fun manual(name: String, s: RoundState) {
+        val input = s.arc3()
+        roundText(name, RoundCalc.arc3(input), RoundCalc.arc3(input.copy(noseR = 0.0)).solution?.nc, "표준 팁 T${s.manualStandardTip()}")
     }
 
     private fun roundText(name: String, r: RoundResult, drawnNc: List<String>?, head: String) {

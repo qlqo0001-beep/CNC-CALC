@@ -11,6 +11,7 @@ import com.bmt.nosecalc.calc.L2Ref
 import com.bmt.nosecalc.calc.MAX_MM
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.RoundInput
+import com.bmt.nosecalc.calc.RoundResult
 import com.bmt.nosecalc.calc.RoundWarning
 
 /** 수동(CAD 3점호) 카드의 번호. TYPE 1~6 다음 */
@@ -22,7 +23,7 @@ internal class DimField(val key: String, val label: String)
 /** 형상(TYPE)마다 그림에 적힌 치수(그림 순서). 형상 1·3·4 의 모서리 R·D·L 은 계산기의 cornerR1·d1·l1 */
 internal fun dims(type: Int): List<DimField> = when (type) {
     1 -> listOf(DimField("mainR", "주 R"), DimField("cr1", "모서리 R"), DimField("l1", "L"))
-    2 -> listOf(DimField("mainR", "주 R"), DimField("cr1", "모서리 R(1)"), DimField("d1", "D1"), DimField("l1", "L1"), DimField("l2", "L2"))
+    2 -> listOf(DimField("mainR", "주 R"), DimField("cr1", "모서리 R"), DimField("d1", "D1"), DimField("l1", "L1"), DimField("l2", "L2"))
     3, 4 -> listOf(DimField("cr1", "모서리 R"), DimField("mainR", "주 R"), DimField("d1", "D"), DimField("l1", "L"))
     else -> listOf(
         DimField("cr2", "모서리 R(2)"), DimField("mainR", "주 R"), DimField("cr1", "모서리 R(1)"),
@@ -38,20 +39,23 @@ internal fun blankable(type: Int): List<String> = when (type) {
     else -> emptyList()
 }
 
-/** TYPE 이름(04 의 모양) */
-internal fun roundTypeName(type: Int): String = when (type) {
-    1 -> "술통 (양끝 면 + 볼록 구면)"
-    2 -> "공 + 양쪽 축 (아령형)"
-    3 -> "원통 + 끝 돔"
-    4 -> "축 + 끝 공"
-    5 -> "큰 원통 → 볼록 구면 → 작은 축"
-    6 -> "플랜지 → 단차 → 돔 → 작은 축"
-    else -> "원호 위 세 점 → 중심 · R · 방향"
+/** 모서리 R 칸. 비우면 0(날카로운 모서리) — 테이퍼와 같다 */
+private val CORNERS = setOf("cr1", "cr2")
+
+/** TYPE 짧은 이름(고르기 카드 머리 · 입력 화면 요약) */
+internal fun roundTypeShort(type: Int): String = when (type) {
+    1 -> "술통"
+    2 -> "아령"
+    3 -> "원통 + 돔"
+    4 -> "축 + 공"
+    5 -> "원통 + 구면 + 축"
+    6 -> "플랜지 + 돔 + 축"
+    else -> "CAD 3점호"
 }
 
 /**
  * 라운드 화면 상태. 입력값은 쓴 그대로의 글.
- * 치수 칸은 TYPE 마다 따로, 노즈R·팁·Z 여유·끝 요소 길이는 함께 쓴다. 수동(3점호) 칸은 따로.
+ * 치수 칸은 TYPE 마다 따로, 노즈R·팁·Z 여유·끝 직선 길이는 함께 쓴다. 수동(3점호) 칸은 따로.
  */
 @Stable
 internal class RoundState(
@@ -70,7 +74,8 @@ internal class RoundState(
     var comp by mutableStateOf(comp)
     private val values = mutableStateMapOf<String, String>().apply { putAll(values) }
 
-    fun dim(type: Int, key: String): String = values["t$type/$key"] ?: RoundDefaults.dim(type, key)
+    /** 도면 치수. 처음 값은 모두 0(예시 치수 없음) */
+    fun dim(type: Int, key: String): String = values["t$type/$key"] ?: "0"
     fun setDim(type: Int, key: String, v: String) { values["t$type/$key"] = v }
 
     /** TYPE 2 의 L2 기준 */
@@ -90,17 +95,24 @@ internal class RoundState(
         get() = values["m/tip"]?.toIntOrNull()
         set(v) { values["m/tip"] = v?.toString() ?: "" }
 
-    /** 수동: x1·z1·x2·z2·x3·z3 */
-    fun point(name: String): String = values["m/$name"] ?: RoundDefaults.point(name)
+    /** 수동: x1·z1·x2·z2·x3·z3. 처음 값은 모두 0 */
+    fun point(name: String): String = values["m/$name"] ?: "0"
     fun setPoint(name: String, v: String) { values["m/$name"] = v }
 
     var inner: Boolean
         get() = values["m/inner"] == "true"
         set(v) { values["m/inner"] = v.toString() }
 
-    /** TYPE 입력을 계산기 입력으로. 그 TYPE 의 칸만 넣고 나머지는 null. 노즈R 빈칸은 NaN(계산기가 BAD_INPUT) */
+    /**
+     * TYPE 입력을 계산기 입력으로. 그 TYPE 의 칸만 넣고 나머지는 null. 노즈R 빈칸은 NaN(계산기가 BAD_INPUT).
+     * 모서리 R 빈칸은 0. 길이 · 지름 · 주 R 은 0 보다 커야 하므로 0(처음 값)은 아직 안 넣은 것 — 빈칸처럼 null 로 넘긴다
+     */
     fun input(type: Int): RoundInput {
-        fun n(key: String) = if (dims(type).any { it.key == key }) dim(type, key).toDoubleOrNull() else null
+        fun n(key: String): Double? {
+            if (dims(type).none { it.key == key }) return null
+            val v = dim(type, key).toDoubleOrNull()
+            return if (key in CORNERS) v ?: 0.0 else v?.takeIf { it != 0.0 }
+        }
         return RoundInput(
             type = type,
             mainR = n("mainR"),
@@ -113,7 +125,7 @@ internal class RoundState(
             l2Ref = l2Ref,
             noseR = shared("noseR").toDoubleOrNull() ?: Double.NaN,
             tip = tip ?: STANDARD_TIP,
-            zClear = shared("zClear").toDoubleOrNull() ?: 1.0,
+            zClear = shared("zClear").toDoubleOrNull() ?: 0.0,
             legLen = shared("leg").toDoubleOrNull() ?: 5.0,
         )
     }
@@ -128,15 +140,18 @@ internal class RoundState(
         z2 = point("z2").toDoubleOrNull(),
         x3 = point("x3").toDoubleOrNull(),
         z3 = point("z3").toDoubleOrNull(),
-        zClear = shared("zClear").toDoubleOrNull() ?: 1.0,
+        zClear = shared("zClear").toDoubleOrNull() ?: 0.0,
     )
 
-    /** 수동 모드의 표준 팁: 끝 Z 가 시작보다 크면 역방향 */
-    fun manualStandardTip(): Int {
+    /** 수동: 끝 Z 가 시작보다 크면 역방향 */
+    fun manualReverse(): Boolean {
         val z1 = point("z1").toDoubleOrNull()
         val z3 = point("z3").toDoubleOrNull()
-        return NoseComp.standardTip(inner, z1 != null && z3 != null && z3 > z1)
+        return z1 != null && z3 != null && z3 > z1
     }
+
+    /** 수동 모드의 표준 팁(외경 · 내경, 정 · 역방향) */
+    fun manualStandardTip(): Int = NoseComp.standardTip(inner, manualReverse())
 
     companion object {
         /** TYPE 1~6 은 외경 정방향(척 쪽, G42) 하나 */
@@ -152,50 +167,69 @@ internal class RoundState(
 }
 
 /**
- * 처음 값. TYPE 을 누르면 바로 결과가 보이게 그림 모양대로 맞는 값이다(비울 수 있는 칸 하나는 비워 자동으로 보인다).
- * TYPE 3 은 calc-design.md 의 손 계산 예(Ø20, SR12.5, CR1 → L = 5).
+ * 공구 칸 처음 값. 노즈R 은 흔한 값, 끝 직선 길이는 그림용 5.0. 도면 치수 · 세 점 · Z 여유는 0 에서 시작한다(예시 치수 없음).
+ * Z 여유 0 이어도 계산기가 진입점을 노즈R 만큼 띄운다
  */
 internal object RoundDefaults {
-    fun dim(type: Int, key: String): String = when (type) {
-        1 -> mapOf("mainR" to "10", "cr1" to "1", "l1" to "12")
-        2 -> mapOf("mainR" to "10", "cr1" to "1", "d1" to "10", "l1" to "5", "l2" to "")
-        3 -> mapOf("cr1" to "1", "mainR" to "12.5", "d1" to "20", "l1" to "")
-        4 -> mapOf("cr1" to "1", "mainR" to "10", "d1" to "12", "l1" to "")
-        5 -> mapOf("cr2" to "1", "mainR" to "18", "cr1" to "1", "d2" to "30", "d1" to "10", "l1" to "5", "l2" to "")
-        else -> mapOf("cr2" to "1", "mainR" to "12", "cr1" to "1", "d2" to "40", "d1" to "8", "l1" to "5", "l2" to "8")
-    }[key] ?: ""
-
-    /** 수동: 어깨의 볼록 R10(X30 Z0 → X50 Z−10, 가운데 점은 45° 자리) */
-    fun point(name: String): String = when (name) {
-        "x1" -> "30"
-        "z1" -> "0"
-        "x2" -> "44.1421"
-        "z2" -> "-2.9289"
-        "x3" -> "50"
-        "z3" -> "-10"
-        else -> ""
-    }
-
     fun shared(name: String): String = when (name) {
         "noseR" -> "0.4"
-        "zClear" -> "1.0"
+        "zClear" -> "0"
         "leg" -> "5.0"
         else -> ""
     }
 }
 
-/** 경고 글. 계산을 멈춘 것(solution = null)은 빨강, 나머지는 노랑. type = [MANUAL] 이면 3점호 */
-internal fun roundWarningText(w: RoundWarning, type: Int): String {
+/** 치수 칸 key(mainR · cr1 · cr2 · d1 · d2 · l1 · l2)의 값 */
+internal fun RoundInput.dim(key: String): Double? = when (key) {
+    "mainR" -> mainR
+    "cr1" -> cornerR1
+    "cr2" -> cornerR2
+    "d1" -> d1
+    "d2" -> d2
+    "l1" -> l1
+    "l2" -> l2
+    else -> null
+}
+
+/**
+ * 화면에 보일 경고(오목 R ≤ 노즈R 을 맨 앞에). 3점호의 세 점 가운데 둘이 같은 자리면(처음 값 0 · 0 그대로 등)
+ * 계산기의 모양 불일치 대신 값 부족 — 아직 덜 넣은 것이라 빨강이 아닌 안내로 보인다
+ */
+internal fun shownWarnings(r: RoundResult, arc3: Arc3Input? = null): List<RoundWarning> {
+    val overlap = arc3 != null && listOf(arc3.x1 to arc3.z1, arc3.x2 to arc3.z2, arc3.x3 to arc3.z3).distinct().size < 3
+    return r.warnings
+        .map { if (it == RoundWarning.SHAPE_MISMATCH && overlap) RoundWarning.MISSING_INPUT else it }
+        .sortedBy { it != RoundWarning.CONCAVE_R_LE_NOSE }
+}
+
+/** 경고가 가리키는 치수 칸(빨간 테두리). 값 부족은 안내라 칸을 붉히지 않는다 */
+internal fun roundWarningFields(w: RoundWarning, type: Int): Set<String> = when (w) {
+    RoundWarning.CONTRADICTION -> blankable(type).toSet()
+    RoundWarning.CORNER_R_TOO_BIG -> dims(type).map { it.key }.filter { it in CORNERS }.toSet()
+    else -> emptySet()
+}
+
+/**
+ * 경고 글. 계산을 멈춘 것은 빨강, 숫자와 함께 나온 것은 노랑, 값 부족은 파란 안내. type = [MANUAL] 이면 3점호.
+ * empty = 아직 안 넣은(빈칸 · 0) 치수 칸 key — 값 부족 안내에 넣을 칸 이름을 든다
+ */
+internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = emptySet()): String {
     val names = dims(type).associate { it.key to it.label }
     val blanks = blankable(type).joinToString(" · ") { names.getValue(it) }
     return when (w) {
-        RoundWarning.MISSING_INPUT -> when {
-            type == MANUAL -> "값이 모자랍니다. 세 점(시작 · 가운데 · 끝)의 X · Z 를 모두 넣으세요."
-            blanks.isEmpty() -> "값이 모자랍니다. ${dims(type).joinToString(" · ") { it.label }} 를 모두 넣으세요. 모서리 R 이 없으면 0 을 넣습니다."
-            else -> "값이 모자랍니다. $blanks 가운데 하나만 비울 수 있고, 나머지 칸은 모두 넣어야 합니다. 모서리 R 이 없으면 0 을 넣습니다."
+        RoundWarning.MISSING_INPUT -> if (type == MANUAL) {
+            "값을 넣으면 바로 계산합니다. 원호 위 세 점(시작 · 가운데 · 끝)의 X · Z 를 서로 다른 자리로 넣으세요."
+        } else {
+            // 비울 수 있는 묶음은 하나는 비워 둬도 되므로 "… 가운데 둘" 처럼 더 넣을 개수로 든다
+            val group = blankable(type).filter { it in empty }
+            val need = listOf(
+                dims(type).filter { it.key in empty && it.key !in blankable(type) }.joinToString(" · ") { it.label },
+                if (group.size > 1) "${group.joinToString(" · ") { names.getValue(it) }} 가운데 ${listOf("하나", "둘", "셋")[group.size - 2]}" else "",
+            ).filter { it.isNotEmpty() }
+            "값을 넣으면 바로 계산합니다." + if (need.isEmpty()) "" else " 넣을 값: ${need.joinToString(", ")}."
         }
         RoundWarning.BAD_INPUT ->
-            "입력이 잘못됐습니다. 길이 · 지름 · R 은 0 보다 크고, 모서리 R · 노즈R · Z 여유는 0 이상, 끝 요소 길이는 0 보다 커야 합니다. X 는 0 이상, 모든 값은 ±${MAX_MM.toInt()} mm 안입니다."
+            "입력이 잘못됐습니다. 길이 · 지름 · R 은 0 보다 크고, 모서리 R · 노즈R · Z 여유는 0 이상, 끝 직선 길이는 0 보다 커야 합니다. X 는 0 이상, 모든 값은 ±${MAX_MM.toInt()} mm 안입니다."
         RoundWarning.CONTRADICTION ->
             "치수가 서로 맞지 않습니다(0.001 mm 넘게). 주 R 은 중심이 축 위인 구라서 $blanks 가운데 하나는 나머지로 정해집니다. 하나를 비우면 계산합니다."
         RoundWarning.SHAPE_MISMATCH -> when (type) {

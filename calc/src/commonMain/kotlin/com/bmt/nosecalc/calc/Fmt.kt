@@ -40,7 +40,8 @@ internal class NcLines {
      * 180° 넘는 원호는 R 의 뜻이 둘이라 어차피 나눠야 한다.
      */
     fun arc(a: Arc) {
-        val k = max(1, ceil(a.sweepDeg / 90 - 1e-6).toInt())
+        // 90° 를 0.09° 까지 넘는 것은 한 줄: 3점호를 CAD 넷째 자리로 넣으면 보통 1/4 원이 90.0003° 로 나온다
+        val k = max(1, ceil(a.sweepDeg / 90 - 1e-3).toInt())
         val a0 = angleOf(a.start - a.center)
         val step = (if (a.cw) -1 else 1) * a.sweepRad() / k
         for (q in 1..k) {

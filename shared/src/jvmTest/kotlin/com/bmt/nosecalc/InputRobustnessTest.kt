@@ -14,7 +14,7 @@ import com.bmt.nosecalc.screens.RoundScreen
 import com.bmt.nosecalc.screens.TaperScreen
 import com.bmt.nosecalc.screens.TriangleScreen
 import com.bmt.nosecalc.screens.round.MANUAL
-import com.bmt.nosecalc.screens.round.RoundState
+import com.bmt.nosecalc.screens.round.roundExample
 import com.bmt.nosecalc.screens.round.dims
 import com.bmt.nosecalc.screens.taper.SlopeForm
 import com.bmt.nosecalc.screens.taper.TaperKind
@@ -125,7 +125,7 @@ class InputRobustnessTest {
     fun round() {
         repeat(30_000) {
             val type = 1 + rnd.nextInt(6)
-            val st = RoundState(type = type, open = true)
+            val st = roundExample(type, open = true)
             for (d in dims(type)) if (rnd.nextInt(3) == 0) st.setDim(type, d.key, nudge(st.dim(type, d.key)))
             if (rnd.nextInt(3) == 0) st.setShared("noseR", nudge(st.shared("noseR")))
             if (rnd.nextInt(5) == 0) st.setShared("leg", nudge(st.shared("leg")))
@@ -139,7 +139,7 @@ class InputRobustnessTest {
                 s.arcs.forEach { a -> show(a.r); a.progR?.let { show(it) } }
                 show(s.entry)
             }
-            val m = RoundState(type = MANUAL, open = true).apply {
+            val m = roundExample(MANUAL, open = true).apply {
                 inner = rnd.nextBoolean()
                 for (name in listOf("x1", "z1", "x2", "z2", "x3", "z3")) if (rnd.nextInt(3) == 0) setPoint(name, nudge(point(name)))
                 if (rnd.nextInt(3) == 0) setShared("noseR", nudge(shared("noseR")))
@@ -194,8 +194,8 @@ class InputRobustnessTest {
             }
             draw { TaperScreen(TaperState(TaperKind.OUTER_DOUBLE, type = 1, open = true).apply { setPoint("z3", v) }) }
             draw { TaperScreen(TaperState(TaperKind.GROOVE, type = 1, open = true).apply { setShared("width", v) }) }
-            draw { RoundScreen(RoundState(type = 3, open = true).apply { setDim(3, "mainR", v) }) }
-            draw { RoundScreen(RoundState(type = MANUAL, open = true).apply { setPoint("x2", v) }) }
+            draw { RoundScreen(roundExample(3, open = true).apply { setDim(3, "mainR", v) }) }
+            draw { RoundScreen(roundExample(MANUAL, open = true).apply { setPoint("x2", v) }) }
             draw { TriangleScreen(TriangleState().apply { set(TriField.A_SIDE, v) }) }
         }
     }
