@@ -3,14 +3,18 @@ package com.bmt.nosecalc.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.text.modifiers.TextAutoSizeLayoutScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,6 +26,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -37,18 +45,24 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.RoleColors
+import kotlin.math.roundToInt
 
 /** 숫자칸 역할색(1.1 역할색 입력칸): 시작점 = 노랑, 목표점 = 빨강, 치수 = 연노랑 */
 enum class FieldRole { Normal, Start, End, Dim }
@@ -63,8 +77,9 @@ enum class FieldRole { Normal, Start, End, Dim }
  * - error = 이 칸 값이 문제: 빨강 2dp 테두리 · 옅은 빨강 바탕 · 라벨 앞 멈춤 아이콘
  * - example = 아직 바꾸지 않은 예시 값: 흐린 글 + "예시" 표. tag = 라벨 뒤 회색 표("Ø직경" · "반경")
  * - placeholder = 빈칸 자리표시("기본 0" 처럼, 흐리게)
- * hint · blankable 은 키패드로 넘긴다(안내 줄 · "비우기 · 자동 계산" 단추).
- * id · figure · preview 는 칸 묶음(다음 칸) · 키패드 그림 · 결과 한 줄 자리 — 아직 그리지 않는다.
+ * hint · blankable · figure · preview 는 키패드로 넘긴다(안내 줄 · "비우기 · 자동 계산" 단추 · 작은 그림 · 결과 한 줄).
+ * [FieldChainHost] 안이면 묶음에 id 로 들어가 키패드를 묶음이 띄우고("다음"), 열리면 시트 위로 올라온다.
+ * 묶음 밖이면 제 키패드를 띄운다.
  */
 @Composable
 fun NumberField(
@@ -87,7 +102,12 @@ fun NumberField(
 ) {
     val c = AppTheme.colors
     val rc = roleColors(role)
-    var editing by remember { mutableStateOf(false) }
+    val chain = LocalFieldChain.current
+    var open by remember { mutableStateOf(false) }
+    val editing = if (chain != null) chain.active == id else open
+    val bring = remember { BringIntoViewRequester() }
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    val density = LocalDensity.current
     val shape = RoundedCornerShape(6.dp)
     val unsolved = value.isEmpty() && autoValue == ""
     val computed = value.isEmpty() && !autoValue.isNullOrEmpty()
@@ -98,7 +118,7 @@ fun NumberField(
         autoValue != null -> Triple(autoValue, c.valueComp, FontWeight.SemiBold)
         else -> Triple(placeholder, c.textHint, FontWeight.Medium)
     }
-    Column(modifier) {
+    Column(if (chain != null) modifier.bringIntoViewRequester(bring).onSizeChanged { size = it } else modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (error) Icon(AppIcons.Stop, null, Modifier.padding(end = 4.dp).size(16.dp), tint = c.error.label)
             // 라벨이 먼저 자리를 잡고 표는 남은 자리에(어느 칸인지가 먼저)
@@ -134,12 +154,32 @@ fun NumberField(
                     },
                     shape,
                 )
-                .clickable { editing = true }
+                .then(
+                    if (chain == null) Modifier
+                    else Modifier.onGloballyPositioned {
+                        val p = it.positionInRoot()
+                        chain.place(id, (p.y / with(density) { 8.dp.toPx() }).roundToInt(), p.x)
+                    },
+                )
+                .clickable { if (chain != null) chain.open(id) else open = true }
                 .padding(horizontal = 12.dp),
         )
     }
-    if (editing) {
-        NumberPad(label, unit, value, onValueChange, onClose = { editing = false }, hint = hint, autoValue = autoValue, blankable = blankable)
+    if (chain != null) {
+        SideEffect { chain.fields[id] = ChainField(label, unit, value, onValueChange, hint, autoValue, blankable, figure, preview) }
+        DisposableEffect(chain, id) { onDispose { chain.remove(id) } }
+        if (editing) {
+            // 칸 아래로 시트 높이 + 8dp 를 더한 곳까지 보이게 — 칸이 시트 위로 올라온다
+            val sheet = chain.sheetHeight
+            LaunchedEffect(sheet) {
+                if (sheet > 0) bring.bringIntoView(Rect(0f, 0f, size.width.toFloat(), size.height + sheet + with(density) { 8.dp.toPx() }))
+            }
+        }
+    } else if (open) {
+        NumberPad(
+            label, unit, value, onValueChange, onClose = { open = false },
+            hint = hint, autoValue = autoValue, blankable = blankable, figure = figure, preview = preview,
+        )
     }
 }
 
@@ -218,9 +258,12 @@ private fun roleColors(role: FieldRole): RoleColors {
  * 숫자 키패드(바텀시트). 열면 지금 값이 "통째 선택"된 채 보이고, 처음 누른 숫자 · . · − 가 그 값을 덮어쓴다(⌫ 는 원래 값을 고친다).
  * 확인 단추는 없다 — 누를 때마다 값이 바로 onChange 로 들어간다. "-" 만 남은 동안은 칸에 앞 값을 둔다.
  * 닫기(닫기 키 · 바깥 누름 · 뒤로 · Esc · 손잡이 끌어내림)는 넣은 값을 그대로 두되, 그때 "-" 뿐이면 연 때 값으로 되돌린다.
- * 위 "취소" 는 연 때 값으로 되돌리고 닫는다. 바뀌는 결과가 보이게 뒤 덮개는 옅다.
+ * 위 "취소" 는 이 칸을 연 때 값으로 되돌리고 닫는다. 바뀌는 결과가 보이게 뒤 덮개는 옅다.
  * hint = 안내 줄, autoValue = 빈칸일 때 계산값("자동 -7.385"), blankable = "비우기 · 자동 계산" 단추(빈칸으로 하고 닫는다).
- * PC 는 실제 키보드도 받는다(숫자 · . · − · Backspace · Delete = C · Enter = 닫기 · Esc = 닫기).
+ * preview = 제목 위 결과 한 줄(누를 때마다 바뀐다), figure = 제목 아래 작은 그림(시트 자리가 넉넉할 때만).
+ * chain = 칸 묶음: 제목 오른쪽 "n / m", 마지막 칸이 아니면 닫기 아래 "다음"(닫을 때처럼 다듬고 다음 칸을 연다 — 시트는 그대로).
+ * PC 는 실제 키보드도 받는다(숫자 · . · − · Backspace · Delete = C · Enter · Tab = 다음(마지막 칸 · 묶음 밖은 닫기) ·
+ * Shift+Tab = 앞 칸 · Esc = 닫기).
  */
 @Composable
 internal fun NumberPad(
@@ -232,109 +275,184 @@ internal fun NumberPad(
     hint: String? = null,
     autoValue: String? = null,
     blankable: Boolean = false,
+    figure: (@Composable (Modifier) -> Unit)? = null,
+    preview: String? = null,
+    chain: FieldChain? = null,
 ) {
     val c = AppTheme.colors
-    // 값이 바로 들어가 initial 도 따라 바뀌므로 연 때 값을 잡아 둔다
-    val start = remember { initial }
-    var keys by remember { mutableStateOf("") }
+    // 값이 바로 들어가 initial 도 따라 바뀌므로 연 때 값을 잡아 둔다. 묶음에서 다른 칸으로 가면 그 칸 값으로 새로 잡는다
+    val id = chain?.active
+    val start = remember(id) { initial }
+    var keys by remember(id) { mutableStateOf("") }
     val text = NumEdit.type(start, keys)
     val fresh = keys.isEmpty() && start.isNotEmpty()
-    fun close() {
+    val next = id?.let { chain.neighbour(it, 1) }
+    val prev = id?.let { chain.neighbour(it, -1) }
+    // 닫거나 다른 칸으로 갈 때: "-" 뿐이면 연 때 값으로
+    fun settle() {
         if (keys.isNotEmpty() && NumEdit.live(NumEdit.type(start, keys)) == null) onChange(start)
+    }
+    fun close() {
+        settle()
         onClose()
     }
     fun cancel() {
         if (keys.isNotEmpty()) onChange(start)
         onClose()
     }
-    fun press(k: Char) {
-        if (k == NumEdit.CLOSE) return close()
-        keys += k
-        NumEdit.live(NumEdit.type(start, keys))?.let(onChange)
+    fun go(to: String) {
+        settle()
+        chain?.open(to)
     }
-    BottomSheet(::close, onKey = { e -> NumEdit.keyOf(e)?.let { press(it); true } ?: false }, scrimAlpha = 0.25f) {
-        SheetTitle(label) {
-            Box(
-                Modifier.size(48.dp, 44.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = ::cancel),
-                contentAlignment = Alignment.Center,
-            ) { Text("취소", color = c.textMuted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
-        }
-        val shape = RoundedCornerShape(10.dp)
-        Row(
-            Modifier.fillMaxWidth().height(64.dp).clip(shape).background(c.field).border(2.dp, c.lineFocus, shape).padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                // 빈칸이면 지금 계산값을 "자동 …" 으로(없으면 "빈칸")
-                val auto = text.isEmpty() && !autoValue.isNullOrEmpty()
-                Text(
-                    if (auto) "자동 $autoValue" else text.ifEmpty { "빈칸" },
-                    Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (fresh) c.lineFocus.copy(alpha = 0.22f) else Color.Transparent)
-                        .padding(horizontal = 4.dp),
-                    color = if (text.isNotEmpty()) c.textValue else if (auto) c.valueComp else c.textHint,
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                )
-            }
-            if (unit.isNotEmpty()) {
-                Spacer(Modifier.width(10.dp))
-                Text(unit, color = c.textMuted, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+    fun press(k: Char) {
+        // 다른 칸으로 막 넘어가 아직 다시 그리기 전에 온 키는 앞 칸에 넣지 않는다
+        if (chain != null && chain.active != id) return
+        when (k) {
+            NumEdit.NEXT -> if (next != null) go(next) else close()
+            NumEdit.PREV -> if (prev != null) go(prev)
+            else -> {
+                keys += k
+                NumEdit.live(NumEdit.type(start, keys))?.let(onChange)
             }
         }
-        Row(Modifier.padding(top = 6.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                if (hint != null) Text(hint, color = c.textBody, fontSize = 13.sp, lineHeight = 18.sp)
-                Text(if (fresh) "숫자 · − · . 를 누르면 새 값 · ⌫ 로 고치기" else "", color = c.textMuted, fontSize = 12.sp)
-            }
-            if (blankable) {
-                val pill = RoundedCornerShape(50)
-                Box(
-                    Modifier
-                        .padding(start = 8.dp)
-                        .minimumInteractiveComponentSize()
-                        .height(40.dp)
-                        .clip(pill)
-                        .border(1.5.dp, c.lineField, pill)
-                        .clickable {
-                            onChange("")
-                            onClose()
+    }
+    BottomSheet(
+        ::close,
+        onKey = { e -> NumEdit.keyOf(e)?.let { press(it); true } ?: false },
+        scrimAlpha = 0.25f,
+        onHeight = chain?.let { ch -> { ch.sheetHeight = it } },
+    ) {
+        BoxWithConstraints {
+            val room = maxHeight
+            Column {
+                if (preview != null) {
+                    Text(
+                        preview, Modifier.padding(bottom = 2.dp), style = AppType.numSmall, color = c.valueComp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                val order = chain?.order.orEmpty()
+                SheetTitle(label, if (id in order) "${order.indexOf(id) + 1} / ${order.size}" else "") {
+                    Box(
+                        Modifier.size(48.dp, 44.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = ::cancel),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("취소", color = c.textMuted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+                }
+                if (figure != null && room >= FIGURE_MIN_H) {
+                    Box(
+                        Modifier
+                            .padding(bottom = 10.dp)
+                            .fillMaxWidth()
+                            .height(if (room >= FIGURE_BIG_H) 170.dp else 150.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(c.subtle),
+                        contentAlignment = Alignment.Center,
+                    ) { figure(Modifier.fillMaxHeight()) }
+                }
+                PadDisplay(text, unit, fresh, autoValue)
+                Row(Modifier.padding(top = 6.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        if (hint != null) Text(hint, color = c.textBody, fontSize = 13.sp, lineHeight = 18.sp)
+                        Text(if (fresh) "숫자 · − · . 를 누르면 새 값 · ⌫ 로 고치기" else "", color = c.textMuted, fontSize = 12.sp)
+                    }
+                    if (blankable) {
+                        val pill = RoundedCornerShape(50)
+                        Box(
+                            Modifier
+                                .padding(start = 8.dp)
+                                .minimumInteractiveComponentSize()
+                                .height(40.dp)
+                                .clip(pill)
+                                .border(1.5.dp, c.lineField, pill)
+                                .clickable {
+                                    onChange("")
+                                    onClose()
+                                }
+                                .padding(horizontal = 14.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("비우기 · 자동 계산", color = c.textBody, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
+                    }
+                }
+                val gap = 8.dp
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    Column(Modifier.weight(3f), verticalArrangement = Arrangement.spacedBy(gap)) {
+                        listOf("789", "456", "123", "-0.").forEach { row ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                                row.forEach { k ->
+                                    PadKey(Modifier.weight(1f), onClick = { press(k) }, strong = k.isDigit()) {
+                                        Text(if (k == '-') "−" else "$k", color = c.textStrong, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
                         }
-                        .padding(horizontal = 14.dp),
-                    contentAlignment = Alignment.Center,
-                ) { Text("비우기 · 자동 계산", color = c.textBody, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
-            }
-        }
-        val gap = 8.dp
-        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-            Column(Modifier.weight(3f), verticalArrangement = Arrangement.spacedBy(gap)) {
-                listOf("789", "456", "123", "-0.").forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                        row.forEach { k ->
-                            PadKey(Modifier.weight(1f), onClick = { press(k) }, strong = k.isDigit()) {
-                                Text(if (k == '-') "−" else "$k", color = c.textStrong, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    // C 는 맨 위(닫기 · 다음에서 떨어뜨려 잘못 눌러 지우지 않게). 값은 이미 들어가 있어 닫기는 닫기만 한다
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(gap)) {
+                        PadKey(Modifier.fillMaxWidth(), onClick = { press('C') }) {
+                            Text("C", color = c.red, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        }
+                        PadKey(Modifier.fillMaxWidth(), onClick = { press('<') }) {
+                            Icon(AppIcons.Backspace, "지우기", Modifier.size(26.dp), tint = c.textBody)
+                        }
+                        val accent = if (c.dark) c.appsFill else c.teal
+                        if (next != null) {
+                            PadKey(Modifier.fillMaxWidth(), onClick = ::close, outline = c.teal) {
+                                Text("닫기", color = c.tealDeep, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            }
+                            PadKey(Modifier.fillMaxWidth(), onClick = { press(NumEdit.NEXT) }, fill = accent) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("다음", color = c.onAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                    Icon(AppIcons.ChevronRight, null, Modifier.padding(start = 4.dp).size(16.dp), tint = c.onAccent)
+                                }
+                            }
+                        } else {
+                            PadKey(Modifier.fillMaxWidth(), onClick = { press(NumEdit.NEXT) }, height = KEY_H * 2 + gap, fill = accent) {
+                                Text("닫기", color = c.onAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
             }
-            // C 는 맨 위(닫기에서 떨어뜨려 잘못 눌러 지우지 않게). 값은 이미 들어가 있어 닫기는 닫기만 한다
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(gap)) {
-                PadKey(Modifier.fillMaxWidth(), onClick = { press('C') }) {
-                    Text("C", color = c.red, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                }
-                PadKey(Modifier.fillMaxWidth(), onClick = { press('<') }) {
-                    Icon(AppIcons.Backspace, "지우기", Modifier.size(26.dp), tint = c.textBody)
-                }
-                PadKey(Modifier.fillMaxWidth(), onClick = { press(NumEdit.CLOSE) }, height = KEY_H * 2 + gap, fill = if (c.dark) c.appsFill else c.teal) {
-                    Text("닫기", color = c.onAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                }
-            }
         }
     }
 }
+
+/** 키패드 위 값 칸(64dp): 지금 글(연 때는 "통째 선택" 바탕), 빈칸이면 계산값 "자동 …"(없으면 "빈칸") + 단위 */
+@Composable
+private fun PadDisplay(text: String, unit: String, fresh: Boolean, autoValue: String?) {
+    val c = AppTheme.colors
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        Modifier.fillMaxWidth().height(64.dp).clip(shape).background(c.field).border(2.dp, c.lineFocus, shape).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+            val auto = text.isEmpty() && !autoValue.isNullOrEmpty()
+            Text(
+                if (auto) "자동 $autoValue" else text.ifEmpty { "빈칸" },
+                Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (fresh) c.lineFocus.copy(alpha = 0.22f) else Color.Transparent)
+                    .padding(horizontal = 4.dp),
+                color = if (text.isNotEmpty()) c.textValue else if (auto) c.valueComp else c.textHint,
+                fontSize = 30.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
+        if (unit.isNotEmpty()) {
+            Spacer(Modifier.width(10.dp))
+            Text(unit, color = c.textMuted, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+/**
+ * 키패드 그림(150dp) · 큰 그림(170dp)을 넣는 시트 안 자리(창 높이 − 시스템 막대 · 손잡이 · 아래 여백).
+ * 그림을 넣어도 시트 위에 머리 · 고치는 칸(약 180dp)이 보일 만큼일 때만 — 412×915 폰 · PC 창은 큰 그림, 360×800 폰은 그림 없이
+ */
+private val FIGURE_MIN_H = 780.dp
+private val FIGURE_BIG_H = 820.dp
 
 private val KEY_H = 58.dp
 
@@ -344,6 +462,7 @@ private fun PadKey(
     onClick: () -> Unit,
     strong: Boolean = false,
     fill: Color? = null,
+    outline: Color? = null,
     height: Dp = KEY_H,
     content: @Composable () -> Unit,
 ) {
@@ -354,7 +473,7 @@ private fun PadKey(
             .height(height)
             .clip(shape)
             .background(fill ?: if (strong) c.subtle else c.field)
-            .border(1.dp, if (fill != null) Color.Transparent else c.lineCard, shape)
+            .border(if (outline != null) 1.5.dp else 1.dp, outline ?: if (fill != null) Color.Transparent else c.lineCard, shape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() } }
@@ -362,7 +481,9 @@ private fun PadKey(
 
 /** 키패드 글 고치기(화면과 떼어 시험한다). 키: '0'~'9' '.' '-'(부호 바꾸기) '<'(지우기) 'C'(비우기) */
 internal object NumEdit {
-    const val CLOSE = '='
+    /** 다음 칸(마지막 칸 · 묶음 밖은 닫기) · 앞 칸 */
+    const val NEXT = '='
+    const val PREV = '^'
     private const val MAX_DIGITS = 12
 
     /** 연 뒤 처음 누를 때 원래 값을 덮어쓰는 키(숫자 · . · −). − 를 먼저 누르면 새 음수: Z-5 에서 − 1 2 → -12 */
@@ -409,7 +530,8 @@ internal object NumEdit {
             Key.Minus, Key.NumPadSubtract -> '-'
             Key.Backspace -> '<'
             Key.Delete -> 'C'
-            Key.Enter, Key.NumPadEnter -> CLOSE
+            Key.Enter, Key.NumPadEnter -> NEXT
+            Key.Tab -> if (e.isShiftPressed) PREV else NEXT
             else -> null
         }
     }

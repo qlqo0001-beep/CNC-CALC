@@ -50,6 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -107,6 +108,7 @@ private fun Scrim(onDismiss: () -> Unit, alpha: Float = 1f) {
  * 아래에서 올라오는 시트(위 모서리 20dp, 220ms). PC 넓은 창에서는 가운데 560dp. 다크는 그림자 대신 테두리로 경계를 보인다.
  * 손잡이 띠(24dp)를 끌면 시트가 따라 내려오고, 80dp 넘게 내려 놓으면 onDismiss, 아니면 제자리로 돌아간다.
  * scrimAlpha = 뒤 덮개 짙기(키패드는 옅게 — 뒤에서 바뀌는 값이 보이게), maxHeightFraction = 창 높이에 대한 최대 높이 비율.
+ * onHeight = 시트 높이(px, 아래 시스템 막대 빼고)가 바뀔 때 — 키패드 묶음이 고치는 칸을 시트 위로 올린다.
  */
 @Composable
 fun BottomSheet(
@@ -114,6 +116,7 @@ fun BottomSheet(
     onKey: ((KeyEvent) -> Boolean)? = null,
     scrimAlpha: Float = 0.6f,
     maxHeightFraction: Float? = null,
+    onHeight: ((Int) -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Overlay(onDismiss, onKey = onKey) {
@@ -142,6 +145,7 @@ fun BottomSheet(
                         .then(if (c.dark) Modifier.border(1.dp, c.lineStrong, shape) else Modifier)
                         .pointerInput(Unit) { detectTapGestures { } }
                         .windowInsetsPadding(WindowInsets.navigationBars)
+                        .then(if (onHeight != null) Modifier.onSizeChanged { onHeight(it.height) } else Modifier)
                         .padding(horizontal = 16.dp)
                         .padding(bottom = 16.dp),
                 ) {
