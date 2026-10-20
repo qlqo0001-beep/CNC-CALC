@@ -1,0 +1,60 @@
+package com.bmt.nosecalc
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.bmt.nosecalc.screens.round.RoundTypeArt
+import com.bmt.nosecalc.ui.theme.AppTheme
+import com.bmt.nosecalc.ui.theme.AppType
+import com.bmt.nosecalc.ui.theme.Space
+import kotlin.test.Test
+
+/** 라운드 형상 그림(RoundTypeArt)을 여러 폭에서 라이트/다크로 → build/shots/art-round-*. 칸은 04 카드 몸통 비율(193 : 189) */
+class RoundArtShotsTest {
+    /** 고르기 카드 그림: 형상 1~6 을 193 · 300 · 600dp 폭에서 — 선 · 글 크기 묶음, 오른쪽 잘림 */
+    @Test
+    fun all() {
+        Shots.both("art-round-all", heightDp = 5000, widthDp = 632) { AppHost(it) { Widths(listOf(193.dp, 300.dp, 600.dp), showDatum = false) } }
+    }
+
+    /** 입력 화면 그림(showDatum): Z0 ▲ · 이론 꼭짓점 ○ */
+    @Test
+    fun input() {
+        Shots.both("art-round-input", heightDp = 1360, widthDp = 632) { AppHost(it) { Widths(listOf(193.dp, 300.dp), showDatum = true) } }
+    }
+}
+
+@Composable
+private fun Widths(widths: List<Dp>, showDatum: Boolean) {
+    val c = AppTheme.colors
+    val shape = RoundedCornerShape(10.dp)
+    Column(Modifier.fillMaxSize().padding(Space.gutter), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (w in widths) {
+            Text("${w.value.toInt()}dp", Modifier.padding(top = 4.dp), style = AppType.caption, color = c.textMuted)
+            // 한 줄에 들어가는 만큼(608dp 안)
+            (1..6).chunked(((608 + 8) / (w.value.toInt() + 8)).coerceAtLeast(1)).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { t ->
+                        Box(Modifier.width(w).aspectRatio(193f / 189f).clip(shape).background(c.card).border(1.dp, c.lineCard, shape)) {
+                            RoundTypeArt(t, showDatum = showDatum)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
