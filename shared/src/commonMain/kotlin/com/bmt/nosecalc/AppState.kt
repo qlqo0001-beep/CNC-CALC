@@ -29,33 +29,43 @@ class AppState(private val store: KeyValueStore) {
         private set
     val current: Feature get() = stack.last()
 
-    /** 테이퍼 헤더의 APPS 로 여는 APP MENU */
+    /** 헤더 메뉴 버튼으로 여는 APP MENU(모든 화면) */
     var menuOpen by mutableStateOf(false)
 
     /** 헤더 도움말 버튼의 사용법 시트 */
     var helpOpen by mutableStateOf(false)
 
-    /** 저장된 테마. null 이면 시스템 설정을 따른다 */
-    var darkSaved: Boolean? by mutableStateOf(store.get(KEY_THEME)?.let { it == "dark" })
+    /** 저장된 테마. null 이면 시스템 설정을 따른다(메뉴의 '자동') */
+    var darkSaved: Boolean? by mutableStateOf(
+        when (store.get(KEY_THEME)) {
+            "dark" -> true
+            "light" -> false
+            else -> null
+        },
+    )
         private set
 
     fun isDark(systemDark: Boolean) = darkSaved ?: systemDark
 
-    fun setDark(dark: Boolean) {
+    /** 메뉴의 화면 테마: null = 자동(시스템 따라), false = 밝게, true = 어둡게 */
+    fun setTheme(dark: Boolean?) {
         darkSaved = dark
-        store.put(KEY_THEME, if (dark) "dark" else "light")
+        store.put(
+            KEY_THEME,
+            when (dark) {
+                null -> "system"
+                true -> "dark"
+                false -> "light"
+            },
+        )
     }
 
+    /** 기능 화면으로. 이미 쌓인 화면이면 그 위를 걷어 내고 돌아간다(같은 화면이 두 번 쌓이지 않게) */
     fun open(f: Feature) {
         menuOpen = false
         helpOpen = false
-        if (f == Feature.TAPER) home() else stack = stack + f
-    }
-
-    fun home() {
-        menuOpen = false
-        helpOpen = false
-        stack = listOf(Feature.TAPER)
+        val i = stack.indexOf(f)
+        stack = if (i >= 0) stack.take(i + 1) else stack + f
     }
 
     internal val backs = mutableStateListOf<BackEntry>()
@@ -63,6 +73,9 @@ class AppState(private val store: KeyValueStore) {
 
     /** 뒤로 갈 곳이 있나(없으면 안드로이드는 앱을 닫는다) */
     val canGoBack: Boolean get() = backs.any { it.enabled.value } || stack.size > 1
+
+    /** 헤더 ← 를 보일까: 앞 화면이나 화면 안 앞 단계가 있을 때. 메뉴 · 시트 · 키패드처럼 위에 뜬 층은 제 닫기가 있어 세지 않는다 */
+    val hasBackStep: Boolean get() = stack.size > 1 || backs.any { it.enabled.value && !it.layer }
 
     /**
      * 뒤로(안드로이드 뒤로 키·PC Esc). 나중에 등록된 [OnBack] 부터 — 키패드·모달 → 메뉴 → 화면 안 단계 → 앞 화면.
@@ -106,18 +119,18 @@ class AppState(private val store: KeyValueStore) {
 
 val LocalAppState = staticCompositionLocalOf<AppState> { error("App 안에서만 쓴다") }
 
-internal class BackEntry(val enabled: State<Boolean>, val onBack: State<() -> Unit>)
+internal class BackEntry(val enabled: State<Boolean>, val onBack: State<() -> Unit>, val layer: Boolean)
 
 /**
  * 뒤로를 가로챈다(화면 안 단계 되돌리기 등). 나중에 그려진 것이 먼저 받는다.
- * enabled 가 false 면 건너뛴다.
+ * enabled 가 false 면 건너뛴다. layer = 위에 뜬 층(메뉴 · 시트 · 모달) — 헤더 ← 는 이것만 남았을 때 안 보인다.
  */
 @Composable
-fun OnBack(enabled: Boolean = true, onBack: () -> Unit) {
+fun OnBack(enabled: Boolean = true, layer: Boolean = false, onBack: () -> Unit) {
     val state = LocalAppState.current
     val e = rememberUpdatedState(enabled)
     val f = rememberUpdatedState(onBack)
-    val entry = remember { BackEntry(e, f) }
+    val entry = remember { BackEntry(e, f, layer) }
     DisposableEffect(state) {
         state.backs.add(entry)
         onDispose { state.backs.remove(entry) }

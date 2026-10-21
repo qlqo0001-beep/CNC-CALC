@@ -8,9 +8,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 /** 선 아이콘(24 칸, 굵기 2). Icon(tint = …) 로 색을 입힌다 */
 object AppIcons {
@@ -23,35 +20,6 @@ object AppIcons {
         line("close") {
             moveTo(6f, 6f); lineTo(18f, 18f)
             moveTo(18f, 6f); lineTo(6f, 18f)
-        }
-    }
-    val Sun by lazy {
-        line("sun") {
-            circle(12f, 12f, 4f)
-            for (i in 0 until 8) {
-                val a = i * PI / 4
-                moveTo(12f + 7f * cos(a).toFloat(), 12f + 7f * sin(a).toFloat())
-                lineTo(12f + 9.5f * cos(a).toFloat(), 12f + 9.5f * sin(a).toFloat())
-            }
-        }
-    }
-    val Moon by lazy {
-        line("moon") {
-            moveTo(12f, 3f)
-            arcTo(6f, 6f, 0f, false, false, 21f, 12f)
-            arcTo(9f, 9f, 0f, true, true, 12f, 3f)
-            close()
-        }
-    }
-    val Home by lazy {
-        line("home") {
-            moveTo(3f, 10.5f); lineTo(12f, 3f); lineTo(21f, 10.5f)
-            moveTo(5.5f, 9f); lineTo(5.5f, 20f)
-            arcTo(1f, 1f, 0f, false, false, 6.5f, 21f)
-            lineTo(17.5f, 21f)
-            arcTo(1f, 1f, 0f, false, false, 18.5f, 20f)
-            lineTo(18.5f, 9f)
-            moveTo(10f, 21f); lineTo(10f, 15f); lineTo(14f, 15f); lineTo(14f, 21f)
         }
     }
     val ChevronRight by lazy {

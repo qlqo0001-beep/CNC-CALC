@@ -45,18 +45,32 @@ import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 
 /**
- * 기능 헤더(1.4): 왼쪽 제목(기능색 한 색 · 20sp 굵게, 모든 기능 같은 꼴) + 한글 부제, 오른쪽 원형 버튼들.
+ * 기능 헤더(1.4): [← 뒤로] 제목(기능색 한 색 · 20sp 굵게, 모든 기능 같은 꼴) + 한글 부제, 오른쪽 버튼들.
  * 카드색 띠 + 아래 1dp 선으로 본문과 갈린다. dimmed = APP MENU 가 열려 헤더가 어두워진 상태(01).
+ * onBack 이 있으면(돌아갈 곳이 있을 때) 제목 왼쪽에 ← 원형 버튼.
  */
 @Composable
-fun FeatureHeader(feature: Feature, dimmed: Boolean = false, actions: @Composable RowScope.() -> Unit) {
+fun FeatureHeader(
+    feature: Feature,
+    dimmed: Boolean = false,
+    onBack: (() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit,
+) {
     val c = AppTheme.colors
     val bg by animateColorAsState(if (dimmed) c.headerDim else c.card)
     Column(Modifier.fillMaxWidth().background(bg).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 66.dp).padding(start = 17.dp, end = 18.dp, top = 6.dp, bottom = 6.dp),
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 66.dp)
+                // ← 가 있으면 누르는 자리(48dp)가 왼쪽 끝 가까이 오게 덜 띄운다
+                .padding(start = if (onBack != null) 8.dp else 17.dp, end = 18.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (onBack != null) {
+                CircleIconButton(AppIcons.Back, "뒤로", onBack)
+                Spacer(Modifier.width(6.dp))
+            }
             Column(Modifier.weight(1f)) {
                 // 좁은 폰 · 큰 글꼴이면 16sp 까지 줄이고, 그래도 넘치면 … 로
                 BasicText(
@@ -114,7 +128,7 @@ fun CircleIconButton(
     }
 }
 
-/** 테이퍼 헤더의 메뉴 버튼(원본 APPS, 햄버거 + 글자, 높이 44dp · 누르는 자리 48dp). 닫힘 = 채움, 열림 = 외곽선 */
+/** 헤더의 메뉴 버튼(원본 APPS, 햄버거 + 글자, 높이 44dp · 누르는 자리 48dp). 닫힘 = 채움, 열림 = 외곽선 */
 @Composable
 fun AppsButton(open: Boolean, onClick: () -> Unit) {
     val c = AppTheme.colors

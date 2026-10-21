@@ -50,7 +50,8 @@ class ScreenShotTest {
 
     @Test
     fun features() {
-        Feature.menu.forEach { f -> Shots.both("feature-${f.name.lowercase()}", setup = { it.open(f) }) { App(it) } }
+        // 테이퍼는 02-taper
+        (Feature.menu - Feature.TAPER).forEach { f -> Shots.both("feature-${f.name.lowercase()}", setup = { it.open(f) }) { App(it) } }
     }
 
     @Test

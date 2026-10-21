@@ -17,7 +17,10 @@ import kotlin.test.assertNull
 /** 직각삼각형 화면을 라이트/다크로 → build/shots/triangle-* */
 class TriangleShotsTest {
     private fun shot(name: String, heightDp: Int = 1480, editing: TriField? = null, frames: Int = 40, frameMs: Long = 100, state: () -> TriangleState) =
-        Shots.both(name, heightDp, frames, frameMs = frameMs) { AppHost(it) { TriangleScreen(state(), editing) } }
+        // 앱에서처럼 테이퍼 위에 연 화면(헤더에 ←)
+        Shots.both(name, heightDp, frames, setup = { it.open(Feature.TRIANGLE) }, frameMs = frameMs) {
+            AppHost(it) { TriangleScreen(state(), editing) }
+        }
 
     @Test
     fun shots() {

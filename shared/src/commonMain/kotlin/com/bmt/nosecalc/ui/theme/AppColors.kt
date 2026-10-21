@@ -90,8 +90,6 @@ data class AppColors(
     val purple: Color,
     /** 헤더 원형 버튼 바탕 */
     val circleBg: Color,
-    val sun: Color,
-    val moon: Color,
     val bmtBlue: Color,
     // 결과 숫자(고정폭)
     val valueComp: Color,
@@ -187,8 +185,6 @@ val LightColors = AppColors(
     indigo = Color(0xFF6366F1),
     purple = Color(0xFF9333EA),
     circleBg = Color(0xFFFFFFFF),
-    sun = Color(0xFFF97316),
-    moon = Color(0xFF475569),
     bmtBlue = Color(0xFF0A4AA6),
     valueComp = Color(0xFF0F5E8C),
     valuePos = Color(0xFF2F8A5E),
@@ -283,8 +279,6 @@ val DarkColors = AppColors(
     indigo = Color(0xFF818CF8),
     purple = Color(0xFFC084FC),
     circleBg = Color(0xFF1B2A3F),
-    sun = Color(0xFFFB923C),
-    moon = Color(0xFFFDE68A),
     bmtBlue = Color(0xFF6E9BF0),
     valueComp = Color(0xFF7DD3FC),
     valuePos = Color(0xFF6EE7B7),

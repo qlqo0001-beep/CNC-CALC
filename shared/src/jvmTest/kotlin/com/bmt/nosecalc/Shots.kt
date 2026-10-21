@@ -63,7 +63,7 @@ object Shots {
         content: @Composable (AppState) -> Unit,
     ): File {
         val state = AppState(KeyValueStore(File.createTempFile("bmt-kv", ".properties").apply { delete() }))
-        state.setDark(dark)
+        state.setTheme(dark)
         setup(state)
         val scene = ImageComposeScene(
             width = (widthDp * DENSITY).roundToInt(),

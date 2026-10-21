@@ -10,7 +10,8 @@ import kotlin.test.Test
 /** 라운드 고르기·입력 화면을 라이트/다크로 → build/shots/round-*. 원본 04 와 나란히 본다. 계산 상태는 예시 치수로 */
 class RoundShotsTest {
     private fun shot(name: String, heightDp: Int = Shots.HEIGHT_DP, frames: Int = 40, frameMs: Long = 100, state: () -> RoundState) =
-        Shots.both(name, heightDp, frames, frameMs = frameMs) { AppHost(it) { RoundScreen(state()) } }
+        // 앱에서처럼 테이퍼 위에 연 화면(헤더에 ←)
+        Shots.both(name, heightDp, frames, setup = { it.open(Feature.ROUND) }, frameMs = frameMs) { AppHost(it) { RoundScreen(state()) } }
 
     @Test
     fun pick() {

@@ -26,12 +26,12 @@
 
 ## 기능 화면 채우기
 - `screens/XxxScreen.kt` 의 `ComingSoon(...)` 자리를 바꾼다. `FeatureScaffold(Feature.X, XxxHelp) { … }` 의 본문은 `BoxScope`(화면 크기),
-  스크롤은 화면이 `Column(Modifier.verticalScroll(…))` 로 정한다. 헤더 버튼(메뉴/테마/도움말/홈)·뒤로는 틀이 처리한다.
+  스크롤은 화면이 `Column(Modifier.verticalScroll(…))` 로 정한다. 헤더(← 뒤로 · 메뉴 · 도움말)·뒤로 키는 틀이 처리한다.
 - 입력값은 `rememberSaveable` 로 — `App` 이 화면마다 `SaveableStateHolder` 로 감싸 다른 기능에 다녀와도 남는다.
 - 화면 안 단계(예: TYPE 고르기 → 입력)를 뒤로 키·Esc 로 되돌리려면 `OnBack(enabled = 단계 > 0) { 단계-- }`.
   나중에 그려진 `OnBack` 이 먼저 받는다(키패드·모달 → 메뉴 → 화면 안 단계 → 앞 화면). 첫 화면에서 갈 곳이 없으면 안드로이드는 앱을 닫는다.
 - 도움말 글은 같은 파일의 `XxxHelp`(문단 목록). 화면을 만들면 실제 순서에 맞춰 고친다.
-- 다른 기능으로 보내기: `LocalAppState.current.open(Feature.X)`, 처음 화면: `.home()`, 안내: `.toast("…")`.
+- 다른 기능으로 보내기: `LocalAppState.current.open(Feature.X)`(이미 쌓인 화면이면 그 위를 걷어 낸다), 안내: `.toast("…")`.
 - **화면 글은 되도록 한글**(10-17 사용자 요청). 그대로 두는 것은 NC·치수 기호(X · Z · T1 · R · D · L · G02/G03 · G41 …)와 단위(mm, °).
   모든 기능의 헤더 제목(`Feature.title`·`sub`)과 메뉴 카드(`menuTitle`·`menuSub`), 메뉴·닫기 버튼, 테이퍼·라운드·직각삼각형 화면을 맞췄다.
   바꾼 표는 `screens.md` 첫머리 — 3·4단계 화면도 그 표를 따른다.
@@ -65,7 +65,7 @@
   (재료 rose-700, 라운드 teal-700, 시뮬 indigo-700, 삼각 violet-700, 극좌표 amber-700, 나사 emerald-700).
 - 다크("딥 다크", 우리가 정함): 바탕 #0D1624 · 카드 #142032 · 입력칸 #1B2A3F · 3D 뷰포트 #09111D. 강조색은 같은 색상의 300~400 단계.
   다크에선 그림자 대신 1dp 테두리. 새 색이 필요하면 `AppColors` 에 라이트·다크 둘 다 넣는다.
-- 테마 버튼은 **지금 테마**를 보인다(라이트 = 해, 02 와 같음 · 다크 = 달). 누르면 바뀌고 저장된다. 저장 전엔 시스템 설정을 따른다.
+- 화면 테마는 메뉴 안 '화면 테마: 자동 · 밝게 · 어둡게'(`AppState.setTheme(null|false|true)`, 저장된다). 자동 = 시스템 설정을 따른다.
 
 ## 글꼴·크기
 - Noto Sans KR 가변 글꼴(google/fonts `ofl/notosanskr`, wght 100~900) 하나에서 400~900 을 꺼내 쓴다. 고정폭은 Courier Prime(`ofl/courierprime`,

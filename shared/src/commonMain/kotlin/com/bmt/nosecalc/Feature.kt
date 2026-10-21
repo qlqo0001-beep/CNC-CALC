@@ -10,7 +10,7 @@ enum class Feature(
     val menuSub: String,
     val title: String,
     val sub: String,
-    /** 다 만든 기능. 아니면 메뉴 카드에 '준비 중' 표시, 화면은 [com.bmt.nosecalc.ui.ComingSoonPage] */
+    /** 다 만든 기능. 아니면 메뉴 아래 '준비 중' 묶음에 흐리게 놓이고 눌러도 안내만 뜬다(화면은 [com.bmt.nosecalc.ui.ComingSoonPage]) */
     val ready: Boolean = false,
 ) {
     TAPER("테이퍼 계산", "외경 · 내경 · 홈 · 2중 테이퍼 노즈R 보정", "CNC 테이퍼 계산", "단일·복합 테이퍼 노즈R 보정", ready = true),
@@ -23,7 +23,7 @@ enum class Feature(
     ;
 
     companion object {
-        /** 메뉴 순서(01.jpg). 첫 화면인 테이퍼는 빠진다 */
-        val menu = listOf(CUTTING, ROUND, SIMULATOR, TRIANGLE, POLAR, THREAD)
+        /** 메뉴 순서: 지금 쓸 수 있는 계산 먼저, 준비 중인 기능은 그 아래(원본 01.jpg 순서와 다르다 — 사용자 결정) */
+        val menu = listOf(TAPER, ROUND, TRIANGLE, CUTTING, SIMULATOR, POLAR, THREAD)
     }
 }

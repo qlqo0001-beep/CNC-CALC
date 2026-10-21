@@ -90,7 +90,7 @@ internal fun Overlay(
         state.overlays.add(entry)
         onDispose { state.overlays.remove(entry) }
     }
-    OnBack(onBack = onDismiss)
+    OnBack(layer = true, onBack = onDismiss)
 }
 
 /** 뒤 화면을 막고 누르면 닫는 덮개 */

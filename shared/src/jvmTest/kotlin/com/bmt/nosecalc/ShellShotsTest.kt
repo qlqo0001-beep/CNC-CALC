@@ -55,20 +55,20 @@ import kotlin.test.assertTrue
 /** 앱 틀(헤더 단추 · 기능 아이콘 · 준비 중 화면 · 도움말 시트 · 넓은 PC 창)을 라이트/다크로 → build/shots */
 class ShellShotsTest {
     /**
-     * 헤더 단추(테이퍼 · 다른 화면)와 알약 단추: 누르는 자리(레이아웃 크기)를 재어 48dp 이상인지 보고,
+     * 헤더 단추(테이퍼 · 라운드, 라운드를 연 뒤라 둘 다 ←)와 알약 단추: 누르는 자리(레이아웃 크기)를 재어 48dp 이상인지 보고,
      * 그 자리를 빨간 점선 네모로 덧그려 찍는다
      */
     @Test
     fun headerButtons() {
         val boxes = clickBoxes(HEADER_H) { HeaderGallery() }
         assertEquals(
-            listOf("메뉴", "어두운 테마로", "도움말", "어두운 테마로", "도움말", "처음 화면", "닫기", "형상 다시 고르기"),
+            listOf("뒤로", "메뉴", "도움말", "뒤로", "메뉴", "도움말", "닫기", "형상 다시 고르기"),
             boxes.map { it.first },
         )
         boxes.forEach { (name, r) ->
             assertTrue(r.width.roundToInt() >= 48 && r.height.roundToInt() >= 48, "$name 누르는 자리 ${r.width} × ${r.height}dp")
         }
-        Shots.both("header-buttons", heightDp = HEADER_H) {
+        Shots.both("header-buttons", heightDp = HEADER_H, setup = { it.open(Feature.ROUND) }) {
             AppHost(it) {
                 Box(Modifier.fillMaxSize()) {
                     HeaderGallery()
@@ -84,6 +84,33 @@ class ShellShotsTest {
             }
         }
     }
+
+    /**
+     * 라운드에서 연 메뉴: 헤더 ← · 메뉴, 화면 테마, 지금 화면 표(라운드), 아래 '준비 중' 묶음.
+     * 준비 중 카드(G코드 시뮬레이터)를 눌러 뜬 토스트까지 — 토스트는 실제 시간 2.5초면 사라지므로 누른 뒤 몇 프레임만
+     */
+    @Test
+    fun menuFromRound() = Shots.both(
+        "menu-round",
+        frames = 14,
+        tapDp = Offset(200f, 574f),
+        setup = {
+            it.open(Feature.ROUND)
+            it.menuOpen = true
+        },
+    ) { App(it) }
+
+    /** 좁은 폰 · 큰 글꼴 메뉴: 화면 테마 세 칸과 카드 글이 잘리지 않는지 */
+    @Test
+    fun menuNarrow() = Shots.both(
+        "menu-w360",
+        widthDp = 360,
+        fontScale = 1.3f,
+        setup = {
+            it.open(Feature.TRIANGLE)
+            it.menuOpen = true
+        },
+    ) { App(it) }
 
     /** 기능 아이콘 일곱: 메뉴 판(40dp 판에 24dp) · 준비 중 화면(56dp) 크기로 */
     @Test
@@ -131,7 +158,7 @@ class ShellShotsTest {
     }
 }
 
-/** 테이퍼 헤더(메뉴 · 테마 · 도움말) + 라운드 헤더(테마 · 도움말 · 처음 화면) + 알약 단추 둘 */
+/** 테이퍼 헤더 + 라운드 헤더(둘 다 ← · 메뉴 · 도움말) + 알약 단추 둘 */
 @Composable
 private fun HeaderGallery() {
     Column(Modifier.fillMaxWidth()) {
@@ -180,7 +207,9 @@ private fun IconGallery() {
 private fun clickBoxes(heightDp: Int, content: @Composable () -> Unit): List<Pair<String, Rect>> {
     val d = Shots.DENSITY
     val state = AppState(KeyValueStore(File.createTempFile("bmt-kv", ".properties").apply { delete() }))
-    state.setDark(false)
+    state.setTheme(false)
+    // 라운드를 연 뒤 — 헤더에 ← 가 보이게
+    state.open(Feature.ROUND)
     val scene = ImageComposeScene((Shots.WIDTH_DP * d).roundToInt(), (heightDp * d).roundToInt(), Density(d)) {
         AppHost(state) { content() }
     }
