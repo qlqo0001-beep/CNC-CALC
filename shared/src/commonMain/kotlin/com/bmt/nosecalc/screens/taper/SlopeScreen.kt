@@ -75,7 +75,7 @@ import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.Space
 
 /**
- * B 화면 — 테이퍼(외경·내경 · 2중 테이퍼): 그림 요약 → (멈춘 까닭 · 값을 넣으라는 안내) → 입력 → 보정 방식 스위치 → 경고 → 결과 카드 → 형상 → NC.
+ * B 화면 — 테이퍼(외경·내경 · 2중 테이퍼): 그림 요약 → (멈춘 까닭 · 값을 넣으라는 안내) → 입력(도면 치수 · 공구) → 보정 방식 스위치 → 경고 → 결과 카드 → 형상 → NC.
  * 결과 카드 · 형상 · NC 는 앱 전체 보정 방식(기계 보정 G41/G42 · 직접 보정 G40)을 따른다.
  * 값이 바뀌면 바로 다시 푼다(계산 버튼 없음). 입력 칸은 한 묶음이라 키패드의 "다음" 으로 이어 넣고, 키패드에는 그 칸만 짚은 그림과 결과 한 줄이 뜬다.
  * 결과 카드가 화면 밖이면 아래 결과 띠에 T 점 좌표(멈췄으면 그 까닭)가 남는다
@@ -144,10 +144,10 @@ internal fun SlopeScreen(s: TaperState) {
             }
         }
 
+        // 입력 카드: '도면 치수'(점마다 X · Z · 모서리 R → 각도 → 시작 · 끝, 단위는 머리에 한 번) → '공구'(노즈 R → Z 여유 · 팁 번호)
         AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
             FieldChainHost(chain) {
-                NoseRPicker(noseR, error = "noseR" in flagged) { s.setShared("noseR", it) }
-                Spacer(Modifier.height(14.dp))
+                CardHeader("도면 치수") { Text("단위 mm · X 는 직경", style = AppType.caption, color = c.textMuted) }
                 // 단일 테이퍼는 다섯 값 가운데 하나를 비워 계산한다(키패드 '비우기 · 자동 계산')
                 val blankable = !kind.double
                 Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
@@ -157,23 +157,20 @@ internal fun SlopeScreen(s: TaperState) {
                             PointBadge("T${i + 1}", pointColor(c, i), Modifier.size(38.dp, 52.dp))
                             NumberField(
                                 "X${i + 1}", xs[i], { s.setPoint("x${i + 1}", it) }, Modifier.weight(1f),
-                                unit = "mm", autoValue = auto(xs[i], p?.xDia), error = "x${i + 1}" in flagged,
+                                autoValue = auto(xs[i], p?.xDia), error = "x${i + 1}" in flagged,
                                 tag = "Ø직경", hint = "직경값 — 도면 Ø 그대로 (Ø40 → 40)", blankable = blankable,
                                 id = "x${i + 1}", figure = figure("x${i + 1}"), preview = preview,
                             )
                             NumberField(
                                 "Z${i + 1}", zs[i], { s.setPoint("z${i + 1}", it) }, Modifier.weight(1f),
-                                unit = "mm", autoValue = auto(zs[i], p?.z), error = "z${i + 1}" in flagged,
+                                autoValue = auto(zs[i], p?.z), error = "z${i + 1}" in flagged,
                                 hint = "Z0 = 부품 오른쪽 끝면 · 척 쪽은 − (예: −5)", blankable = blankable,
                                 id = "z${i + 1}", figure = figure("z${i + 1}"), preview = preview,
                             )
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(if (n == 3) 8.dp else Space.fieldGap)) {
-                        for (i in 0 until n) {
+                            // 점 이름은 줄 앞 표에 있으니 키패드 안내 줄에 적는다
                             NumberField(
-                                "T${i + 1} 모서리 R", rs[i], { s.setPoint("r${i + 1}", it) }, Modifier.weight(1f),
-                                unit = "mm", placeholder = "기본 0", error = "r${i + 1}" in flagged, hint = "비우면 0 (날카로운 꼭짓점)",
+                                "모서리 R", rs[i], { s.setPoint("r${i + 1}", it) }, Modifier.weight(.8f),
+                                placeholder = "기본 0", error = "r${i + 1}" in flagged, hint = "T${i + 1} 모서리 R · 비우면 0 (날카로운 꼭짓점)",
                                 id = "r${i + 1}", figure = figure("r${i + 1}"), preview = preview,
                             )
                         }
@@ -186,9 +183,8 @@ internal fun SlopeScreen(s: TaperState) {
                                 hint = "Z축(가로선)에서 잰 한쪽 각 · 도면이 꼭지각이면 ÷2 · X축 기준이면 90 − 값", blankable = true,
                                 id = "ang", figure = figure("ang"), preview = preview,
                             )
-                            ZClearField(zClear, "zClear" in flagged, Modifier.weight(1f), preview) { s.setShared("zClear", it) }
+                            Spacer(Modifier.weight(1f))
                         }
-                        ZClearNote(sol, form, r)
                     }
                     // 시작점·끝점: 그 요소가 단면이면 X(직경), 수평이면 Z. 넣었을 때만 그 요소를 깎는다.
                     // 끝점을 비우면 마지막 T 점(모서리 R 이면 그 끝)에서 끝나 그 좌표를 자동 값으로, 시작점을 비우면 "안 깎음"
@@ -196,7 +192,7 @@ internal fun SlopeScreen(s: TaperState) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                         NumberField(
                             if (frontV) "시작 X (단면 바깥 Ø)" else "시작 Z (앞 끝)", start, { s.setPoint("start", it) }, Modifier.weight(1f),
-                            unit = "mm", placeholder = "안 깎음", error = "start" in flagged,
+                            placeholder = "안 깎음", error = "start" in flagged,
                             hint = "T1 앞 요소가 시작하는 좌표 · 비우면 그 요소는 안 깎고 연장선에서 진입",
                             id = "start", figure = figure("start"), preview = preview,
                         )
@@ -208,34 +204,41 @@ internal fun SlopeScreen(s: TaperState) {
                                 else -> "끝 Z (뒤 끝 · 척 쪽)"
                             },
                             end, { s.setPoint("end", it) }, Modifier.weight(1f),
-                            unit = "mm", autoValue = auto(end, last?.let { if (backV) it.xDia else it.z }), error = "end" in flagged,
+                            autoValue = auto(end, last?.let { if (backV) it.xDia else it.z }), error = "end" in flagged,
                             hint = (if (s.reverse) "T$n 뒤 요소의 실제 끝 좌표" else "척·턱 쪽 실제 끝 좌표") + " · 비우면 T$n 에서 끝남 (자동 값)",
                             id = "end", figure = figure("end"), preview = preview,
                         )
                     }
-                    if (kind.double) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
-                            ZClearField(zClear, "zClear" in flagged, Modifier.weight(1f), preview) { s.setShared("zClear", it) }
-                            TipField(tip, standard, { s.tip = it }, Modifier.weight(1f))
-                        }
-                        ZClearNote(sol, form, r)
-                    } else {
-                        TipField(tip, standard, { s.tip = it })
+                }
+                ExpandableHint(
+                    if (kind.double) "세 점의 X · Z 를 모두 넣습니다. 각도는 결과로 나옵니다."
+                    else "빈칸 하나는 나머지 넷으로 자동 계산합니다 (보통 각도를 비움).",
+                    (
+                        if (kind.double) ""
+                        else "X1·Z1·X2·Z2·각도 가운데 하나를 비우면(키패드의 '비우기 · 자동 계산') 나머지 넷으로 계산합니다. 보통 각도를 비워 둡니다. "
+                        ) +
+                        "모서리 R 은 비우면 0(날카로운 꼭짓점). 시작점·끝점은 앞뒤 요소의 바깥 끝 좌표(단면이면 X, 수평이면 Z)로, 넣었을 때만 그 요소를 깎습니다 — " +
+                        "끝점을 비우면 마지막 T 점에서 끝나고, 넣으면 인선이 그 좌표까지 갑니다. 시작점을 비우면 첫 T 점에서 시작합니다.",
+                    Modifier.padding(top = 4.dp),
+                )
+                GroupDivider()
+                CardHeader("공구")
+                NoseRPicker(noseR, error = "noseR" in flagged) { s.setShared("noseR", it) }
+                Spacer(Modifier.height(14.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
+                        NumberField(
+                            "Z 여유 (진입)", zClear, { s.setShared("zClear", it) }, Modifier.weight(1f), unit = "mm", placeholder = "기본 0",
+                            error = "zClear" in flagged, hint = "진입점까지 Z 거리 (+ 값) · 노즈 R 보다 작으면 노즈 R 만큼", id = "zClear", preview = preview,
+                        )
+                        TipField(tip, standard, { s.tip = it }, Modifier.weight(1f))
+                    }
+                    // Z 여유가 노즈 R 보다 작으면 진입은 노즈 R 만큼 띄운다(G41/G42 시작 이동 ≥ 노즈 R) — 왜 G00 이 그대로인지 알린다
+                    if (sol != null && form.zClear < form.noseR) {
+                        WarningBanner("Z 여유가 노즈 R 보다 작아 진입을 노즈 R($r) 만큼 띄웠습니다", level = WarnLevel.Info)
                     }
                 }
             }
-            ExpandableHint(
-                if (kind.double) "세 점의 X · Z 를 모두 넣습니다. 각도는 결과로 나옵니다."
-                else "빈칸 하나는 나머지 넷으로 자동 계산합니다 (보통 각도를 비움).",
-                (
-                    if (kind.double) ""
-                    else "X1·Z1·X2·Z2·각도 가운데 하나를 비우면(키패드의 '비우기 · 자동 계산') 나머지 넷으로 계산합니다. 보통 각도를 비워 둡니다. "
-                    ) +
-                    "모서리 R 은 비우면 0(날카로운 꼭짓점). 시작점·끝점은 앞뒤 요소의 바깥 끝 좌표(단면이면 X, 수평이면 Z)로, 넣었을 때만 그 요소를 깎습니다 — " +
-                    "끝점을 비우면 마지막 T 점에서 끝나고, 넣으면 인선이 그 좌표까지 갑니다. 시작점을 비우면 첫 T 점에서 시작합니다. " +
-                    "Z 여유는 첫 깎는 점에서 Z 로 띄운 진입 거리입니다(노즈 R 보다 작으면 노즈 R).",
-                Modifier.padding(top = 4.dp),
-            )
         }
 
         if (sol != null) {
@@ -293,22 +296,6 @@ private fun slopeDock(result: TaperResult, form: SlopeForm, waiting: Boolean, di
     // 바이트 반대쪽 면(파란 접힌 띠)은 세지 않는다
     val warn = result.warnings.count { it != TaperWarning.AGAINST_TOOL }
     return if (warn > 0) DockStatus.Warn(warn, rows) else DockStatus.Ok(rows)
-}
-
-@Composable
-private fun ZClearField(value: String, error: Boolean, modifier: Modifier, preview: String?, onChange: (String) -> Unit) {
-    NumberField(
-        "Z 여유 (진입)", value, onChange, modifier, unit = "mm", placeholder = "기본 0", error = error,
-        hint = "진입점까지 Z 거리 (+ 값) · 노즈 R 보다 작으면 노즈 R 만큼", id = "zClear", preview = preview,
-    )
-}
-
-/** Z 여유가 노즈 R 보다 작으면 진입은 노즈 R 만큼 띄운다(G41/G42 시작 이동 ≥ 노즈 R) — 왜 G00 이 그대로인지 알린다 */
-@Composable
-private fun ZClearNote(sol: TaperSolution?, f: SlopeForm, r: String) {
-    if (sol != null && f.zClear < f.noseR) {
-        WarningBanner("Z 여유가 노즈 R 보다 작아 진입을 노즈 R($r) 만큼 띄웠습니다", level = WarnLevel.Info)
-    }
 }
 
 /** 끝 숫자를 읽은 소리로 목적격 조사(영 · 일 · 삼 · 육 · 칠 · 팔 = 받침 → 을, 이 · 사 · 오 · 구 → 를). G41 을 · G42 를 · T3 을 · T2 를 */

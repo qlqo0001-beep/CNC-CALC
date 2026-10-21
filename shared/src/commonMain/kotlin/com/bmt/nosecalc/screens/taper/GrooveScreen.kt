@@ -62,8 +62,8 @@ import com.bmt.nosecalc.ui.theme.Space
 import kotlin.math.max
 
 /**
- * B 화면 — Outer Groove: 그림 요약 → (침범 경고 · 값을 넣으라는 안내) → 기준 인선(TYPE 1 왼쪽 팁 3번 / TYPE 2 오른쪽 팁 4번) · 치수 →
- * 다단 진입 표 → 형상 → NC.
+ * B 화면 — Outer Groove: 그림 요약 → (침범 경고 · 값을 넣으라는 안내) → 홈 치수 → 공구(기준 인선 TYPE 1 왼쪽 팁 3번 / TYPE 2 오른쪽 팁 4번 ·
+ * 인서트 폭 · 겹침 · X 여유) → 다단 진입 표 → 형상 → NC.
  * 벽·바닥이 X·Z 축에 평행해 노즈R 보정은 0 이다(calc-design.md 홈 계산). 치수 칸은 한 묶음(키패드 "다음"),
  * 다단 진입 표가 화면 밖이면 아래 결과 띠에 첫 단 · 끝 단 좌표가 남는다
  */
@@ -115,14 +115,12 @@ internal fun GrooveScreen(s: TaperState) {
             }
         }
 
+        // 입력 카드: '홈 치수'(시작 Z · 홈 폭 / 외경 · 바닥) → '공구'(기준 인선 → 인서트 폭 · 겹침 · X 여유)
         AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
-            FieldLabel("기준 인선 (프로그램 기준 모서리)")
-            Spacer(Modifier.height(6.dp))
-            Segmented(listOf("왼쪽 인선 (팁 3번)", "오른쪽 인선 (팁 4번)"), type - 1, { s.type = it + 1 }, color = c.teal, height = 46.dp, fontSize = 15)
-            Spacer(Modifier.height(14.dp))
             // 후퇴 X(직경) = 외경 + 2 × X 여유(반경) — X 여유 칸 키패드에 지금 값으로 보인다
             val retract = input.od?.takeIf { it > 0 }?.let { " · 지금 후퇴 Ø" + Fmt.nc(it + 2 * input.xClear).removeSuffix(".") }.orEmpty()
             FieldChainHost(chain) {
+                CardHeader("홈 치수")
                 Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                         Field("zStart", "시작 Z (오른쪽 벽)", Modifier.weight(1f))
@@ -132,14 +130,17 @@ internal fun GrooveScreen(s: TaperState) {
                         Field("od", "외경 ØD", Modifier.weight(1f), tag = "Ø직경")
                         Field("bottom", "바닥 Ød", Modifier.weight(1f), tag = "Ø직경")
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
-                        Field("insert", "인서트 폭 T", Modifier.weight(1f))
-                        Field("overlap", "단 겹침", Modifier.weight(1f), placeholder = "0.5")
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
-                        Field("xClear", "X 여유", Modifier.weight(1f), placeholder = "기본 0", tag = "반경", hint = "반경값 — 한쪽 거리 · 0 이면 외경까지$retract")
-                        Spacer(Modifier.weight(1f))
-                    }
+                }
+                GroupDivider()
+                CardHeader("공구")
+                FieldLabel("기준 인선 (프로그램 기준 모서리)")
+                Spacer(Modifier.height(6.dp))
+                Segmented(listOf("왼쪽 인선 (팁 3번)", "오른쪽 인선 (팁 4번)"), type - 1, { s.type = it + 1 }, color = c.teal, height = 46.dp, fontSize = 15)
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Field("insert", "인서트 폭 T", Modifier.weight(1f))
+                    Field("overlap", "단 겹침", Modifier.weight(1f), placeholder = "0.5")
+                    Field("xClear", "X 여유", Modifier.weight(1f), placeholder = "기본 0", tag = "반경", hint = "반경값 — 한쪽 거리 · 0 이면 외경까지$retract")
                 }
             }
             ExpandableHint(

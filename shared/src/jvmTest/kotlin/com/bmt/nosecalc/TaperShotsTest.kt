@@ -119,11 +119,11 @@ class TaperShotsTest {
     }
 
     /**
-     * 각도 칸(taper-b 의 (114, 692)dp)을 눌러 연 키패드: 안내 줄(Z축 기준 · 꼭지각 ÷2 · X축 기준 90 − 값) · '비우기 · 자동 계산'.
+     * 각도 칸(taper-b 의 (114, 550)dp)을 눌러 연 키패드: 안내 줄(Z축 기준 · 꼭지각 ÷2 · X축 기준 90 − 값) · '비우기 · 자동 계산'.
      * 묶음 키패드라 칸이 시트 위로 올라온다 — 폰 프레임(16ms)으로 찍는다
      */
     @Test
-    fun keypadHint() = Shots.both("taper-b-keypad-ang", frames = 150, frameMs = 16, tapDp = Offset(114f, 692f)) {
+    fun keypadHint() = Shots.both("taper-b-keypad-ang", frames = 150, frameMs = 16, tapDp = Offset(114f, 550f)) {
         AppHost(it) { TaperScreen(TaperState(type = 1, open = true).example()) }
     }
 

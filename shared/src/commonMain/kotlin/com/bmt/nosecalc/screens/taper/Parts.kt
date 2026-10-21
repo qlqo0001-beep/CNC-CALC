@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -62,6 +63,7 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
@@ -135,6 +137,12 @@ internal fun PointBadge(text: String, color: Color, modifier: Modifier = Modifie
         modifier.clip(shape).background(color.copy(alpha = 0.12f)).border(1.5.dp, color.copy(alpha = 0.55f), shape),
         contentAlignment = Alignment.Center,
     ) { Text(text, color = color, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+}
+
+/** 입력 카드 안 묶음('도면 치수' · '공구') 사이 구분선: 1dp, 위아래 14dp(라운드 입력 카드와 같다) */
+@Composable
+internal fun GroupDivider() {
+    Box(Modifier.padding(vertical = 14.dp).fillMaxWidth().height(1.dp).background(AppTheme.colors.lineCard))
 }
 
 /** 필드 위 라벨(NumberField 와 같은 모양) */
@@ -225,8 +233,11 @@ internal fun TipField(tip: Int, standard: Int, onPick: (Int?) -> Unit, modifier:
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
             )
-            Spacer(Modifier.weight(1f))
-            Text("바꾸기", color = c.textMuted, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+            // '바꾸기' 는 남은 자리 오른쪽 끝에 — 반 칸(360dp 폰 · 큰 글꼴)에 다 들어가지 않으면 두 줄로 쪼개지 말고 뺀다
+            Layout({ Text("바꾸기", color = c.textMuted, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, maxLines = 1) }, Modifier.weight(1f)) { ms, cs ->
+                val p = ms[0].measure(Constraints()).takeIf { it.width <= cs.maxWidth }
+                layout(cs.maxWidth, p?.height ?: 0) { p?.place(cs.maxWidth - p.width, 0) }
+            }
         }
     }
     if (open) {
