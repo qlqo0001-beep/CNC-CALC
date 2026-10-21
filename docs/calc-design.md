@@ -418,7 +418,7 @@ object GrooveCalc { const val MAX_STEPS = 1000; fun calc(i: GrooveInput): Groove
 
 ### 경고 `RoundWarning`
 - 계산을 멈춤(solution = null, 경고 하나): `MISSING_INPUT`(묶음에서 둘 이상 비움 포함), `BAD_INPUT`, `CONTRADICTION`,
-  `SHAPE_MISMATCH`, `CORNER_R_TOO_BIG`, `NOSE_UNREACHABLE`(NoseComp 의 Unreachable·이을 수 없음).
+  `SHAPE_MISMATCH`, `CORNER_R_TOO_BIG`, `NOSE_UNREACHABLE`(NoseComp 의 Unreachable·이을 수 없음, 내경에서 노즈 중심이 축을 넘음).
 - 숫자와 함께: `CONCAVE_R_LE_NOSE`, `AGAINST_TOOL`(TaperCalc 와 같은 기준 — 노즈 접점이 팁 벡터 ±45° 밖. 원호는 접점 방향이
   원호 각만큼 돌므로 90° 넘거나 양 끝이 밖이면. 팁 1~4 만. 경계는 내적·각으로 1e-3(약 0.06~0.08°) 넘을 때부터 밖 —
   3점호는 CAD 점을 넷째 자리로 넣어 중심이 흔들려, 단면→외경의 보통 볼록 R 이 경계를 1e-6 넘어 경고가 나던 것). TYPE 1(왼쪽 면)·2·4(공의 뒤쪽)는 늘 나온다 — 그쪽은 35° 인서트·
@@ -432,7 +432,8 @@ enum class L2Ref { A, B }   // TYPE 2: A = 왼쪽 이음점 ~ 오른쪽 끝(= L1
 data class RoundInput(val type: Int = 1 /*1~6*/, val mainR: Double? = null,
     val cornerR1: Double? = null /*Corner R, Corner R(1)*/, val cornerR2: Double? = null,
     val d1: Double? = null /*D, D1 (직경)*/, val d2: Double? = null, val l1: Double? = null /*L, L1*/, val l2: Double? = null,
-    val l2Ref: L2Ref = L2Ref.B, val noseR: Double = 0.4, val tip: Int = 3, val zClear: Double = 1.0, val legLen: Double = 5.0)
+    val l2Ref: L2Ref = L2Ref.B, val noseR: Double = 0.4, val tip: Int? = null /*null = 표준(외경 3, 내경 2)*/, val zClear: Double = 1.0,
+    val legLen: Double = 5.0 /*내경 3~6 = 입구 구멍 깊이*/, val inner: Boolean = false /*TYPE 2~6*/, val through: Boolean = false /*내경 5·6*/)
 data class Arc3Input(val inner: Boolean = false, val noseR: Double = 0.4, val tip: Int? = null /*null = 표준*/,
     val x1/z1/x2/z2/x3/z3: Double? = null /*X 직경*/, val zClear: Double = 1.0)
 data class RoundArc(val index: Int /*drawing.segs 번호*/, val cw: Boolean, val center: Pt, val r: Double,
@@ -442,10 +443,14 @@ data class RoundSolution(
     val nodes: List<CompPoint>,       // 요소 끝점마다 도면점·보정점, 가공 순서
     val arcs: List<RoundArc>,
     val tip: Int, val side: Side, val entry: Pt, val nc: List<String>,
-    val drawing: Contour, val center: Contour, val program: Contour)  // segs[k] 끼리 대응
+    val drawing: Contour, val center: Contour, val program: Contour,  // segs[k] 끼리 대응
+    val ncRefs: List<NcRef>) {        // nc 줄마다 하나
+    fun lineOf(element: Int, p: Pt): Int  // element 의 NC 줄 번호(0부터), 나눈 원호는 p 의 각 비율로 조각. 줄이 없으면 그 앞 줄
+}
+data class NcRef(val element: Int /*−2 = G00 진입, −1 = G01 시작점, k = drawing.segs[k]*/, val piece: Int, val pieces: Int)
 data class RoundResult(val solution: RoundSolution?, val warnings: List<RoundWarning>)
 object RoundCalc {
-    fun calc(i: RoundInput): RoundResult   // type 이 1~6 밖이면 IllegalArgumentException(프로그램 실수)
+    fun calc(i: RoundInput): RoundResult   // type 이 1~6 밖, 내경 1, 외경·내경 2~4 의 through 면 IllegalArgumentException(프로그램 실수)
     fun arc3(i: Arc3Input): RoundResult
 }
 ```

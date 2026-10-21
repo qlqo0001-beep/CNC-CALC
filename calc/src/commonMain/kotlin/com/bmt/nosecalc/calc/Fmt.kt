@@ -28,10 +28,16 @@ object Fmt {
 /** NC 줄 모으기. 앞 줄과 같은 축 값은 빼고(모달), 움직임이 없는 줄은 버린다. 같은지는 찍힌 글(0.001)로 본다 */
 internal class NcLines {
     val lines = mutableListOf<String>()
+
+    /** 줄마다 [element] 와 원호 조각 번호 */
+    val refs = mutableListOf<NcRef>()
+
+    /** 지금 쓰는 요소 번호(부르는 쪽이 정한다) */
+    var element = -3
     private var x: String? = null
     private var z: String? = null
 
-    fun move(g: String, p: Pt) = put(g, p, "")
+    fun move(g: String, p: Pt) = put(g, p, "", 0, 1)
 
     /**
      * G02/G03 끝점 R. 90° 넘는 원호는 같은 각으로 나눠(조각마다 90° 이하) 여러 줄로 쓴다.
@@ -46,15 +52,18 @@ internal class NcLines {
         val step = (if (a.cw) -1 else 1) * a.sweepRad() / k
         for (q in 1..k) {
             val p = if (q == k) a.end else a.center + Pt(cos(a0 + step * q), sin(a0 + step * q)) * a.radius
-            put(if (a.cw) "G02" else "G03", p, " R" + Fmt.nc(a.radius))
+            put(if (a.cw) "G02" else "G03", p, " R" + Fmt.nc(a.radius), q - 1, k)
         }
     }
 
-    private fun put(g: String, p: Pt, tail: String) {
+    private fun put(g: String, p: Pt, tail: String, piece: Int, pieces: Int) {
         val nx = Fmt.nc(p.xDia)
         val nz = Fmt.nc(p.z)
         val words = (if (nx != x) " X$nx" else "") + (if (nz != z) " Z$nz" else "")
-        if (words.isNotEmpty()) lines += g + words + tail
+        if (words.isNotEmpty()) {
+            lines += g + words + tail
+            refs += NcRef(element, piece, pieces)
+        }
         x = nx
         z = nz
     }

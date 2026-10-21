@@ -86,6 +86,7 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
     val c = AppTheme.colors
     val comp = LocalAppState.current.compMode == CompMode.DIRECT
     val input = s.input(type)
+    val tip = s.tip ?: RoundState.STANDARD_TIP
     val result = remember(input) { RoundCalc.calc(input) }
     // 노즈R 0 으로 푼 것 = 도면 좌표 프로그램(기계 보정의 NC · 뷰어 경로)
     val drawn = remember(input) { RoundCalc.calc(input.copy(noseR = 0.0)).solution }
@@ -116,7 +117,7 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
     }
 
     Page(dock, chain.sheetOpen) { anchor ->
-        RoundSummary(type, "외경 · 정방향 가공 (Z−) · ${toolText(s, input.tip)}") { s.open = false }
+        RoundSummary(type, "외경 · 정방향 가공 (Z−) · ${toolText(s, tip)}") { s.open = false }
         if (sol == null) Banners(warnings, type, solved = false, empty, anchor) { s.setDim(type, it, "") }
 
         AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
@@ -190,7 +191,7 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
                     Modifier.padding(top = 8.dp),
                 )
                 Divider()
-                ToolInputs(s, RoundState.STANDARD_TIP, input.tip, { s.tip = it }, leg = if (type != 1) figure("leg") else null, preview = preview)
+                ToolInputs(s, RoundState.STANDARD_TIP, tip, { s.tip = it }, leg = if (type != 1) figure("leg") else null, preview = preview)
             }
         }
 

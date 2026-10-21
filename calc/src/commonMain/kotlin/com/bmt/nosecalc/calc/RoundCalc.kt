@@ -2,8 +2,10 @@ package com.bmt.nosecalc.calc
 
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
@@ -27,7 +29,7 @@ enum class RoundWarning {
     /** 모서리 R 이 너무 커서 이웃 요소를 다 먹거나 닿을 자리가 없다 */
     CORNER_R_TOO_BIG,
 
-    /** 노즈R 에 비해 요소가 짧거나 좁아 공구가 닿지 못한다 — 도면 형상이 안 나온다 */
+    /** 노즈R 에 비해 요소가 짧거나 좁아 공구가 닿지 못한다 — 도면 형상이 안 나온다. 내경은 구멍이 좁아(지름 < 2r) 노즈 중심이 축을 넘을 때도 */
     NOSE_UNREACHABLE,
 
     /**
@@ -45,6 +47,7 @@ enum class L2Ref { A, B }
 
 /**
  * 라운드 TYPE 1~6(원본 04.jpg). 외경, 척 쪽(−Z)으로 깎음(G42). X 는 직경값, Z0 = 부품 오른쪽 끝.
+ * 내경([inner], TYPE 2~6)은 같은 치수의 구멍: 보링바(팁 2 · G41)로 입구에서 안쪽(Z−)으로 깎고 Z0 = 구멍 입구 끝면.
  * 주 원호(Main R)는 중심이 축 위인 구다. 그래서 TYPE 2~5 에서는 R·D·L 가운데 하나가 나머지로 정해진다 —
  * 그 묶음([mainR] 과 TYPE 2 의 d1·l2, TYPE 3·4 의 d1·l1, TYPE 5 의 d2·d1·l2)은 하나를 비워도 되고, 다 넣으면 맞는지 본다.
  * TYPE 1·3·4 의 Corner R·D·L 은 [cornerR1]·[d1]·[l1] 에 넣는다.
@@ -66,12 +69,19 @@ data class RoundInput(
     val l2: Double? = null,
     val l2Ref: L2Ref = L2Ref.B,
     val noseR: Double = 0.4,
-    /** 가상 인선 번호(외경 정방향 표준 3) */
-    val tip: Int = 3,
+    /** 가상 인선 번호. null = 표준(외경 3, 내경 2) */
+    val tip: Int? = null,
     /** 진입 여유: 첫 보정점에서 Z+ 로 이만큼(노즈R 보다 작으면 노즈R — 테이퍼와 같다) */
     val zClear: Double = 1.0,
-    /** 마지막 원통·축(TYPE 2~6) 길이 — 그림과 마지막 NC 줄에만 쓰인다 */
+    /**
+     * TYPE 2~6 의 끝 직선 길이. 외경 = 마지막 원통·축 길이(그림과 마지막 NC 줄만). 내경 3~6 = 입구 구멍 깊이(Z0 ~ 첫 이론 꼭짓점, 실제 치수).
+     * 내경 2 = 공 뒤 구멍 길이(그림과 마지막 NC 줄만)
+     */
     val legLen: Double = 5.0,
+    /** 내경(보링, 팁 2 · G41). TYPE 2~6 만 */
+    val inner: Boolean = false,
+    /** 내경 5 · 6 만: 바닥 면 없이 D1 구멍이 뚫림 */
+    val through: Boolean = false,
 )
 
 /** 수동 모드(CAD 3점호): 원호 위 세 점(시작 → 가운데 → 끝). 점 순서가 가공 방향이다. X 는 직경값 */
@@ -96,6 +106,9 @@ data class Arc3Input(
 /** 도면 원호 하나. [index] = drawing.segs 번호, [progR] = 보정(합성) R — 볼록 R + r, 오목 R − r, 없어졌으면 null */
 data class RoundArc(val index: Int, val cw: Boolean, val center: Pt, val r: Double, val progR: Double?)
 
+/** NC 줄 하나가 어디서 나왔나. [element] −2 = G00 진입, −1 = G01 시작점, k = drawing.segs[k]. 90° 넘게 나눈 원호는 [pieces] 조각 가운데 [piece] 번(0부터) */
+data class NcRef(val element: Int, val piece: Int, val pieces: Int)
+
 data class RoundSolution(
     /** TYPE 모드: 빈 값을 채운 입력. 3점 모드는 null */
     val filled: RoundInput?,
@@ -116,7 +129,24 @@ data class RoundSolution(
     val center: Contour,
     /** 가상 인선 경로 = 프로그램 경로. segs[k] ↔ drawing.segs[k] */
     val program: Contour,
-)
+    /** [nc] 줄마다 하나 */
+    val ncRefs: List<NcRef>,
+) {
+    /** element 의 NC 줄 번호(0부터). p = 이 풀이의 프로그램 좌표 점(나눈 원호는 각 비율로 조각을 고름). 줄이 없으면 그 앞 줄 */
+    fun lineOf(element: Int, p: Pt): Int {
+        val lines = ncRefs.indices.filter { ncRefs[it].element == element }
+        if (lines.isEmpty()) return max(0, ncRefs.indexOfLast { it.element < element })
+        val a = program.segs.getOrNull(element) as? Arc
+        val pieces = ncRefs[lines.first()].pieces
+        if (a == null || pieces == 1) return lines.first()
+        // 원호 밖(반올림)이면 가까운 끝으로
+        val sweep = a.sweepRad()
+        val along = wrap2Pi((if (a.cw) -1 else 1) * (angleOf(p - a.center) - angleOf(a.start - a.center)))
+        val frac = if (along <= sweep) along / sweep else if (along > PI + sweep / 2) 0.0 else 1.0
+        val piece = min(pieces - 1, floor(frac * pieces).toInt())
+        return lines.lastOrNull { ncRefs[it].piece <= piece } ?: lines.first()
+    }
+}
 
 data class RoundResult(val solution: RoundSolution?, val warnings: List<RoundWarning>)
 
@@ -133,6 +163,8 @@ object RoundCalc {
 
     fun calc(i: RoundInput): RoundResult = guarded {
         require(i.type in 1..6) { "TYPE 은 1~6: ${i.type}" }
+        require(!(i.inner && i.type == 1)) { "내경은 TYPE 2~6" }
+        require(!i.through || (i.inner && i.type in 5..6)) { "관통은 내경 TYPE 5·6 만" }
         checkTool(i.noseR, i.tip, i.zClear)
         if (!(i.legLen > 0 && i.legLen.isFinite())) stop(RoundWarning.BAD_INPUT)
         if (tooBig(i.mainR, i.cornerR1, i.cornerR2, i.d1, i.d2, i.l1, i.l2, i.legLen)) stop(RoundWarning.BAD_INPUT)
@@ -143,9 +175,30 @@ object RoundCalc {
             5 -> type5(i)
             else -> type6(i)
         }
-        val drawing = Contour(Corners.insert(s.segs, s.corners)?.segs ?: stop(RoundWarning.CORNER_R_TOO_BIG))
+        val segs = Corners.insert(s.segs, s.corners)?.segs ?: stop(RoundWarning.CORNER_R_TOO_BIG)
+        val drawing = Contour(if (i.inner) innerOf(segs, i.type, i.through) else segs)
         // Z 여유 0 이어도 진입점은 노즈R 만큼 띄운다(테이퍼와 같다)
-        finish(drawing, i.noseR, Side.G42, i.tip, Pt(max(i.zClear, i.noseR), 0.0), s.filled)
+        val tip = i.tip ?: NoseComp.standardTip(i.inner, false)
+        finish(drawing, i.noseR, if (i.inner) Side.G41 else Side.G42, tip, Pt(max(i.zClear, i.noseR), 0.0), s.filled, i.inner)
+    }
+
+    /**
+     * 외경 도면(모서리 R 까지 끼운 것) → 같은 치수의 구멍. TYPE 2 는 끝 면만 빼면 구멍 입구 (0, D1/2) 에서 시작한다.
+     * 3~6 은 외경 끝(깊이 K)이 구멍 입구 Z0 이 되게 z′ = −z − K 로 뒤집고 거꾸로 간다 — 외경의 끝 면 · 돔 끝이 구멍 바닥.
+     * 뒤집기와 거꾸로 가기가 각각 원호 방향을 바꿔 cw 는 그대로다. 재료가 반대쪽이라 모서리 R 의 볼록 · 오목은 저절로 바뀐다.
+     * 관통은 바닥 면을 뺀다
+     */
+    private fun innerOf(segs: List<Seg>, type: Int, through: Boolean): List<Seg> {
+        if (type == 2) return segs.drop(1)
+        val k = -segs.last().end.z
+        fun m(p: Pt) = Pt(-p.z - k, p.x)
+        val out = segs.asReversed().map {
+            when (it) {
+                is Line -> Line(m(it.end), m(it.start))
+                is Arc -> Arc(m(it.end), m(it.start), m(it.center), it.cw)
+            }
+        }
+        return if (through) out.dropLast(1) else out
     }
 
     fun arc3(i: Arc3Input): RoundResult = guarded {
@@ -178,7 +231,7 @@ object RoundCalc {
         val toTool = if ((side == Side.G41) == arc.cw) radial else radial * -1.0
         val back = radial.left() * (if (arc.cw) 1.0 else -1.0)
         val entryShift = if ((away dot toTool) >= 0) away * clear else back * clear
-        finish(Contour(listOf(arc)), i.noseR, side, tip, entryShift, null)
+        finish(Contour(listOf(arc)), i.noseR, side, tip, entryShift, null, i.inner)
     }
 
     /** 이론 윤곽(꼭짓점 그대로) + 꼭짓점마다 모서리 R(0 = 그대로). corners[k] = segs[k] 와 segs[k+1] 사이 */
@@ -401,13 +454,15 @@ object RoundCalc {
     }
 
     /** 보정·노드 표·NC. [NoseComp] 의 일반 해법 그대로 */
-    private fun finish(drawing: Contour, r: Double, side: Side, tip: Int, entryShift: Pt, filled: RoundInput?): RoundResult {
+    private fun finish(drawing: Contour, r: Double, side: Side, tip: Int, entryShift: Pt, filled: RoundInput?, inner: Boolean): RoundResult {
         val center = try {
             NoseComp.centerPath(drawing, r, side)
         } catch (e: IllegalArgumentException) {
             stop(RoundWarning.NOSE_UNREACHABLE)
         }
         if (center.warnings.any { it is CompWarning.Unreachable }) stop(RoundWarning.NOSE_UNREACHABLE)
+        // 내경: 노즈 중심이 축을 넘으면 노즈가 맞은편 벽을 판다(구멍 지름 < 2r)
+        if (inner && center.path.segs.any { lowestX(it) < -EPS }) stop(RoundWarning.NOSE_UNREACHABLE)
         val program = NoseComp.tipPath(drawing, r, side, tip).path
 
         val warnings = mutableListOf<RoundWarning>()
@@ -426,10 +481,15 @@ object RoundCalc {
         }
         val entry = prog[0] + entryShift
         val nc = NcLines().apply {
+            element = -2
             move("G00", entry)
+            element = -1
             move("G01", prog[0])
-            for (s in program.segs) if (s is Arc) arc(s) else move("G01", s.end)
-        }.lines
+            for ((k, s) in program.segs.withIndex()) {
+                element = k
+                if (s is Arc) arc(s) else move("G01", s.end)
+            }
+        }
         return RoundResult(
             RoundSolution(
                 filled = filled,
@@ -438,13 +498,22 @@ object RoundCalc {
                 tip = tip,
                 side = side,
                 entry = entry,
-                nc = nc,
+                nc = nc.lines,
                 drawing = drawing,
                 center = center.path,
                 program = program,
+                ncRefs = nc.refs,
             ),
             warnings,
         )
+    }
+
+    /** 요소의 가장 낮은 x. 원호는 맨 아래(−X 쪽)를 지나면 중심 − R */
+    private fun lowestX(s: Seg): Double {
+        val ends = min(s.start.x, s.end.x)
+        if (s !is Arc) return ends
+        val down = wrap2Pi((if (s.cw) -1 else 1) * (-PI / 2 - angleOf(s.start - s.center)))
+        return if (down <= s.sweepRad()) min(ends, s.center.x - s.radius) else ends
     }
 
     /**
