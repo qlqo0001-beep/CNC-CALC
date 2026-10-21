@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -516,7 +517,8 @@ internal data class NcFact(val text: String, val tone: WarnLevel? = null)
  * NC 블록 카드: 머리(제목 · 복사 아이콘) → 꼭 알 것(facts) →
  * 줄 번호 + 고정폭 줄(골라 복사할 수 있고, 줄은 접지 않고 옆으로 민다 · 줄 번호는 복사되지 않음) →
  * 큰 복사 단추(프로그램 이름 · 줄 수, 누르면 2초 "복사됨") → 설명(첫 문장 + 자세히). 복사하면 토스트.
- * 테이퍼 · 라운드의 프로그램(기계 보정 · 직접 보정)은 결과 맨 위 [CompModeSwitch] 가 고른다
+ * 테이퍼 · 라운드의 프로그램(기계 보정 · 직접 보정)은 결과 맨 위 [CompModeSwitch] 가 고른다.
+ * flagged = 빨갛게 짚을 줄(0부터, 보링바가 닿는 줄): 줄 번호 왼쪽 3dp 빨간 띠 + 빨간 번호
  */
 @Composable
 internal fun NcCard(
@@ -524,6 +526,7 @@ internal fun NcCard(
     note: String,
     programName: String = "NC 프로그램",
     facts: List<NcFact> = emptyList(),
+    flagged: Set<Int> = emptySet(),
 ) {
     val c = AppTheme.colors
     val state = LocalAppState.current
@@ -569,11 +572,20 @@ internal fun NcCard(
                 // 줄 번호(복사 밖) — 줄과 같은 줄 높이라 나란히 선다
                 Column(Modifier.padding(start = 4.dp).width(24.dp)) {
                     shown.indices.forEach {
+                        val flag = it in flagged
                         Text(
                             "${it + 1}",
-                            Modifier.fillMaxWidth(),
-                            style = AppType.numSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Normal, lineHeight = NC_LINE, lineHeightStyle = NcLineStyle),
-                            color = c.textHint,
+                            // 빨간 띠는 줄 번호 칸 왼쪽 여백(4dp)에, 상자 왼쪽 끝에 붙여
+                            Modifier.fillMaxWidth().drawBehind {
+                                if (flag) drawRect(c.error.label, Offset(-4.dp.toPx(), 0f), Size(3.dp.toPx(), size.height))
+                            },
+                            style = AppType.numSmall.copy(
+                                fontSize = 12.sp,
+                                fontWeight = if (flag) FontWeight.Bold else FontWeight.Normal,
+                                lineHeight = NC_LINE,
+                                lineHeightStyle = NcLineStyle,
+                            ),
+                            color = if (flag) c.error.label else c.textHint,
                             textAlign = TextAlign.End,
                         )
                     }

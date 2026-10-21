@@ -2,6 +2,10 @@ package com.bmt.nosecalc.screens.round
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,9 +15,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,8 +45,13 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.calc.Arc
+import com.bmt.nosecalc.calc.BoringBar
 import com.bmt.nosecalc.calc.Contour
 import com.bmt.nosecalc.calc.Fmt
+import com.bmt.nosecalc.calc.HolderCheck
+import com.bmt.nosecalc.calc.HolderHit
+import com.bmt.nosecalc.calc.HolderPart
+import com.bmt.nosecalc.calc.HolderResult
 import com.bmt.nosecalc.calc.Line
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.Pt
@@ -51,6 +66,7 @@ import com.bmt.nosecalc.ui.LegendItem
 import com.bmt.nosecalc.ui.MarkKind
 import com.bmt.nosecalc.ui.PillButton
 import com.bmt.nosecalc.ui.ShapeViewerCard
+import com.bmt.nosecalc.ui.ViewerFill
 import com.bmt.nosecalc.ui.ViewerLine
 import com.bmt.nosecalc.ui.ViewerMark
 import com.bmt.nosecalc.ui.ViewerStock
@@ -58,8 +74,11 @@ import com.bmt.nosecalc.ui.arrowHead
 import com.bmt.nosecalc.ui.haloText
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
+import com.bmt.nosecalc.ui.theme.onFill
 import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.sin
 
 /**
@@ -154,16 +173,16 @@ internal fun ManualArt(withText: Boolean, inner: Boolean = false, reverse: Boole
     }
 }
 
-/** 입력 화면 맨 위(글만): 라운드 R · 형상 번호와 짧은 이름 · 방향 · 노즈 R · 팁 + 다시 고르기. 그림은 아래 치수 카드에 크게 */
+/** 입력 화면 맨 위(글만): 라운드 R · 형상 번호와 짧은 이름(inner = 내경 이름) · 방향 · 노즈 R · 팁 + 다시 고르기. 그림은 아래 치수 카드에 크게 */
 @Composable
-internal fun RoundSummary(type: Int, info: String, onBack: () -> Unit) {
+internal fun RoundSummary(type: Int, info: String, inner: Boolean = false, onBack: () -> Unit) {
     val c = AppTheme.colors
     AppCard(Modifier.fillMaxWidth(), padding = 12.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("라운드 R", color = c.tealDeep, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "${if (type == MANUAL) "수동" else "형상 $type"} · ${roundTypeShort(type)}",
+                    "${if (type == MANUAL) "수동" else "형상 $type"} · ${roundTypeShort(type, inner)}",
                     color = c.textStrong, fontSize = 19.sp, fontWeight = FontWeight.Bold,
                 )
                 Text(info, color = c.textMuted, fontSize = 12.5.sp, lineHeight = 17.sp)
@@ -259,20 +278,34 @@ private val POINT_COL = 34.dp
 /** 노드 번호. 3점호(filled == null)는 노드가 시작 · 끝 둘뿐이라 입력 칸 P1 · P3 와 이름을 맞춘다 */
 internal fun nodeNo(sol: RoundSolution, i: Int) = if (sol.filled == null && i == sol.nodes.lastIndex) 3 else i + 1
 
+/** 형상 확인에 그릴 보링바: 바 · 검사 결과(건너뛰지 않은 것) · 도면 시작이 입구 끝면인가 · 닿는 곳의 NC 줄 번호(1부터, 지금 카드 그대로) */
+internal class HolderShow(val bar: BoringBar, val result: HolderResult, val faceAtStart: Boolean, val lineNo: (HolderHit) -> Int)
+
 /**
  * 형상 확인. 소재(빗금) 위에 도면(3.5dp), 그 위에 NC 의 프로그램 경로(1.8dp, 진행 화살). 진입점 □ 에서 첫 점까지는 NC 처럼 이송(G01)이라
  * 경로에 넣는다 — 라운드 NC 는 G00 으로 진입점에 온 뒤 끝까지 이송이라 그릴 급송 토막이 없다.
  * 기계 보정(comp = false) = 도면 좌표 프로그램(drawn, 노즈R 0 으로 푼 것) · 접점 ○ 번호. 직접 보정(comp) = 꺾임점의 노즈 원(옅게 칠함)과 가상 인선 꺾쇠 ·
  * 노즈 중심(끊은 선) · 가상 인선 프로그램 · 보정점 • 번호. 원호 중심은 + 와 원호 가운데까지 끊은 지시선, 'R10.000 G02'(직접 보정은 합성 R
- * 'R10.000 → 10.400 G02') 알약 — 화면 반지름이 14dp 보다 작으면 뷰어가 뺀다. inner = 소재가 구멍 쪽(3점호 내경)
+ * 'R10.000 → 10.400 G02') 알약 — 화면 반지름이 14dp 보다 작으면 뷰어가 뺀다. inner = 소재가 구멍 쪽(내경).
+ * holder(내경 보링바)가 있으면 지름 전체 단면(맞은편 벽 · 1dp 뒤집은 도면)에 고른 자리의 바 · 인서트 단면(초록, 입구 끝면 너머는 자름),
+ * 겹친 곳(빨강 α .5), 닿는 경로 구간(빨강 3dp, 경로 밑), 처음 닿는 곳 ✕ '간섭 n줄'. 카드 아래 알약으로 자리를 고른다
  */
 @Composable
-internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: RoundSolution?, inner: Boolean) {
+internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: RoundSolution?, inner: Boolean, holder: HolderShow? = null) {
     val c = AppTheme.colors
     val path = if (comp) sol else drawn
     val nose = comp && r > 0
+    val hits = holder?.result?.hits.orEmpty()
+    // 보링바를 그릴 자리(이름 → 노즈 중심). 처음은 첫 간섭, 닿지 않으면 가장 좁은 곳
+    val poses = holder?.let { holderPoses(it.result, sol, r) }.orEmpty()
+    var pick by remember(holder?.result) { mutableStateOf(0) }
+    val at = poses.getOrNull(pick)?.second
     val lines = buildList {
         add(ViewerLine(sol.drawing, c.drawProfile, 3.5.dp))
+        if (holder != null) {
+            add(ViewerLine(mirrored(sol.drawing), c.drawProfile, 1.dp))
+            if (path != null) for (h in hits) cut(path, h)?.let { add(ViewerLine(it, c.red, 3.dp)) }
+        }
         if (nose) {
             val tv = NoseComp.tipVector(sol.tip, r)
             for (o in (listOf(sol.center.segs.first().start) + sol.center.segs.map { it.end }).distinct()) {
@@ -283,6 +316,23 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
             add(ViewerLine(sol.center, c.viewNose, 1.4.dp, dashed = true))
         }
         if (path != null) add(ViewerLine(Contour(listOf(Line(path.entry, path.program.segs.first().start)) + path.program.segs), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
+        if (holder != null && at != null) {
+            // 바는 입구 끝면 너머 max(3, 깊이 15 %) 에서 자른다 — 뷰어가 바 끝까지 맞추지 않게
+            val zs = sol.drawing.segs.flatMap { listOf(it.start.z, it.end.z) }
+            val reverse = sol.drawing.segs.last().end.z > sol.drawing.segs.first().start.z
+            val maxZ = zs.max() + max(3.0, 0.15 * (zs.max() - zs.min()))
+            for (part in HolderCheck.outline(holder.bar, r, at, maxZ, reverse)) add(ViewerLine(part, c.drawHolder, 1.6.dp, fill = c.drawHolderFill))
+        }
+    }
+    val overlap = if (holder != null && at != null) {
+        HolderCheck.overlap(sol.drawing, holder.faceAtStart, holder.bar, r, at).map { ViewerFill(it, c.red.copy(alpha = .5f)) }
+    } else {
+        emptyList()
+    }
+    // 처음 닿는 곳 ✕ — 줄마다 하나(바 · 인서트 · 공구대 먼저, 최소 가공경만 걸린 줄은 'Dmin')
+    val contacts = if (holder == null) emptyList() else hits.sortedBy { it.part == HolderPart.MIN_BORE }.distinctBy { holder.lineNo(it) }.map { h ->
+        val name = if (h.part == HolderPart.MIN_BORE) "Dmin" else "간섭"
+        ViewerMark(if (comp) h.first.tip else h.first.drawn, c.red, "$name ${holder.lineNo(h)}줄", MarkKind.Cross)
     }
     val points = if (comp) {
         sol.nodes.mapIndexed { i, n -> ViewerMark(n.prog, c.viewPath, "${nodeNo(sol, i)}", MarkKind.Dot) }
@@ -296,7 +346,12 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
         ViewerMark(a.center, c.simArc, text, MarkKind.Cross, arc = sol.drawing.segs[a.index] as Arc)
     }
     val entry = listOfNotNull(path?.let { ViewerMark(it.entry, c.viewRapid, "진입", MarkKind.Square) })
-    val legend = if (comp) {
+    val holderLegend = if (holder == null) {
+        emptyList()
+    } else {
+        listOfNotNull(LegendItem(c.drawHolderFill, "보링바 단면", LegendGlyph.Fill), LegendItem(c.red.copy(alpha = .5f), "간섭", LegendGlyph.Fill).takeIf { hits.isNotEmpty() })
+    }
+    val legend = holderLegend + if (comp) {
         listOfNotNull(
             LegendItem(c.drawProfile, "도면"),
             LegendItem(c.viewNose, "노즈 중심", LegendGlyph.Dashed).takeIf { nose },
@@ -315,10 +370,84 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
         )
     }
     ShapeViewerCard(
-        lines, points + centers + entry, legend,
+        lines, points + centers + entry + contacts, legend,
         subtitle = if (comp) "직접 보정(G40) · 합성 R 궤적 · 팁 ${sol.tip}번" else "기계 보정(${sol.side}) · 도면 좌표",
-        stock = ViewerStock(sol.drawing, inner),
+        stock = ViewerStock(sol.drawing, inner, mirror = holder != null),
+        fills = overlap,
+        footer = if (poses.isEmpty()) null else ({ PosePicker(poses.map { it.first }, pick) { pick = it } }),
     )
+}
+
+/**
+ * 보링바를 그릴 자리 → 노즈 중심: 첫 간섭(바 · 인서트 · 공구대 — 없으면 최소 가공경) · 가장 깊은 곳 · 가장 좁은 곳(바와 벽) ·
+ * 노드 P1…Pn(그 점에 선 공구)
+ */
+private fun holderPoses(res: HolderResult, sol: RoundSolution, r: Double): List<Pair<String, Pt>> {
+    val real = res.hits.filter { it.part != HolderPart.MIN_BORE }.ifEmpty { res.hits }
+    val tv = NoseComp.tipVector(sol.tip, r)
+    return listOfNotNull(
+        real.firstOrNull()?.let { "첫 간섭" to it.first.nose },
+        real.maxByOrNull { it.depth }?.let { "가장 깊은 곳" to it.worst.nose },
+        res.barClearAt?.let { "가장 좁은 곳" to it.nose },
+    ) + sol.nodes.mapIndexed { i, n -> "P${nodeNo(sol, i)}" to n.prog - tv }
+}
+
+/** 닿는 구간: 보이는 경로(path)의 그 요소를 처음 · 마지막 닿는 곳(길이 비율)까지 자른 것. 진입점에 선 자세(−2)는 점이라 없다 */
+private fun cut(path: RoundSolution, h: HolderHit): Contour? {
+    val s = when (h.element) {
+        -2 -> return null
+        -1 -> Line(path.entry, path.program.segs.first().start)
+        else -> path.program.segs.getOrNull(h.element) ?: return null
+    }
+    fun at(t: Double): Pt = when (s) {
+        is Line -> s.start + (s.end - s.start) * t
+        is Arc -> {
+            val a = atan2(s.start.x - s.center.x, s.start.z - s.center.z) + (if (s.cw) -1 else 1) * s.sweepDeg * PI / 180 * t
+            s.center + Pt(cos(a), sin(a)) * s.radius
+        }
+    }
+    val a = at(h.fromT)
+    val b = at(h.toT)
+    return Contour(listOf(if (s is Arc) Arc(a, b, s.center, s.cw) else Line(a, b)))
+}
+
+/** 축(X0)에 뒤집은 윤곽(맞은편 벽) */
+private fun mirrored(c: Contour) = Contour(
+    c.segs.map {
+        when (it) {
+            is Line -> Line(Pt(it.start.z, -it.start.x), Pt(it.end.z, -it.end.x))
+            is Arc -> Arc(Pt(it.start.z, -it.start.x), Pt(it.end.z, -it.end.x), Pt(it.center.z, -it.center.x), !it.cw)
+        }
+    },
+)
+
+/** 보링바 자리 고르기(형상 확인 카드의 단추 줄 아래): 이름 줄 + 가로로 미는 알약(40dp, 고른 것은 청록) */
+@Composable
+private fun PosePicker(names: List<String>, picked: Int, onPick: (Int) -> Unit) {
+    val c = AppTheme.colors
+    Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 8.dp)) {
+        Text("보링바를 그릴 자리", color = c.textMuted, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            names.forEachIndexed { i, name ->
+                val on = i == picked
+                val shape = RoundedCornerShape(50)
+                Box(
+                    Modifier
+                        .minimumInteractiveComponentSize()
+                        .height(40.dp)
+                        .clip(shape)
+                        .background(if (on) c.teal else c.field)
+                        .border(1.5.dp, if (on) c.teal else c.lineField, shape)
+                        .clickable { onPick(i) }
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(name, color = if (on) c.onFill(c.teal) else c.textBody, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+            }
+        }
+    }
 }
 
 /** 원호 하나의 요약(수동 모드): 방향 · R(도면 → 보정) · 중심 · 각 */

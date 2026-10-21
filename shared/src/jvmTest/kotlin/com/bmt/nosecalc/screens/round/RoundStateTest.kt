@@ -2,15 +2,26 @@ package com.bmt.nosecalc.screens.round
 
 import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.ui.graphics.Color
+import com.bmt.nosecalc.calc.Arc
+import com.bmt.nosecalc.calc.BarField
+import com.bmt.nosecalc.calc.BoringBar
+import com.bmt.nosecalc.calc.Fmt
+import com.bmt.nosecalc.calc.HolderCheck
+import com.bmt.nosecalc.calc.HolderPart
+import com.bmt.nosecalc.calc.HolderResult
+import com.bmt.nosecalc.calc.HolderSkip
+import com.bmt.nosecalc.calc.InsertShape
 import com.bmt.nosecalc.calc.L2Ref
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundWarning
-import com.bmt.nosecalc.calc.Arc
+import com.bmt.nosecalc.calc.Side
+import com.bmt.nosecalc.screens.taper.directNc
 import com.bmt.nosecalc.ui.DockStatus
 import com.bmt.nosecalc.ui.oneLine
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -129,16 +140,186 @@ class RoundStateTest {
         assertTrue(comp is DockStatus.Ok)
         assertEquals("P1 X-0.800 Z0.000 · P6 X-0.800 Z-12.800 · 외 4점", comp.oneLine())
         assertEquals("P1 X0.000 Z0.000 · P6 X0.000 Z-12.000 · 외 4점", roundDock(r.solution, shownWarnings(r), 1, comp = false, name = Color.Unspecified)!!.oneLine())
+        // 보링바가 닿으면 확인할 것 하나 더
+        assertEquals(1, (roundDock(r.solution, shownWarnings(r), 1, comp = true, name = Color.Unspecified, holderContact = true) as DockStatus.Warn).count)
         val bad = RoundCalc.calc(roundExample().apply { setDim(2, "l2", "30") }.input(2))
         assertEquals(DockStatus.Error("치수가 서로 맞지 않습니다(0.001 mm 넘게)."), roundDock(bad.solution, shownWarnings(bad), 2, comp = true, name = Color.Unspecified))
         val fresh = RoundCalc.calc(RoundState().input(3))
         assertNull(roundDock(fresh.solution, shownWarnings(fresh), 3, comp = true, name = Color.Unspecified))
     }
 
-    /** 그림은 견본 치수로 만든 윤곽을 그린다 — 풀리지 않으면 카드가 빈다 */
+    /** 그림은 견본 치수로 만든 윤곽을 그린다 — 풀리지 않으면 카드가 빈다. 내경 2~6 · 관통 5 · 6 도 */
     @Test
     fun artSamplesSolve() {
         for (t in 1..6) assertNotNull(RoundCalc.calc(sampleInput(t)).solution, "형상 $t 그림 견본")
+        for (t in 2..6) {
+            for (through in if (t >= 5) listOf(false, true) else listOf(false)) {
+                val sol = RoundCalc.calc(sampleInput(t, inner = true, through = through)).solution
+                assertNotNull(sol, "내경 형상 $t 관통 $through 그림 견본")
+                assertEquals(Side.G41, sol.side)
+            }
+        }
+    }
+
+    /** 내경: 형상 2~6 은 내경 · 팁 null(표준 2) · 입구 구멍 깊이, 관통은 5 · 6 만. 외경으로 돌리면 관통을 켜 둬도 외경 */
+    @Test
+    fun innerInput() {
+        val s = roundInnerExample(3).apply { through = true }
+        for (t in 2..6) {
+            val i = s.input(t)
+            assertTrue(i.inner, "형상 $t")
+            assertNull(i.tip, "형상 $t")
+            assertEquals(10.0, i.legLen)
+            assertEquals(t >= 5, i.through, "형상 $t")
+        }
+        // calc-design 의 내경 손 계산(Ø20 입구 깊이 10, SR12.5, CR1, 0.4R): 팁 2 · G41
+        val sol = RoundCalc.calc(s.input(3)).solution!!
+        assertEquals(2, sol.tip)
+        assertEquals(Side.G41, sol.side)
+        assertEquals(listOf("G00 X20. Z0.6", "G01 Z-0.4", "G01 Z-10.059", "G03 X19.739 Z-10.432 R0.6", "G03 X0.8 Z-15. R12.1"), sol.nc)
+        s.typeInner = false
+        val outer = s.input(5)
+        assertFalse(outer.inner)
+        assertFalse(outer.through)
+        assertEquals(3, RoundCalc.calc(outer).solution!!.tip)
+        // 형상 1 은 내경이 없다(고르기 화면에 없음) — 스위치가 켜져 있어도 외경으로 푼다
+        assertFalse(roundInnerExample(1).input(1).inner)
+    }
+
+    /** 보링바 칸: D · f · 모양 · 날 길이 · κr 가 다 숫자여야 바. 돌출 길이 · DMIN 은 비우면 null */
+    @Test
+    fun holderBarParsing() {
+        val s = RoundState()
+        assertNull(s.holderBar())
+        mapOf("dia" to "16", "f" to "11", "shape" to "C", "edge" to "9", "kr" to "95").forEach { (k, v) -> s.setHolder(k, v) }
+        assertEquals(BoringBar(16.0, 11.0, InsertShape.C, 9.0, 95.0), s.holderBar())
+        s.setHolder("ovh", "40")
+        s.setHolder("dmin", "20")
+        assertEquals(BoringBar(16.0, 11.0, InsertShape.C, 9.0, 95.0, overhang = 40.0, dMin = 20.0), s.holderBar())
+        s.setHolder("ovh", "")
+        assertNull(s.holderBar()!!.overhang)
+        for (k in listOf("dia", "f", "shape", "edge", "kr")) {
+            val keep = s.holder(k)
+            s.setHolder(k, "")
+            assertNull(s.holderBar(), k)
+            // 키패드에서 '−' 만 누른 칸(새 음수 시작)도 아직 숫자가 아니다
+            s.setHolder(k, "-")
+            assertNull(s.holderBar(), k)
+            s.setHolder(k, keep)
+        }
+        assertNotNull(s.holderBar())
+    }
+
+    /** 프리셋 28 줄: 출처(https) · 노즈R 0.4 · 0.8 에서 맞는 값. 고르면 D · f · DMIN · κr · 모양 · 날 길이를 채우고(돌출 길이는 그대로), 고치면 수정됨 */
+    @Test
+    fun presets() {
+        assertEquals(28, HOLDER_PRESETS.size)
+        assertEquals(HOLDER_PRESETS.size, HOLDER_PRESETS.map { it.code }.distinct().size)
+        for (p in HOLDER_PRESETS) {
+            assertTrue(p.url.startsWith("https://"), p.code)
+            for (r in listOf(0.4, 0.8)) assertEquals(emptySet(), HolderCheck.problems(p.bar, r), "${p.code} 노즈R $r")
+        }
+        val s = RoundState()
+        s.setHolder("ovh", "40")
+        s.pickPreset(HOLDER_PRESETS.single { it.code == "A16R-SDUCR 07-R" })
+        assertEquals(listOf("16", "11", "20", "93", "D", "7"), listOf("dia", "f", "dmin", "kr", "shape", "edge").map(s::holder))
+        assertEquals(BoringBar(16.0, 11.0, InsertShape.D, 7.0, 93.0, overhang = 40.0, dMin = 20.0), s.holderBar())
+        assertEquals("www.sandvik.coromant.com", s.preset!!.host)
+        assertFalse(s.presetEdited())
+        s.setHolder("f", "8")
+        assertTrue(s.presetEdited())
+        // 직접 입력으로 돌려도 칸 값은 그대로
+        s.pickPreset(null)
+        assertNull(s.preset)
+        assertFalse(s.presetEdited())
+        assertEquals("8", s.holder("f"))
+        assertEquals("107.5", RoundState().apply { pickPreset(HOLDER_PRESETS.single { it.code == "A16R-SDQCR 07" }) }.holder("kr"))
+    }
+
+    /** 칸 오류 글: f 가 모자라면 f 하한(바 윗면이 노즈보다 낮게) */
+    @Test
+    fun barFieldTexts() {
+        val bar = BoringBar(16.0, 8.0, InsertShape.C, 9.0, 95.0)
+        assertEquals(setOf(BarField.F), HolderCheck.problems(bar, 0.4))
+        // fMin = D/2 + r(1 − cos κr) = 8 + 0.4 × 1.0872
+        assertEquals("f 는 8.435 이상이어야 합니다 (바 윗면이 노즈보다 낮게)", barFieldText(BarField.F, bar, 0.4))
+        assertEquals(setOf(BarField.KAPPA), HolderCheck.problems(bar.copy(f = 11.0, kappaDeg = 100.0), 0.4))
+        assertEquals("절입각 κr 은 90° 이상, 100° 보다 작아야 합니다", barFieldText(BarField.KAPPA, bar.copy(kappaDeg = 100.0), 0.4))
+    }
+
+    /**
+     * 보링바 띠: 내경 손 계산 돔(바 Ø16 · f 11 · C 9.67 · κr 95°)은 구 원호(요소 2)에서 바 · 인서트가 맞은편 벽에 닿는다.
+     * 줄 번호는 NC 카드 그대로(1부터, 직접 보정은 첫 줄 주석까지), 블록은 그 줄 글, 좌표는 직접 보정 = 인선 · 기계 보정 = 도면 점
+     */
+    @Test
+    fun holderBanner() {
+        val s = roundInnerExample(3)
+        val input = s.input(3)
+        val sol = RoundCalc.calc(input).solution!!
+        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
+        val bar = BoringBar(16.0, 11.0, InsertShape.C, 9.67, 95.0)
+        val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, true, bar)
+        val hit = res.hits.first { it.part == HolderPart.BAR }
+        assertTrue(abs(hit.first.tip.z + 11.409) < 3e-3 && abs(hit.first.tip.xDia - 18.006) < 3e-3, "${hit.first.tip}")
+        val direct = directNc(sol.nc, 0.4, sol.tip)
+        val comp = holderNote(res, bar, sol, drawn, comp = true, direct)!!
+        assertTrue(comp.contact)
+        assertEquals("보링바가 소재에 닿습니다 — 2곳", comp.text)
+        assertEquals(setOf(5), comp.flagged)
+        val p = hit.first.tip
+        assertEquals(
+            "6줄 G03 X0.8 Z-15. R12.1 — 바가 맞은편 벽에 닿음: 처음 X${Fmt.fixed3(p.xDia)} Z${Fmt.fixed3(p.z)}, " +
+                "반경 겹침 최대 ${Fmt.fixed3(hit.depth)} mm (인선에서 1.6 mm 뒤)",
+            comp.lines[0],
+        )
+        assertTrue(comp.lines[1].startsWith("6줄 G03 X0.8 Z-15. R12.1 — 인서트가 맞은편 벽에 닿음: 처음 X"), comp.lines[1])
+        val machine = holderNote(res, bar, sol, drawn, comp = false, drawn.nc)!!
+        assertEquals(setOf(4), machine.flagged)
+        val q = hit.first.drawn
+        assertTrue(machine.lines[0].startsWith("5줄 G03 X0. Z-15. R12.5 — 바가 맞은편 벽에 닿음: 처음 X${Fmt.fixed3(q.xDia)} Z${Fmt.fixed3(q.z)}, "), machine.lines[0])
+        // 둘 다 같은 G40 요소 · 같은 NC 블록을 가리킨다
+        assertEquals(4, sol.lineOf(2, p))
+        assertEquals(4, drawn.lineOf(2, q))
+    }
+
+    /** 닿지 않으면 가장 좁은 곳(파란 안내), 바 값이 없으면 넣으라는 안내, 값이 틀리면 띠 없음(칸이 빨갛다), 되돌아가는 원호는 검사 안 함 */
+    @Test
+    fun holderNotes() {
+        val input = roundInnerStep().input(5)
+        val sol = RoundCalc.calc(input).solution!!
+        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
+        val bar = BoringBar(16.0, 11.0, InsertShape.C, 9.67, 95.0)
+        val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, true, bar)
+        assertTrue(res.hits.isEmpty())
+        val n = drawn.lineOf(res.barClearElement!!, res.barClearAt!!.drawn) + 1
+        val clear = holderNote(res, bar, sol, drawn, comp = false, drawn.nc)!!
+        assertFalse(clear.contact)
+        assertEquals("보링바가 소재에 닿지 않습니다. 바와 구멍 벽 사이 가장 좁은 곳 2.970 mm (${n}줄).", clear.text)
+        assertTrue(clear.lines.isEmpty() && clear.flagged.isEmpty())
+        assertEquals("보링바 값을 넣으면 공구가 소재에 닿는지 봅니다.", holderNote(null, null, sol, drawn, comp = false, drawn.nc)!!.text)
+        val bad = bar.copy(f = 8.0)
+        assertNull(holderNote(HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, true, bad), bad, sol, drawn, comp = false, drawn.nc))
+        val loop = HolderResult(HolderSkip.NOT_MONOTONE, emptyList(), null, null, null)
+        assertEquals("원호가 Z 로 되돌아가는 모양이라 홀더 검사를 하지 않습니다.", holderNote(loop, bar, sol, drawn, comp = false, drawn.nc)!!.text)
+    }
+
+    /** 띠는 4 줄까지, 나머지는 '외 n곳'. 최소 가공경은 바 · 인서트 닿음 뒤에 */
+    @Test
+    fun holderBannerOverflow() {
+        val s = roundInnerExample(3).withA16()
+        val input = s.input(3)
+        val sol = RoundCalc.calc(input).solution!!
+        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
+        val bar = s.holderBar()!!
+        val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, true, bar)
+        assertEquals(5, res.hits.size, "${res.hits.map { it.element to it.part }}")
+        val note = holderNote(res, bar, sol, drawn, comp = false, drawn.nc)!!
+        assertEquals("보링바가 소재에 닿습니다 — 5곳", note.text)
+        assertEquals(5, note.lines.size)
+        assertEquals("외 1곳", note.lines.last())
+        assertTrue(note.lines[0].contains("바가 맞은편 벽") && note.lines[1].contains("인서트가 맞은편 벽"), "${note.lines}")
+        assertTrue(note.lines.subList(2, 4).all { it.contains("최소 가공경 Ø20 보다 좁은 곳에 헤드가 들어감: 처음 X") }, "${note.lines}")
+        assertEquals(setOf(2, 3, 4), note.flagged)
     }
 
     @Test
@@ -148,7 +329,11 @@ class RoundStateTest {
         s.l2Ref = L2Ref.A
         s.tip = 2
         s.inner = true
+        s.typeInner = true
+        s.through = true
         s.setPoint("x1", "41.5")
+        s.pickPreset(HOLDER_PRESETS.single { it.code == "S16MSDUCR07" })
+        s.setHolder("ovh", "45")
         val back = with(RoundState.Saver) { restore(SaverScope { true }.save(s)!!)!! }
         assertEquals(2, back.type)
         assertTrue(back.open)
@@ -156,7 +341,12 @@ class RoundStateTest {
         assertEquals(L2Ref.A, back.l2Ref)
         assertEquals(2, back.tip)
         assertTrue(back.inner)
+        assertTrue(back.typeInner)
+        assertTrue(back.through)
         assertEquals("41.5", back.point("x1"))
+        assertEquals("S16MSDUCR07", back.preset?.code)
+        assertEquals(s.holderBar(), back.holderBar())
+        assertEquals(45.0, back.holderBar()!!.overhang)
         back.tip = null
         assertNull(back.tip)
         assertTrue(abs(back.input(2).noseR - 0.4) < 1e-12)

@@ -122,10 +122,11 @@ data class ViewerMark(
 
 /**
  * 소재 단면. 뷰어가 가장 먼저 면 + 45° 빗금으로 칠한다: 외경은 profile 과 중심선 사이, 내경(inner)은 profile 위(뷰어 위 끝까지).
- * 화면 왼쪽 끝(척 쪽)은 extendLeft 면, 오른쪽 끝은 extendRight 면 뷰어 밖까지 늘린다
+ * 화면 왼쪽 끝(척 쪽)은 extendLeft 면, 오른쪽 끝은 extendRight 면 뷰어 밖까지 늘린다.
+ * mirror = 내경의 맞은편 벽도: 축(X0)에 뒤집은 단면을 뷰어 아래 끝까지(지름 전체 단면 — 보링바 간섭)
  */
 @Immutable
-data class ViewerStock(val profile: Contour, val inner: Boolean, val extendLeft: Boolean = true, val extendRight: Boolean = false)
+data class ViewerStock(val profile: Contour, val inner: Boolean, val extendLeft: Boolean = true, val extendRight: Boolean = false, val mirror: Boolean = false)
 
 /** 소재 위에 칠하는 면(깎을 부분 등). 윤곽은 닫힌 것으로 본다 */
 @Immutable
@@ -602,7 +603,8 @@ internal fun DrawScope.mark(kind: MarkKind, p: Offset, color: Color, bg: Color) 
 
 /**
  * 소재 단면: profile(원호는 3° 마다 꺾은선)의 화면 왼쪽 끝을 x = −10px 까지(extendLeft), 오른쪽 끝을 뷰어 밖까지(extendRight) 늘리고
- * 외경은 중심선을 따라, 내경은 뷰어 위 밖(y = −10px)을 따라 닫아 면 + 45° 빗금(9dp 간격)으로 칠한다
+ * 외경은 중심선을 따라, 내경은 뷰어 위 밖(y = −10px)을 따라 닫아 면 + 45° 빗금(9dp 간격)으로 칠한다.
+ * mirror 면 축에 뒤집은 단면을 뷰어 아래 밖(y = 높이 + 10px)까지 닫아 함께 칠한다
  */
 private fun DrawScope.stockSection(st: ViewerStock, v: ViewXf, fill: Color, hatch: Color) {
     val pts = st.profile.segs.flatMap { seg ->
@@ -613,12 +615,17 @@ private fun DrawScope.stockSection(st: ViewerStock, v: ViewXf, fill: Color, hatc
     val out = 10f
     val left = if (st.extendLeft) Offset(min(p.first().x, -out), p.first().y) else p.first()
     val right = if (st.extendRight) Offset(max(p.last().x, size.width + out), p.last().y) else p.last()
-    val close = if (st.inner) -out else v.t.y
+    // 축 아래로 뒤집은 점(화면 y 를 중심선에서 뒤집는다)
+    fun flip(q: Offset) = Offset(q.x, 2 * v.t.y - q.y)
     val section = Path().apply {
-        moveTo(left.x, close)
-        for (q in listOf(left) + p + right) lineTo(q.x, q.y)
-        lineTo(right.x, close)
-        close()
+        // (닫는 높이, 뒤집었나): 윗 단면 · 맞은편 벽
+        for ((edge, flipped) in listOfNotNull((if (st.inner) -out else v.t.y) to false, (size.height + out to true).takeIf { st.mirror })) {
+            val ring = (listOf(left) + p + right).map { if (flipped) flip(it) else it }
+            moveTo(ring.first().x, edge)
+            for (q in ring) lineTo(q.x, q.y)
+            lineTo(ring.last().x, edge)
+            close()
+        }
     }
     // 크게 확대하면 면이 화면보다 훨씬 커진다 — 뷰어 칸으로 잘라 빗금 수를 묶는다
     val view = Path().apply { addRect(Rect(-out, -out, size.width + out, size.height + out)) }

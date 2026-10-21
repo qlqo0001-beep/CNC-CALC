@@ -46,8 +46,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import com.bmt.nosecalc.CompMode
 import com.bmt.nosecalc.LocalAppState
+import com.bmt.nosecalc.calc.BoringBar
 import com.bmt.nosecalc.calc.Fmt
+import com.bmt.nosecalc.calc.HolderCheck
+import com.bmt.nosecalc.calc.HolderResult
 import com.bmt.nosecalc.calc.L2Ref
+import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundSolution
 import com.bmt.nosecalc.calc.RoundWarning
@@ -77,20 +81,24 @@ import com.bmt.nosecalc.ui.theme.Space
 import kotlinx.coroutines.launch
 
 /**
- * TYPE 1~6 입력·결과: 요약 → (계산이 멈추면 그 까닭) → 도면 치수(큰 그림 + 칸)·공구 → 보정 방식 스위치 → 경고 → 노드 표 → 형상 → NC.
+ * TYPE 1~6 입력·결과: 요약 → (계산이 멈추면 그 까닭) → 도면 치수(큰 그림 + 칸)·공구 → (내경) 보링바 → 보정 방식 스위치 → 경고 → 노드 표 → 형상 → NC.
  * 값이 바뀌면 바로 다시 푼다. 기계 보정의 NC 는 같은 윤곽을 노즈R 0 으로 푼 것(= 도면 좌표 프로그램)이다.
- * 치수 · 공구 칸은 한 묶음이라 키패드의 "다음" 으로 이어 넣고, 키패드에는 그 치수 하나만 짚은 그림과 결과 한 줄이 뜬다
+ * 치수 · 공구 · 보링바 칸은 한 묶음이라 키패드의 "다음" 으로 이어 넣고, 키패드에는 그 치수 하나만 짚은 그림과 결과 한 줄이 뜬다.
+ * 내경(고르기 화면 스위치)은 같은 치수의 구멍 — 형상 5 · 6 은 막힘 / 관통, 보링바 칸을 채우면 공구가 소재에 닿는지 본다
  */
 @Composable
 internal fun RoundTypeScreen(s: RoundState, type: Int) {
     val c = AppTheme.colors
     val comp = LocalAppState.current.compMode == CompMode.DIRECT
     val input = s.input(type)
-    val tip = s.tip ?: RoundState.STANDARD_TIP
+    val inner = input.inner
+    val standard = NoseComp.standardTip(inner, false)
+    val tip = s.tip ?: standard
     val result = remember(input) { RoundCalc.calc(input) }
     // 노즈R 0 으로 푼 것 = 도면 좌표 프로그램(기계 보정의 NC · 뷰어 경로)
     val drawn = remember(input) { RoundCalc.calc(input.copy(noseR = 0.0)).solution }
     val sol = result.solution
+    val holder = holderOf(s, sol, input.noseR, inner, faceAtStart = true)
     val blanks = blankable(type)
     val warnings = shownWarnings(result)
     val flagged = warnings.flatMap { roundWarningFields(it, type) }.toSet()
@@ -108,36 +116,38 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
             else -> DimShown("", DimKind.Missing)
         }?.let { f.key to it }
     }.toMap() + ("leg" to DimShown(s.shared("leg").ifEmpty { "5.0" }))
-    val dock = roundDock(sol, warnings, type, comp, empty, c.textStrong)
+    val dock = roundDock(sol, warnings, type, comp, empty, c.textStrong, holder?.result?.hits?.isNotEmpty() == true)
     val preview = dock?.oneLine()
     val chain = rememberFieldChain(s.editing)
+    val through = input.through
     // 키패드 그림: 같은 그림에서 그 치수 하나만 초점색으로
     fun figure(key: String): @Composable (Modifier) -> Unit = { m ->
-        RoundTypeArt(type, m.aspectRatio(193f / 189f), showDatum = true, l2Ref = s.l2Ref, labels = labels, contradiction = flagged, focus = key)
+        RoundTypeArt(type, m.aspectRatio(193f / 189f), showDatum = true, l2Ref = s.l2Ref, labels = labels, contradiction = flagged, focus = key, inner = inner, through = through)
     }
 
     Page(dock, chain.sheetOpen) { anchor ->
-        RoundSummary(type, "외경 · 정방향 가공 (Z−) · ${toolText(s, tip)}") { s.open = false }
-        if (sol == null) Banners(warnings, type, solved = false, empty, anchor) { s.setDim(type, it, "") }
+        RoundSummary(type, "${if (inner) "내경" else "외경"} · 정방향 가공 (Z−) · ${toolText(s, tip)}", inner) { s.open = false }
+        if (sol == null) Banners(warnings, type, solved = false, empty, anchor, inner) { s.setDim(type, it, "") }
 
-        AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
-            CardHeader("도면 치수")
-            ArtFrame(Modifier.widthIn(max = 300.dp).fillMaxWidth().aspectRatio(193f / 189f)) {
-                RoundTypeArt(type, showDatum = true, l2Ref = s.l2Ref, labels = labels, contradiction = flagged)
-            }
-            Text(
-                // ▲ 는 그림의 Z0 표와 같은 색
-                buildAnnotatedString {
-                    withStyle(SpanStyle(color = c.drawT1)) { append("▲") }
-                    append(" Z0 = 오른쪽 끝면 · X 는 지름 · 바이트는 Z− (왼쪽) 으로")
-                },
-                Modifier.fillMaxWidth().padding(top = 6.dp),
-                color = c.textMuted,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-            )
-            Spacer(Modifier.height(14.dp))
-            FieldChainHost(chain) {
+        // 치수 · 공구 카드와 보링바 카드의 칸이 한 키패드 묶음
+        FieldChainHost(chain) {
+            AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
+                CardHeader("도면 치수")
+                ArtFrame(Modifier.widthIn(max = 300.dp).fillMaxWidth().aspectRatio(193f / 189f)) {
+                    RoundTypeArt(type, showDatum = true, l2Ref = s.l2Ref, labels = labels, contradiction = flagged, inner = inner, through = through)
+                }
+                Text(
+                    // ▲ 는 그림의 Z0 표와 같은 색
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = c.drawT1)) { append("▲") }
+                        append(if (inner) " Z0 = 구멍 입구 끝면 · X 는 지름 · 보링바는 Z− (왼쪽) 으로" else " Z0 = 오른쪽 끝면 · X 는 지름 · 바이트는 Z− (왼쪽) 으로")
+                    },
+                    Modifier.fillMaxWidth().padding(top = 6.dp),
+                    color = c.textMuted,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(14.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     dims(type).chunked(2).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -174,6 +184,16 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
                             )
                         }
                     }
+                    if (inner && type >= 5) {
+                        Column {
+                            FieldLabel("구멍 바닥")
+                            Spacer(Modifier.height(6.dp))
+                            Segmented(
+                                listOf("막힘 (바닥까지)", "관통"), if (through) 1 else 0, { s.through = it == 1 },
+                                Modifier.fillMaxWidth(), color = c.teal, height = 42.dp, fontSize = 14,
+                            )
+                        }
+                    }
                 }
                 val dia = dims(type).filter { it.key.startsWith("d") }
                 ExpandableHint(
@@ -191,11 +211,16 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
                     Modifier.padding(top = 8.dp),
                 )
                 Divider()
-                ToolInputs(s, RoundState.STANDARD_TIP, tip, { s.tip = it }, leg = if (type != 1) figure("leg") else null, preview = preview)
+                ToolInputs(
+                    s, standard, tip, { s.tip = it }, leg = if (type != 1) figure("leg") else null, preview = preview,
+                    legName = legLabel(type, inner),
+                    legHint = if (inner && type != 2) "Z0(입구 끝면)에서 첫 이론 꼭짓점까지 · 실제 치수" else "마지막 직선 부분 길이 (그림의 점선 치수) · 비우면 5.0",
+                )
             }
+            if (inner) HolderCard(s, input.noseR, preview)
         }
 
-        Results(sol, warnings, type, comp, input.noseR, drawn, anchor, inner = false)
+        Results(sol, warnings, type, comp, input.noseR, drawn, anchor, inner, holder)
         if (chain.sheetOpen) Spacer(Modifier.height(440.dp))
     }
 }
@@ -220,7 +245,9 @@ internal fun ManualScreen(s: RoundState) {
     val standard = s.manualStandardTip()
     val tip = s.manualTip ?: standard
     val reverse = s.manualReverse()
-    val dock = roundDock(sol, warnings, MANUAL, comp, name = c.textStrong)
+    // 3점호는 입구 끝면을 모른다 — 시작 접선을 거꾸로 늘인다(입구 R 이면 끝면)
+    val holder = holderOf(s, sol, input.noseR, s.inner, faceAtStart = false)
+    val dock = roundDock(sol, warnings, MANUAL, comp, name = c.textStrong, holderContact = holder?.result?.hits?.isNotEmpty() == true)
     val preview = dock?.oneLine()
     val chain = rememberFieldChain(s.editing)
 
@@ -233,13 +260,13 @@ internal fun ManualScreen(s: RoundState) {
         RoundSummary(MANUAL, "${if (s.inner) "내경" else "외경"} · $dir · ${toolText(s, tip)}") { s.open = false }
         if (sol == null) Banners(warnings, MANUAL, solved = false, modifier = anchor)
 
-        AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
-            CardHeader("세 점")
-            Segmented(listOf("외경", "내경"), if (s.inner) 1 else 0, { s.inner = it == 1 }, Modifier.fillMaxWidth(), color = c.teal, height = 44.dp)
-            Spacer(Modifier.height(12.dp))
-            ArtFrame(Modifier.fillMaxWidth().height(200.dp)) { ManualArt(withText = true, inner = s.inner, reverse = reverse) }
-            Spacer(Modifier.height(14.dp))
-            FieldChainHost(chain) {
+        FieldChainHost(chain) {
+            AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
+                CardHeader("세 점")
+                Segmented(listOf("외경", "내경"), if (s.inner) 1 else 0, { s.inner = it == 1 }, Modifier.fillMaxWidth(), color = c.teal, height = 44.dp)
+                Spacer(Modifier.height(12.dp))
+                ArtFrame(Modifier.fillMaxWidth().height(200.dp)) { ManualArt(withText = true, inner = s.inner, reverse = reverse) }
+                Spacer(Modifier.height(14.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     listOf(1 to "시작", 2 to "가운데", 3 to "끝").forEach { (i, name) ->
                         // 키패드 그림: 그 점만 초점색으로
@@ -258,9 +285,10 @@ internal fun ManualScreen(s: RoundState) {
                 Divider()
                 ToolInputs(s, standard, tip, { s.manualTip = it }, leg = null, preview = preview)
             }
+            if (s.inner) HolderCard(s, input.noseR, preview)
         }
 
-        Results(sol, warnings, MANUAL, comp, input.noseR, drawn, anchor, inner = s.inner)
+        Results(sol, warnings, MANUAL, comp, input.noseR, drawn, anchor, s.inner, holder)
         if (chain.sheetOpen) Spacer(Modifier.height(440.dp))
     }
 }
@@ -297,7 +325,7 @@ private fun Page(dock: DockStatus?, sheetOpen: Boolean, content: @Composable Col
 
 /**
  * 결과 띠 · 키패드 결과 한 줄: 풀리면 지금 보정 방식의 노드 좌표(comp = 직접 보정 → 보정 좌표 파랑, 기계 보정 → 도면 좌표 name 색)와
- * 노란 경고 수, 멈췄으면 첫 경고의 첫 문장. 이름은 name 색. 값이 모자라는 동안(파란 안내)은 null — 띠도 한 줄도 없다
+ * 노란 경고 수(보링바가 닿으면 하나 더 — holderContact), 멈췄으면 첫 경고의 첫 문장. 이름은 name 색. 값이 모자라는 동안(파란 안내)은 null — 띠도 한 줄도 없다
  */
 internal fun roundDock(
     sol: RoundSolution?,
@@ -306,6 +334,7 @@ internal fun roundDock(
     comp: Boolean,
     empty: Set<String> = emptySet(),
     name: Color,
+    holderContact: Boolean = false,
 ): DockStatus? {
     if (sol == null) {
         val w = warnings.firstOrNull()?.takeIf { it != RoundWarning.MISSING_INPUT } ?: return null
@@ -317,8 +346,23 @@ internal fun roundDock(
         val p = if (comp) n.prog else n.drawn
         DockRow("P${nodeNo(sol, i)}", Fmt.fixed3(p.xDia), Fmt.fixed3(p.z), name, if (comp) null else name)
     }
-    val warn = warnings.count { warnLevel(it, type, solved = true) == WarnLevel.Warn }
+    val warn = warnings.count { warnLevel(it, type, solved = true) == WarnLevel.Warn } + (if (holderContact) 1 else 0)
     return if (warn > 0) DockStatus.Warn(warn, rows) else DockStatus.Ok(rows)
+}
+
+/**
+ * 내경 결과의 보링바: bar = 칸 값(모자라면 null), result = 검사(풀이 · 바가 없으면 null).
+ * faceAtStart = 도면 시작이 구멍 입구 끝면(TYPE 화면). 3점호는 시작 접선을 거꾸로 늘여 입구를 찾는다
+ */
+private class Holder(val bar: BoringBar?, val result: HolderResult?, val faceAtStart: Boolean)
+
+/** 내경이면 보링바 칸을 읽어 검사한다(외경은 null — 보링바 칸 · 띠가 없다). r = 노즈 R */
+@Composable
+private fun holderOf(s: RoundState, sol: RoundSolution?, r: Double, inner: Boolean, faceAtStart: Boolean): Holder? {
+    if (!inner) return null
+    val bar = s.holderBar()
+    val result = remember(sol, bar) { if (sol != null && bar != null) HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, r, faceAtStart, bar) else null }
+    return Holder(bar, result, faceAtStart)
 }
 
 /** 요약 끝 공구 글: 노즈 R(쓴 그대로) · 팁 번호. 붙임 공백 · 낱말 이음(\u2060)으로 "팁 3번" 이 쪼개져 줄바꿈되지 않게 */
@@ -337,7 +381,7 @@ private fun ColumnScope.ArtFrame(modifier: Modifier, content: @Composable BoxSco
 
 /**
  * 경고 띠 색: 값 부족은 파란 안내, 계산이 멈춘 것은 빨강, 숫자와 함께 나온 것은 노랑.
- * 다만 형상 1 · 2 · 4 의 바이트 반대쪽 면(이 형상들은 늘 뜬다)은 파란 한 줄로 접어 둔다
+ * 다만 형상 1 · 2 · 4 의 바이트 반대쪽 면(이 형상들은 늘 뜬다 — 내경 2 · 4 는 입구 쪽 면)은 파란 한 줄로 접어 둔다
  */
 private fun warnLevel(w: RoundWarning, type: Int, solved: Boolean): WarnLevel = when {
     w == RoundWarning.MISSING_INPUT -> WarnLevel.Info
@@ -346,7 +390,7 @@ private fun warnLevel(w: RoundWarning, type: Int, solved: Boolean): WarnLevel = 
     else -> WarnLevel.Warn
 }
 
-/** 경고 띠([warnLevel] 색). 값 부족은 넣을 칸 이름을 들고, 모순으로 멈췄으면 비울 수 있는 칸마다 '… 비우기' 단추 */
+/** 경고 띠([warnLevel] 색). 값 부족은 넣을 칸 이름을 들고, 모순으로 멈췄으면 비울 수 있는 칸마다 '… 비우기' 단추. inner = 내경 형상 */
 @Composable
 private fun Banners(
     warnings: List<RoundWarning>,
@@ -354,6 +398,7 @@ private fun Banners(
     solved: Boolean,
     empty: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
+    inner: Boolean = false,
     onBlank: (String) -> Unit = {},
 ) {
     if (warnings.isEmpty()) return
@@ -362,9 +407,13 @@ private fun Banners(
         warnings.forEach { w ->
             val level = warnLevel(w, type, solved)
             WarningBanner(
-                roundWarningText(w, type, empty),
+                roundWarningText(w, type, empty, inner),
                 level = level,
-                collapsedText = if (w == RoundWarning.AGAINST_TOOL && level == WarnLevel.Info) "바이트 반대쪽 면 있음 (척 쪽 면) — 눌러서 자세히" else null,
+                collapsedText = if (w == RoundWarning.AGAINST_TOOL && level == WarnLevel.Info) {
+                    "바이트 반대쪽 면 있음 (${if (inner) "입구" else "척"} 쪽 면) — 눌러서 자세히"
+                } else {
+                    null
+                },
                 actions = if (w == RoundWarning.CONTRADICTION && !solved) blankable(type).map { key -> "${names.getValue(key)} 비우기" to { onBlank(key) } } else emptyList(),
             )
         }
@@ -373,10 +422,20 @@ private fun Banners(
 
 /**
  * 노즈R · Z 여유 · 끝 직선 길이(TYPE 2~6) · 팁 번호 — TYPE 끼리 함께 쓴다.
- * leg = 끝 직선 길이 칸의 키패드 그림(null 이면 그 칸이 없다 — 형상 1 · 3점호), preview = 키패드 결과 한 줄
+ * leg = 끝 직선 길이 칸의 키패드 그림(null 이면 그 칸이 없다 — 형상 1 · 3점호), preview = 키패드 결과 한 줄.
+ * legName · legHint = 그 칸 이름과 키패드 안내(내경 3~6 은 입구 구멍 깊이)
  */
 @Composable
-private fun ToolInputs(s: RoundState, standardTip: Int, tip: Int, onTip: (Int?) -> Unit, leg: (@Composable (Modifier) -> Unit)?, preview: String?) {
+private fun ToolInputs(
+    s: RoundState,
+    standardTip: Int,
+    tip: Int,
+    onTip: (Int?) -> Unit,
+    leg: (@Composable (Modifier) -> Unit)?,
+    preview: String?,
+    legName: String = "",
+    legHint: String = "",
+) {
     NoseRPicker(s.shared("noseR")) { s.setShared("noseR", it) }
     Spacer(Modifier.height(14.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -386,8 +445,8 @@ private fun ToolInputs(s: RoundState, standardTip: Int, tip: Int, onTip: (Int?) 
         )
         if (leg != null) {
             NumberField(
-                "끝 직선 길이", s.shared("leg"), { s.setShared("leg", it) }, Modifier.weight(1f),
-                unit = "mm", placeholder = "5.0", hint = "마지막 직선 부분 길이 (그림의 점선 치수) · 비우면 5.0", id = "leg", figure = leg, preview = preview,
+                legName, s.shared("leg"), { s.setShared("leg", it) }, Modifier.weight(1f),
+                unit = "mm", placeholder = "5.0", hint = legHint, id = "leg", figure = leg, preview = preview,
             )
         } else {
             TipField(tip, standardTip, onTip, Modifier.weight(1f))
@@ -400,9 +459,9 @@ private fun ToolInputs(s: RoundState, standardTip: Int, tip: Int, onTip: (Int?) 
 }
 
 /**
- * 보정 방식 스위치(테이퍼와 같은 자리 · 같은 값) → 원호(3점호) → 숫자와 함께 나온 경고 → 노드 표(anchor — 결과 띠가 가리킨다) → 형상 →
- * NC(comp = 직접 보정이면 보정 좌표, 아니면 도면 좌표). 계산이 멈췄으면 없다(까닭은 요약 아래).
- * drawn = 노즈R 0 으로 푼 것(도면 좌표 프로그램), inner = 소재가 구멍 쪽(3점호 내경)
+ * 보정 방식 스위치(테이퍼와 같은 자리 · 같은 값) → 원호(3점호) → 숫자와 함께 나온 경고 → 보링바 띠(내경) → 노드 표(anchor — 결과 띠가 가리킨다) →
+ * 형상 → NC(comp = 직접 보정이면 보정 좌표, 아니면 도면 좌표 — 보링바가 닿는 줄은 빨갛게). 계산이 멈췄으면 없다(까닭은 요약 아래).
+ * drawn = 노즈R 0 으로 푼 것(도면 좌표 프로그램), inner = 소재가 구멍 쪽(내경), holder = 내경의 보링바
  */
 @Composable
 private fun Results(
@@ -414,22 +473,37 @@ private fun Results(
     drawn: RoundSolution?,
     anchor: Modifier,
     inner: Boolean,
+    holder: Holder?,
 ) {
     if (sol == null) return
     CompModeSwitch(sol.side)
     if (type == MANUAL) ArcCard(sol)
-    Banners(warnings, type, solved = true)
+    Banners(warnings, type, solved = true, inner = inner)
+    // NC 카드에 주는 목록(직접 보정은 첫 줄 주석부터) — 보링바 띠의 줄 번호 · 빨간 줄이 이것을 센다
+    val nc = if (comp) directNc(sol.nc, noseR, sol.tip) else drawn?.nc
+    val note = if (holder != null && nc != null) holderNote(holder.result, holder.bar, sol, drawn, comp, nc) else null
+    if (note != null) {
+        WarningBanner((listOf(note.text) + note.lines.map { "· $it" }).joinToString("\n"), level = if (note.contact) WarnLevel.Warn else WarnLevel.Info)
+    }
     NodeTable(sol, comp, anchor)
-    RoundViewer(sol, comp, noseR, drawn, inner)
-    val legNote = if (type in 2..6) " 마지막 줄은 끝 직선의 끝(끝 직선 길이)까지입니다." else ""
+    val shown = holder?.result?.takeIf { it.skip == null }
+    val prog = if (comp) sol else drawn
+    RoundViewer(
+        sol, comp, noseR, drawn, inner,
+        if (shown != null && holder.bar != null && prog != null) HolderShow(holder.bar, shown, holder.faceAtStart) { cardLine(prog, comp, it.element, it.first) + 1 } else null,
+    )
+    // 내경 3~6 은 끝 직선이 입구 구멍(처음)이라 마지막 줄은 바닥
+    val legNote = if (type in 2..6 && !(inner && type != 2)) " 마지막 줄은 끝 직선의 끝(끝 직선 길이)까지입니다." else ""
     val r = Fmt.nc(noseR).removeSuffix(".")
+    val flagged = note?.flagged.orEmpty()
     if (comp) {
         NcCard(
-            directNc(sol.nc, noseR, sol.tip),
+            nc!!,
             "가상 인선 팁 ${sol.tip}번 기준 프로그램 좌표입니다 — 기계의 노즈R 보정은 쓰지 않습니다(G40). 원호 R 은 합성 R(볼록 R + r · 오목 R − r)이고, " +
                 "90° 넘는 원호는 나눠 썼습니다. 첫 줄 주석이 그 노즈 R · 팁을 적어 둡니다(기계는 주석을 건너뜁니다). 이송 F 는 넣지 않았습니다.$legNote",
             programName = "직접 보정(G40) 프로그램",
             facts = listOf(NcFact("G41/G42 걸지 말 것 (이중 보정)", WarnLevel.Error), NcFact("원호 = 합성 R"), NcFact("이송 F 없음")),
+            flagged = flagged,
         )
     } else if (drawn != null) {
         NcCard(
@@ -442,6 +516,7 @@ private fun Results(
                 NcFact("공구 보정: R $r · T ${sol.tip}", WarnLevel.Warn),
                 NcFact("이송 F 없음"),
             ),
+            flagged = flagged,
         )
     }
 }

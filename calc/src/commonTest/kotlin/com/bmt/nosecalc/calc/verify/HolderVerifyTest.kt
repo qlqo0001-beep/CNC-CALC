@@ -54,7 +54,7 @@ import kotlin.time.TimeSource
 class HolderVerifyTest {
     private val stats = Stats()
 
-    /** 설계 문서의 손 계산 A~F · 문턱 · 뒤보링과 무작위 내경 TYPE 2~6 300개(5 · 6 은 넷에 하나 관통) */
+    /** 설계 문서의 손 계산 A~F · 문턱 · 화면 프리셋 바와 무작위 내경 TYPE 2~6 300개(5 · 6 은 넷에 하나 관통) */
     @Test
     fun innerTypes() {
         val rep = Report("보링바 · 내경 TYPE")
@@ -74,6 +74,9 @@ class HolderVerifyTest {
             RoundInput(type = 4, mainR = 8.0, d1 = 10.0, cornerR1 = 1.0, legLen = 5.0) to BoringBar(8.0, 4.5, InsertShape.D, 7.75, 93.0),
             step.copy(through = true) to BoringBar(20.0, 20.01, InsertShape.C, 9.67, 95.0),
             step.copy(through = true) to BoringBar(20.0, 19.99, InsertShape.C, 9.67, 95.0),
+            // 화면 스크린샷 · 골든의 프리셋 A16R-SCLCR 09(Ø16 · f 11 · C 9 · κr 95° · DMIN 20)
+            dome to A16,
+            step.copy(through = true) to A16,
         )
         for ((inp, bar) in fixed) runType(rep, inp.copy(inner = true, noseR = 0.4, zClear = 1.0), bar)
         val rnd = Random(2024)
@@ -88,7 +91,7 @@ class HolderVerifyTest {
         rep.finish()
     }
 
-    /** 3점호 내경: 정방향 150 · 뒤보링(역방향) 150 무작위, Z 로 되돌아가는 원호 30(검사 안 함이 맞나), 뒤보링 손 계산 */
+    /** 3점호 내경: 정방향 150 · 뒤보링(역방향) 150 무작위, Z 로 되돌아가는 원호 30(검사 안 함이 맞나), 뒤보링 손 계산 · 입구 R(화면 프리셋 바도) */
     @Test
     fun arcs() {
         val rep = Report("보링바 · 3점호 내경")
@@ -98,6 +101,7 @@ class HolderVerifyTest {
         // 입구 R5(Ø30 면 → Ø20 구멍), 시작 접선이 수직 — 입구 면을 아는 3점호
         val mouth = Arc3Input(inner = true, noseR = 0.4, x1 = 30.0, z1 = 0.0, x2 = 22.929, z2 = -1.464, x3 = 20.0, z3 = -5.0, zClear = 1.0)
         runArc(rep, mouth, BoringBar(16.0, 11.0, InsertShape.C, 9.67, 95.0, overhang = 30.0))
+        runArc(rep, mouth, A16)
         val rnd = Random(77)
         for (kind in listOf(Kind.FORWARD, Kind.REVERSE, Kind.LOOP)) repeat(if (kind == Kind.LOOP) 30 else 150) {
             val r = NOSE_RS[rnd.nextInt(NOSE_RS.size)]
@@ -311,6 +315,9 @@ private const val BLOCK = 128
 private val INF = Double.POSITIVE_INFINITY
 private val PARTS = HolderPart.entries
 private val NOSE_RS = listOf(0.0, 0.2, 0.4, 0.8)
+
+/** 화면 프리셋 A16R-SCLCR 09 (스크린샷 · 골든의 바): Ø16 · f 11 · C 9(품번 크기 숫자) · κr 95° · DMIN 20 */
+private val A16 = BoringBar(16.0, 11.0, InsertShape.C, 9.0, 95.0, dMin = 20.0)
 
 private fun r3(v: Double) = (v * 1000).roundToLong() / 1000.0
 

@@ -5,16 +5,23 @@ import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.GrooveCalc
 import com.bmt.nosecalc.calc.GrooveInput
 import com.bmt.nosecalc.calc.GrooveRef
+import com.bmt.nosecalc.calc.HolderCheck
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RightTriangle
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundResult
+import com.bmt.nosecalc.calc.RoundSolution
 import com.bmt.nosecalc.calc.Side
 import com.bmt.nosecalc.screens.round.MANUAL
 import com.bmt.nosecalc.screens.round.RoundState
+import com.bmt.nosecalc.screens.round.holderNote
 import com.bmt.nosecalc.screens.round.roundExample
+import com.bmt.nosecalc.screens.round.roundInnerExample
+import com.bmt.nosecalc.screens.round.roundInnerStep
+import com.bmt.nosecalc.screens.round.roundManualInnerMouth
 import com.bmt.nosecalc.screens.round.roundManualInnerRev
+import com.bmt.nosecalc.screens.round.withA16
 import com.bmt.nosecalc.screens.taper.SlopeForm
 import com.bmt.nosecalc.screens.taper.TaperKind
 import com.bmt.nosecalc.screens.taper.TaperSolve
@@ -101,6 +108,15 @@ class UiGoldenTest {
         manual("round-manual-empty", RoundState(type = MANUAL, open = true))
     }
 
+    /** 내경 라운드와 보링바 띠 글 · 빨간 NC 줄(스크린샷과 같은 상태): 손 계산 돔(바 없음 · 프리셋 A16R-SCLCR 09), 관통 단차(안 닿음), 3점호 입구 R */
+    @Test
+    fun roundInner() {
+        roundType("round-inner-b3", roundInnerExample(3), 3)
+        roundType("round-inner-b3-holder", roundInnerExample(3).withA16(), 3)
+        roundType("round-inner-b5-through-holder-clear", roundInnerStep().withA16(), 5)
+        manual("round-manual-inner-holder", roundManualInnerMouth().withA16())
+    }
+
     @Test
     fun triangle() {
         triangle("triangle-empty", TriangleState())
@@ -180,16 +196,35 @@ class UiGoldenTest {
     /** RoundTypeScreen: RoundState.input(type), 도면 좌표 NC = 노즈R 0 */
     private fun roundType(name: String, s: RoundState, type: Int) {
         val input = s.input(type)
-        roundText(name, RoundCalc.calc(input), RoundCalc.calc(input.copy(noseR = 0.0)).solution?.nc, input.noseR, "팁 T${input.tip}")
+        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution
+        val tip = input.tip ?: NoseComp.standardTip(input.inner, false)
+        roundText(name, RoundCalc.calc(input), drawn, input.noseR, if (input.inner) "내경 팁 T$tip" else "팁 T$tip", s.takeIf { input.inner }, faceAtStart = true)
     }
 
     /** ManualScreen: RoundState.arc3(), 도면 좌표 NC = 노즈R 0 */
     private fun manual(name: String, s: RoundState) {
         val input = s.arc3()
-        roundText(name, RoundCalc.arc3(input), RoundCalc.arc3(input.copy(noseR = 0.0)).solution?.nc, input.noseR, "표준 팁 T${s.manualStandardTip()}")
+        roundText(name, RoundCalc.arc3(input), RoundCalc.arc3(input.copy(noseR = 0.0)).solution, input.noseR, "표준 팁 T${s.manualStandardTip()}", s.takeIf { input.inner }, faceAtStart = false)
     }
 
-    private fun roundText(name: String, r: RoundResult, drawnNc: List<String>?, noseR: Double, head: String) {
+    /** 보링바(내경에서 바 값이 있을 때): 화면의 holderNote 그대로 — 기계 보정 · 직접 보정의 띠 글과 빨간 NC 줄(1부터) */
+    private fun StringBuilder.holderText(s: RoundState, sol: RoundSolution, drawn: RoundSolution?, noseR: Double, faceAtStart: Boolean) {
+        val bar = s.holderBar() ?: return
+        val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, noseR, faceAtStart, bar)
+        line("보링바 $bar")
+        for (comp in listOf(false, true)) {
+            val nc = if (comp) directNc(sol.nc, noseR, sol.tip) else drawn?.nc ?: continue
+            val note = holderNote(res, bar, sol, drawn, comp, nc) ?: continue
+            line(if (comp) "띠 직접 보정" else "띠 기계 보정")
+            line("  ${note.text}")
+            note.lines.forEach { line("  · $it") }
+            line("  빨간 줄 ${note.flagged.sorted().map { it + 1 }}")
+        }
+    }
+
+    /** inner = 내경 화면의 상태(보링바 칸이 있다), 외경은 null */
+    private fun roundText(name: String, r: RoundResult, drawn: RoundSolution?, noseR: Double, head: String, inner: RoundState?, faceAtStart: Boolean) {
+        val drawnNc = drawn?.nc
         val text = buildString {
             line(head)
             line("경고 ${r.warnings}")
@@ -208,6 +243,7 @@ class UiGoldenTest {
             directNc(sol.nc, noseR, sol.tip).forEach { line("  $it") }
             line("NC 도면 좌표")
             drawnNc?.forEach { line("  $it") }
+            inner?.let { holderText(it, sol, drawn, noseR, faceAtStart) }
         }
         golden(name, text)
     }

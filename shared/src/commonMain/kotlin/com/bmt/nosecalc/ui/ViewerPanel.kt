@@ -64,7 +64,7 @@ enum class LegendGlyph { Line, Dashed, Dotted, Ring, Dot, Square, Cross, Circle,
 data class LegendItem(val color: Color, val label: String, val glyph: LegendGlyph = LegendGlyph.Line)
 
 /**
- * 형상 확인 카드: 머리(제목 + 부제 + 크게 보기) · [ShapeViewer] · 단추 줄(− + 맞춤) · 범례.
+ * 형상 확인 카드: 머리(제목 + 부제 + 크게 보기) · [ShapeViewer] · 단추 줄(− + 맞춤) · footer(그림을 고르는 줄 등) · 범례.
  * 그림 높이는 그림 상자 비율을 따른다 — 폭 × 세로/가로(0.45~1.1) + 76dp 를 220~400dp(넓은 PC 창은 520dp)로.
  * 납작한 테이퍼는 낮은 상자, 높은 형상은 높은 상자가 되어 빈 곳이 줄어든다. 크게 보기도 같은 보기(state)를 쓴다
  */
@@ -79,6 +79,7 @@ fun ShapeViewerCard(
     stock: ViewerStock? = null,
     fills: List<ViewerFill> = emptyList(),
     state: ViewerState = rememberViewerState(),
+    footer: (@Composable () -> Unit)? = null,
 ) {
     val bounds = remember(lines, marks) { boundsOf(lines, marks) }
     var full by remember { mutableStateOf(false) }
@@ -92,6 +93,7 @@ fun ShapeViewerCard(
             ShapeViewer(lines, Modifier.fillMaxWidth().height(h), marks, state, stock = stock, fills = fills)
         }
         ViewerToolbar(state)
+        footer?.invoke()
         ViewerLegend(legend, Modifier.padding(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 12.dp))
     }
     if (full) ViewerFullScreen(lines, marks, legend, title, subtitle, stock, fills, state) { full = false }

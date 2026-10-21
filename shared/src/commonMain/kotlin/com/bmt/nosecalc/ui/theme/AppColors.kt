@@ -37,6 +37,7 @@ data class FeatureColors(val title: Color, val menu: Color)
  * | viewGridMajor (보조선) | 1.4 | 1.5 | 뷰어 |
  * | viewLabelT1 | 4.5 | 11.1 | 뷰어 |
  * | viewLabelT2 | 4.9 | 9.9 | 뷰어 |
+ * | drawHolder | 4.5 | 10.6 | 뷰어 |
  * | onToast / toast | 12.8 | 13.1 | 토스트 |
  * | info.label · info.value | 6.2 · 9.5 | 6.6 · 11.8 | info.bg |
  * | warn.label · error.label (띠 머리말 글) | 4.8 · 5.7 | 9.4 · 6.3 | 각 띠 bg |
@@ -138,6 +139,9 @@ data class AppColors(
     /** 뷰어 안 T1 · T2 이름표 */
     val viewLabelT1: Color,
     val viewLabelT2: Color,
+    /** 보링바(홀더) 단면: 윤곽선 · 면(같은 색 α .16) — 빨강(간섭) · 노랑 · 경로 보라 · 노즈 파랑과 갈리는 초록 */
+    val drawHolder: Color,
+    val drawHolderFill: Color,
     /** 라운드 TYPE 칩(04): 홀수 하늘 · 짝수 민트(bg · border · label = 글자) */
     val chipSky: RoleColors,
     val chipMint: RoleColors,
@@ -219,6 +223,8 @@ val LightColors = AppColors(
     viewGridMajor = Color(0xFFC8D0DB),
     viewLabelT1 = Color(0xFFB45309),
     viewLabelT2 = Color(0xFF0F766E),
+    drawHolder = Color(0xFF15803D),
+    drawHolderFill = Color(0x2915803D),
     chipSky = RoleColors(Color(0xFFFFFFFF), Color(0xFFA5F3FC), Color(0xFF155E75), Color(0xFF155E75)),
     chipMint = RoleColors(Color(0xFFFFFFFF), Color(0xFFA7F3D0), Color(0xFF065F46), Color(0xFF065F46)),
     features = mapOf(
@@ -313,6 +319,8 @@ val DarkColors = AppColors(
     viewGridMajor = Color(0xFF26364D),
     viewLabelT1 = Color(0xFFFBBF24),
     viewLabelT2 = Color(0xFF2DD4BF),
+    drawHolder = Color(0xFF4ADE80),
+    drawHolderFill = Color(0x294ADE80),
     chipSky = RoleColors(Color(0xFF10242E), Color(0xFF1E6A80), Color(0xFF67E8F9), Color(0xFF67E8F9)),
     chipMint = RoleColors(Color(0xFF0E241F), Color(0xFF1C7A5C), Color(0xFF6EE7B7), Color(0xFF6EE7B7)),
     features = mapOf(

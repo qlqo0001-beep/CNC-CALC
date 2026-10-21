@@ -29,6 +29,7 @@ import com.bmt.nosecalc.screens.round.RoundTypeArt
 import com.bmt.nosecalc.screens.round.blankable
 import com.bmt.nosecalc.screens.round.dims
 import com.bmt.nosecalc.screens.round.roundExample
+import com.bmt.nosecalc.screens.round.roundInnerExample
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.Space
@@ -62,6 +63,22 @@ class RoundArtShotsTest {
         Shots.both("art-round-labels", heightDp = 1680, widthDp = 632) { AppHost(it) { Grid(cases, 300.dp) } }
     }
 
+    /**
+     * 내경 그림: 고르기 카드(193dp) · 입력 화면 Z0 ▲ 와 ○(300dp) · 예시 값(입구 구멍 깊이 10, 비운 칸 자동) · 관통 5 · 6 ·
+     * 키패드 초점(형상 3 의 칸마다)
+     */
+    @Test
+    fun inner() {
+        val ex = roundInnerExample(3)
+        val through = roundInnerExample(3).apply { through = true }
+        val cases = (2..6).map { "내경 형상 $it" to Case(it, ex, labels = false) } +
+            (2..6).map { "내경 형상 $it · 값" to Case(it, ex) } +
+            (5..6).map { "내경 형상 $it · 관통" to Case(it, through) } +
+            (dims(3).map { it.key to it.label } + ("leg" to "입구 구멍 깊이")).map { (key, label) -> "내경 3 · $label" to Case(3, ex, focus = key) }
+        Shots.both("art-round-inner", heightDp = 2600, widthDp = 632) { AppHost(it) { Grid(cases, 193.dp) } }
+        Shots.both("art-round-inner-wide", heightDp = 1700, widthDp = 632) { AppHost(it) { Grid(cases.subList(5, 12), 300.dp) } }
+    }
+
     /** 키패드 그림(높이 150dp): 형상 2 · 5 의 칸마다 초점 하나 */
     @Test
     fun focus() {
@@ -72,7 +89,8 @@ class RoundArtShotsTest {
     }
 }
 
-private class Case(val type: Int, val s: RoundState, val focus: String? = null)
+/** labels = false 면 고르기 카드처럼 이름만(Z0 ▲ · ○ 없이) */
+private class Case(val type: Int, val s: RoundState, val focus: String? = null, val labels: Boolean = true)
 
 @Composable
 private fun Widths(widths: List<Dp>, showDatum: Boolean) {
@@ -108,14 +126,21 @@ private fun Grid(cases: List<Pair<String, Case>>, w: Dp) {
                         Text(name, Modifier.height(20.dp), style = AppType.caption, color = c.textMuted)
                         val result = RoundCalc.calc(k.s.input(k.type))
                         Box(Modifier.width(w).aspectRatio(193f / 189f).clip(shape).background(c.card).border(1.dp, c.lineCard, shape)) {
-                            RoundTypeArt(
-                                k.type,
-                                showDatum = k.focus == null,
-                                l2Ref = k.s.l2Ref,
-                                labels = shown(k.s, k.type),
-                                contradiction = if (RoundWarning.CONTRADICTION in result.warnings) blankable(k.type).toSet() else emptySet(),
-                                focus = k.focus,
-                            )
+                            val inner = k.s.typeInner && k.type != 1
+                            if (!k.labels) {
+                                RoundTypeArt(k.type, inner = inner, through = inner && k.s.through)
+                            } else {
+                                RoundTypeArt(
+                                    k.type,
+                                    showDatum = k.focus == null,
+                                    l2Ref = k.s.l2Ref,
+                                    labels = shown(k.s, k.type),
+                                    contradiction = if (RoundWarning.CONTRADICTION in result.warnings) blankable(k.type).toSet() else emptySet(),
+                                    focus = k.focus,
+                                    inner = inner,
+                                    through = inner && k.s.through,
+                                )
+                            }
                         }
                     }
                 }

@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -45,8 +46,10 @@ import com.bmt.nosecalc.ui.theme.AppColors
 import com.bmt.nosecalc.ui.theme.AppTheme
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -67,6 +70,8 @@ internal class DimShown(val text: String, val kind: DimKind = DimKind.Given)
  * - labels: 치수 key(mainR · cr1 · cr2 · d1 · d2 · l1 · l2 · leg) → 이름 옆에 쓸 값. 있으면 끝 직선 길이(leg) 치수도 그린다
  * - contradiction: 서로 맞지 않는 치수 key — 이름 · 값을 빨강 + 점선 밑줄
  * - focus: 키패드 그림. 그 key 의 치수 하나만 초점색 · 굵은 선 · 알약 이름으로 그리고 다른 치수는 뺀다
+ * inner = 같은 치수의 구멍(형상 2~6): 금속 덩어리(구멍 깊이 + 8 %, 반경 × 1.25)에서 구멍을 뺀 단면 — 구멍은 옅은 바탕, 깎는 윤곽은 굵게.
+ * Z0 은 오른쪽 구멍 입구 끝면, 지름 치수는 구멍 안, 길이는 입구에서 안쪽으로. through = 관통(5 · 6) — 금속 왼쪽 끝까지 뚫린다
  */
 @Composable
 internal fun RoundTypeArt(
@@ -77,18 +82,36 @@ internal fun RoundTypeArt(
     labels: Map<String, DimShown>? = null,
     contradiction: Set<String> = emptySet(),
     focus: String? = null,
+    inner: Boolean = false,
+    through: Boolean = false,
 ) {
     val c = AppTheme.colors
     val measurer = rememberTextMeasurer()
     val sans = AppTheme.sans
-    val shape = remember(type) { RoundCalc.calc(sampleInput(type)).solution?.drawing }
+    val shape = remember(type, inner, through) { RoundCalc.calc(sampleInput(type, inner, through)).solution?.drawing }
     Canvas(modifier) {
-        if (shape != null) ArtPen(this, c, measurer, sans, showDatum, l2Ref, labels, contradiction, focus).draw(type, shape)
+        if (shape == null) return@Canvas
+        val pen = ArtPen(this, c, measurer, sans, showDatum, l2Ref, labels, contradiction, focus)
+        if (inner) pen.drawInner(type, shape) else pen.draw(type, shape)
     }
 }
 
-/** 그림용 견본 치수(04 의 비율). 노즈R 0 — 윤곽만 쓴다 */
-internal fun sampleInput(type: Int): RoundInput = when (type) {
+/**
+ * 그림용 견본 치수(04 의 비율). 노즈R 0 — 윤곽만 쓴다. 내경은 같은 모양의 구멍이되 입구 구멍(끝 직선)을 길게 —
+ * 둘레 금속까지 넣은 칸이 너무 높지 않게(형상 5 · 6 은 작은 구멍 L1 도). through = 관통(5 · 6 만)
+ */
+internal fun sampleInput(type: Int, inner: Boolean = false, through: Boolean = false): RoundInput {
+    val outer = outerSample(type)
+    if (!inner || type == 1) return outer
+    return when (type) {
+        3 -> outer.copy(legLen = 20.0)
+        5 -> outer.copy(legLen = 14.0, l1 = 7.0)
+        6 -> outer.copy(legLen = 14.0, l1 = 6.0)
+        else -> outer
+    }.copy(inner = true, through = through && type >= 5)
+}
+
+private fun outerSample(type: Int): RoundInput = when (type) {
     1 -> RoundInput(1, mainR = 10.0, cornerR1 = 1.0, l1 = 14.8, noseR = 0.0)
     2 -> RoundInput(2, mainR = 8.0, cornerR1 = 0.8, d1 = 5.5, l1 = 4.5, l2Ref = L2Ref.B, noseR = 0.0, legLen = 4.5)
     3 -> RoundInput(3, mainR = 11.5, cornerR1 = 1.0, d1 = 20.0, noseR = 0.0, legLen = 11.8)
@@ -135,16 +158,20 @@ private class ArtPen(
 
     fun px(v: Dp) = px(v.value)
 
-    // 그림 자리: 윤곽의 Z 범위를 폭 비율 x0..x1 에, 축을 높이 비율 cy 에 둔다
+    // 그림 자리: 윤곽의 Z 범위를 폭 비율 x0..x1 에, 축을 높이 비율 cy 에 둔다(내경은 금속 덩어리의 왼쪽 끝 zLeft 를 x0 에)
     var x0 = 0f
     var s = 1f
     var zMin = 0.0
+    var zLeft = 0.0
     var cy = 0f
 
     /** 윤곽의 가장 높은 반경(부품 맨 위) */
     var peak = 0.0
 
-    fun at(z: Double, x: Double) = Offset(x0 * w + ((z - zMin) * s).toFloat(), cy * h - (x * s).toFloat())
+    /** 끝 직선이 실제 치수(내경 3~6 의 입구 구멍 깊이) — 옅게 하지 않는다 */
+    var realLeg = false
+
+    fun at(z: Double, x: Double) = Offset(x0 * w + ((z - zLeft) * s).toFloat(), cy * h - (x * s).toFloat())
 
     fun draw(type: Int, shape: Contour) {
         val upper = Probe.points(shape)
@@ -161,6 +188,7 @@ private class ArtPen(
         x0 = left
         cy = axis
         s = ((right - left) * w / (0.0 - zMin)).toFloat()
+        zLeft = zMin
         body(shape, upper)
         if (showDatum) datum()
         // 치수는 견본 치수의 이론 꼭짓점(모서리 R 을 넣기 전)에 단다 — 길이 L·L1·L2 가 그 점 사이라서
@@ -256,6 +284,160 @@ private class ArtPen(
         }
     }
 
+    /**
+     * 내경(같은 치수의 구멍): 금속 덩어리 → 구멍 → 치수. 견본은 [sampleInput] 의 내경(입구 Z0 이 오른쪽, 깊이는 왼쪽).
+     * 덩어리 칸(폭 · 높이 비율)에 맞춰 배율을 정하고 가운데 둔다. 지름은 구멍 안 세로 치수(보조선 없음 — 짧으면 이름이 위 끝 너머, 금속 위),
+     * 길이는 입구에서 안쪽으로 덩어리 아래 줄마다(보조선이 아래 벽에서 내려가고 이름은 치수선 위 — 입구 구멍 깊이가 첫 줄),
+     * R 이름은 덩어리 위 한 줄에서 내려 짚는다(겹치지 않게 좌우로 민다). 형상 2 는 공 홈이 커서 R 이름이 홈 안,
+     * 공 뒤 구멍(그림만)은 외경처럼 위 옅은 점선. 형상 5 · 6 의 주 R 은 큰 구멍 안에서 아래 구면을 짚는다
+     */
+    fun drawInner(type: Int, shape: Contour) {
+        val upper = Probe.points(shape)
+        zMin = upper.minOf { it.z }
+        peak = upper.maxOf { it.x }
+        // 관통(형상 2 · 5 · 6 관통)이면 구멍이 금속 왼쪽 끝까지
+        val open = upper.last().x > 1e-6
+        zLeft = zMin - 0.08 * -zMin
+        val half = 1.25 * peak
+        // 덩어리 칸: 왼쪽 · 오른쪽 · 위 · 아래 비율(위는 R 이름 줄, 아래는 길이 치수 줄 — 형상 2 · 5 · 6 은 셋, 3 · 4 는 둘)
+        val (l, r, t, b) = listOf(.08f, .92f, .18f, if (type == 3 || type == 4) .68f else .62f)
+        s = minOf((r - l) * w / (0.0 - zLeft), (b - t) * h / (2 * half)).toFloat()
+        x0 = (l + r) / 2 - ((0.0 - zLeft) * s / 2 / w).toFloat()
+        cy = (t + b) / 2
+        realLeg = type != 2
+        innerBody(upper, half, open)
+        if (showDatum) datum()
+        val i = sampleInput(type, inner = true)
+        // 치수 줄(금속 아래 끝에서 줄마다 .1), R 이름 줄(금속 위 끝 위)
+        val bottom = at(0.0, -half).y / h
+        fun row(n: Int) = bottom + .1f * n
+        val above = at(0.0, half).y / h - .08f
+        fun onSphere(zc: Double, rr: Double, rad: Double) = at(zc + rr * cos(rad), rr * sin(rad))
+        // z 의 화면 폭 비율 — 구멍 안 지름 치수(보조선 없이 −r ~ r) · 구멍 안 R 이름 자리
+        fun fx(z: Double) = at(z, 0.0).x / w
+        when (type) {
+            2 -> {
+                val rr = i.mainR!!
+                val a = i.d1!! / 2
+                val l1 = i.l1!!
+                val halfL = sqrt(rr * rr - a * a)
+                val zc = -l1 - halfL
+                val zl = zc - halfL
+                // 공 홈 안: 위에 모서리 R(입구 쪽 이음점), 아래에 주 R(아래 구면)
+                leader("cr1", "모서리 R", fx(zc + .15 * rr), at(0.0, .45 * rr).y / h, at(-l1, a))
+                leader("mainR", "주 R", fx(zc), at(0.0, -.45 * rr).y / h, onSphere(zc, rr, -2.2))
+                vDim("d1", "D1", fx(-l1 / 2), -l1 / 2, a)
+                rowDim("l1", "L1", 0.0, -a, -l1, -a, row(1))
+                rowDim("l2", "L2 (B)", -l1, -a, zl, -a, row(2), L2Ref.B)
+                rowDim("l2", "L2 (A)", 0.0, -a, zl, -a, row(3), L2Ref.A)
+                leg(zl, a)
+                vertex(-l1, a, Pt(1.0, 0.0), along(zc, -l1, a, left = true))
+                vertex(zl, a, Pt(-1.0, 0.0), along(zc, zl, a, left = false))
+            }
+            3, 4 -> {
+                val rr = i.mainR!!
+                val hh = i.d1!! / 2
+                val leg = i.legLen
+                val ll = rr + (if (type == 4) 1 else -1) * sqrt(rr * rr - hh * hh)
+                val zc = rr - ll - leg
+                vDim("d1", "D", fx(-leg / 2), -leg / 2, hh)
+                leaders(above, Triple("mainR", "주 R", onSphere(zc, rr, if (type == 3) 2.75 else 2.0)), Triple("cr1", "모서리 R", at(-leg, hh)))
+                rowDim("leg", "입구 구멍 깊이", 0.0, -hh, -leg, -hh, row(1))
+                rowDim("l1", "L", -leg, -hh, zMin, 0.0, row(2))
+                vertex(-leg, hh, Pt(1.0, 0.0), along(zc, -leg, hh, left = true))
+            }
+            else -> {
+                val a = i.d1!! / 2
+                val bb = i.d2!! / 2
+                val l1 = i.l1!!
+                val l2 = i.l2!!
+                val leg = i.legLen
+                // 구면(돔)이 작은 구멍과 만나는 z, 구 중심 · R, 입구 쪽 이음점(형상 5 = 큰 구멍 끝, 6 = 바닥 면 위 돔 밑동)
+                val zs = -leg - l2
+                val rr: Double
+                val zc: Double
+                if (type == 5) {
+                    val u = ((bb * bb - a * a) / l2 + l2) / 2
+                    rr = sqrt(u * u + a * a)
+                    zc = zs + u
+                } else {
+                    rr = i.mainR!!
+                    zc = zs + sqrt(rr * rr - a * a)
+                }
+                val joint = if (type == 5) Pt(-leg, bb) else Pt(-leg, sqrt(rr * rr - (zc + leg) * (zc + leg)))
+                vDim("d2", "D2", fx(-leg / 2), -leg / 2, bb)
+                vDim("d1", "D1", fx(zs - l1 / 2), zs - l1 / 2, a)
+                leaders(above, Triple("cr1", "모서리 R(1)", at(zs, a)), Triple("cr2", "모서리 R(2)", at(joint.z, joint.x)))
+                leader("mainR", "주 R", fx(-leg * .55), at(0.0, -.6 * bb).y / h, onSphere(zc, rr, -(PI - asin(a / rr)) + .45))
+                rowDim("leg", "입구 구멍 깊이", 0.0, -bb, -leg, -bb, row(1))
+                rowDim("l2", "L2", -leg, -joint.x, zs, -a, row(2))
+                rowDim("l1", "L1", zs, -a, zMin, -a, row(3))
+                vertex(-leg, joint.x, if (type == 5) Pt(1.0, 0.0) else Pt(0.0, 1.0), along(zc, joint.z, joint.x, left = true))
+                vertex(zs, a, Pt(-1.0, 0.0), along(zc, zs, a, left = false))
+            }
+        }
+    }
+
+    /**
+     * R 이름 한 줄(높이 비율 ly): 이름 가운데를 짚는 점 x 에 두되, 왼쪽부터 서로 6dp 띄워 오른쪽으로 밀고 칸을 넘으면 왼쪽으로 당긴다.
+     * 초점 모드에서 빠지는 이름은 자리를 차지하지 않는다
+     */
+    private fun leaders(ly: Float, vararg items: Triple<String, String, Offset>) {
+        val gap = with(d) { 6.dp.toPx() }
+        val pad = with(d) { 4.dp.toPx() }
+        val shown = items.mapNotNull { item -> look(item.first, item.second)?.let { item to measurer.measure(it.text, it.style).size.width.toFloat() } }
+            .sortedBy { it.first.third.x }
+        val left = FloatArray(shown.size) { shown[it].first.third.x - shown[it].second / 2 }
+        for (k in left.indices) {
+            left[k] = left[k].coerceAtLeast(if (k == 0) pad else left[k - 1] + shown[k - 1].second + gap)
+        }
+        for (k in left.indices.reversed()) {
+            val limit = if (k == left.lastIndex) w - pad else left[k + 1] - gap
+            left[k] = left[k].coerceAtMost(limit - shown[k].second)
+        }
+        shown.forEachIndexed { k, (item, width) -> leader(item.first, item.second, (left[k] + width / 2) / w, ly, item.third) }
+    }
+
+    /**
+     * 가로 치수 한 줄(내경): (za, xa)·(zb, xb) 에서 높이 비율 y 의 치수선까지 보조선, 양 끝 채운 화살, 이름은 치수선 위 가운데.
+     * 치수보다 길면 왼쪽 끝에서 오른쪽(입구 쪽)으로 — 아래 줄의 보조선(더 안쪽)을 덮지 않게 — 칸 안으로 민다. 모순이면 이름 밑 빨간 점선
+     */
+    private fun rowDim(key: String, name: String, za: Double, xa: Double, zb: Double, xb: Double, y: Float, ref: L2Ref? = null) {
+        val look = look(key, name, ref) ?: return
+        val yy = y * h
+        val (lp, rp) = listOf(at(za, xa), at(zb, xb)).sortedBy { it.x }
+        val width = px(DrawSpec.dim) * look.weight
+        for (p in listOf(lp, rp)) ext(p, yy, look.line, px(DrawSpec.ext) * look.weight)
+        d.drawLine(look.line, Offset(lp.x, yy), Offset(rp.x, yy), width)
+        val arrow = px(DrawSpec.arrowLen) * look.weight
+        d.arrowHead(Offset(lp.x, yy), Offset(-1f, 0f), look.line, arrow)
+        d.arrowHead(Offset(rp.x, yy), Offset(1f, 0f), look.line, arrow)
+        val size = measurer.measure(look.text, look.style).size
+        val tl = Offset(inside(max((lp.x + rp.x - size.width) / 2, lp.x), size.width, look), yy - px(1f) - size.height)
+        val box = d.haloText(measurer, look.text, look.style, look.halo, ks, topLeft = tl, pill = look.focused)
+        if (look.wrong) underline(box)
+    }
+
+    /**
+     * 내경 몸통: 금속 덩어리(zLeft ~ 0, ±half) 에서 구멍(깎는 윤곽 + 축 아래로 뒤집은 것, 뚫렸으면 덩어리 왼쪽 끝까지)을 빼고
+     * 금속 그라데이션 · 옅은 둘레선. 구멍은 옅은 바탕, 중심선은 덩어리 양끝을 10dp 넘긴다. 깎는 윤곽(위 벽)은 가장 굵은 선
+     */
+    private fun innerBody(upper: List<Pt>, half: Double, open: Boolean) {
+        val wall = if (open) upper + Pt(zLeft, upper.last().x) else upper
+        val bore = poly(wall + wall.asReversed().map { Pt(it.z, -it.x) }).apply { close() }
+        val block = Path().apply { addRect(Rect(at(zLeft, half), at(0.0, -half))) }
+        val metal = Path().apply { op(block, bore, PathOperation.Difference) }
+        val m = c.drawMetal
+        val y0 = at(0.0, half).y
+        val y1 = at(0.0, -half).y
+        d.drawPath(metal, Brush.verticalGradient(0f to m[0], .28f to m[1], .5f to m[2], .78f to m[3], 1f to m[4], startY = y0, endY = y1))
+        d.drawPath(bore, c.subtle)
+        d.drawPath(metal, c.drawMetalEdge.copy(alpha = .6f), style = Stroke(px(1.1f), join = StrokeJoin.Round))
+        val over = Offset(px(10f), 0f)
+        d.centerLine(at(zLeft, 0.0) - over, at(0.0, 0.0) + over, c.drawRef.copy(alpha = .85f), ks)
+        d.drawPath(poly(wall), c.drawProfile, style = Stroke(px(2f), join = StrokeJoin.Round))
+    }
+
     /** 윤곽 점(z, x)을 이은 꺾은선 */
     private fun poly(pts: List<Pt>) = Path().apply {
         pts.forEachIndexed { i, p -> at(p.z, p.x).let { if (i == 0) moveTo(it.x, it.y) else lineTo(it.x, it.y) } }
@@ -343,7 +525,7 @@ private class ArtPen(
         if (focus != null && (key != focus || other)) return null
         val focused = focus != null
         val wrong = key in contradiction && !other
-        val muted = key == "leg" && !focused
+        val muted = key == "leg" && !focused && !realLeg
         val text = buildAnnotatedString {
             val weight = when {
                 focused || (ref != null && ref == l2Ref) -> FontWeight.Bold
