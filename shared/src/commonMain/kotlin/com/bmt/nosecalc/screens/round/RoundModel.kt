@@ -102,10 +102,14 @@ internal class RoundState(
     fun shared(name: String): String = values["s/$name"] ?: RoundDefaults.shared(name)
     fun setShared(name: String, v: String) { values["s/$name"] = v }
 
-    /** 팁 번호 직접 지정. null = 표준(TYPE 은 외경 3 · 내경 2, 수동은 외경·내경·방향에 따라) */
+    /**
+     * TYPE 화면의 팁 번호 직접 지정. null = 표준(외경 3 · 내경 2). 외경 · 내경([typeInner]) 따로 둔다 —
+     * 외경에서 고른 팁이 내경 보링(G41)으로 넘어가지 않게(테이퍼도 가공 종류마다 따로)
+     */
     var tip: Int?
-        get() = values["tip"]?.toIntOrNull()
-        set(v) { values["tip"] = v?.toString() ?: "" }
+        get() = values[tipKey]?.toIntOrNull()
+        set(v) { values[tipKey] = v?.toString() ?: "" }
+    private val tipKey get() = if (typeInner) "tip/inner" else "tip"
 
     /** TYPE 화면(고르기 화면 스위치): 내경 = 같은 치수의 구멍(형상 2~6, 보링바 · 팁 2 · G41) */
     var typeInner: Boolean
@@ -351,7 +355,7 @@ internal fun holderNote(res: HolderResult?, bar: BoringBar?, sol: RoundSolution,
     val hits = res.hits.sortedBy { it.part == HolderPart.MIN_BORE }
     val texts = hits.map { h ->
         val from = line(h.element, h.first)
-        holderHitText(h, from + 1, line(h.element, h.last) + 1, nc[from], comp, bar)
+        holderHitText(h, from + 1, line(h.element, h.last) + 1, nc[from], comp, bar, backBoring(sol))
     }
     val flagged = hits.flatMap { line(it.element, it.first)..line(it.element, it.last) }.toSet()
     val shown = texts.take(4) + listOfNotNull("외 ${texts.size - 4}곳".takeIf { texts.size > 4 })
@@ -364,11 +368,15 @@ internal fun holderNote(res: HolderResult?, bar: BoringBar?, sol: RoundSolution,
  */
 internal fun cardLine(prog: RoundSolution, comp: Boolean, e: Int, p: HolderPose): Int = prog.lineOf(e, if (comp) p.tip else p.drawn) + (if (comp) 1 else 0)
 
+/** 뒤보링: 도면이 +Z 로 간다(3점호 역방향 내경) — 보링바 검사와 같은 판정 */
+internal fun backBoring(sol: RoundSolution): Boolean = sol.drawing.segs.last().end.z > sol.drawing.segs.first().start.z
+
 /**
  * 닿는 곳 한 줄: 'a~b줄 NC 블록 — 무엇이 어디에 닿음: 처음 X… Z…, …'. 줄은 1부터, block = 첫 줄의 NC 글.
- * 좌표는 comp(직접 보정)면 가상 인선, 아니면 노즈가 닿는 도면 점. 인서트 · 바는 반경 겹침과 그 점이 인선에서 Z 로 얼마나 뒤(뒤보링은 앞)인지
+ * 좌표는 comp(직접 보정)면 가상 인선, 아니면 노즈가 닿는 도면 점. 인서트 · 바는 반경 겹침과 그 점이 인선에서 이송 방향으로 앞 · 뒤 얼마인지 —
+ * 정방향은 +Z 가 뒤, 뒤보링(reverse — 이송 +Z)은 +Z 가 앞
  */
-internal fun holderHitText(hit: HolderHit, lineFrom: Int, lineTo: Int, block: String, comp: Boolean, bar: BoringBar): String {
+internal fun holderHitText(hit: HolderHit, lineFrom: Int, lineTo: Int, block: String, comp: Boolean, bar: BoringBar, reverse: Boolean): String {
     val lines = if (lineFrom == lineTo) "${lineFrom}줄" else "$lineFrom~${lineTo}줄"
     val p = if (comp) hit.first.tip else hit.first.drawn
     val at = "처음 X${Fmt.fixed3(p.xDia)} Z${Fmt.fixed3(p.z)}"
@@ -376,7 +384,7 @@ internal fun holderHitText(hit: HolderHit, lineFrom: Int, lineTo: Int, block: St
         HolderPart.INSERT, HolderPart.BAR -> {
             val part = if (hit.part == HolderPart.BAR) "바" else "인서트"
             val wall = if (hit.opposite) "맞은편 벽" else "깎는 쪽 벽"
-            val side = if (hit.behind < 0) "앞" else "뒤"
+            val side = if ((hit.behind < 0) != reverse) "앞" else "뒤"
             "${part}가 ${wall}에 닿음: $at, 반경 겹침 최대 ${Fmt.fixed3(hit.depth)} mm (인선에서 ${fixed1(abs(hit.behind))} mm $side)"
         }
         HolderPart.TURRET -> "공구대가 소재 끝면에 닿음: $at, 돌출 길이가 ${Fmt.fixed3(hit.depth)} mm 모자람"

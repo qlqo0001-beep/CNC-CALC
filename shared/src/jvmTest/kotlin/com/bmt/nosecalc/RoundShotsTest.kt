@@ -7,10 +7,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import com.bmt.nosecalc.calc.HolderCheck
+import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.screens.RoundScreen
 import com.bmt.nosecalc.screens.round.HolderCard
+import com.bmt.nosecalc.screens.round.HolderShow
 import com.bmt.nosecalc.screens.round.MANUAL
 import com.bmt.nosecalc.screens.round.RoundState
+import com.bmt.nosecalc.screens.round.RoundViewer
+import com.bmt.nosecalc.screens.round.cardLine
 import com.bmt.nosecalc.screens.round.roundExample
 import com.bmt.nosecalc.screens.round.roundInnerExample
 import com.bmt.nosecalc.screens.round.roundInnerStep
@@ -106,6 +112,24 @@ class RoundShotsTest {
             AppHost(it) {
                 val s = remember { roundInnerExample(3).withA16().apply { setHolder("f", "8") } }
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Space.gutter)) { HolderCard(s, 0.4) }
+            }
+        }
+    }
+
+    /** 형상 확인 크게 보기(돔 + A16R-SCLCR 09, 기계 보정): 카드 머리 오른쪽 '크게 보기' 를 눌러 연다 — 보링바 자리 고르기도 아래 단추 줄과 함께 */
+    @Test
+    fun holderFull() {
+        Shots.both("round-inner-holder-full", setup = { it.open(Feature.ROUND) }, tapDp = Offset(366f, 50f)) {
+            AppHost(it) {
+                val s = remember { roundInnerExample(3).withA16() }
+                val input = s.input(3)
+                val sol = remember { RoundCalc.calc(input).solution!! }
+                val drawn = remember { RoundCalc.calc(input.copy(noseR = 0.0)).solution!! }
+                val bar = s.holderBar()!!
+                val res = remember { HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, input.noseR, true, bar) }
+                Column(Modifier.fillMaxSize().padding(Space.gutter)) {
+                    RoundViewer(sol, false, input.noseR, drawn, true, HolderShow(bar, res, true) { h -> cardLine(drawn, false, h.element, h.first) + 1 })
+                }
             }
         }
     }

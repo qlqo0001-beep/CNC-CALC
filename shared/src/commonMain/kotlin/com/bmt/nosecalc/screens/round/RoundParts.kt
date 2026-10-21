@@ -76,7 +76,6 @@ import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.onFill
 import kotlin.math.PI
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
@@ -304,7 +303,7 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
         add(ViewerLine(sol.drawing, c.drawProfile, 3.5.dp))
         if (holder != null) {
             add(ViewerLine(mirrored(sol.drawing), c.drawProfile, 1.dp))
-            if (path != null) for (h in hits) cut(path, h)?.let { add(ViewerLine(it, c.red, 3.dp)) }
+            if (path != null) for (h in hits) contactBand(path, h, comp)?.let { add(ViewerLine(it, c.red, 3.dp)) }
         }
         if (nose) {
             val tv = NoseComp.tipVector(sol.tip, r)
@@ -319,16 +318,14 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
         if (holder != null && at != null) {
             // 바는 입구 끝면 너머 max(3, 깊이 15 %) 에서 자른다 — 뷰어가 바 끝까지 맞추지 않게
             val zs = sol.drawing.segs.flatMap { listOf(it.start.z, it.end.z) }
-            val reverse = sol.drawing.segs.last().end.z > sol.drawing.segs.first().start.z
             val maxZ = zs.max() + max(3.0, 0.15 * (zs.max() - zs.min()))
-            for (part in HolderCheck.outline(holder.bar, r, at, maxZ, reverse)) add(ViewerLine(part, c.drawHolder, 1.6.dp, fill = c.drawHolderFill))
+            for (part in HolderCheck.outline(holder.bar, r, at, maxZ, backBoring(sol))) add(ViewerLine(part, c.drawHolder, 1.6.dp, fill = c.drawHolderFill))
         }
     }
-    val overlap = if (holder != null && at != null) {
-        HolderCheck.overlap(sol.drawing, holder.faceAtStart, holder.bar, r, at).map { ViewerFill(it, c.red.copy(alpha = .5f)) }
-    } else {
-        emptyList()
-    }
+    // 겹친 곳은 띠마다 소재를 다시 재므로 자리 · 바가 바뀔 때만(키패드가 열리고 닫힐 때 다시 세지 않게)
+    val overlap = remember(sol.drawing, holder?.bar, holder?.faceAtStart, r, at) {
+        if (holder != null && at != null) HolderCheck.overlap(sol.drawing, holder.faceAtStart, holder.bar, r, at) else emptyList()
+    }.map { ViewerFill(it, c.red.copy(alpha = .5f)) }
     // 처음 닿는 곳 ✕ — 줄마다 하나(바 · 인서트 · 공구대 먼저, 최소 가공경만 걸린 줄은 'Dmin')
     val contacts = if (holder == null) emptyList() else hits.sortedBy { it.part == HolderPart.MIN_BORE }.distinctBy { holder.lineNo(it) }.map { h ->
         val name = if (h.part == HolderPart.MIN_BORE) "Dmin" else "간섭"
@@ -392,22 +389,20 @@ private fun holderPoses(res: HolderResult, sol: RoundSolution, r: Double): List<
     ) + sol.nodes.mapIndexed { i, n -> "P${nodeNo(sol, i)}" to n.prog - tv }
 }
 
-/** 닿는 구간: 보이는 경로(path)의 그 요소를 처음 · 마지막 닿는 곳(길이 비율)까지 자른 것. 진입점에 선 자세(−2)는 점이라 없다 */
-private fun cut(path: RoundSolution, h: HolderHit): Contour? {
-    val s = when (h.element) {
-        -2 -> return null
-        -1 -> Line(path.entry, path.program.segs.first().start)
-        else -> path.program.segs.getOrNull(h.element) ?: return null
+/**
+ * 닿는 구간: 보이는 경로(path)의 그 요소에서 처음 · 마지막 닿는 곳 사이 — comp(직접 보정)는 가상 인선 점, 기계 보정은 노즈가 닿는 도면 점
+ * (✕ 표와 같은 곳. 도면 좌표 경로의 요소는 보정 경로와 길이가 달라 길이 비율로는 어긋난다). 진입 이동(−1)은 길이 비율로, 진입점에 선 자세(−2)는 점이라 없다
+ */
+internal fun contactBand(path: RoundSolution, h: HolderHit, comp: Boolean): Contour? {
+    if (h.element < 0) {
+        if (h.element == -2) return null
+        val a = path.entry
+        val d = path.program.segs.first().start - a
+        return Contour.polyline(a + d * h.fromT, a + d * h.toT)
     }
-    fun at(t: Double): Pt = when (s) {
-        is Line -> s.start + (s.end - s.start) * t
-        is Arc -> {
-            val a = atan2(s.start.x - s.center.x, s.start.z - s.center.z) + (if (s.cw) -1 else 1) * s.sweepDeg * PI / 180 * t
-            s.center + Pt(cos(a), sin(a)) * s.radius
-        }
-    }
-    val a = at(h.fromT)
-    val b = at(h.toT)
+    val s = path.program.segs.getOrNull(h.element) ?: return null
+    val a = if (comp) h.first.tip else h.first.drawn
+    val b = if (comp) h.last.tip else h.last.drawn
     return Contour(listOf(if (s is Arc) Arc(a, b, s.center, s.cw) else Line(a, b)))
 }
 

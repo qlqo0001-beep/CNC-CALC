@@ -7,11 +7,14 @@ import com.bmt.nosecalc.calc.BarField
 import com.bmt.nosecalc.calc.BoringBar
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.HolderCheck
+import com.bmt.nosecalc.calc.HolderHit
 import com.bmt.nosecalc.calc.HolderPart
+import com.bmt.nosecalc.calc.HolderPose
 import com.bmt.nosecalc.calc.HolderResult
 import com.bmt.nosecalc.calc.HolderSkip
 import com.bmt.nosecalc.calc.InsertShape
 import com.bmt.nosecalc.calc.L2Ref
+import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundWarning
 import com.bmt.nosecalc.calc.Side
@@ -186,6 +189,22 @@ class RoundStateTest {
         assertFalse(roundInnerExample(1).input(1).inner)
     }
 
+    /** 팁 번호는 외경 · 내경 따로(표준이 3 · 2 로 다르다) — 외경에서 고른 팁이 내경 보링으로 넘어가지 않는다 */
+    @Test
+    fun tipPerSide() {
+        val s = roundExample(3, open = true)
+        s.tip = 4
+        assertEquals(4, s.input(3).tip)
+        s.typeInner = true
+        assertNull(s.tip)
+        assertNull(s.input(3).tip)
+        assertEquals(2, RoundCalc.calc(s.input(3)).solution!!.tip)
+        s.tip = 6
+        assertEquals(6, s.input(3).tip)
+        s.typeInner = false
+        assertEquals(4, s.input(3).tip)
+    }
+
     /** 보링바 칸: D · f · 모양 · 날 길이 · κr 가 다 숫자여야 바. 돌출 길이 · DMIN 은 비우면 null */
     @Test
     fun holderBarParsing() {
@@ -322,14 +341,56 @@ class RoundStateTest {
         assertEquals(setOf(2, 3, 4), note.flagged)
     }
 
+    /**
+     * 뒤보링(3점호 역방향 내경)은 이송이 +Z 라 인선보다 +Z 쪽(바 쪽)이 '앞'. 화면 예 X50 Z−10 → X30 Z0 에 Ø40 · f 25 바 —
+     * 바가 입구 Ø30 을 못 지나 진입부터 닿는다(인선보다 11 mm 앞), 입구에 거의 다 와서는 바 앞 끝이 인선보다 조금 뒤에서
+     */
+    @Test
+    fun backBoringSaysAhead() {
+        val hit = HolderHit(
+            0, HolderPart.BAR, HolderPose(Pt(-5.0, 10.0), Pt(-4.6, 9.6), Pt(-5.0, 10.0)), HolderPose(Pt(-1.0, 12.0), Pt(-0.6, 11.6), Pt(-1.0, 12.0)),
+            HolderPose(Pt(-1.0, 12.0), Pt(-0.6, 11.6), Pt(-1.0, 12.0)), 0.2, 1.0, 0.5, true, 2.04,
+        )
+        val bar = BoringBar(40.0, 25.0, InsertShape.C, 9.0, 95.0)
+        assertTrue(holderHitText(hit, 3, 3, "G03 X30. Z0. R10.", comp = true, bar, reverse = false).endsWith("(인선에서 2.0 mm 뒤)"))
+        assertTrue(holderHitText(hit, 3, 3, "G03 X30. Z0. R10.", comp = true, bar, reverse = true).endsWith("(인선에서 2.0 mm 앞)"))
+        assertTrue(holderHitText(hit.copy(behind = -0.3), 3, 3, "G03 X30. Z0. R10.", comp = true, bar, reverse = true).endsWith("(인선에서 0.3 mm 뒤)"))
+
+        val input = roundManualInnerRev().arc3()
+        val sol = RoundCalc.arc3(input).solution!!
+        val drawn = RoundCalc.arc3(input.copy(noseR = 0.0)).solution!!
+        val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, false, bar)
+        assertTrue(res.hits.isNotEmpty() && res.hits.all { it.part == HolderPart.BAR } && res.hits.any { it.behind > 1 }, "${res.hits.map { it.part to it.behind }}")
+        val note = holderNote(res, bar, sol, drawn, comp = false, drawn.nc)!!
+        assertEquals(res.hits.size, note.lines.size)
+        for ((h, line) in res.hits.zip(note.lines)) assertTrue(line.endsWith("mm ${if (h.behind > 0) "앞" else "뒤"})"), "${h.behind} $line")
+    }
+
+    /** 형상 확인의 빨간 경로 구간: 직접 보정은 가상 인선, 기계 보정은 도면 좌표 경로에서 노즈가 닿는 도면 점 사이(✕ 표와 같은 곳) */
+    @Test
+    fun contactBandFollowsShownPath() {
+        val s = roundInnerExample(3).withA16()
+        val input = s.input(3)
+        val sol = RoundCalc.calc(input).solution!!
+        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
+        val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, true, s.holderBar()!!)
+        for (h in res.hits.filter { it.element >= 0 }) {
+            val comp = contactBand(sol, h, comp = true)!!.segs.single()
+            assertTrue((comp.start - h.first.tip).length < 1e-9 && (comp.end - h.last.tip).length < 1e-9, "${h.element} ${h.part}")
+            val machine = contactBand(drawn, h, comp = false)!!.segs.single()
+            assertTrue((machine.start - h.first.drawn).length < 1e-9 && (machine.end - h.last.drawn).length < 1e-9, "${h.element} ${h.part}")
+        }
+    }
+
     @Test
     fun stateSurvivesSaver() {
         val s = RoundState(type = 2, open = true)
         s.setDim(2, "l2", "12")
         s.l2Ref = L2Ref.A
-        s.tip = 2
         s.inner = true
         s.typeInner = true
+        // 팁은 외경 · 내경 따로 — 내경 쪽
+        s.tip = 2
         s.through = true
         s.setPoint("x1", "41.5")
         s.pickPreset(HOLDER_PRESETS.single { it.code == "S16MSDUCR07" })

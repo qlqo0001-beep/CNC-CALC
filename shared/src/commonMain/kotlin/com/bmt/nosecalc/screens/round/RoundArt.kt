@@ -400,20 +400,24 @@ private class ArtPen(
 
     /**
      * 가로 치수 한 줄(내경): (za, xa)·(zb, xb) 에서 높이 비율 y 의 치수선까지 보조선, 양 끝 채운 화살, 이름은 치수선 위 가운데.
-     * 치수보다 길면 왼쪽 끝에서 오른쪽(입구 쪽)으로 — 아래 줄의 보조선(더 안쪽)을 덮지 않게 — 칸 안으로 민다. 모순이면 이름 밑 빨간 점선
+     * 치수보다 길면 왼쪽 끝에서 오른쪽(입구 쪽)으로 — 아래 줄의 보조선(더 안쪽)을 덮지 않게 — 칸 안으로 민다. 그때 이름 아래로 지나는
+     * 오른쪽 보조선은 이름 위에서 끊는다(글자 사이로 선이 보이지 않게). 모순이면 이름 밑 빨간 점선
      */
     private fun rowDim(key: String, name: String, za: Double, xa: Double, zb: Double, xb: Double, y: Float, ref: L2Ref? = null) {
         val look = look(key, name, ref) ?: return
         val yy = y * h
         val (lp, rp) = listOf(at(za, xa), at(zb, xb)).sortedBy { it.x }
+        val size = measurer.measure(look.text, look.style).size
+        val tl = Offset(inside(max((lp.x + rp.x - size.width) / 2, lp.x), size.width, look), yy - px(1f) - size.height)
         val width = px(DrawSpec.dim) * look.weight
-        for (p in listOf(lp, rp)) ext(p, yy, look.line, px(DrawSpec.ext) * look.weight)
+        for (p in listOf(lp, rp)) {
+            val under = p.x > tl.x + px(2f) && p.x < tl.x + size.width - px(2f) && tl.y - px(2f) > p.y + px(DrawSpec.extGap)
+            ext(p, if (under) tl.y - px(2f) - px(DrawSpec.extOver) else yy, look.line, px(DrawSpec.ext) * look.weight)
+        }
         d.drawLine(look.line, Offset(lp.x, yy), Offset(rp.x, yy), width)
         val arrow = px(DrawSpec.arrowLen) * look.weight
         d.arrowHead(Offset(lp.x, yy), Offset(-1f, 0f), look.line, arrow)
         d.arrowHead(Offset(rp.x, yy), Offset(1f, 0f), look.line, arrow)
-        val size = measurer.measure(look.text, look.style).size
-        val tl = Offset(inside(max((lp.x + rp.x - size.width) / 2, lp.x), size.width, look), yy - px(1f) - size.height)
         val box = d.haloText(measurer, look.text, look.style, look.halo, ks, topLeft = tl, pill = look.focused)
         if (look.wrong) underline(box)
     }

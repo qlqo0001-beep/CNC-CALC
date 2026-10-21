@@ -96,12 +96,12 @@ fun ShapeViewerCard(
         footer?.invoke()
         ViewerLegend(legend, Modifier.padding(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 12.dp))
     }
-    if (full) ViewerFullScreen(lines, marks, legend, title, subtitle, stock, fills, state) { full = false }
+    if (full) ViewerFullScreen(lines, marks, legend, title, subtitle, stock, fills, state, footer) { full = false }
 }
 
 /**
- * 크게 보기: 화면 전체(c.page)에 머리(제목 · 부제 · 닫기) + 범례, 뷰어(한 손가락 이동 · Ctrl 없는 휠 확대), 아래 단추 줄(내비게이션 바 위).
- * 보기(state)는 카드와 같이 써서 확대가 양쪽으로 이어진다. 키: + / − 확대·축소, 0 맞춤, Esc · 뒤로 키는 닫기
+ * 크게 보기: 화면 전체(c.page)에 머리(제목 · 부제 · 닫기) + 범례, 뷰어(한 손가락 이동 · Ctrl 없는 휠 확대), 아래 단추 줄 · footer(내비게이션 바 위 —
+ * 카드와 같은 고르는 줄). 보기(state)는 카드와 같이 써서 확대가 양쪽으로 이어진다. 키: + / − 확대·축소, 0 맞춤, Esc · 뒤로 키는 닫기
  */
 @Composable
 internal fun ViewerFullScreen(
@@ -113,6 +113,7 @@ internal fun ViewerFullScreen(
     stock: ViewerStock?,
     fills: List<ViewerFill>,
     state: ViewerState,
+    footer: (@Composable () -> Unit)? = null,
     onClose: () -> Unit,
 ) {
     Overlay(onClose, onKey = { e -> viewerKey(e, state) }) {
@@ -126,7 +127,10 @@ internal fun ViewerFullScreen(
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.lineCard))
             ShapeViewer(lines, Modifier.fillMaxWidth().weight(1f), marks, state, oneFingerPan = true, stock = stock, fills = fills)
-            Column(Modifier.fillMaxWidth().background(c.card).windowInsetsPadding(WindowInsets.navigationBars)) { ViewerToolbar(state) }
+            Column(Modifier.fillMaxWidth().background(c.card).windowInsetsPadding(WindowInsets.navigationBars)) {
+                ViewerToolbar(state)
+                footer?.invoke()
+            }
         }
     }
 }
