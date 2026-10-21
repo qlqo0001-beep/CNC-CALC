@@ -200,7 +200,11 @@ private fun Chip(text: String, on: Boolean, modifier: Modifier, onClick: () -> U
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = if (on) c.onFill(c.teal) else c.textValue, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        // 칩보다 긴 직접 값은 "…" 로 — 잘린 숫자가 멀쩡한 값처럼 보이지 않게
+        Text(
+            text, color = if (on) c.onFill(c.teal) else c.textValue, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

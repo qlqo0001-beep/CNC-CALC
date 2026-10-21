@@ -5,7 +5,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import com.bmt.nosecalc.Feature
 
-/** 역할색 칸 한 벌: 입력칸(나사 Z 시작=노랑, 목표=빨강 …)·경고 띠 */
+/** 역할색 한 벌(바탕 · 테두리 · 라벨 · 값): 입력칸 · 경고 띠 · 형상 카드 칩 */
 @Immutable
 data class RoleColors(val bg: Color, val border: Color, val label: Color, val value: Color)
 
@@ -83,7 +83,6 @@ data class AppColors(
     val appsOpenBg: Color,
     val green: Color,
     val blue: Color,
-    val sky: Color,
     val orange: Color,
     val amber: Color,
     val red: Color,
@@ -97,9 +96,6 @@ data class AppColors(
     val valuePos: Color,
     // 역할 칸
     val fieldNormal: RoleColors,
-    val fieldStart: RoleColors,
-    val fieldEnd: RoleColors,
-    val fieldDim: RoleColors,
     val warn: RoleColors,
     val error: RoleColors,
     /** 안내 띠(파랑): 경고가 아닌 알림 */
@@ -118,8 +114,6 @@ data class AppColors(
     val drawToolLine: Color,
     val drawInsert: Color,
     val simProgram: Color,
-    val simToolpath: Color,
-    val simRapid: Color,
     val simArc: Color,
     /** 라운드 TYPE 그림(04 자리)의 금속 몸통: 위 → 아래 그라데이션 5단, 윤곽·모서리선 */
     val drawMetal: List<Color>,
@@ -182,7 +176,6 @@ val LightColors = AppColors(
     appsOpenBg = Color(0xFFF0FDFA),
     green = Color(0xFF16A34A),
     blue = Color(0xFF2B7BC0),
-    sky = Color(0xFF0EA5E9),
     orange = Color(0xFFEA580C),
     amber = Color(0xFFD97706),
     red = Color(0xFFE11D48),
@@ -193,9 +186,6 @@ val LightColors = AppColors(
     valueComp = Color(0xFF0F5E8C),
     valuePos = Color(0xFF2F8A5E),
     fieldNormal = RoleColors(Color(0xFFF1F5F9), Color(0xFFCBD5E1), Color(0xFF0284C7), Color(0xFF0F172A)),
-    fieldStart = RoleColors(Color(0xFFFFFBEB), Color(0xFFFDE68A), Color(0xFFD97706), Color(0xFF92400E)),
-    fieldEnd = RoleColors(Color(0xFFFFF1F2), Color(0xFFFECDD3), Color(0xFFE11D48), Color(0xFFBE123C)),
-    fieldDim = RoleColors(Color(0xFFFEFCE8), Color(0xFFFEF08A), Color(0xFFB45309), Color(0xFF0F172A)),
     warn = RoleColors(Color(0xFFFFFBEB), Color(0xFFFCD34D), Color(0xFFB45309), Color(0xFF78350F)),
     error = RoleColors(Color(0xFFFFF1F2), Color(0xFFFDA4AF), Color(0xFFBE123C), Color(0xFF881337)),
     info = RoleColors(Color(0xFFEFF6FF), Color(0xFFBFDBFE), Color(0xFF1D4ED8), Color(0xFF1E3A8A)),
@@ -210,8 +200,6 @@ val LightColors = AppColors(
     drawToolLine = Color(0xFF475569),
     drawInsert = Color(0xFFFBBF24),
     simProgram = Color(0xFF2F9E6B),
-    simToolpath = Color(0xFFC026D3),
-    simRapid = Color(0xFF94A3B8),
     simArc = Color(0xFF2563EB),
     drawMetal = listOf(Color(0xFFCBD5E1), Color(0xFFF1F5F9), Color(0xFFE2E8F0), Color(0xFFCBD5E1), Color(0xFFA9B6C8)),
     drawMetalEdge = Color(0xFF334155),
@@ -278,7 +266,6 @@ val DarkColors = AppColors(
     appsOpenBg = Color(0xFF103A3A),
     green = Color(0xFF34D399),
     blue = Color(0xFF3B82F6),
-    sky = Color(0xFF38BDF8),
     orange = Color(0xFFFB923C),
     amber = Color(0xFFFBBF24),
     red = Color(0xFFFB7185),
@@ -289,9 +276,6 @@ val DarkColors = AppColors(
     valueComp = Color(0xFF7DD3FC),
     valuePos = Color(0xFF6EE7B7),
     fieldNormal = RoleColors(Color(0xFF1B2A3F), Color(0xFF30435F), Color(0xFF38BDF8), Color(0xFFF3F6FB)),
-    fieldStart = RoleColors(Color(0xFF2A2210), Color(0xFF7A5A14), Color(0xFFFBBF24), Color(0xFFFCD34D)),
-    fieldEnd = RoleColors(Color(0xFF2E1520), Color(0xFF833048), Color(0xFFFB7185), Color(0xFFFDA4AF)),
-    fieldDim = RoleColors(Color(0xFF26240F), Color(0xFF6E6417), Color(0xFFFBBF24), Color(0xFFF3F6FB)),
     warn = RoleColors(Color(0xFF2A2210), Color(0xFF8A6516), Color(0xFFFBBF24), Color(0xFFFDE68A)),
     error = RoleColors(Color(0xFF2E1520), Color(0xFF9F2F4E), Color(0xFFFB7185), Color(0xFFFECDD3)),
     info = RoleColors(Color(0xFF0F1E33), Color(0xFF1E3A8A), Color(0xFF60A5FA), Color(0xFFBFDBFE)),
@@ -306,8 +290,6 @@ val DarkColors = AppColors(
     drawToolLine = Color(0xFFCBD5E1),
     drawInsert = Color(0xFFFBBF24),
     simProgram = Color(0xFF4ADE80),
-    simToolpath = Color(0xFFE879F9),
-    simRapid = Color(0xFF64748B),
     simArc = Color(0xFF60A5FA),
     drawMetal = listOf(Color(0xFF2B3B53), Color(0xFF4A5B75), Color(0xFF34455E), Color(0xFF26354B), Color(0xFF1C2839)),
     drawMetalEdge = Color(0xFFCBD5E1),

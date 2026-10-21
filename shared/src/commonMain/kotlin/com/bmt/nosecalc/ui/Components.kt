@@ -68,74 +68,6 @@ fun AppCard(modifier: Modifier = Modifier, padding: Dp = 16.dp, content: @Compos
     )
 }
 
-/** TYPE 칩 자리: 테이퍼(02)는 왼쪽 아래, 라운드(04)·11 은 왼쪽 위. End 는 그림을 좌우로 뒤집을 때(테이퍼 역방향) */
-enum class ChipPlace(val align: Alignment) {
-    BottomStart(Alignment.BottomStart),
-    TopStart(Alignment.TopStart),
-    BottomEnd(Alignment.BottomEnd),
-    TopEnd(Alignment.TopEnd),
-}
-
-/**
- * TYPE 그림 카드 2열(02·04·11). type 은 1부터. 개수가 홀수면 마지막 줄 오른쪽은 빈칸.
- * drawing 이 카드 안 전체를 채운다(칩은 그 위에 얹힌다).
- */
-@Composable
-fun TypeGrid(
-    count: Int,
-    selected: Int?,
-    onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-    chip: ChipPlace = ChipPlace.BottomStart,
-    aspectRatio: Float = 1.08f,
-    chipColor: ((Int) -> Color)? = null,
-    /** TYPE 칩 글자 크기(sp). 테이퍼(02)는 작은 칩 11.5 */
-    chipTextSize: Float = 14f,
-    drawing: @Composable BoxScope.(type: Int) -> Unit,
-) {
-    val c = AppTheme.colors
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        (1..count).chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                row.forEach { type ->
-                    val on = type == selected
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .aspectRatio(aspectRatio)
-                            .typeFrame(on, c.subtle) { onSelect(type) },
-                    ) {
-                        drawing(type)
-                        TypeChip(
-                            type, chipColor?.invoke(type) ?: c.tealDeep, chipTextSize,
-                            Modifier
-                                .align(chip.align)
-                                .padding(14.dp),
-                        )
-                        // 칩이 오른쪽 위에 있으면(내경 역방향) 체크는 왼쪽 위
-                        if (on) SelectedCheck(if (chip == ChipPlace.TopEnd) Alignment.TopStart else Alignment.TopEnd)
-                    }
-                }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun TypeChip(type: Int, color: Color, size: Float, modifier: Modifier) {
-    val c = AppTheme.colors
-    val shape = RoundedCornerShape(5.dp)
-    Text(
-        "형상 $type",
-        modifier.clip(shape).background(c.field).border(1.5.dp, c.lineField, shape).padding(horizontal = 9.dp, vertical = 2.dp),
-        color = color,
-        fontSize = size.sp,
-        fontWeight = FontWeight.Medium,
-        letterSpacing = 0.02.em,
-    )
-}
-
 /**
  * 형상 카드(고르기 화면): 36dp 머리 띠(칩 + 이름, 길면 …) + 1dp 구분선 + 몸통(그림). 모서리 12dp.
  * 고르면 2dp 청록 테두리 + 옅은 청록 바탕 + 오른쪽 위 체크 원 — 색만으로 가르지 않는다
@@ -152,7 +84,7 @@ fun TypeCard(
     body: @Composable BoxScope.() -> Unit,
 ) {
     val c = AppTheme.colors
-    Box(modifier.aspectRatio(aspectRatio).typeFrame(selected, c.card, onClick)) {
+    Box(modifier.aspectRatio(aspectRatio).typeFrame(selected, onClick)) {
         Column(Modifier.fillMaxSize()) {
             // 오른쪽 36dp 는 체크 원 자리(고르기 전후로 글이 밀리지 않게 늘 비운다)
             Row(Modifier.fillMaxWidth().height(36.dp).padding(start = 8.dp, end = 36.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -172,29 +104,29 @@ fun TypeCard(
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.lineCard))
             Box(Modifier.fillMaxWidth().weight(1f), content = body)
         }
-        if (selected) SelectedCheck(Alignment.TopEnd)
+        if (selected) SelectedCheck()
     }
 }
 
-/** 형상 카드 틀(TypeCard · TypeGrid): 보통 1dp 연한 테두리 + 옅은 그림자(라이트만), 고르면 2dp 청록 테두리 + 청록 옅은 바탕 */
+/** 형상 카드 틀: 보통 1dp 연한 테두리 + 옅은 그림자(라이트만), 고르면 2dp 청록 테두리 + 청록 옅은 바탕 */
 @Composable
-private fun Modifier.typeFrame(selected: Boolean, bg: Color, onClick: () -> Unit): Modifier {
+private fun Modifier.typeFrame(selected: Boolean, onClick: () -> Unit): Modifier {
     val c = AppTheme.colors
     val shape = RoundedCornerShape(12.dp)
     return shadow(if (c.dark) 0.dp else 1.dp, shape)
         .clip(shape)
-        .background(bg)
+        .background(c.card)
         .background(if (selected) c.teal.copy(alpha = if (c.dark) .10f else .06f) else Color.Transparent)
         .border(if (selected) 2.dp else 1.dp, if (selected) c.teal else c.lineCard, shape)
         .clickable(onClick = onClick)
 }
 
-/** 고른 카드 모서리의 청록 체크 원(20dp, 8dp 안쪽) */
+/** 고른 카드 오른쪽 위의 청록 체크 원(20dp, 8dp 안쪽) */
 @Composable
-private fun BoxScope.SelectedCheck(align: Alignment) {
+private fun BoxScope.SelectedCheck() {
     val c = AppTheme.colors
     Box(
-        Modifier.align(align).padding(8.dp).size(20.dp).clip(CircleShape).background(c.teal),
+        Modifier.align(Alignment.TopEnd).padding(8.dp).size(20.dp).clip(CircleShape).background(c.teal),
         contentAlignment = Alignment.Center,
     ) {
         Icon(AppIcons.Check, null, Modifier.size(14.dp), tint = c.onFill(c.teal))
@@ -389,32 +321,6 @@ fun OutlineTabs(rows: List<List<String>>, selected: Int, onSelect: (Int) -> Unit
                             letterSpacing = (-0.03).em,
                         )
                     }
-                }
-            }
-        }
-    }
-}
-
-/**
- * 결과 카드(06·10): 왼쪽 위 대문자 작은 라벨, 아래 고정폭 큰 숫자. 축 글자와 값 사이를 넓게.
- * 예: ResultCard("COMPENSATED POINT (보정좌표)", listOf("X" to "34.000", "Z" to "-2.186"))
- */
-@Composable
-fun ResultCard(
-    label: String,
-    values: List<Pair<String, String>>,
-    modifier: Modifier = Modifier,
-    color: Color = AppTheme.colors.valueComp,
-) {
-    val c = AppTheme.colors
-    AppCard(modifier, padding = 12.dp) {
-        Text(label, color = c.textMuted, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.02.em)
-        Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-            values.forEach { (axis, v) ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(axis, color = color, fontFamily = AppTheme.mono, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(16.dp))
-                    Text(v, color = color, fontFamily = AppTheme.mono, fontSize = 25.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.1.em)
                 }
             }
         }

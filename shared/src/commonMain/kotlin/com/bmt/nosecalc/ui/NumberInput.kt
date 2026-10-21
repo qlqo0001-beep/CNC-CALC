@@ -61,11 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
-import com.bmt.nosecalc.ui.theme.RoleColors
 import kotlin.math.roundToInt
-
-/** 숫자칸 역할색(1.1 역할색 입력칸): 시작점 = 노랑, 목표점 = 빨강, 치수 = 연노랑 */
-enum class FieldRole { Normal, Start, End, Dim }
 
 /**
  * 숫자칸(위 라벨 줄 + 52dp 칸, 값 가운데 굵게). 누르면 [NumberPad] 가 뜬다 — 시스템 키보드는 쓰지 않는다.
@@ -78,8 +74,8 @@ enum class FieldRole { Normal, Start, End, Dim }
  * - tag = 라벨 뒤 회색 표("Ø직경" · "반경")
  * - placeholder = 빈칸 자리표시("기본 0" 처럼, 흐리게)
  * hint · blankable · figure · preview 는 키패드로 넘긴다(안내 줄 · "비우기 · 자동 계산" 단추 · 작은 그림 · 결과 한 줄).
- * [FieldChainHost] 안이면 묶음에 id 로 들어가 키패드를 묶음이 띄우고("다음"), 열리면 시트 위로 올라온다.
- * 묶음 밖이면 제 키패드를 띄운다.
+ * 키패드는 [FieldChainHost] 가 띄운다 — 칸은 묶음에 id 로 들어가("다음"), 열리면 시트 위로 올라온다.
+ * 묶음 밖의 칸은 모양만 보인다(부품 견본).
  */
 @Composable
 fun NumberField(
@@ -88,7 +84,6 @@ fun NumberField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     unit: String = "",
-    role: FieldRole = FieldRole.Normal,
     placeholder: String = "",
     autoValue: String? = null,
     error: Boolean = false,
@@ -100,10 +95,9 @@ fun NumberField(
     preview: String? = null,
 ) {
     val c = AppTheme.colors
-    val rc = roleColors(role)
+    val rc = c.fieldNormal
     val chain = LocalFieldChain.current
-    var open by remember { mutableStateOf(false) }
-    val editing = if (chain != null) chain.active == id else open
+    val editing = chain?.active == id
     val bring = remember { BringIntoViewRequester() }
     var size by remember { mutableStateOf(IntSize.Zero) }
     val density = LocalDensity.current
@@ -159,7 +153,7 @@ fun NumberField(
                         chain.place(id, (p.y / with(density) { 8.dp.toPx() }).roundToInt(), p.x)
                     },
                 )
-                .clickable { if (chain != null) chain.open(id) else open = true }
+                .clickable(enabled = chain != null) { chain?.open(id) }
                 .padding(horizontal = 12.dp),
         )
     }
@@ -173,11 +167,6 @@ fun NumberField(
                 if (sheet > 0) bring.bringIntoView(Rect(0f, 0f, size.width.toFloat(), size.height + sheet + with(density) { 8.dp.toPx() }))
             }
         }
-    } else if (open) {
-        NumberPad(
-            label, unit, value, onValueChange, onClose = { open = false },
-            hint = hint, autoValue = autoValue, blankable = blankable, figure = figure, preview = preview,
-        )
     }
 }
 
@@ -206,16 +195,19 @@ private fun ValueAndUnit(text: String, style: TextStyle, unit: String, modifier:
 }
 
 /**
- * 칸 값 글자 크기: 20sp 에서 0.5sp 씩 줄여 한 줄에 다 들어가는 크기(11sp 까지). 그래도 넘치면 "…" 로 줄인다 —
+ * 숫자 글자 크기: max 에서 0.5sp 씩 줄여 한 줄에 다 들어가는 크기(min 까지). 그래도 넘치면 "…" 로 줄인다 —
  * 잘린 숫자가 멀쩡한 값처럼 보이지 않게. (StepBased 는 PC 에서 "…" 를 넘침으로 보지 않아 줄이지 않는다)
  */
-private data object ValueFit : TextAutoSize {
+private data class FitDown(val max: Float, val min: Float) : TextAutoSize {
     override fun TextAutoSizeLayoutScope.getFontSize(constraints: Constraints, text: AnnotatedString): TextUnit {
-        var size = 20f
-        while (size > 11f && performLayout(constraints, text, size.sp).multiParagraph.intrinsics.maxIntrinsicWidth > constraints.maxWidth) size -= 0.5f
+        var size = max
+        while (size > min && performLayout(constraints, text, size.sp).multiParagraph.intrinsics.maxIntrinsicWidth > constraints.maxWidth) size -= 0.5f
         return size.sp
     }
 }
+
+/** 칸 값: 20sp → 11sp */
+private val ValueFit = FitDown(20f, 11f)
 
 /**
  * 라벨 줄 작은 표(11.5sp 굵게, 모서리 4dp): "자동" · "Ø직경". 라벨 다음 남은 자리에 text 가 다 들어가지 않으면 short 로,
@@ -238,17 +230,6 @@ private fun FieldChip(text: String, bg: Color, fg: Color, border: Color = Color.
     }) { ms, cs ->
         val p = ms.firstNotNullOfOrNull { m -> m.measure(Constraints()).takeIf { it.width <= cs.maxWidth } }
         layout(p?.width ?: 0, p?.height ?: 0) { p?.place(0, 0) }
-    }
-}
-
-@Composable
-private fun roleColors(role: FieldRole): RoleColors {
-    val c = AppTheme.colors
-    return when (role) {
-        FieldRole.Normal -> c.fieldNormal
-        FieldRole.Start -> c.fieldStart
-        FieldRole.End -> c.fieldEnd
-        FieldRole.Dim -> c.fieldDim
     }
 }
 
@@ -323,10 +304,11 @@ internal fun NumberPad(
         BoxWithConstraints {
             val room = maxHeight
             Column {
+                // 큰 글꼴 · 좁은 폰에서도 끝 점 좌표가 "…" 로 잘리지 않게 numSmall(12.5sp) 에서 9sp 까지 줄인다
                 if (preview != null) {
-                    Text(
-                        preview, Modifier.padding(bottom = 2.dp), style = AppType.numSmall, color = c.valueComp,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    BasicText(
+                        preview, Modifier.padding(bottom = 2.dp), style = AppType.numSmall.copy(color = c.valueComp),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, autoSize = FitDown(12.5f, 9f),
                     )
                 }
                 val order = chain?.order.orEmpty()

@@ -30,7 +30,6 @@ import com.bmt.nosecalc.ui.DockRow
 import com.bmt.nosecalc.ui.DockStatus
 import com.bmt.nosecalc.ui.FieldChain
 import com.bmt.nosecalc.ui.FieldChainHost
-import com.bmt.nosecalc.ui.FieldRole
 import com.bmt.nosecalc.ui.NumberField
 import com.bmt.nosecalc.ui.NumberPad
 import com.bmt.nosecalc.ui.oneLine
@@ -45,8 +44,8 @@ import kotlin.test.assertTrue
 class KeypadShotsTest {
     @Test
     fun fieldStates() {
-        Shots.both("field-states", heightDp = 650) { AppHost(it) { FieldStates() } }
-        Shots.both("field-states-w360", heightDp = 760, widthDp = 360, fontScale = 1.3f) { AppHost(it) { FieldStates() } }
+        Shots.both("field-states", heightDp = 500) { AppHost(it) { FieldStates() } }
+        Shots.both("field-states-w360", heightDp = 540, widthDp = 360, fontScale = 1.3f) { AppHost(it) { FieldStates() } }
     }
 
     /** 빈칸(자동) 칸의 키패드: 안내 줄 · "자동 -7.385"(뒤 화면 taper-b-auto 의 Z2) · "비우기 · 자동 계산" */
@@ -140,7 +139,7 @@ private fun ChainFields(chain: FieldChain, figure: (@Composable (Modifier) -> Un
     }
 }
 
-/** 칸 모양 모아 보기: 넣은 값 · 자동 · 못 푼 자동 · 문제 칸 · 표 · 자리표시 · 역할색 · 긴 값(잘리지 않고 줄어야) */
+/** 칸 모양 모아 보기: 넣은 값 · 자동 · 못 푼 자동 · 문제 칸 · 표 · 자리표시 · 긴 값(잘리지 않고 줄어야) */
 @Composable
 private fun FieldStates() {
     Column(Modifier.fillMaxSize().padding(Space.gutter)) {
@@ -165,10 +164,6 @@ private fun FieldStates() {
                 Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                     NumberField("Z3", "-9999.999", {}, Modifier.weight(1f), unit = "mm")
                     NumberField("X3", "123456789012", {}, Modifier.weight(1f), unit = "mm", tag = "Ø직경")
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
-                    NumberField("Z축 시작점", "5.0", {}, Modifier.weight(1f), role = FieldRole.Start)
-                    NumberField("가공 목표점(Z)", "-25.0", {}, Modifier.weight(1f), role = FieldRole.End)
                 }
             }
         }
