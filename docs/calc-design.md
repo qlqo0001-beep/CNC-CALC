@@ -73,7 +73,7 @@
 
 ## 공개 API (구현됨 — 바꾸면 이 문서도 같이)
 패키지 `com.bmt.nosecalc.calc`. 파일: `Geom.kt`, `NoseComp.kt`, `Fmt.kt`, `NoseR.kt`(닫힌 식).
-계산기 `TaperCalc.kt`·`GrooveCalc.kt`·`RoundCalc.kt`·`RightTriangle.kt` 는 아래 따로 절이 있다.
+계산기 `TaperCalc.kt`·`GrooveCalc.kt`·`RoundCalc.kt`·`Holder.kt`·`RightTriangle.kt` 는 아래 따로 절이 있다.
 ```kotlin
 // Geom.kt
 data class Pt(val z: Double, val x: Double) {               // x = 반경. 점이자 벡터
@@ -452,6 +452,53 @@ data class RoundResult(val solution: RoundSolution?, val warnings: List<RoundWar
 object RoundCalc {
     fun calc(i: RoundInput): RoundResult   // type 이 1~6 밖, 내경 1, 외경·내경 2~4 의 through 면 IllegalArgumentException(프로그램 실수)
     fun arc3(i: Arc3Input): RoundResult
+}
+```
+
+## 보링바 간섭 검사 (`HolderCheck`, 구현됨 — 화면은 아직)
+내경 라운드(TYPE 2~6 · 3점호)의 G40 경로를 따라 보링바 단면이 소재에 닿는지 본다. 축을 지나는 ZX 단면에서
+소재 = {|x| ≥ ρ(z)}(깎은 벽과 축 너머 맞은편 벽), 공구 = 인서트 + 바 띠.
+- **공구 단면**(노즈 중심 기준): 주절삭날 e1 = (−cos κr, −sin κr), 끝날 e2 = (cos κr′, −sin κr′), κr′ = 180° − κr − ε.
+  인서트 = 꼭짓점 N(노즈 원이 두 날에 접함)에서 날 길이 l 의 마름모(T 는 삼각형), 노즈는 현으로. 가상 인선 (−r, r) = 팁 2 가
+  카탈로그 f 의 기준 → 바 중심 x_c = r − f, 반지름 D/2 의 띠. 바 앞은 N 을 지나는 주절삭날 연장선, 뒤는 공구대 면(인선 + 돌출 길이).
+  인서트는 띠 위 · 아래로 나온 조각만 따로 본다 — 띠 안은 바가 덮는다(설계안은 위 조각만이었으나, 바보다 큰 인서트의
+  아래 끝이 맞은편 벽에 닿는 것을 놓쳐 둘 다 본다).
+- **뒤보링**(도면이 +Z 로 감, 3점호 역방향): 인서트를 노즈 중심에서 Z 로 뒤집고(날이 +Z, 가상 인선 (r, r) = 팁 1) 바는 그대로 +Z 로
+  나간다. 바 앞(−Z) 끝은 인서트 끝에서 수직. DMIN 구간은 인선에서 −Z 쪽으로 인서트 길이만큼.
+- **소재 ρ(z)**: 도면을 반직선으로 늘인다 — 입구 면이 없으면(3점호) 시작에서 −시작 접선, 끝이 축 위가 아니면 끝 접선. 축에서 멈추고,
+  z 성분이 0.002 미만이면 수직(입구 면: CAD 점 반올림으로 기운 입구 R 의 시작 접선). 늘인 윤곽의 가장 큰 z 너머는 공기, 깊은 끝이
+  축 위면 그 너머는 소재(ρ = 0). Z 로 1 µm 넘게 되돌아가면 `NOT_MONOTONE`(검사 안 함). 면(수직 요소)은 이웃의 한쪽 극한으로만 —
+  면에 모서리로만 붙는 것은 닿음이 아니다.
+- **여유**(조각마다, 정확한 최솟값): 조각의 위 · 아래 변은 꼭짓점 z 사이 직선, 소재 꺾임점으로 더 나눈 토막마다 양 끝과 원호에서
+  ρ′ = 변 기울기인 곳에서 min(ρ − 위, ρ + 아래). 공구대 = 인선 z + 돌출 길이 − 입구 면 z(면을 모르면 안 봄), 최소 가공경 =
+  헤드 구간의 가장 좁은 ρ − DMIN/2. 닿음 = 여유 < −0.005 mm. 경로는 진입점 자세 · 진입 이동 · 요소마다 0.02 mm(20000 점 넘으면 늘림),
+  닿는 구간의 처음 · 끝은 이분법.
+- 값 검사(`problems`): D > 0, 90° ≤ κr < 180° − ε, l > r / tan(ε/2), f ≥ D/2 + r(1 − cos κr)(바 윗면이 노즈 접점 아래),
+  돌출 길이 > 헤드 길이(`overhangMin`), DMIN > 0.
+- 테스트: `HolderCheckTest`(설계 손 계산 A~F · 문턱 · 뒤보링 손 계산 · 뒤집은 인서트), `verify/HolderVerifyTest`(따로 짠 표본 모형으로
+  무작위 내경 TYPE 300 · 3점호 정방향 150 · 뒤보링 150 · 되돌아가는 원호 30).
+
+```kotlin
+enum class InsertShape(val epsDeg: Double) { C(80.0), D(55.0), V(35.0), T(60.0) }
+data class BoringBar(val dia: Double, val f: Double, val shape: InsertShape, val edge: Double, val kappaDeg: Double,
+    val overhang: Double? = null /*null = 공구대 검사 안 함*/, val dMin: Double? = null /*null = 검사 안 함*/)
+enum class HolderPart { INSERT, BAR, TURRET, MIN_BORE }
+enum class HolderSkip { BAD_INPUT, NOT_MONOTONE }
+enum class BarField { DIA, F, EDGE, KAPPA, OVERHANG, DMIN }
+data class HolderPose(val tip: Pt /*G40 프로그램 점*/, val nose: Pt, val drawn: Pt /*노즈가 닿는 도면 점*/)
+data class HolderHit(val element: Int /*−2 진입점, −1 진입 이동, k = program.segs[k]*/, val part: HolderPart,
+    val first: HolderPose, val last: HolderPose, val worst: HolderPose, val fromT: Double, val toT: Double /*요소 길이 비율*/,
+    val depth: Double, val opposite: Boolean /*맞은편 벽*/, val behind: Double /*닿는 점 z − 인선 z*/)
+data class HolderResult(val skip: HolderSkip?, val hits: List<HolderHit> /*요소 순, 처음 닿는 곳 순*/,
+    val barClear: Double?, val barClearAt: HolderPose?, val barClearElement: Int?)
+object HolderCheck {
+    const val CONTACT_TOL = 0.005; const val STEP = 0.02
+    fun fMin(dia: Double, kappaDeg: Double, r: Double): Double; fun edgeMin(shape: InsertShape, r: Double): Double
+    fun overhangMin(bar: BoringBar, r: Double): Double
+    fun problems(bar: BoringBar, r: Double): Set<BarField>
+    fun check(drawing: Contour, program: Contour, entry: Pt, tip: Int, r: Double, faceAtStart: Boolean, bar: BoringBar): HolderResult
+    fun outline(bar: BoringBar, r: Double, nose: Pt, maxZ: Double, reverse: Boolean = false): List<Contour> // [바, 인서트]
+    fun overlap(drawing: Contour, faceAtStart: Boolean, bar: BoringBar, r: Double, nose: Pt): List<Contour>  // 겹친 곳
 }
 ```
 
