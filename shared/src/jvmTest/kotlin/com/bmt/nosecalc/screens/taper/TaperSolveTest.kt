@@ -278,6 +278,51 @@ class TaperSolveTest {
     }
 
     /**
+     * 처음 화면에서 키패드로 치수를 넣는 흐름(정방향 형상 1, 홈 왼쪽 인선): 0 에서 시작해 칸 순서대로 넣는 동안은 파란 안내(waiting)이거나 답이고
+     * 빨간 멈춤은 없다 — 테이퍼는 마지막 치수가 들어가는 순간 답이 나온다. 키패드는 누를 때마다 값을 넣으므로 한 자리씩(4 → 40, − 만은 넣지 않는다)
+     */
+    @Test
+    fun freshStartSolvesAsYouType() {
+        fun typed(v: String) = (1..v.length).map { v.take(it) }.filter { it != "-" }
+        for (kind in TaperKind.entries.filter { !it.groove }) {
+            val s = TaperState(kind, type = 1, open = true)
+            val names = (1..kind.points).flatMap { listOf("x$it", "z$it") }.filter { TaperExample.point(kind, 1, false, it) != "0" }
+            for (name in names) {
+                for (t in typed(TaperExample.point(kind, 1, false, name))) {
+                    s.setPoint(name, t)
+                    val f = formOf(s)
+                    val done = name == names.last() && t == TaperExample.point(kind, 1, false, name)
+                    assertEquals(!done, f.waiting, "${kind.label} $name=$t")
+                    if (done) assertNotNull(TaperSolve.solve(f).solution, kind.label)
+                }
+            }
+        }
+        val g = TaperState(TaperKind.GROOVE, type = 1, open = true)
+        for ((name, v) in TaperExample.groove) {
+            for (t in typed(v)) {
+                g.setShared(name, t)
+                val input = GrooveInput(
+                    g.shared("zStart").toDouble(), g.shared("width").toDouble(), g.shared("od").toDouble(), g.shared("bottom").toDouble(),
+                    g.shared("insert").toDouble(), g.shared("overlap").toDouble(), xClear = g.shared("xClear").toDouble(),
+                )
+                val r = GrooveCalc.calc(input)
+                assertTrue(r.solution != null || input.waiting, "홈 $name=$t ${r.warnings}")
+            }
+        }
+    }
+
+    /** SlopeScreen 의 입력 → SlopeForm 그대로 */
+    private fun formOf(s: TaperState): SlopeForm {
+        val n = s.kind.points
+        return SlopeForm(
+            s.kind, s.type!!, s.reverse, s.shared("noseR").toDouble(), s.tip,
+            (1..n).map { s.point("x$it").toDoubleOrNull() }, (1..n).map { s.point("z$it").toDoubleOrNull() }, s.point("ang").toDoubleOrNull(),
+            s.shared("zClear").toDoubleOrNull() ?: 0.0, (1..n).map { s.point("r$it").toDoubleOrNull() ?: 0.0 },
+            s.point("start").toDoubleOrNull(), s.point("end").toDoubleOrNull(),
+        )
+    }
+
+    /**
      * 현장: "Z 여유를 바꿔도 G00 이 따라오지 않는다". 화면의 모든 종류 · 형상 · 방향(모서리 R · 시작점 유무)에서 Z 여유 0 ~ 3 을 바꾸면
      * 두 NC 의 G00 진입과 화면의 진입점(직접 보정 G00)이 첫 깎는 점에서 Z 로 꼭 max(Z 여유, 노즈 R) — 정방향은 +Z(척 반대쪽),
      * 역방향은 −Z — 떨어진다. 첫 깎는 점 = 직접 보정은 첫 보정점(시작점을 넣었으면 시작점′), G41/G42 는 첫 도면점.
@@ -333,6 +378,7 @@ class TaperSolveTest {
         s.setPoint("end", "-20")
         s.tip = 2
         s.setShared("noseR", "0.8")
+        s.editing = "z2"
         val back = with(TaperState.Saver) {
             restore(androidx.compose.runtime.saveable.SaverScope { true }.save(s)!!)!!
         }
@@ -344,6 +390,7 @@ class TaperSolveTest {
         assertEquals("-20", back.point("end"))
         assertEquals(2, back.tip)
         assertEquals("0.8", back.shared("noseR"))
+        assertEquals("z2", back.editing)
         back.tip = null
         assertNull(back.tip)
     }

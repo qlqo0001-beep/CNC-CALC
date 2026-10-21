@@ -26,6 +26,34 @@ class TaperWarningsTest {
         assertEquals(setOf("x1", "z1", "x2", "z2", "ang"), taperWarningFields(TaperWarning.CONTRADICTION, f))
     }
 
+    /**
+     * 다섯 값이 어긋나면 비울 칸을 단추로 권한다: 비어 있다가 마지막에 값이 들어온 칸 · 각도 가운데 지금 찬 것(둘까지).
+     * 종류 · 형상 · 방향마다 따로 기억한다. 단추가 그 칸을 비우면 남은 넷으로 바로 풀린다
+     */
+    @Test
+    fun contradictionOffersBlanks() {
+        // taper-b-error: 비어 있던 각도에 30 을 넣었다
+        val s = TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") }
+        assertEquals("ang", s.lastAuto)
+        assertEquals(listOf("ang"), s.contradictionFixes())
+        // Z2 를 비워 각도로 풀다가 Z2 를 다시 넣으면 Z2 · 각도
+        s.setPoint("z2", "")
+        s.setPoint("z2", "-8")
+        assertEquals(listOf("z2", "ang"), s.contradictionFixes())
+        // 각도가 비어 있으면 그 단추는 없다
+        s.setPoint("ang", "")
+        assertEquals(listOf("z2"), s.contradictionFixes())
+        // 모서리 R · 시작점은 다섯 값이 아니다
+        s.setPoint("r1", "1")
+        assertEquals("z2", s.lastAuto)
+        // 방향을 바꾸면 따로
+        s.reverse = true
+        assertEquals(null, s.lastAuto)
+        assertEquals(emptyList(), s.contradictionFixes())
+        // 각도 비우고 계산: 남은 넷(X 40 · 50, Z 0 · −5)으로 풀린다
+        assertTrue(TaperSolve.solve(form(TaperKind.OUTER, 3, listOf(40.0, 50.0), listOf(0.0, -5.0), angle = null)).solution != null)
+    }
+
     @Test
     fun zSignFlagsOnlyZ() {
         // taper-b-zsign: 정방향인데 Z2 가 + 쪽

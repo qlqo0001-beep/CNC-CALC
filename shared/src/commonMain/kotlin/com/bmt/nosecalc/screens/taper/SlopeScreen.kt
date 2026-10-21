@@ -6,19 +6,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -28,28 +27,43 @@ import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.calc.Arc
 import com.bmt.nosecalc.calc.Contour
 import com.bmt.nosecalc.calc.Fmt
+import com.bmt.nosecalc.calc.Line
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.TaperPoint
+import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
 import com.bmt.nosecalc.ui.AppCard
+import com.bmt.nosecalc.ui.Arrow
 import com.bmt.nosecalc.ui.CardHeader
 import com.bmt.nosecalc.ui.CoordPair
+import com.bmt.nosecalc.ui.DockRow
+import com.bmt.nosecalc.ui.DockStatus
 import com.bmt.nosecalc.ui.ExpandableHint
+import com.bmt.nosecalc.ui.FieldChainHost
 import com.bmt.nosecalc.ui.LabeledValue
+import com.bmt.nosecalc.ui.LegendGlyph
+import com.bmt.nosecalc.ui.LegendItem
+import com.bmt.nosecalc.ui.MarkKind
 import com.bmt.nosecalc.ui.NumberField
+import com.bmt.nosecalc.ui.ShapeViewerCard
 import com.bmt.nosecalc.ui.ViewerLine
 import com.bmt.nosecalc.ui.ViewerMark
+import com.bmt.nosecalc.ui.ViewerStock
 import com.bmt.nosecalc.ui.WarnLevel
 import com.bmt.nosecalc.ui.WarningBanner
+import com.bmt.nosecalc.ui.oneLine
+import com.bmt.nosecalc.ui.rememberFieldChain
+import com.bmt.nosecalc.ui.theme.AppColors
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.Space
 
 /**
  * B 화면 — 테이퍼(외경·내경 · 2중 테이퍼): 그림 요약 → (멈춘 까닭 · 값을 넣으라는 안내) → 입력 → 경고 → 보정 좌표 → 형상 → NC(G41/G42 · 직접 보정).
- * 값이 바뀌면 바로 다시 푼다(계산 버튼 없음).
+ * 값이 바뀌면 바로 다시 푼다(계산 버튼 없음). 입력 칸은 한 묶음이라 키패드의 "다음" 으로 이어 넣고, 키패드에는 그 칸만 짚은 그림과 결과 한 줄이 뜬다.
+ * 보정 좌표가 화면 밖이면 아래 결과 띠에 T 점′ 좌표(멈췄으면 그 까닭)가 남는다
  */
 @Composable
 internal fun SlopeScreen(s: TaperState) {
@@ -87,90 +101,111 @@ internal fun SlopeScreen(s: TaperState) {
     val flagged = if (sol == null && !waiting) result.warnings.flatMap { taperWarningFields(it, form) }.toSet() else emptySet()
     fun auto(text: String, v: Double?) = if (waiting) null else autoValue(text, v)
     val r = if (form.noseR.isFinite()) Fmt.nc(form.noseR).removeSuffix(".") else "—"
+    val dock = slopeDock(result, form, waiting, c)
+    val preview = dock?.oneLine()
+    val chain = rememberFieldChain(s.editing)
+    // 키패드 그림: 요약 칸 그림에서 그 칸의 점 · 치수만 짚는다
+    fun figure(key: String): @Composable (Modifier) -> Unit = { m ->
+        TypeArt(kind, type, s.reverse, m.aspectRatio(199f / 184f), compact = true, focus = key)
+    }
 
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.gutter).padding(top = 8.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(Space.cardGap),
-    ) {
+    TaperPage(dock, chain.sheetOpen) { anchor ->
         val dir = if (s.reverse) "역방향 가공 (Z+)" else "정방향 가공 (Z−)"
         SummaryCard(kind, type, s.reverse, "$dir · 노즈 R$r · 팁 ${tip}번") { s.open = false }
-        // 멈춘 까닭은 입력 카드 위에(폰 첫 화면 안에)
+        // 멈춘 까닭은 입력 카드 위에(폰 첫 화면 안에). 다섯 값이 어긋나면 비울 칸을 단추로 권한다
         if (waiting) {
             WarningBanner(taperWarningText(TaperWarning.MISSING_INPUT, form), level = WarnLevel.Info)
         } else if (sol == null) {
-            result.warnings.forEach { WarningBanner(taperWarningText(it, form), level = WarnLevel.Error) }
+            Column(anchor, verticalArrangement = Arrangement.spacedBy(Space.cardGap)) {
+                result.warnings.forEach { w ->
+                    val fixes = if (w == TaperWarning.CONTRADICTION) s.contradictionFixes() else emptyList()
+                    WarningBanner(
+                        taperWarningText(w, form),
+                        level = WarnLevel.Error,
+                        actions = fixes.map { k -> "${if (k == "ang") "각도" else k.uppercase()} 비우고 계산" to { s.setPoint(k, "") } },
+                    )
+                }
+            }
         }
 
         AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
-            NoseRPicker(noseR, error = "noseR" in flagged) { s.setShared("noseR", it) }
-            Spacer(Modifier.height(14.dp))
-            // 단일 테이퍼는 다섯 값 가운데 하나를 비워 계산한다(키패드 '비우기 · 자동 계산')
-            val blankable = !kind.double
-            Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
-                for (i in 0 until n) {
-                    val p = sol?.points?.get(i)?.vertex
-                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PointBadge("T${i + 1}", pointColor(c, i), Modifier.size(38.dp, 52.dp))
-                        NumberField(
-                            "X${i + 1}", xs[i], { s.setPoint("x${i + 1}", it) }, Modifier.weight(1f),
-                            unit = "mm", autoValue = auto(xs[i], p?.xDia), error = "x${i + 1}" in flagged,
-                            tag = "Ø직경", hint = "직경값 — 도면 Ø 그대로 (Ø40 → 40)", blankable = blankable,
-                        )
-                        NumberField(
-                            "Z${i + 1}", zs[i], { s.setPoint("z${i + 1}", it) }, Modifier.weight(1f),
-                            unit = "mm", autoValue = auto(zs[i], p?.z), error = "z${i + 1}" in flagged,
-                            hint = "Z0 = 부품 오른쪽 끝면 · 척 쪽은 − (예: −5)", blankable = blankable,
-                        )
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(if (n == 3) 8.dp else Space.fieldGap)) {
+            FieldChainHost(chain) {
+                NoseRPicker(noseR, error = "noseR" in flagged) { s.setShared("noseR", it) }
+                Spacer(Modifier.height(14.dp))
+                // 단일 테이퍼는 다섯 값 가운데 하나를 비워 계산한다(키패드 '비우기 · 자동 계산')
+                val blankable = !kind.double
+                Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                     for (i in 0 until n) {
-                        NumberField(
-                            "T${i + 1} 모서리 R", rs[i], { s.setPoint("r${i + 1}", it) }, Modifier.weight(1f),
-                            unit = "mm", placeholder = "기본 0", error = "r${i + 1}" in flagged, hint = "비우면 0 (날카로운 꼭짓점)",
-                        )
+                        val p = sol?.points?.get(i)?.vertex
+                        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            PointBadge("T${i + 1}", pointColor(c, i), Modifier.size(38.dp, 52.dp))
+                            NumberField(
+                                "X${i + 1}", xs[i], { s.setPoint("x${i + 1}", it) }, Modifier.weight(1f),
+                                unit = "mm", autoValue = auto(xs[i], p?.xDia), error = "x${i + 1}" in flagged,
+                                tag = "Ø직경", hint = "직경값 — 도면 Ø 그대로 (Ø40 → 40)", blankable = blankable,
+                                id = "x${i + 1}", figure = figure("x${i + 1}"), preview = preview,
+                            )
+                            NumberField(
+                                "Z${i + 1}", zs[i], { s.setPoint("z${i + 1}", it) }, Modifier.weight(1f),
+                                unit = "mm", autoValue = auto(zs[i], p?.z), error = "z${i + 1}" in flagged,
+                                hint = "Z0 = 부품 오른쪽 끝면 · 척 쪽은 − (예: −5)", blankable = blankable,
+                                id = "z${i + 1}", figure = figure("z${i + 1}"), preview = preview,
+                            )
+                        }
                     }
-                }
-                if (!kind.double) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(if (n == 3) 8.dp else Space.fieldGap)) {
+                        for (i in 0 until n) {
+                            NumberField(
+                                "T${i + 1} 모서리 R", rs[i], { s.setPoint("r${i + 1}", it) }, Modifier.weight(1f),
+                                unit = "mm", placeholder = "기본 0", error = "r${i + 1}" in flagged, hint = "비우면 0 (날카로운 꼭짓점)",
+                                id = "r${i + 1}", figure = figure("r${i + 1}"), preview = preview,
+                            )
+                        }
+                    }
+                    if (!kind.double) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
+                            NumberField(
+                                "각도 (Z축 기준)", ang, { s.setPoint("ang", it) }, Modifier.weight(1f),
+                                unit = "°", autoValue = auto(ang, sol?.anglesDeg?.first()), error = "ang" in flagged,
+                                hint = "Z축(가로선)에서 잰 한쪽 각 · 도면이 꼭지각이면 ÷2 · X축 기준이면 90 − 값", blankable = true,
+                                id = "ang", figure = figure("ang"), preview = preview,
+                            )
+                            ZClearField(zClear, "zClear" in flagged, Modifier.weight(1f), preview) { s.setShared("zClear", it) }
+                        }
+                        ZClearNote(sol, form, r)
+                    }
+                    // 시작점·끝점: 그 요소가 단면이면 X(직경), 수평이면 Z. 넣었을 때만 그 요소를 깎는다.
+                    // 끝점을 비우면 마지막 T 점(모서리 R 이면 그 끝)에서 끝나 그 좌표를 자동 값으로, 시작점을 비우면 "안 깎음"
+                    val last = sol?.cutEnd
                     Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                         NumberField(
-                            "각도 (Z축 기준)", ang, { s.setPoint("ang", it) }, Modifier.weight(1f),
-                            unit = "°", autoValue = auto(ang, sol?.anglesDeg?.first()), error = "ang" in flagged,
-                            hint = "Z축(가로선)에서 잰 한쪽 각 · 도면이 꼭지각이면 ÷2 · X축 기준이면 90 − 값", blankable = true,
+                            if (frontV) "시작 X (단면 바깥 Ø)" else "시작 Z (앞 끝)", start, { s.setPoint("start", it) }, Modifier.weight(1f),
+                            unit = "mm", placeholder = "안 깎음", error = "start" in flagged,
+                            hint = "T1 앞 요소가 시작하는 좌표 · 비우면 그 요소는 안 깎고 연장선에서 진입",
+                            id = "start", figure = figure("start"), preview = preview,
                         )
-                        ZClearField(zClear, "zClear" in flagged, Modifier.weight(1f)) { s.setShared("zClear", it) }
+                        // 역방향은 끝 요소가 척 반대쪽이다
+                        NumberField(
+                            when {
+                                backV -> "끝 X (단면 끝 Ø)"
+                                s.reverse -> "끝 Z (뒤 끝)"
+                                else -> "끝 Z (뒤 끝 · 척 쪽)"
+                            },
+                            end, { s.setPoint("end", it) }, Modifier.weight(1f),
+                            unit = "mm", autoValue = auto(end, last?.let { if (backV) it.xDia else it.z }), error = "end" in flagged,
+                            hint = (if (s.reverse) "T$n 뒤 요소의 실제 끝 좌표" else "척·턱 쪽 실제 끝 좌표") + " · 비우면 T$n 에서 끝남 (자동 값)",
+                            id = "end", figure = figure("end"), preview = preview,
+                        )
                     }
-                    ZClearNote(sol, form, r)
-                }
-                // 시작점·끝점: 그 요소가 단면이면 X(직경), 수평이면 Z. 넣었을 때만 그 요소를 깎는다.
-                // 끝점을 비우면 마지막 T 점(모서리 R 이면 그 끝)에서 끝나 그 좌표를 자동 값으로, 시작점을 비우면 "안 깎음"
-                val last = sol?.cutEnd
-                Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
-                    NumberField(
-                        if (frontV) "시작 X (단면 바깥 Ø)" else "시작 Z (앞 끝)", start, { s.setPoint("start", it) }, Modifier.weight(1f),
-                        unit = "mm", placeholder = "안 깎음", error = "start" in flagged,
-                        hint = "T1 앞 요소가 시작하는 좌표 · 비우면 그 요소는 안 깎고 연장선에서 진입",
-                    )
-                    // 역방향은 끝 요소가 척 반대쪽이다
-                    NumberField(
-                        when {
-                            backV -> "끝 X (단면 끝 Ø)"
-                            s.reverse -> "끝 Z (뒤 끝)"
-                            else -> "끝 Z (뒤 끝 · 척 쪽)"
-                        },
-                        end, { s.setPoint("end", it) }, Modifier.weight(1f),
-                        unit = "mm", autoValue = auto(end, last?.let { if (backV) it.xDia else it.z }), error = "end" in flagged,
-                        hint = (if (s.reverse) "T$n 뒤 요소의 실제 끝 좌표" else "척·턱 쪽 실제 끝 좌표") + " · 비우면 T$n 에서 끝남 (자동 값)",
-                    )
-                }
-                if (kind.double) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
-                        ZClearField(zClear, "zClear" in flagged, Modifier.weight(1f)) { s.setShared("zClear", it) }
-                        TipField(tip, standard, { s.tip = it }, Modifier.weight(1f))
+                    if (kind.double) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
+                            ZClearField(zClear, "zClear" in flagged, Modifier.weight(1f), preview) { s.setShared("zClear", it) }
+                            TipField(tip, standard, { s.tip = it }, Modifier.weight(1f))
+                        }
+                        ZClearNote(sol, form, r)
+                    } else {
+                        TipField(tip, standard, { s.tip = it })
                     }
-                    ZClearNote(sol, form, r)
-                } else {
-                    TipField(tip, standard, { s.tip = it })
                 }
             }
             ExpandableHint(
@@ -188,16 +223,19 @@ internal fun SlopeScreen(s: TaperState) {
         }
 
         if (sol != null) {
-            result.warnings.forEach {
-                if (it == TaperWarning.AGAINST_TOOL) {
-                    WarningBanner(taperWarningText(it, form), level = WarnLevel.Info, collapsedText = "바이트 반대쪽 면 있음 (역테이퍼 꼴) — 눌러서 자세히")
-                } else {
-                    WarningBanner(taperWarningText(it, form), level = WarnLevel.Warn)
-                }
-            }
             val g41 = s.ncTab == 0
-            CompCard(sol, g41)
-            SlopeViewer(sol, form.noseR)
+            // 결과 띠가 가리키는 곳: 경고 · 보정 좌표
+            Column(anchor, verticalArrangement = Arrangement.spacedBy(Space.cardGap)) {
+                result.warnings.forEach {
+                    if (it == TaperWarning.AGAINST_TOOL) {
+                        WarningBanner(taperWarningText(it, form), level = WarnLevel.Info, collapsedText = "바이트 반대쪽 면 있음 (역테이퍼 꼴) — 눌러서 자세히")
+                    } else {
+                        WarningBanner(taperWarningText(it, form), level = WarnLevel.Warn)
+                    }
+                }
+                CompCard(sol, g41)
+            }
+            SlopeViewer(sol, form.noseR, r, kind.inner, s.reverse)
             NcCard(
                 if (g41) sol.ncG41G42 else sol.ncG40,
                 if (g41) {
@@ -220,14 +258,30 @@ internal fun SlopeScreen(s: TaperState) {
                 },
             )
         }
+        if (chain.sheetOpen) Spacer(Modifier.height(440.dp))
     }
 }
 
+/**
+ * 결과 띠 · 키패드 결과 한 줄: 풀리면 T 점마다 첫 보정점(T1′ …, 직접 보정 좌표)과 노란 경고 수, 멈췄으면 첫 경고의 첫 문장.
+ * 값이 모자라는 동안(파란 안내)은 null — 띠도 한 줄도 없다
+ */
+private fun slopeDock(result: TaperResult, form: SlopeForm, waiting: Boolean, c: AppColors): DockStatus? {
+    val sol = result.solution ?: return if (waiting) null else result.warnings.firstOrNull()?.let { DockStatus.Error(firstSentence(taperWarningText(it, form))) }
+    val rows = sol.points.mapIndexed { i, p ->
+        val q = p.nodes.first().prog
+        DockRow("T${i + 1}′", Fmt.fixed3(q.xDia), Fmt.fixed3(q.z), pointColor(c, i))
+    }
+    // 바이트 반대쪽 면(파란 접힌 띠)은 세지 않는다
+    val warn = result.warnings.count { it != TaperWarning.AGAINST_TOOL }
+    return if (warn > 0) DockStatus.Warn(warn, rows) else DockStatus.Ok(rows)
+}
+
 @Composable
-private fun ZClearField(value: String, error: Boolean, modifier: Modifier, onChange: (String) -> Unit) {
+private fun ZClearField(value: String, error: Boolean, modifier: Modifier, preview: String?, onChange: (String) -> Unit) {
     NumberField(
         "Z 여유 (진입)", value, onChange, modifier, unit = "mm", placeholder = "기본 0", error = error,
-        hint = "진입점까지 Z 거리 (+ 값) · 노즈 R 보다 작으면 노즈 R 만큼",
+        hint = "진입점까지 Z 거리 (+ 값) · 노즈 R 보다 작으면 노즈 R 만큼", id = "zClear", preview = preview,
     )
 }
 
@@ -350,37 +404,69 @@ internal fun SmallLabel(text: String) {
 }
 
 /**
- * 도면선(앞뒤 요소·모서리 R 포함) · 노즈 중심 경로 · 보정점마다 노즈 원 · 직접 보정 프로그램(가상 인선) 경로(진입점에서 G01 포함) · G00 후퇴.
+ * 도면(굵게) 위에 직접 보정(G40) 경로(진입점에서 G01 포함, 채운 화살) · 노즈 중심(끊은 선) · 보정점마다 노즈 원과 가상 인선 꺾쇠 ·
+ * G00 후퇴(점선, 빈 화살). 점: T 점(○) · 보정점(●) · 진입 · 후퇴(□) · 모서리 R 중심(+ 도면 R → 보정 R).
+ * 소재는 빗금(내경은 구멍 위) — 척 쪽(왼쪽)으로 이어지고, 역방향은 끝 요소가 Z0 쪽(오른쪽)으로도 이어진다.
  * 시작·끝점을 비웠으면 프로그램이 그 요소를 깎지 않으므로(진입점에서 첫 꺾임점′ 으로, 마지막 꺾임점′ 에서 후퇴) 그 토막은 그리지 않는다.
+ * rText = 노즈 R 을 쓴 글(범례)
  */
 @Composable
-private fun SlopeViewer(sol: TaperSolution, r: Double) {
+private fun SlopeViewer(sol: TaperSolution, r: Double, rText: String, inner: Boolean, reverse: Boolean) {
     val c = AppTheme.colors
     val skip = if (sol.fromStart) 0 else 1
     val tail = if (sol.toEnd) 0 else 1
     val program = sol.program.segs.drop(skip).dropLast(tail)
     val tv = NoseComp.tipVector(sol.tip, r)
+    val nose = r > 0
     val lines = buildList {
-        add(ViewerLine(sol.drawing, c.drawProfile, 2.5.dp))
-        add(ViewerLine(Contour(sol.center.segs.drop(skip).dropLast(tail)), c.sky, 1.4.dp, dashed = true))
-        for (p in sol.points) for (node in p.nodes) add(ViewerLine(circle(node.prog - tv, r), c.sky, 1.2.dp))
-        add(ViewerLine(Contour.polyline(sol.entry, program.first().start), c.simToolpath, 2.2.dp)) // 진입점에서 첫 점까지는 G01 이송
-        add(ViewerLine(Contour.polyline(program.last().end, sol.exit), c.simRapid, 1.6.dp, dashed = true))
-        add(ViewerLine(Contour(program), c.simToolpath, 2.2.dp))
+        add(ViewerLine(sol.drawing, c.drawProfile, 3.5.dp))
+        if (nose) {
+            for (p in sol.points) for (node in p.nodes) {
+                val o = node.prog - tv
+                add(ViewerLine(circle(o, r), c.viewNose, 1.2.dp, fill = c.viewNose.copy(alpha = .10f)))
+                // 가상 인선 꺾쇠: 노즈 원에 Z · X 방향으로 접하는 두 선이 가상 인선(보정점)에서 만난다(팁 1~4)
+                if (tv.z != 0.0 && tv.x != 0.0) add(ViewerLine(Contour.polyline(o + Pt(tv.z, 0.0), node.prog, o + Pt(0.0, tv.x)), c.viewNose.copy(alpha = .8f), 1.2.dp))
+            }
+            add(ViewerLine(Contour(sol.center.segs.drop(skip).dropLast(tail)), c.viewNose, 1.4.dp, dashed = true))
+        }
+        add(ViewerLine(Contour.polyline(program.last().end, sol.exit), c.viewRapid, 2.dp, dotted = true, arrows = Arrow.Hollow))
+        // 진입점에서 첫 점까지는 G01 이송
+        add(ViewerLine(Contour(listOf(Line(sol.entry, program.first().start)) + program), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
     }
-    val marks = sol.points.flatMapIndexed { i, p ->
-        // T 점은 넣은 꼭짓점(모서리 R 이 있으면 이론 꼭짓점) 그대로. 테두리가 바로 옆 보정점(T1′ 등) 바탕에 가리지 않게 보정점을 먼저 그린다
-        p.nodes.map { ViewerMark(it.prog, c.simToolpath) } + ViewerMark(p.vertex, pointColor(c, i), "T${i + 1}")
-    } + ViewerMark(sol.entry, c.simRapid, "진입")
-    ViewerCard(
+    val marks = buildList {
+        sol.points.forEachIndexed { i, p ->
+            // T 점은 넣은 꼭짓점(모서리 R 이 있으면 이론 꼭짓점) 그대로
+            add(ViewerMark(p.vertex, viewLabelColor(c, i), "T${i + 1}"))
+            p.nodes.forEach { add(ViewerMark(it.prog, c.viewPath, kind = MarkKind.Dot)) }
+            p.corner?.let { k ->
+                val g = if (k.cw) "G02" else "G03"
+                val text = "R${Fmt.fixed3(k.r)} " + (k.progR?.let { "→ ${Fmt.fixed3(it)} $g" } ?: "$g · 보정 R 없음")
+                add(ViewerMark(k.center, c.simArc, text, MarkKind.Cross, arc = Arc(p.nodes.first().drawn, p.nodes.last().drawn, k.center, k.cw)))
+            }
+        }
+        add(ViewerMark(sol.entry, c.viewRapid, "진입", MarkKind.Square))
+        add(ViewerMark(sol.exit, c.viewRapid, "후퇴", MarkKind.Square))
+    }
+    ShapeViewerCard(
         lines, marks,
-        listOf(
-            Legend(c.drawProfile, "도면"),
-            Legend(c.sky, "노즈 중심", dashed = true),
-            Legend(c.simToolpath, "직접 보정(G40) 경로"),
-            Legend(c.simRapid, "급송", dashed = true),
+        listOfNotNull(
+            LegendItem(c.drawProfile, "도면"),
+            LegendItem(c.viewNose, "노즈 중심", LegendGlyph.Dashed).takeIf { nose },
+            LegendItem(c.viewNose, "노즈 R$rText · 가상 인선 ${sol.tip}번", LegendGlyph.Circle).takeIf { nose },
+            LegendItem(c.viewPath, "직접 보정(G40) 경로"),
+            LegendItem(c.viewRapid, "급송 G00", LegendGlyph.Dotted),
+            LegendItem(c.drawHatch, "소재", LegendGlyph.Fill),
         ),
+        subtitle = "직접 보정(G40) 경로 · 팁 ${sol.tip}번",
+        stock = ViewerStock(sol.drawing, inner, extendRight = reverse),
     )
+}
+
+/** 뷰어의 T 점 · 라벨 색(뷰어 바탕 대비가 나은 쪽): T1 주황, T2 청록, T3 남색 */
+private fun viewLabelColor(c: AppColors, i: Int): Color = when (i) {
+    0 -> c.viewLabelT1
+    1 -> c.viewLabelT2
+    else -> c.indigo
 }
 
 /** 노즈 원(반원 둘) */

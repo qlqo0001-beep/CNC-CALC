@@ -95,8 +95,16 @@ internal class TaperState(
     private val dir get() = if (reverse) "r" else "f"
 
     fun point(name: String): String = values[pointKey(name)] ?: TaperDefaults.point(name)
-    fun setPoint(name: String, v: String) { values[pointKey(name)] = v }
+    fun setPoint(name: String, v: String) {
+        // 비어 있던(자동) 다섯 값 칸에 값이 들어오면 기억한다 — 다섯 값이 어긋나면 그 칸을 다시 비우자고 권한다
+        if (name in FIVE && point(name).isEmpty() && v.isNotEmpty()) values[lastAutoKey] = name
+        values[pointKey(name)] = v
+    }
     private fun pointKey(name: String) = "p/${kind.name}/$type/$dir/$name"
+
+    /** 비어 있다가 마지막으로 값이 들어온 다섯 값 칸(x1 · z1 · x2 · z2 · ang, 종류 · 형상 · 방향마다). 없으면 null */
+    val lastAuto: String? get() = values[lastAutoKey]
+    private val lastAutoKey get() = "ui/lastAuto/${kind.name}/$type/$dir"
 
     /** 팁 번호 직접 지정(종류·방향마다). null = 표준 */
     var tip: Int?
@@ -111,7 +119,18 @@ internal class TaperState(
         get() = values["ui/nc"]?.toIntOrNull() ?: 0
         set(v) { values["ui/nc"] = v.toString() }
 
+    /** 입력 화면을 열 때 키패드를 열어 둘 칸 id(x1 · z2 · insert …). 화면이 처음 그려질 때 한 번 읽는다(스크린샷 시험) */
+    var editing: String?
+        get() = values["ui/editing"]?.ifEmpty { null }
+        set(v) { values["ui/editing"] = v.orEmpty() }
+
+    /** 다섯 값이 어긋날 때(CONTRADICTION) 비우자고 권할 칸: 마지막에 채운 자동 칸 · 각도 가운데 지금 찬 것(둘까지) */
+    fun contradictionFixes(): List<String> = listOfNotNull(lastAuto, "ang").distinct().filter { point(it).isNotEmpty() }
+
     companion object {
+        /** 단일 테이퍼에서 하나를 비워 계산하는 다섯 값 */
+        private val FIVE = setOf("x1", "z1", "x2", "z2", "ang")
+
         val Saver = listSaver<TaperState, String>(
             save = { s ->
                 listOf(s.kind.name, s.reverse.toString(), s.type?.toString() ?: "", s.open.toString()) +
@@ -308,7 +327,7 @@ internal fun taperWarningText(w: TaperWarning, f: SlopeForm): String = when (w) 
     TaperWarning.MISSING_INPUT ->
         if (f.kind.double) "세 점의 X · Z 를 모두 넣으면 바로 계산합니다."
         else "값을 넣으면 바로 계산합니다 — X1 · Z1 · X2 · Z2 · 각도 가운데 넷."
-    TaperWarning.CONTRADICTION -> "다섯 값이 서로 맞지 않습니다. 각도를 비우면 두 점으로 각도를 계산합니다."
+    TaperWarning.CONTRADICTION -> "다섯 값이 모두 찼고 서로 맞지 않습니다. 하나를 비워 계산하세요."
     TaperWarning.BAD_ANGLE -> "각도는 0° 보다 크고 90° 보다 작아야 합니다. 두 점이 수평·수직으로 놓이면 경사가 아닙니다."
     TaperWarning.SHAPE_MISMATCH -> when {
         !f.zBackward -> "값이 고른 형상 그림과 맞지 않습니다. 점의 좌우 순서(그림의 T1·T2 자리)와 X 가 커지는 쪽을 확인하세요."

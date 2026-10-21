@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,28 +19,37 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -53,6 +63,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSize
 import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.NoseComp
@@ -61,14 +72,13 @@ import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.AppIcons
 import com.bmt.nosecalc.ui.BottomSheet
 import com.bmt.nosecalc.ui.CardHeader
+import com.bmt.nosecalc.ui.DockStatus
 import com.bmt.nosecalc.ui.ExpandableHint
 import com.bmt.nosecalc.ui.NumberPad
 import com.bmt.nosecalc.ui.PillButton
+import com.bmt.nosecalc.ui.ResultDock
 import com.bmt.nosecalc.ui.Segmented
 import com.bmt.nosecalc.ui.SheetTitle
-import com.bmt.nosecalc.ui.ShapeViewer
-import com.bmt.nosecalc.ui.ViewerLine
-import com.bmt.nosecalc.ui.ViewerMark
 import com.bmt.nosecalc.ui.WarnLevel
 import com.bmt.nosecalc.ui.arrowHead
 import com.bmt.nosecalc.ui.theme.AppTheme
@@ -76,6 +86,7 @@ import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.Space
 import com.bmt.nosecalc.ui.theme.onFill
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -599,31 +610,35 @@ private fun NcLine(line: String) {
     )
 }
 
-/** 뷰어 범례 한 칸 */
-internal data class Legend(val color: Color, val label: String, val dashed: Boolean = false)
-
-/** 형상 뷰어 카드: 제목 + [ShapeViewer] + 범례 */
+/**
+ * 입력 화면 틀(라운드와 같다): 세로 스크롤(양옆 Space.gutter · 카드 사이 Space.cardGap · 아래 80dp — 끝 카드가 결과 띠에 가리지 않게) + 아래 결과 띠.
+ * 띠는 anchor 를 단 것(풀리면 경고 · 결과 카드, 멈췄으면 위의 빨간 띠)이 화면 밖일 때만 뜨고(키패드가 열려 있으면 안 뜬다), 띠 단추는 그것으로 스크롤한다
+ */
 @Composable
-internal fun ViewerCard(lines: List<ViewerLine>, marks: List<ViewerMark>, legend: List<Legend>) {
-    val c = AppTheme.colors
-    AppCard(Modifier.fillMaxWidth(), padding = 0.dp) {
-        CardHeader("형상 확인", modifier = Modifier.padding(start = Space.cardPad, end = Space.cardPad, top = 14.dp)) {
-            Text("확대·이동 · 두 번 눌러 맞춤", style = AppType.caption, color = c.textMuted)
-        }
-        ShapeViewer(lines, Modifier.fillMaxWidth().height(300.dp), marks)
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            legend.forEach { l ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Canvas(Modifier.size(18.dp, 8.dp)) {
-                        drawLine(
-                            l.color, Offset(0f, center.y), Offset(size.width, center.y), 2.dp.toPx(),
-                            pathEffect = if (l.dashed) PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())) else null,
-                        )
-                    }
-                    Spacer(Modifier.width(5.dp))
-                    Text(l.label, color = c.textBody, fontSize = 12.sp, maxLines = 1)
-                }
-            }
+internal fun TaperPage(dock: DockStatus?, sheetOpen: Boolean, content: @Composable ColumnScope.(anchor: Modifier) -> Unit) {
+    val scope = rememberCoroutineScope()
+    val bring = remember { BringIntoViewRequester() }
+    // 스크롤 칸(화면에 보이는 곳)과 anchor 의 자리(뿌리 좌표, 스크롤로 화면 밖이어도 잘리지 않은 칸)
+    var view by remember { mutableStateOf(Rect.Zero) }
+    var target by remember { mutableStateOf(Rect.Zero) }
+    val anchor = remember { Modifier.bringIntoViewRequester(bring).onGloballyPositioned { target = Rect(it.positionInRoot(), it.size.toSize()) } }
+    // 스크롤할 때마다 자리가 바뀌지만 띠는 보임 · 숨김이 바뀔 때만 다시 그린다
+    val away by remember { derivedStateOf { !target.isEmpty && !target.overlaps(view) } }
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { view = it.boundsInRoot() }
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Space.gutter)
+                .padding(top = 8.dp, bottom = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(Space.cardGap),
+        ) { content(anchor) }
+        if (dock != null) {
+            ResultDock(dock, visible = !sheetOpen && away) { scope.launch { bring.bringIntoView() } }
         }
     }
 }
+
+/** 결과 띠 · 키패드 한 줄의 멈춤 글: 경고 글의 첫 문장 */
+internal fun firstSentence(text: String): String = text.indexOf(". ").let { if (it < 0) text else text.substring(0, it + 1) }

@@ -140,7 +140,7 @@ private fun ChainFields(chain: FieldChain, figure: (@Composable (Modifier) -> Un
     }
 }
 
-/** 칸 모양 모아 보기: 넣은 값 · 자동 · 못 푼 자동 · 문제 칸 · 예시 · 표 · 자리표시 · 역할색 · 긴 값(잘리지 않고 줄어야) */
+/** 칸 모양 모아 보기: 넣은 값 · 자동 · 못 푼 자동 · 문제 칸 · 표 · 자리표시 · 역할색 · 긴 값(잘리지 않고 줄어야) */
 @Composable
 private fun FieldStates() {
     Column(Modifier.fillMaxSize().padding(Space.gutter)) {
@@ -155,7 +155,7 @@ private fun FieldStates() {
                     NumberField("각도", "30", {}, Modifier.weight(1f), unit = "°", error = true)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
-                    NumberField("X1", "40", {}, Modifier.weight(1f), unit = "mm", example = true, tag = "Ø직경")
+                    NumberField("X1", "40", {}, Modifier.weight(1f), unit = "mm", tag = "Ø직경")
                     NumberField("X2", "50.000", {}, Modifier.weight(1f), unit = "mm", tag = "Ø직경")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {

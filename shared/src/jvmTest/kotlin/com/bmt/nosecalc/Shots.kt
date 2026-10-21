@@ -30,6 +30,7 @@ object Shots {
      * frameMs = 한 프레임에 흘리는 시간. 키패드가 고치는 칸을 시트 위로 끌어올리는 스크롤처럼 프레임마다 다시 겨누는 애니메이션은
      * 0.1초 걸음이면 출렁여 자리가 매번 달라진다 — 그런 장면은 16(폰 프레임)으로 frames 를 늘려 찍는다
      * tapDp = 몇 프레임 그린 뒤 한 번 누르고 뗄 자리(dp) — 칸을 눌러 연 키패드처럼 상태로 열 수 없는 것을 찍는다.
+     * scrollToEnd = 몇 프레임 그린 뒤 휠을 크게 굴려 페이지를 끝까지 내린다(아래 결과 띠처럼 내려야 보이는 것).
      */
     fun both(
         name: String,
@@ -40,10 +41,11 @@ object Shots {
         fontScale: Float = 1f,
         frameMs: Long = 100,
         tapDp: Offset? = null,
+        scrollToEnd: Boolean = false,
         content: @Composable (AppState) -> Unit,
     ) {
-        take(name, dark = false, heightDp, frames, setup, widthDp, fontScale, frameMs, tapDp, content)
-        take(name, dark = true, heightDp, frames, setup, widthDp, fontScale, frameMs, tapDp, content)
+        take(name, dark = false, heightDp, frames, setup, widthDp, fontScale, frameMs, tapDp, scrollToEnd, content)
+        take(name, dark = true, heightDp, frames, setup, widthDp, fontScale, frameMs, tapDp, scrollToEnd, content)
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
@@ -57,6 +59,7 @@ object Shots {
         fontScale: Float = 1f,
         frameMs: Long = 100,
         tapDp: Offset? = null,
+        scrollToEnd: Boolean = false,
         content: @Composable (AppState) -> Unit,
     ): File {
         val state = AppState(KeyValueStore(File.createTempFile("bmt-kv", ".properties").apply { delete() }))
@@ -76,6 +79,10 @@ object Shots {
                 if (tapDp != null && i == TAP_FRAME) {
                     scene.sendPointerEvent(PointerEventType.Press, tapDp * DENSITY, type = PointerType.Touch)
                     scene.sendPointerEvent(PointerEventType.Release, tapDp * DENSITY, type = PointerType.Touch)
+                }
+                // 화면 왼쪽 끝(단추 밖)에서 굴린다 — 마우스가 남아도 올린 색이 찍히지 않게
+                if (scrollToEnd && i == TAP_FRAME) {
+                    scene.sendPointerEvent(PointerEventType.Scroll, Offset(2f, heightDp / 2f) * DENSITY, scrollDelta = Offset(0f, 1000f))
                 }
                 Thread.sleep(15)
                 t += frameMs * 1_000_000L

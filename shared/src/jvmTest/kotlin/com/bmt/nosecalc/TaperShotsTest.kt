@@ -17,8 +17,14 @@ import kotlin.test.Test
 
 /** 테이퍼·홈 화면 A·B 를 라이트/다크로 → build/shots/taper-*. 원본 02·11 과 나란히 본다 */
 class TaperShotsTest {
-    private fun shot(name: String, heightDp: Int = Shots.HEIGHT_DP, state: () -> TaperState) =
-        Shots.both(name, heightDp) { AppHost(it) { TaperScreen(state()) } }
+    private fun shot(
+        name: String,
+        heightDp: Int = Shots.HEIGHT_DP,
+        frames: Int = 40,
+        frameMs: Long = 100,
+        scrollToEnd: Boolean = false,
+        state: () -> TaperState,
+    ) = Shots.both(name, heightDp, frames, frameMs = frameMs, scrollToEnd = scrollToEnd) { AppHost(it) { TaperScreen(state()) } }
 
     @Test
     fun pick() {
@@ -65,7 +71,7 @@ class TaperShotsTest {
         }
         shot("taper-b-reverse", 2280) { TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example() }
         shot("taper-b-double", 2640) { TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1") } }
-        // 각도 30 ≠ 두 점의 45° → CONTRADICTION: 빨간 띠는 요약 바로 아래, X1 · Z1 · X2 · Z2 · 각도에 빨간 테
+        // 각도 30 ≠ 두 점의 45° → CONTRADICTION: 빨간 띠는 요약 바로 아래(그 아래 '각도 비우고 계산'), X1 · Z1 · X2 · Z2 · 각도에 빨간 테
         shot("taper-b-error", 1150) { TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") } }
         // 정방향인데 Z2 를 + 로(척 반대쪽) → Z 부호 글, Z 칸만 빨간 테
         shot("taper-b-zsign", 1150) { TaperState(type = 1, open = true).example().apply { setPoint("z2", "5") } }
@@ -82,9 +88,32 @@ class TaperShotsTest {
         shot("taper-groove-error") { TaperState(TaperKind.GROOVE, type = 2, open = true).example().apply { setShared("insert", "9") } }
     }
 
-    /** 각도 칸(taper-b 의 (114, 692)dp)을 눌러 연 키패드: 안내 줄(Z축 기준 · 꼭지각 ÷2 · X축 기준 90 − 값) · '비우기 · 자동 계산' */
+    /**
+     * 키패드(폰 높이): 그림은 고치는 칸의 점 · 치수만 초점색, 위에 결과 한 줄(T1′ · T2′ / 첫 단 · 끝 단), 제목 옆 "n / m", 오른쪽 아래 "다음".
+     * 칸을 끌어올리는 스크롤이 0.1초 걸음에서는 출렁이므로 폰 프레임(16ms)으로 찍는다
+     */
     @Test
-    fun keypadHint() = Shots.both("taper-b-keypad-ang", tapDp = Offset(114f, 692f)) {
+    fun keypad() {
+        shot("taper-b-keypad", frames = 150, frameMs = 16) { TaperState(type = 1, open = true).example().apply { editing = "z2" } }
+        shot("taper-groove-keypad", frames = 150, frameMs = 16) { TaperState(TaperKind.GROOVE, type = 1, open = true).example().apply { editing = "insert" } }
+    }
+
+    /**
+     * 폰 첫 화면: 보정 좌표가 화면 밖이라 아래 결과 띠(T1′ · T2′ · 결과 단추)가 뜬다.
+     * 멈춘 까닭(빨간 띠)은 입력 카드 위라 915dp 폰은 끝까지 내려도 보인다 — 작은 폰(640dp)에서 끝까지 내리면 띠가 빨갛게 그 까닭을 남긴다
+     */
+    @Test
+    fun dock() {
+        shot("taper-b-top") { TaperState(type = 1, open = true).example() }
+        shot("taper-b-error-dock", 640, scrollToEnd = true) { TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") } }
+    }
+
+    /**
+     * 각도 칸(taper-b 의 (114, 692)dp)을 눌러 연 키패드: 안내 줄(Z축 기준 · 꼭지각 ÷2 · X축 기준 90 − 값) · '비우기 · 자동 계산'.
+     * 묶음 키패드라 칸이 시트 위로 올라온다 — 폰 프레임(16ms)으로 찍는다
+     */
+    @Test
+    fun keypadHint() = Shots.both("taper-b-keypad-ang", frames = 150, frameMs = 16, tapDp = Offset(114f, 692f)) {
         AppHost(it) { TaperScreen(TaperState(type = 1, open = true).example()) }
     }
 

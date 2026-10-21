@@ -75,7 +75,7 @@ enum class FieldRole { Normal, Start, End, Dim }
  * - autoValue = 빈칸일 때 계산된 값: 청록 옅은 바탕·테두리 + valueComp 글 + 라벨 줄 "자동" 표.
  *   "" 이면 풀지 못한 것 → 칸에 "—", 표는 "자동 · 계산 안 됨"
  * - error = 이 칸 값이 문제: 빨강 2dp 테두리 · 옅은 빨강 바탕 · 라벨 앞 멈춤 아이콘
- * - example = 아직 바꾸지 않은 예시 값: 흐린 글 + "예시" 표. tag = 라벨 뒤 회색 표("Ø직경" · "반경")
+ * - tag = 라벨 뒤 회색 표("Ø직경" · "반경")
  * - placeholder = 빈칸 자리표시("기본 0" 처럼, 흐리게)
  * hint · blankable · figure · preview 는 키패드로 넘긴다(안내 줄 · "비우기 · 자동 계산" 단추 · 작은 그림 · 결과 한 줄).
  * [FieldChainHost] 안이면 묶음에 id 로 들어가 키패드를 묶음이 띄우고("다음"), 열리면 시트 위로 올라온다.
@@ -92,7 +92,6 @@ fun NumberField(
     placeholder: String = "",
     autoValue: String? = null,
     error: Boolean = false,
-    example: Boolean = false,
     tag: String? = null,
     hint: String? = null,
     blankable: Boolean = false,
@@ -113,7 +112,7 @@ fun NumberField(
     val computed = value.isEmpty() && !autoValue.isNullOrEmpty()
     // 칸 글 · 색 · 굵기: 넣은 값 > 못 푼 자동 > 자동값 > 자리표시
     val (shown, color, weight) = when {
-        value.isNotEmpty() -> Triple(value, if (example) c.textMuted else rc.value, if (example) FontWeight.SemiBold else FontWeight.Bold)
+        value.isNotEmpty() -> Triple(value, rc.value, FontWeight.Bold)
         unsolved -> Triple("—", c.textHint, FontWeight.Medium)
         autoValue != null -> Triple(autoValue, c.valueComp, FontWeight.SemiBold)
         else -> Triple(placeholder, c.textHint, FontWeight.Medium)
@@ -126,7 +125,6 @@ fun NumberField(
             if (tag != null) FieldChip(tag, c.subtle, c.textBody, c.lineField)
             if (unsolved) FieldChip("자동 · 계산 안 됨", c.error.bg, c.error.label, short = "계산 안 됨")
             if (computed) FieldChip("자동", c.teal.copy(alpha = 0.14f), c.tealDeep)
-            if (example) FieldChip("예시", c.warn.bg, c.warn.label, c.warn.border)
         }
         Spacer(Modifier.height(6.dp))
         ValueAndUnit(
@@ -220,7 +218,7 @@ private data object ValueFit : TextAutoSize {
 }
 
 /**
- * 라벨 줄 작은 표(11.5sp 굵게, 모서리 4dp): "자동" · "예시" · "Ø직경". 라벨 다음 남은 자리에 text 가 다 들어가지 않으면 short 로,
+ * 라벨 줄 작은 표(11.5sp 굵게, 모서리 4dp): "자동" · "Ø직경". 라벨 다음 남은 자리에 text 가 다 들어가지 않으면 short 로,
  * 그것도 넘치면 그리지 않는다(반쯤 잘린 표 대신)
  */
 @Composable
