@@ -1,6 +1,7 @@
 package com.bmt.nosecalc.screens.taper
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,21 +10,33 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bmt.nosecalc.CompMode
+import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.calc.Arc
 import com.bmt.nosecalc.calc.Contour
 import com.bmt.nosecalc.calc.Fmt
@@ -35,6 +48,7 @@ import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
 import com.bmt.nosecalc.ui.AppCard
+import com.bmt.nosecalc.ui.AppIcons
 import com.bmt.nosecalc.ui.Arrow
 import com.bmt.nosecalc.ui.CardHeader
 import com.bmt.nosecalc.ui.CoordPair
@@ -61,9 +75,10 @@ import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.Space
 
 /**
- * B 화면 — 테이퍼(외경·내경 · 2중 테이퍼): 그림 요약 → (멈춘 까닭 · 값을 넣으라는 안내) → 입력 → 경고 → 보정 좌표 → 형상 → NC(G41/G42 · 직접 보정).
+ * B 화면 — 테이퍼(외경·내경 · 2중 테이퍼): 그림 요약 → (멈춘 까닭 · 값을 넣으라는 안내) → 입력 → 보정 방식 스위치 → 경고 → 결과 카드 → 형상 → NC.
+ * 결과 카드 · 형상 · NC 는 앱 전체 보정 방식(기계 보정 G41/G42 · 직접 보정 G40)을 따른다.
  * 값이 바뀌면 바로 다시 푼다(계산 버튼 없음). 입력 칸은 한 묶음이라 키패드의 "다음" 으로 이어 넣고, 키패드에는 그 칸만 짚은 그림과 결과 한 줄이 뜬다.
- * 보정 좌표가 화면 밖이면 아래 결과 띠에 T 점′ 좌표(멈췄으면 그 까닭)가 남는다
+ * 결과 카드가 화면 밖이면 아래 결과 띠에 T 점 좌표(멈췄으면 그 까닭)가 남는다
  */
 @Composable
 internal fun SlopeScreen(s: TaperState) {
@@ -101,7 +116,8 @@ internal fun SlopeScreen(s: TaperState) {
     val flagged = if (sol == null && !waiting) result.warnings.flatMap { taperWarningFields(it, form) }.toSet() else emptySet()
     fun auto(text: String, v: Double?) = if (waiting) null else autoValue(text, v)
     val r = if (form.noseR.isFinite()) Fmt.nc(form.noseR).removeSuffix(".") else "—"
-    val dock = slopeDock(result, form, waiting, c)
+    val direct = LocalAppState.current.compMode == CompMode.DIRECT
+    val dock = slopeDock(result, form, waiting, direct, c)
     val preview = dock?.oneLine()
     val chain = rememberFieldChain(s.editing)
     // 키패드 그림: 요약 칸 그림에서 그 칸의 점 · 치수만 짚는다
@@ -223,8 +239,8 @@ internal fun SlopeScreen(s: TaperState) {
         }
 
         if (sol != null) {
-            val g41 = s.ncTab == 0
-            // 결과 띠가 가리키는 곳: 경고 · 보정 좌표
+            CompModeSwitch(sol.side)
+            // 결과 띠가 가리키는 곳: 경고 · 결과 카드
             Column(anchor, verticalArrangement = Arrangement.spacedBy(Space.cardGap)) {
                 result.warnings.forEach {
                     if (it == TaperWarning.AGAINST_TOOL) {
@@ -233,28 +249,26 @@ internal fun SlopeScreen(s: TaperState) {
                         WarningBanner(taperWarningText(it, form), level = WarnLevel.Warn)
                     }
                 }
-                CompCard(sol, g41)
+                if (direct) CompCard(sol) else MachineCard(sol, form.noseR)
             }
-            SlopeViewer(sol, form.noseR, r, kind.inner, s.reverse)
+            SlopeViewer(sol, form.noseR, r, kind.inner, s.reverse, direct)
             NcCard(
-                if (g41) sol.ncG41G42 else sol.ncG40,
-                if (g41) {
+                if (direct) directNc(sol.ncG40, form.noseR, sol.tip) else sol.ncG41G42,
+                if (direct) {
+                    "앱이 계산한 가상 인선 ${sol.tip}번 좌표입니다 — 기계의 노즈R 보정 없이(G40) 그대로 깎습니다. 이 좌표에 G41/G42 를 또 걸면 " +
+                        "노즈R 만큼 두 번 밀립니다(첫 줄 주석이 그 노즈 R · 팁을 적어 둡니다 — 기계는 주석을 건너뜁니다). " +
+                        "모서리 원호는 보정 R(볼록 R + r · 오목 R − r), 인선은 끝좌표에 멈춥니다. 이송 F 는 넣지 않았습니다."
+                } else {
                     "도면 좌표에 ${sol.side} ${eulReul("${sol.side}")} 걸어 기계가 노즈R 을 보정합니다. " +
                         "기계 공구 보정 화면에 R$r · T${sol.tip} ${eulReul("${sol.tip}")} 넣으세요(첫 줄 주석). " +
                         "보정 시작·취소는 직선 이동에서 합니다. 마지막 줄 끝에서는 노즈 접점이 끝좌표에 와서 인선이 직접 보정보다 더 갈 수 있습니다 " +
-                        "(끝 요소가 외경·내경처럼 수평이면 Z 로 노즈R 만큼) — 바로 뒤에 어깨·턱이 있으면 직접 보정 프로그램을 쓰세요. 이송 F 는 넣지 않았습니다."
-                } else {
-                    "앱이 계산한 가상 인선 ${sol.tip}번 좌표입니다 — 기계의 노즈R 보정 없이(G40) 그대로 깎습니다. 이 좌표에 G41/G42 를 또 걸면 " +
-                        "노즈R 만큼 두 번 밀립니다. 모서리 원호는 보정 R(볼록 R + r · 오목 R − r), 인선은 끝좌표에 멈춥니다. 이송 F 는 넣지 않았습니다."
+                        "(끝 요소가 외경·내경처럼 수평이면 Z 로 노즈R 만큼) — 바로 뒤에 어깨·턱이 있으면 위 스위치에서 직접 보정을 고르세요. 이송 F 는 넣지 않았습니다."
                 },
-                tabs = listOf("G41/G42 보정 프로그램", "직접 보정 (G40)"),
-                tab = s.ncTab,
-                onTab = { s.ncTab = it },
-                programName = if (g41) "기계 보정(G41/G42) 프로그램" else "직접 보정(G40) 프로그램",
-                facts = if (g41) {
-                    listOf(NcFact("공구 보정 화면: R $r · T ${sol.tip} 입력", WarnLevel.Warn), NcFact("끝점에서 노즈R 만큼 더 갈 수 있음"), NcFact("이송 F 없음"))
-                } else {
+                programName = if (direct) "직접 보정(G40) 프로그램" else "기계 보정(G41/G42) 프로그램",
+                facts = if (direct) {
                     listOf(NcFact("G41/G42 걸지 말 것 (이중 보정)", WarnLevel.Error), NcFact("공구 보정 R 안 씀"), NcFact("이송 F 없음"))
+                } else {
+                    listOf(NcFact("공구 보정 화면: R $r · T ${sol.tip} 입력", WarnLevel.Warn), NcFact("끝점에서 노즈R 만큼 더 갈 수 있음"), NcFact("이송 F 없음"))
                 },
             )
         }
@@ -263,14 +277,18 @@ internal fun SlopeScreen(s: TaperState) {
 }
 
 /**
- * 결과 띠 · 키패드 결과 한 줄: 풀리면 T 점마다 첫 보정점(T1′ …, 직접 보정 좌표)과 노란 경고 수, 멈췄으면 첫 경고의 첫 문장.
- * 값이 모자라는 동안(파란 안내)은 null — 띠도 한 줄도 없다
+ * 결과 띠 · 키패드 결과 한 줄: 풀리면 T 점마다 첫 점(직접 보정 = 보정점 T1′ …, 기계 보정 = 도면 점 T1 …)과 노란 경고 수,
+ * 멈췄으면 첫 경고의 첫 문장. 값이 모자라는 동안(파란 안내)은 null — 띠도 한 줄도 없다
  */
-private fun slopeDock(result: TaperResult, form: SlopeForm, waiting: Boolean, c: AppColors): DockStatus? {
+private fun slopeDock(result: TaperResult, form: SlopeForm, waiting: Boolean, direct: Boolean, c: AppColors): DockStatus? {
     val sol = result.solution ?: return if (waiting) null else result.warnings.firstOrNull()?.let { DockStatus.Error(firstSentence(taperWarningText(it, form))) }
     val rows = sol.points.mapIndexed { i, p ->
-        val q = p.nodes.first().prog
-        DockRow("T${i + 1}′", Fmt.fixed3(q.xDia), Fmt.fixed3(q.z), pointColor(c, i))
+        val n = p.nodes.first()
+        if (direct) {
+            DockRow("T${i + 1}′", Fmt.fixed3(n.prog.xDia), Fmt.fixed3(n.prog.z), pointColor(c, i))
+        } else {
+            DockRow("T${i + 1}", Fmt.fixed3(n.drawn.xDia), Fmt.fixed3(n.drawn.z), pointColor(c, i), c.textValue)
+        }
     }
     // 바이트 반대쪽 면(파란 접힌 띠)은 세지 않는다
     val warn = result.warnings.count { it != TaperWarning.AGAINST_TOOL }
@@ -300,50 +318,99 @@ private fun eulReul(s: String): String = if (s.last() in "013678") "을" else "�
 private fun autoValue(text: String, v: Double?): String? = if (text.isNotEmpty()) null else v?.let { Fmt.fixed3(it) } ?: ""
 
 /**
- * 보정 좌표(가상 인선 = 직접 보정 프로그램 좌표): 점마다 X | Z 좌표 쌍 + "ΔX(직경) · ΔZ" 줄.
- * 모서리 R 이 있는 점은 R 시작·끝 접점 둘(도면 좌표를 아래에)과 원호 방향·도면 R·보정 R. 아래 각도·G00 진입점.
- * g41 = 아래 NC 가 G41/G42 프로그램 — 이 좌표를 그 프로그램에 넣으면 노즈R 이 두 번 들어간다고 위에 알린다
+ * 직접 보정 결과 — 보정 좌표(가상 인선 = 직접 보정 프로그램 좌표): 점마다 X | Z 좌표 쌍 + "ΔX(직경) · ΔZ" 줄.
+ * 모서리 R 이 있는 점은 R 시작·끝 접점 둘(도면 좌표를 아래에)과 원호 방향·도면 R·보정 R. 아래 각도·G00 진입점
  */
 @Composable
-private fun CompCard(sol: TaperSolution, g41: Boolean) {
+private fun CompCard(sol: TaperSolution) {
     val c = AppTheme.colors
     AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
         CardHeader("보정 좌표", "직접 보정(G40) 프로그램 좌표 · 팁 ${sol.tip}번") {
             Text("단위 mm · X 직경", style = AppType.caption, color = c.textMuted)
-        }
-        if (g41) {
-            WarningBanner(
-                "G41/G42 프로그램(아래 NC)은 도면 좌표를 씁니다. 이 보정 좌표를 그 프로그램에 넣으면 노즈R 이 두 번 들어갑니다.",
-                level = WarnLevel.Info,
-            )
         }
         sol.points.forEachIndexed { i, p ->
             Rule()
             Row(verticalAlignment = if (p.corner == null) Alignment.CenterVertically else Alignment.Top) {
                 PointBadge("T${i + 1}′", pointColor(c, i), Modifier.size(44.dp, 40.dp))
                 Spacer(Modifier.width(12.dp))
-                PointRows(p, Modifier.weight(1f))
+                PointRows(p, Modifier.weight(1f), drawn = false, c.valueComp)
             }
         }
         Rule()
-        val size = AppType.numLarge.fontSize
-        val entry = "X${Fmt.fixed3(sol.entry.xDia)}  Z${Fmt.fixed3(sol.entry.z)}"
-        val angles = sol.anglesDeg
-        if (angles.size == 1) {
-            Row {
-                LabeledValue("각도 (Z축 기준)", "${Fmt.fixed3(angles[0])}°", Modifier.weight(1f), size = size)
-                LabeledValue("G00 진입점", entry, Modifier.weight(1.5f), size = size)
+        Angles(sol, entry = true)
+    }
+}
+
+/**
+ * 기계 보정 결과(G41/G42 프로그램): 공구 보정 화면에 넣을 R · T(크게) → 점마다 도면 좌표(모서리 R 은 접점 둘 · 원호 방향 · 도면 R) → 각도.
+ * 진입점은 G41/G42 프로그램(NC 의 첫 G00)에만 있어 따로 쓰지 않는다. 보정 좌표는 '직접 보정 좌표도 보기' 를 눌러야 흐리게 나온다 —
+ * 그 좌표를 G41/G42 프로그램에 넣으면 노즈R 이 두 번 들어가서
+ */
+@Composable
+private fun MachineCard(sol: TaperSolution, noseR: Double) {
+    val c = AppTheme.colors
+    var more by rememberSaveable { mutableStateOf(false) }
+    AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
+        CardHeader("기계 보정", "공구 보정 화면에 넣을 값 · 도면 좌표") {
+            Text("단위 mm · X 직경", style = AppType.caption, color = c.textMuted)
+        }
+        // R · T 는 기계 공구 보정 화면의 칸 이름 그대로(이름은 한글 글꼴로 작게, 값은 고정폭)
+        Text(
+            buildAnnotatedString {
+                listOf("R" to Fmt.fixed3(noseR), "T" to "${sol.tip}").forEachIndexed { i, (name, v) ->
+                    withStyle(SpanStyle(fontFamily = AppTheme.sans, fontSize = 15.sp, color = c.textMuted)) { append(if (i > 0) "   ·   $name " else "$name ") }
+                    append(v)
+                }
+            },
+            style = AppType.numHero,
+            color = c.textValue,
+        )
+        // 'R 칸' 이 줄 끝에서 쪼개지지 않게 붙임 공백(\u00A0) · 낱말 이음(\u2060)
+        Text("노즈 R · 팁 번호 — 기계 공구 보정 화면의 R\u00A0칸 · T\u00A0칸\u2060에 넣습니다", Modifier.padding(top = 2.dp), style = AppType.caption, color = c.textMuted)
+        sol.points.forEachIndexed { i, p ->
+            Rule()
+            Row(verticalAlignment = if (p.corner == null) Alignment.CenterVertically else Alignment.Top) {
+                PointBadge("T${i + 1}", pointColor(c, i), Modifier.size(44.dp, 40.dp))
+                Spacer(Modifier.width(12.dp))
+                PointRows(p, Modifier.weight(1f), drawn = true, c.textValue, AppType.numLarge.fontSize)
             }
-        } else {
-            // 2중 테이퍼: 경사 둘(그림의 각1 = T1–T2 · 각2 = T2–T3)을 나란히, 진입점은 아랫줄
-            Row {
-                angles.forEachIndexed { i, a ->
-                    LabeledValue("각${i + 1} (Z축 기준)", "${Fmt.fixed3(a)}°", Modifier.weight(1f), size = size)
+        }
+        Rule()
+        Angles(sol, entry = false)
+        Rule()
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp)).clickable { more = !more },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(if (more) "직접 보정 좌표 접기" else "직접 보정 좌표도 보기", Modifier.weight(1f), color = c.tealDeep, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+            Icon(AppIcons.ChevronDown, null, Modifier.size(16.dp).rotate(if (more) 180f else 0f), tint = c.tealDeep)
+        }
+        if (more) {
+            Text("직접 보정(G40)용 보정 좌표 — G41/G42 프로그램에 넣으면 노즈R 이 두 번 들어갑니다.", style = AppType.caption, color = c.textMuted)
+            sol.points.forEachIndexed { i, p ->
+                Row(Modifier.padding(top = 10.dp), verticalAlignment = if (p.corner == null) Alignment.CenterVertically else Alignment.Top) {
+                    PointBadge("T${i + 1}′", c.textMuted, Modifier.size(44.dp, 40.dp))
+                    Spacer(Modifier.width(12.dp))
+                    PointRows(p, Modifier.weight(1f), drawn = false, c.textMuted, AppType.numBody.fontSize)
                 }
             }
-            LabeledValue("G00 진입점", entry, Modifier.padding(top = 10.dp), size = size)
         }
     }
+}
+
+/** 각도(2중 테이퍼는 경사 둘 — 그림의 각1 = T1–T2 · 각2 = T2–T3)와 entry 면 G00 진입점(단일은 각도 옆, 2중은 아랫줄) */
+@Composable
+private fun Angles(sol: TaperSolution, entry: Boolean) {
+    val size = AppType.numLarge.fontSize
+    val at = "X${Fmt.fixed3(sol.entry.xDia)}  Z${Fmt.fixed3(sol.entry.z)}"
+    val angles = sol.anglesDeg
+    Row {
+        angles.forEachIndexed { i, a ->
+            LabeledValue(if (angles.size == 1) "각도 (Z축 기준)" else "각${i + 1} (Z축 기준)", "${Fmt.fixed3(a)}°", Modifier.weight(1f), size = size)
+        }
+        if (entry && angles.size == 1) LabeledValue("G00 진입점", at, Modifier.weight(1.5f), size = size)
+    }
+    if (entry && angles.size > 1) LabeledValue("G00 진입점", at, Modifier.padding(top = 10.dp), size = size)
 }
 
 @Composable
@@ -351,25 +418,30 @@ private fun Rule() {
     Box(Modifier.padding(vertical = 9.dp).fillMaxWidth().height(1.dp).background(AppTheme.colors.lineCard))
 }
 
+/**
+ * 점 하나의 좌표 줄(color · size 글로). drawn = 도면 좌표(기계 보정 프로그램 좌표)만, 아니면 보정 좌표 + 아래 "ΔX(직경) · ΔZ" 줄
+ * (모서리 R 이면 그 접점의 도면 좌표). 모서리 R 이 있으면 R 시작·끝 접점 둘과 원호 방향 · 도면 R(보정 좌표면 → 보정 R)
+ */
 @Composable
-private fun PointRows(p: TaperPoint, modifier: Modifier) {
+private fun PointRows(p: TaperPoint, modifier: Modifier, drawn: Boolean, color: Color, size: TextUnit = AppType.numHero.fontSize) {
     val c = AppTheme.colors
     val corner = p.corner
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         p.nodes.forEachIndexed { k, node ->
             if (k > 0) Spacer(Modifier.height(6.dp))
             if (corner != null) SmallLabel(if (k == 0) "R 시작 (접점)" else "R 끝 (접점)")
-            CoordPair(Fmt.fixed3(node.prog.xDia), Fmt.fixed3(node.prog.z), c.valueComp)
-            if (corner == null) {
-                SubLine("ΔX(직경)" to signed(node.dXDia), "ΔZ" to signed(node.dZ))
-            } else {
-                SubLine("도면" to "X${Fmt.fixed3(node.drawn.xDia)}  Z${Fmt.fixed3(node.drawn.z)}")
+            val q = if (drawn) node.drawn else node.prog
+            CoordPair(Fmt.fixed3(q.xDia), Fmt.fixed3(q.z), color, size = size)
+            when {
+                drawn -> {}
+                corner == null -> SubLine("ΔX(직경)" to signed(node.dXDia), "ΔZ" to signed(node.dZ))
+                else -> SubLine("도면" to "X${Fmt.fixed3(node.drawn.xDia)}  Z${Fmt.fixed3(node.drawn.z)}")
             }
         }
         if (corner != null) {
             Text(
-                "${if (corner.cw) "G02 시계" else "G03 반시계"} · 도면 R${Fmt.fixed3(corner.r)} → 보정 R" +
-                    (corner.progR?.let { Fmt.fixed3(it) } ?: " 없음 (R ≤ 노즈R)"),
+                "${if (corner.cw) "G02 시계" else "G03 반시계"} · 도면 R${Fmt.fixed3(corner.r)}" +
+                    if (drawn) "" else " → 보정 R" + (corner.progR?.let { Fmt.fixed3(it) } ?: " 없음 (R ≤ 노즈R)"),
                 Modifier.padding(top = 2.dp),
                 style = AppType.label,
                 color = c.simArc,
@@ -408,16 +480,17 @@ internal fun SmallLabel(text: String) {
  * G00 후퇴(점선, 빈 화살). 점: T 점(○) · 보정점(●) · 진입 · 후퇴(□) · 모서리 R 중심(+ 도면 R → 보정 R).
  * 소재는 빗금(내경은 구멍 위) — 척 쪽(왼쪽)으로 이어지고, 역방향은 끝 요소가 Z0 쪽(오른쪽)으로도 이어진다.
  * 시작·끝점을 비웠으면 프로그램이 그 요소를 깎지 않으므로(진입점에서 첫 꺾임점′ 으로, 마지막 꺾임점′ 에서 후퇴) 그 토막은 그리지 않는다.
- * rText = 노즈 R 을 쓴 글(범례)
+ * direct = false(기계 보정)면 프로그램은 도면 좌표 그대로라 도면의 깎는 토막을 경로로 그리고(모서리 R 은 도면 R),
+ * 노즈 원 · 보정점 · 직접 보정의 진입 · 후퇴는 그리지 않는다. rText = 노즈 R 을 쓴 글(범례)
  */
 @Composable
-private fun SlopeViewer(sol: TaperSolution, r: Double, rText: String, inner: Boolean, reverse: Boolean) {
+private fun SlopeViewer(sol: TaperSolution, r: Double, rText: String, inner: Boolean, reverse: Boolean, direct: Boolean) {
     val c = AppTheme.colors
     val skip = if (sol.fromStart) 0 else 1
     val tail = if (sol.toEnd) 0 else 1
     val program = sol.program.segs.drop(skip).dropLast(tail)
     val tv = NoseComp.tipVector(sol.tip, r)
-    val nose = r > 0
+    val nose = direct && r > 0
     val lines = buildList {
         add(ViewerLine(sol.drawing, c.drawProfile, 3.5.dp))
         if (nose) {
@@ -429,23 +502,29 @@ private fun SlopeViewer(sol: TaperSolution, r: Double, rText: String, inner: Boo
             }
             add(ViewerLine(Contour(sol.center.segs.drop(skip).dropLast(tail)), c.viewNose, 1.4.dp, dashed = true))
         }
-        add(ViewerLine(Contour.polyline(program.last().end, sol.exit), c.viewRapid, 2.dp, dotted = true, arrows = Arrow.Hollow))
-        // 진입점에서 첫 점까지는 G01 이송
-        add(ViewerLine(Contour(listOf(Line(sol.entry, program.first().start)) + program), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
+        if (direct) {
+            add(ViewerLine(Contour.polyline(program.last().end, sol.exit), c.viewRapid, 2.dp, dotted = true, arrows = Arrow.Hollow))
+            // 진입점에서 첫 점까지는 G01 이송
+            add(ViewerLine(Contour(listOf(Line(sol.entry, program.first().start)) + program), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
+        } else {
+            add(ViewerLine(Contour(sol.drawing.segs.drop(skip).dropLast(tail)), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
+        }
     }
     val marks = buildList {
         sol.points.forEachIndexed { i, p ->
             // T 점은 넣은 꼭짓점(모서리 R 이 있으면 이론 꼭짓점) 그대로
             add(ViewerMark(p.vertex, viewLabelColor(c, i), "T${i + 1}"))
-            p.nodes.forEach { add(ViewerMark(it.prog, c.viewPath, kind = MarkKind.Dot)) }
+            if (direct) p.nodes.forEach { add(ViewerMark(it.prog, c.viewPath, kind = MarkKind.Dot)) }
             p.corner?.let { k ->
                 val g = if (k.cw) "G02" else "G03"
-                val text = "R${Fmt.fixed3(k.r)} " + (k.progR?.let { "→ ${Fmt.fixed3(it)} $g" } ?: "$g · 보정 R 없음")
+                val text = "R${Fmt.fixed3(k.r)} " + if (!direct) g else k.progR?.let { "→ ${Fmt.fixed3(it)} $g" } ?: "$g · 보정 R 없음"
                 add(ViewerMark(k.center, c.simArc, text, MarkKind.Cross, arc = Arc(p.nodes.first().drawn, p.nodes.last().drawn, k.center, k.cw)))
             }
         }
-        add(ViewerMark(sol.entry, c.viewRapid, "진입", MarkKind.Square))
-        add(ViewerMark(sol.exit, c.viewRapid, "후퇴", MarkKind.Square))
+        if (direct) {
+            add(ViewerMark(sol.entry, c.viewRapid, "진입", MarkKind.Square))
+            add(ViewerMark(sol.exit, c.viewRapid, "후퇴", MarkKind.Square))
+        }
     }
     ShapeViewerCard(
         lines, marks,
@@ -453,11 +532,11 @@ private fun SlopeViewer(sol: TaperSolution, r: Double, rText: String, inner: Boo
             LegendItem(c.drawProfile, "도면"),
             LegendItem(c.viewNose, "노즈 중심", LegendGlyph.Dashed).takeIf { nose },
             LegendItem(c.viewNose, "노즈 R$rText · 가상 인선 ${sol.tip}번", LegendGlyph.Circle).takeIf { nose },
-            LegendItem(c.viewPath, "직접 보정(G40) 경로"),
-            LegendItem(c.viewRapid, "급송 G00", LegendGlyph.Dotted),
+            LegendItem(c.viewPath, if (direct) "직접 보정(G40) 경로" else "기계 보정(${sol.side}) 경로 · 도면 좌표"),
+            LegendItem(c.viewRapid, "급송 G00", LegendGlyph.Dotted).takeIf { direct },
             LegendItem(c.drawHatch, "소재", LegendGlyph.Fill),
         ),
-        subtitle = "직접 보정(G40) 경로 · 팁 ${sol.tip}번",
+        subtitle = if (direct) "직접 보정(G40) 경로 · 팁 ${sol.tip}번" else "기계 보정(${sol.side}) · 도면 좌표",
         stock = ViewerStock(sol.drawing, inner, extendRight = reverse),
     )
 }

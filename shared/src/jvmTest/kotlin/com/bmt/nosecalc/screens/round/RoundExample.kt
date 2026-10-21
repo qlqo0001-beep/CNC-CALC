@@ -5,8 +5,8 @@ package com.bmt.nosecalc.screens.round
  * 그림 모양대로 맞는 값이고, 비울 수 있는 칸 하나는 비워 자동으로 보인다. 형상 3 은 calc-design.md 의 손 계산 예(Ø20, SR12.5, CR1 → L = 5).
  * 수동은 어깨의 볼록 R10(X30 Z0 → X50 Z−10, 가운데 점은 45° 자리). Z 여유도 예전 처음 값 1.0
  */
-internal fun roundExample(type: Int? = null, open: Boolean = false, comp: Boolean = true): RoundState =
-    RoundState(type, open, comp).apply {
+internal fun roundExample(type: Int? = null, open: Boolean = false): RoundState =
+    RoundState(type, open).apply {
         EXAMPLE_DIMS.forEach { (t, dims) -> dims.forEach { (key, v) -> setDim(t, key, v) } }
         EXAMPLE_POINTS.forEach { (name, v) -> setPoint(name, v) }
         setShared("zClear", "1.0")

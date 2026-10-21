@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -64,9 +65,11 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
+import com.bmt.nosecalc.CompMode
 import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.NoseComp
+import com.bmt.nosecalc.calc.Side
 import com.bmt.nosecalc.calc.TaperCalc
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.AppIcons
@@ -77,7 +80,6 @@ import com.bmt.nosecalc.ui.ExpandableHint
 import com.bmt.nosecalc.ui.NumberPad
 import com.bmt.nosecalc.ui.PillButton
 import com.bmt.nosecalc.ui.ResultDock
-import com.bmt.nosecalc.ui.Segmented
 import com.bmt.nosecalc.ui.SheetTitle
 import com.bmt.nosecalc.ui.WarnLevel
 import com.bmt.nosecalc.ui.arrowHead
@@ -445,21 +447,70 @@ internal fun signed(v: Double): String {
     return if (t.startsWith("-") || t == "0.000") t else "+$t"
 }
 
+/**
+ * 보정 방식 스위치(테이퍼 · 라운드 결과 맨 위, 앱 전체 하나 — AppState.compMode): 두 줄 칸(60dp, 청록) + 아래 한 줄 설명.
+ * 기계 보정 = 도면 좌표에 G41/G42(side)를 걸어 기계가 노즈R 을 보정, 직접 보정 = 앱이 계산한 보정 좌표를 G40 으로 그대로.
+ * 결과 카드 · 형상 확인 · NC 가 모두 이것을 따른다
+ */
+@Composable
+internal fun CompModeSwitch(side: Side) {
+    val c = AppTheme.colors
+    val state = LocalAppState.current
+    val mode = state.compMode
+    AppCard(Modifier.fillMaxWidth(), padding = 10.dp) {
+        val shape = RoundedCornerShape(11.dp)
+        Row(Modifier.fillMaxWidth().height(60.dp).clip(shape).background(c.segTrack).border(1.dp, c.lineCard, shape).padding(4.dp)) {
+            listOf(
+                Triple(CompMode.MACHINE, "기계 보정", "$side · 도면 좌표"),
+                Triple(CompMode.DIRECT, "직접 보정", "G40 · 보정 좌표"),
+            ).forEach { (m, name, sub) ->
+                val on = m == mode
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (on) c.teal else Color.Transparent)
+                        .clickable { state.compMode = m },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(name, color = if (on) c.onFill(c.teal) else c.textBody, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(sub, color = if (on) c.onFill(c.teal) else c.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                }
+            }
+        }
+        Text(
+            // 좁은 폰에서 '좌표로' · '(기계 보정 없음)' 이 쪼개져 줄바꿈되지 않게 낱말 이음(\u2060) · 붙임 공백(\u00A0)
+            if (mode == CompMode.MACHINE) "기계 공구 보정 화면에 R·T 를 넣고 도면 좌\u2060표\u2060로 깎습니다"
+            else "앱이 계산한 좌표 그대로 깎습니다 (기계\u00A0보정\u00A0없음)",
+            Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
+            style = AppType.caption,
+            color = c.textMuted,
+        )
+    }
+}
+
+/**
+ * 직접 보정(G40) 프로그램: 첫 줄에 주석 '(G40 DIRECT R0.4 T3)' — 좌표에 노즈 R · 팁이 이미 들어 있다고 적어 G41/G42 를 또 걸지 않게.
+ * 기계는 주석을 건너뛴다(FANUC 주석은 한글을 못 쓴다). 화면 · 복사 · 골든 모두 이 줄부터
+ */
+internal fun directNc(lines: List<String>, noseR: Double, tip: Int): List<String> =
+    listOf("(G40 DIRECT R${Fmt.nc(noseR).removeSuffix(".")} T$tip)") + lines
+
 /** NC 카드의 꼭 알 것 한 칸. tone = null 이면 보통(회색), 아니면 경고 띠와 같은 색 · 아이콘 */
 internal data class NcFact(val text: String, val tone: WarnLevel? = null)
 
 /**
- * NC 블록 카드: 머리(제목 · 복사 아이콘) → 프로그램 고르기(tabs, 테이퍼: G41/G42 · 직접 보정) → 꼭 알 것(facts) →
+ * NC 블록 카드: 머리(제목 · 복사 아이콘) → 꼭 알 것(facts) →
  * 줄 번호 + 고정폭 줄(골라 복사할 수 있고, 줄은 접지 않고 옆으로 민다 · 줄 번호는 복사되지 않음) →
- * 큰 복사 단추(프로그램 이름 · 줄 수, 누르면 2초 "복사됨") → 설명(첫 문장 + 자세히). 복사하면 토스트
+ * 큰 복사 단추(프로그램 이름 · 줄 수, 누르면 2초 "복사됨") → 설명(첫 문장 + 자세히). 복사하면 토스트.
+ * 테이퍼 · 라운드의 프로그램(기계 보정 · 직접 보정)은 결과 맨 위 [CompModeSwitch] 가 고른다
  */
 @Composable
 internal fun NcCard(
     lines: List<String>,
     note: String,
-    tabs: List<String> = emptyList(),
-    tab: Int = 0,
-    onTab: (Int) -> Unit = {},
     programName: String = "NC 프로그램",
     facts: List<NcFact> = emptyList(),
 ) {
@@ -493,9 +544,6 @@ internal fun NcCard(
             ) {
                 Icon(AppIcons.Copy, "복사", Modifier.size(20.dp), tint = c.textBody)
             }
-        }
-        if (tabs.isNotEmpty()) {
-            Segmented(tabs, tab, onTab, Modifier.fillMaxWidth().padding(bottom = 10.dp), color = c.teal, height = 44.dp, fontSize = 14)
         }
         if (facts.isNotEmpty()) {
             FlowRow(

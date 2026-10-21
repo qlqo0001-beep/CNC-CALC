@@ -19,7 +19,7 @@ import androidx.compose.ui.input.key.type
 import com.bmt.nosecalc.ui.OverlayEntry
 
 /**
- * 앱 전체 상태: 화면 쌓임, 테마, 뒤로 처리, 위에 뜨는 것(바텀시트·모달), 토스트.
+ * 앱 전체 상태: 화면 쌓임, 테마, 보정 방식, 뒤로 처리, 위에 뜨는 것(바텀시트·모달), 토스트.
  * 안드로이드는 MainActivity, PC 는 main() 이 하나 만들어 [App] 에 넘긴다.
  */
 @Stable
@@ -59,6 +59,16 @@ class AppState(private val store: KeyValueStore) {
             },
         )
     }
+
+    private var comp by mutableStateOf(if (store.get(KEY_COMP) == CompMode.DIRECT.name) CompMode.DIRECT else CompMode.MACHINE)
+
+    /** 보정 방식(결과 맨 위 스위치) — 테이퍼 · 라운드가 함께 쓰고 다음에 켜도 그대로. 처음은 기계 보정 */
+    var compMode: CompMode
+        get() = comp
+        set(v) {
+            comp = v
+            store.put(KEY_COMP, v.name)
+        }
 
     /** 기능 화면으로. 이미 쌓인 화면이면 그 위를 걷어 내고 돌아간다(같은 화면이 두 번 쌓이지 않게) */
     fun open(f: Feature) {
@@ -114,8 +124,12 @@ class AppState(private val store: KeyValueStore) {
 
     private companion object {
         const val KEY_THEME = "theme"
+        const val KEY_COMP = "compMode"
     }
 }
+
+/** 노즈R 보정 방식: 기계 보정(G41/G42 · 도면 좌표, 기계가 보정) · 직접 보정(G40 · 앱이 계산한 보정 좌표 그대로) */
+enum class CompMode { MACHINE, DIRECT }
 
 val LocalAppState = staticCompositionLocalOf<AppState> { error("App 안에서만 쓴다") }
 

@@ -15,7 +15,7 @@ import com.bmt.nosecalc.screens.taper.example
 import com.bmt.nosecalc.ui.AppCard
 import kotlin.test.Test
 
-/** 테이퍼·홈 화면 A·B 를 라이트/다크로 → build/shots/taper-*. 원본 02·11 과 나란히 본다 */
+/** 테이퍼·홈 화면 A·B 를 라이트/다크로 → build/shots/taper-*. 원본 02·11 과 나란히 본다. 보정 방식은 처음 값(기계 보정), comp 로 바꿔 찍는다 */
 class TaperShotsTest {
     private fun shot(
         name: String,
@@ -23,8 +23,11 @@ class TaperShotsTest {
         frames: Int = 40,
         frameMs: Long = 100,
         scrollToEnd: Boolean = false,
+        comp: CompMode = CompMode.MACHINE,
         state: () -> TaperState,
-    ) = Shots.both(name, heightDp, frames, frameMs = frameMs, scrollToEnd = scrollToEnd) { AppHost(it) { TaperScreen(state()) } }
+    ) = Shots.both(name, heightDp, frames, setup = { it.compMode = comp }, frameMs = frameMs, scrollToEnd = scrollToEnd) {
+        AppHost(it) { TaperScreen(state()) }
+    }
 
     @Test
     fun pick() {
@@ -44,24 +47,24 @@ class TaperShotsTest {
     fun input() {
         // 처음 화면: 치수 0 → 빨간 멈춤 대신 파란 안내, 그림은 그대로
         shot("taper-b-empty") { TaperState(type = 1, open = true) }
-        shot("taper-b", 2280) { TaperState(type = 1, open = true).example() }
-        // 외경 형상 1: T1 모서리 R1, 시작점 단면 X30 → 결과 카드에 R 시작·끝 접점, NC 는 직접 보정 탭
-        shot("taper-b-corner", 2340) {
+        // 처음 보정 방식(기계 보정): 결과 카드 맨 위 R · T, 도면 좌표, 접힌 '직접 보정 좌표도 보기' · 뷰어는 도면 좌표 경로 · NC 는 G41/G42
+        shot("taper-b", 2540) { TaperState(type = 1, open = true).example() }
+        // 외경 형상 1: T1 모서리 R1, 시작점 단면 X30 → 직접 보정: 보정 좌표 카드에 R 시작·끝 접점, NC 첫 줄 '(G40 DIRECT R0.4 T3)'
+        shot("taper-b-corner", 2640, comp = CompMode.DIRECT) {
             TaperState(type = 1, open = true).example().apply {
                 setPoint("r1", "1")
                 setPoint("start", "30")
-                ncTab = 1
             }
         }
         // 외경 형상 3: T2 모서리 R0.5, 끝점 Z-20
-        shot("taper-b-outer3", 2440) {
+        shot("taper-b-outer3", 2540) {
             TaperState(type = 3, open = true).example().apply {
                 setPoint("r2", "0.5")
                 setPoint("end", "-20")
             }
         }
         // 내경 형상 1(원본 06): 끝점 = 구멍 깊이 Z-20
-        shot("taper-b-inner1", 2300) { TaperState(TaperKind.INNER, type = 1, open = true).example().apply { setPoint("end", "-20") } }
+        shot("taper-b-inner1", 2440) { TaperState(TaperKind.INNER, type = 1, open = true).example().apply { setPoint("end", "-20") } }
         // Z2 를 비우고 각도로 풀면 "자동" 값이 단위와 겹치지 않아야 한다(412dp)
         shot("taper-b-auto", 1100) {
             TaperState(type = 1, open = true).example().apply {
@@ -69,7 +72,8 @@ class TaperShotsTest {
                 setPoint("ang", "34.1")
             }
         }
-        shot("taper-b-reverse", 2280) { TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example() }
+        // 내경 역방향 · 직접 보정: 팁 1번이 NC 첫 줄 주석에도
+        shot("taper-b-reverse", 2480, comp = CompMode.DIRECT) { TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example() }
         shot("taper-b-double", 2640) { TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1") } }
         // 각도 30 ≠ 두 점의 45° → CONTRADICTION: 빨간 띠는 요약 바로 아래(그 아래 '각도 비우고 계산'), X1 · Z1 · X2 · Z2 · 각도에 빨간 테
         shot("taper-b-error", 1150) { TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") } }
@@ -88,8 +92,14 @@ class TaperShotsTest {
         shot("taper-groove-error") { TaperState(TaperKind.GROOVE, type = 2, open = true).example().apply { setShared("insert", "9") } }
     }
 
+    /** 좁은 폰 · 큰 글꼴(360dp · 1.3): 보정 방식 스위치 두 줄 칸 · 기계 보정 카드의 R · T 와 도면 좌표가 잘리지 않는다 */
+    @Test
+    fun narrow() = Shots.both("taper-b-w360", heightDp = 3000, widthDp = 360, fontScale = 1.3f) {
+        AppHost(it) { TaperScreen(TaperState(type = 1, open = true).example()) }
+    }
+
     /**
-     * 키패드(폰 높이): 그림은 고치는 칸의 점 · 치수만 초점색, 위에 결과 한 줄(T1′ · T2′ / 첫 단 · 끝 단), 제목 옆 "n / m", 오른쪽 아래 "다음".
+     * 키패드(폰 높이): 그림은 고치는 칸의 점 · 치수만 초점색, 위에 결과 한 줄(기계 보정은 T1 · T2 도면 좌표 / 첫 단 · 끝 단), 제목 옆 "n / m", 오른쪽 아래 "다음".
      * 칸을 끌어올리는 스크롤이 0.1초 걸음에서는 출렁이므로 폰 프레임(16ms)으로 찍는다
      */
     @Test
@@ -99,12 +109,12 @@ class TaperShotsTest {
     }
 
     /**
-     * 폰 첫 화면: 보정 좌표가 화면 밖이라 아래 결과 띠(T1′ · T2′ · 결과 단추)가 뜬다.
+     * 폰 첫 화면: 결과 카드가 화면 밖이라 아래 결과 띠(직접 보정이면 T1′ · T2′ 보정 좌표 · 결과 단추)가 뜬다. 기계 보정의 띠(도면 좌표)는 round-b-top.
      * 멈춘 까닭(빨간 띠)은 입력 카드 위라 915dp 폰은 끝까지 내려도 보인다 — 작은 폰(640dp)에서 끝까지 내리면 띠가 빨갛게 그 까닭을 남긴다
      */
     @Test
     fun dock() {
-        shot("taper-b-top") { TaperState(type = 1, open = true).example() }
+        shot("taper-b-top", comp = CompMode.DIRECT) { TaperState(type = 1, open = true).example() }
         shot("taper-b-error-dock", 640, scrollToEnd = true) { TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") } }
     }
 

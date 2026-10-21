@@ -20,6 +20,7 @@ import com.bmt.nosecalc.screens.taper.TaperKind
 import com.bmt.nosecalc.screens.taper.TaperSolve
 import com.bmt.nosecalc.screens.taper.TaperState
 import com.bmt.nosecalc.screens.taper.cutEnd
+import com.bmt.nosecalc.screens.taper.directNc
 import com.bmt.nosecalc.screens.taper.example
 import com.bmt.nosecalc.screens.taper.signed
 import com.bmt.nosecalc.screens.triangle.TriField
@@ -32,6 +33,7 @@ import kotlin.test.assertTrue
 /**
  * 화면에 나오는 숫자·NC 지킴이. 스크린샷 상태마다 화면과 똑같이 계산기 입력을 만들어 경고·좌표(Fmt.fixed3)·NC 를 글로 적고
  * golden/<이름>.txt 와 맞춰 본다. 화면을 다듬다가 숫자나 NC 가 한 글자라도 바뀌면 여기서 걸린다.
+ * NC 는 화면 · 복사 그대로다 — 직접 보정(G40) 프로그램은 첫 줄 주석 `(G40 DIRECT R0.4 T3)`([directNc])까지.
  * 일부러 바꿨을 때만 다시 쓴다: `gradlew :shared:jvmTest --tests '*UiGoldenTest*' -DupdateGolden=true`
  */
 class UiGoldenTest {
@@ -59,7 +61,6 @@ class UiGoldenTest {
             TaperState(type = 1, open = true).example().apply {
                 setPoint("r1", "1")
                 setPoint("start", "30")
-                ncTab = 1
             },
         )
         slope(
@@ -92,7 +93,7 @@ class UiGoldenTest {
     fun round() {
         // 화면은 0 에서 시작한다 — 스크린샷과 같은 예시 치수로
         for (t in 1..6) roundType("round-b$t", roundExample(t, open = true), t)
-        roundType("round-b3-contact", roundExample(3, open = true, comp = false), 3)
+        roundType("round-b3-contact", roundExample(3, open = true), 3)
         roundType("round-b2-error", roundExample(2, open = true).apply { setDim(2, "l2", "30") }, 2)
         roundType("round-b3-empty", RoundState(type = 3, open = true), 3)
         manual("round-manual", roundExample(MANUAL, open = true))
@@ -145,7 +146,7 @@ class UiGoldenTest {
             line("NC G41/G42")
             sol.ncG41G42.forEach { line("  $it") }
             line("NC G40")
-            sol.ncG40.forEach { line("  $it") }
+            directNc(sol.ncG40, form.noseR, sol.tip).forEach { line("  $it") }
         }
         golden(name, text)
     }
@@ -179,16 +180,16 @@ class UiGoldenTest {
     /** RoundTypeScreen: RoundState.input(type), 도면 좌표 NC = 노즈R 0 */
     private fun roundType(name: String, s: RoundState, type: Int) {
         val input = s.input(type)
-        roundText(name, RoundCalc.calc(input), RoundCalc.calc(input.copy(noseR = 0.0)).solution?.nc, "팁 T${input.tip}")
+        roundText(name, RoundCalc.calc(input), RoundCalc.calc(input.copy(noseR = 0.0)).solution?.nc, input.noseR, "팁 T${input.tip}")
     }
 
     /** ManualScreen: RoundState.arc3(), 도면 좌표 NC = 노즈R 0 */
     private fun manual(name: String, s: RoundState) {
         val input = s.arc3()
-        roundText(name, RoundCalc.arc3(input), RoundCalc.arc3(input.copy(noseR = 0.0)).solution?.nc, "표준 팁 T${s.manualStandardTip()}")
+        roundText(name, RoundCalc.arc3(input), RoundCalc.arc3(input.copy(noseR = 0.0)).solution?.nc, input.noseR, "표준 팁 T${s.manualStandardTip()}")
     }
 
-    private fun roundText(name: String, r: RoundResult, drawnNc: List<String>?, head: String) {
+    private fun roundText(name: String, r: RoundResult, drawnNc: List<String>?, noseR: Double, head: String) {
         val text = buildString {
             line(head)
             line("경고 ${r.warnings}")
@@ -204,7 +205,7 @@ class UiGoldenTest {
             }
             line("진입점 ${xz(sol.entry)}")
             line("NC 보정")
-            sol.nc.forEach { line("  $it") }
+            directNc(sol.nc, noseR, sol.tip).forEach { line("  $it") }
             line("NC 도면 좌표")
             drawnNc?.forEach { line("  $it") }
         }

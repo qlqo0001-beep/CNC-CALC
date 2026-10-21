@@ -143,7 +143,7 @@ class RoundStateTest {
 
     @Test
     fun stateSurvivesSaver() {
-        val s = RoundState(type = 2, open = true, comp = false)
+        val s = RoundState(type = 2, open = true)
         s.setDim(2, "l2", "12")
         s.l2Ref = L2Ref.A
         s.tip = 2
@@ -151,7 +151,7 @@ class RoundStateTest {
         s.setPoint("x1", "41.5")
         val back = with(RoundState.Saver) { restore(SaverScope { true }.save(s)!!)!! }
         assertEquals(2, back.type)
-        assertTrue(back.open && !back.comp)
+        assertTrue(back.open)
         assertEquals("12", back.dim(2, "l2"))
         assertEquals(L2Ref.A, back.l2Ref)
         assertEquals(2, back.tip)

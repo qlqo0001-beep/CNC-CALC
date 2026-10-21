@@ -8,7 +8,11 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.Density
+import com.bmt.nosecalc.screens.RoundScreen
 import com.bmt.nosecalc.screens.TaperScreen
+import com.bmt.nosecalc.screens.round.roundExample
+import com.bmt.nosecalc.screens.taper.TaperState
+import com.bmt.nosecalc.screens.taper.example
 import com.bmt.nosecalc.ui.BottomSheet
 import java.io.File
 import kotlin.test.Test
@@ -128,6 +132,43 @@ class AppStateTest {
         } finally {
             scene.close()
         }
+    }
+
+    /**
+     * 보정 방식은 앱 전체 하나: 처음은 기계 보정. 테이퍼 결과의 '직접 보정' 을 누르면 라운드도 직접 보정이고
+     * (NC 첫 줄 '(G40 DIRECT R0.4 T3)'), 다음에 켜도 그대로
+     */
+    @Test
+    fun compModeIsSharedAndRemembered() {
+        val file = File.createTempFile("bmt-kv", ".properties").apply { delete() }
+        val s = AppState(KeyValueStore(file))
+        assertEquals(CompMode.MACHINE, s.compMode)
+        val round = mutableStateOf(false)
+        val scene = ImageComposeScene(400, 900, Density(1f)) {
+            AppHost(s) {
+                if (round.value) RoundScreen(roundExample(1, open = true)) else TaperScreen(TaperState(type = 1, open = true).example())
+            }
+        }
+        try {
+            scene.render(0)
+            assertFalse("(G40 DIRECT R0.4 T3)" in scene.texts())
+            scene.tap("직접 보정")
+            assertEquals(CompMode.DIRECT, s.compMode)
+            scene.render(100_000_000)
+            assertTrue("(G40 DIRECT R0.4 T3)" in scene.texts())
+            round.value = true
+            scene.render(200_000_000)
+            assertTrue("(G40 DIRECT R0.4 T3)" in scene.texts())
+        } finally {
+            scene.close()
+        }
+        assertEquals(CompMode.DIRECT, AppState(KeyValueStore(file)).compMode)
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    private fun ImageComposeScene.texts(): List<String> {
+        fun walk(n: SemanticsNode): List<SemanticsNode> = listOf(n) + n.children.flatMap(::walk)
+        return semanticsOwners.flatMap { walk(it.unmergedRootSemanticsNode) }.flatMap { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
     }
 
     /** 글이 text 인 누를 수 있는 것 하나를 누른다 */

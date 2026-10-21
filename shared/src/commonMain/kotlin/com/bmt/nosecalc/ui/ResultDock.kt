@@ -45,8 +45,8 @@ import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 
-/** 결과 띠 한 줄: 점 이름(색) + 보정 X · Z(이미 Fmt 로 쓴 글) */
-data class DockRow(val name: String, val x: String, val z: String, val color: Color)
+/** 결과 띠 한 줄: 점 이름(색) + X · Z(이미 Fmt 로 쓴 글). 값 색은 보정 좌표 파랑, 도면 좌표(기계 보정)면 value 로 준다 */
+data class DockRow(val name: String, val x: String, val z: String, val color: Color, val value: Color? = null)
 
 /** 결과 띠의 상태: 풀림 · 풀렸지만 확인할 것 count 건 · 계산 멈춤(경고 첫 문장) */
 sealed interface DockStatus {
@@ -134,7 +134,7 @@ private fun DockRows(rows: List<DockRow>, modifier: Modifier) {
                 BasicText(
                     "X ${r.x}  Z ${r.z}",
                     Modifier.weight(1f).alignByBaseline(),
-                    style = AppType.numLarge.copy(color = c.valueComp),
+                    style = AppType.numLarge.copy(color = r.value ?: c.valueComp),
                     maxLines = 1,
                     autoSize = TextAutoSize.StepBased(11.sp, 18.sp, 0.5.sp),
                 )

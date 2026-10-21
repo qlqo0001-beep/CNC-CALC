@@ -61,7 +61,6 @@ internal fun roundTypeShort(type: Int): String = when (type) {
 internal class RoundState(
     type: Int? = null,
     open: Boolean = false,
-    comp: Boolean = true,
     values: Map<String, String> = emptyMap(),
 ) {
     /** 고른 카드: 1~6 = TYPE, [MANUAL] = 수동(3점호) */
@@ -69,9 +68,6 @@ internal class RoundState(
 
     /** true = 입력·결과 화면 */
     var open by mutableStateOf(open)
-
-    /** true = 합성 R 궤적(보정), false = 접점 모드(도면) */
-    var comp by mutableStateOf(comp)
 
     /** 입력 화면을 열 때 키패드를 열어 둘 칸 id(치수 key · zClear · leg · x1 · z1 …). 화면이 처음 그려질 때 한 번 읽는다(스크린샷 시험) */
     var editing by mutableStateOf<String?>(null)
@@ -161,10 +157,8 @@ internal class RoundState(
         const val STANDARD_TIP = 3
 
         val Saver = listSaver<RoundState, String>(
-            save = { s -> listOf(s.type?.toString() ?: "", s.open.toString(), s.comp.toString()) + s.values.flatMap { listOf(it.key, it.value) } },
-            restore = { l ->
-                RoundState(l[0].toIntOrNull(), l[1].toBoolean(), l[2].toBoolean(), l.drop(3).chunked(2).associate { it[0] to it[1] })
-            },
+            save = { s -> listOf(s.type?.toString() ?: "", s.open.toString()) + s.values.flatMap { listOf(it.key, it.value) } },
+            restore = { l -> RoundState(l[0].toIntOrNull(), l[1].toBoolean(), l.drop(2).chunked(2).associate { it[0] to it[1] }) },
         )
     }
 }

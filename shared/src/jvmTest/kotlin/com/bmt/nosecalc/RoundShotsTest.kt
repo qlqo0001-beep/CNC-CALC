@@ -7,11 +7,24 @@ import com.bmt.nosecalc.screens.round.roundExample
 import com.bmt.nosecalc.screens.round.roundManualInnerRev
 import kotlin.test.Test
 
-/** 라운드 고르기·입력 화면을 라이트/다크로 → build/shots/round-*. 원본 04 와 나란히 본다. 계산 상태는 예시 치수로 */
+/** 라운드 고르기·입력 화면을 라이트/다크로 → build/shots/round-*. 원본 04 와 나란히 본다. 계산 상태는 예시 치수로, 보정 방식은 처음 값(기계 보정) 또는 comp */
 class RoundShotsTest {
-    private fun shot(name: String, heightDp: Int = Shots.HEIGHT_DP, frames: Int = 40, frameMs: Long = 100, state: () -> RoundState) =
+    private fun shot(
+        name: String,
+        heightDp: Int = Shots.HEIGHT_DP,
+        frames: Int = 40,
+        frameMs: Long = 100,
+        comp: CompMode = CompMode.MACHINE,
+        state: () -> RoundState,
+    ) = Shots.both(
+        name, heightDp, frames,
         // 앱에서처럼 테이퍼 위에 연 화면(헤더에 ←)
-        Shots.both(name, heightDp, frames, setup = { it.open(Feature.ROUND) }, frameMs = frameMs) { AppHost(it) { RoundScreen(state()) } }
+        setup = {
+            it.open(Feature.ROUND)
+            it.compMode = comp
+        },
+        frameMs = frameMs,
+    ) { AppHost(it) { RoundScreen(state()) } }
 
     @Test
     fun pick() {
@@ -19,12 +32,14 @@ class RoundShotsTest {
         shot("round-a-all", 1180) { RoundState() }
     }
 
+    /** 형상 1 은 처음 보정 방식(기계 보정 — taper-b 와 같은 스위치), 형상 2~6 · 3점호는 직접 보정(합성 R 궤적), round-b3-contact 는 형상 3 의 기계 보정 */
     @Test
     fun input() {
-        for (t in 1..6) shot("round-b$t", 3320) { roundExample(t, open = true) }
-        shot("round-b3-contact", 2720) { roundExample(3, open = true, comp = false) }
+        shot("round-b1", 3320) { roundExample(1, open = true) }
+        for (t in 2..6) shot("round-b$t", 3320, comp = CompMode.DIRECT) { roundExample(t, open = true) }
+        shot("round-b3-contact", 2720) { roundExample(3, open = true) }
         shot("round-b2-error", 1700) { roundExample(2, open = true).apply { setDim(2, "l2", "30") } }
-        shot("round-manual", 2720) { roundExample(MANUAL, open = true) }
+        shot("round-manual", 2720, comp = CompMode.DIRECT) { roundExample(MANUAL, open = true) }
         shot("round-manual-inner-rev", 2720) { roundManualInnerRev() }
     }
 

@@ -44,17 +44,21 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
+import com.bmt.nosecalc.CompMode
+import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.L2Ref
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundSolution
 import com.bmt.nosecalc.calc.RoundWarning
+import com.bmt.nosecalc.screens.taper.CompModeSwitch
 import com.bmt.nosecalc.screens.taper.FieldLabel
 import com.bmt.nosecalc.screens.taper.NcCard
 import com.bmt.nosecalc.screens.taper.NcFact
 import com.bmt.nosecalc.screens.taper.NoseRPicker
 import com.bmt.nosecalc.screens.taper.PointBadge
 import com.bmt.nosecalc.screens.taper.TipField
+import com.bmt.nosecalc.screens.taper.directNc
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.CardHeader
 import com.bmt.nosecalc.ui.DockRow
@@ -73,16 +77,17 @@ import com.bmt.nosecalc.ui.theme.Space
 import kotlinx.coroutines.launch
 
 /**
- * TYPE 1~6 입력·결과: 요약 → (계산이 멈추면 그 까닭) → 모드 → 도면 치수(큰 그림 + 칸)·공구 → 경고 → 노드 표 → 형상 → NC.
- * 값이 바뀌면 바로 다시 푼다. 접점 모드의 NC 는 같은 윤곽을 노즈R 0 으로 푼 것(= 도면 좌표 프로그램)이다.
+ * TYPE 1~6 입력·결과: 요약 → (계산이 멈추면 그 까닭) → 도면 치수(큰 그림 + 칸)·공구 → 보정 방식 스위치 → 경고 → 노드 표 → 형상 → NC.
+ * 값이 바뀌면 바로 다시 푼다. 기계 보정의 NC 는 같은 윤곽을 노즈R 0 으로 푼 것(= 도면 좌표 프로그램)이다.
  * 치수 · 공구 칸은 한 묶음이라 키패드의 "다음" 으로 이어 넣고, 키패드에는 그 치수 하나만 짚은 그림과 결과 한 줄이 뜬다
  */
 @Composable
 internal fun RoundTypeScreen(s: RoundState, type: Int) {
     val c = AppTheme.colors
+    val comp = LocalAppState.current.compMode == CompMode.DIRECT
     val input = s.input(type)
     val result = remember(input) { RoundCalc.calc(input) }
-    // 노즈R 0 으로 푼 것 = 도면 좌표 프로그램(접점 모드의 NC · 뷰어 경로)
+    // 노즈R 0 으로 푼 것 = 도면 좌표 프로그램(기계 보정의 NC · 뷰어 경로)
     val drawn = remember(input) { RoundCalc.calc(input.copy(noseR = 0.0)).solution }
     val sol = result.solution
     val blanks = blankable(type)
@@ -102,7 +107,7 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
             else -> DimShown("", DimKind.Missing)
         }?.let { f.key to it }
     }.toMap() + ("leg" to DimShown(s.shared("leg").ifEmpty { "5.0" }))
-    val dock = roundDock(sol, warnings, type, s.comp, empty, c.textStrong)
+    val dock = roundDock(sol, warnings, type, comp, empty, c.textStrong)
     val preview = dock?.oneLine()
     val chain = rememberFieldChain(s.editing)
     // 키패드 그림: 같은 그림에서 그 치수 하나만 초점색으로
@@ -113,7 +118,6 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
     Page(dock, chain.sheetOpen) { anchor ->
         RoundSummary(type, "외경 · 정방향 가공 (Z−) · ${toolText(s, input.tip)}") { s.open = false }
         if (sol == null) Banners(warnings, type, solved = false, empty, anchor) { s.setDim(type, it, "") }
-        ModeCard(s.comp) { s.comp = it }
 
         AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
             CardHeader("도면 치수")
@@ -190,7 +194,7 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
             }
         }
 
-        Results(sol, warnings, type, s.comp, input.noseR, drawn, anchor, inner = false)
+        Results(sol, warnings, type, comp, input.noseR, drawn, anchor, inner = false)
         if (chain.sheetOpen) Spacer(Modifier.height(440.dp))
     }
 }
@@ -202,10 +206,11 @@ private fun dimHint(key: String): String? = when {
     else -> null
 }
 
-/** 수동(CAD 3점호): 요약 → (계산이 멈추면 그 까닭) → 모드 → 세 점(외경/내경 · 그림 · 칸) · 공구 → 원호 → 경고 → 노드 표 → 형상 → NC */
+/** 수동(CAD 3점호): 요약 → (계산이 멈추면 그 까닭) → 세 점(외경/내경 · 그림 · 칸) · 공구 → 보정 방식 스위치 → 원호 → 경고 → 노드 표 → 형상 → NC */
 @Composable
 internal fun ManualScreen(s: RoundState) {
     val c = AppTheme.colors
+    val comp = LocalAppState.current.compMode == CompMode.DIRECT
     val input = s.arc3()
     val result = remember(input) { RoundCalc.arc3(input) }
     val drawn = remember(input) { RoundCalc.arc3(input.copy(noseR = 0.0)).solution }
@@ -214,7 +219,7 @@ internal fun ManualScreen(s: RoundState) {
     val standard = s.manualStandardTip()
     val tip = s.manualTip ?: standard
     val reverse = s.manualReverse()
-    val dock = roundDock(sol, warnings, MANUAL, s.comp, name = c.textStrong)
+    val dock = roundDock(sol, warnings, MANUAL, comp, name = c.textStrong)
     val preview = dock?.oneLine()
     val chain = rememberFieldChain(s.editing)
 
@@ -226,7 +231,6 @@ internal fun ManualScreen(s: RoundState) {
         }
         RoundSummary(MANUAL, "${if (s.inner) "내경" else "외경"} · $dir · ${toolText(s, tip)}") { s.open = false }
         if (sol == null) Banners(warnings, MANUAL, solved = false, modifier = anchor)
-        ModeCard(s.comp) { s.comp = it }
 
         AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
             CardHeader("세 점")
@@ -255,8 +259,7 @@ internal fun ManualScreen(s: RoundState) {
             }
         }
 
-        if (sol != null) ArcCard(sol)
-        Results(sol, warnings, MANUAL, s.comp, input.noseR, drawn, anchor, inner = s.inner)
+        Results(sol, warnings, MANUAL, comp, input.noseR, drawn, anchor, inner = s.inner)
         if (chain.sheetOpen) Spacer(Modifier.height(440.dp))
     }
 }
@@ -292,8 +295,8 @@ private fun Page(dock: DockStatus?, sheetOpen: Boolean, content: @Composable Col
 }
 
 /**
- * 결과 띠 · 키패드 결과 한 줄: 풀리면 지금 모드의 노드 좌표(합성 R = 보정 = 프로그램 좌표, 접점 = 도면 좌표 · name 색 이름)와
- * 노란 경고 수, 멈췄으면 첫 경고의 첫 문장. 값이 모자라는 동안(파란 안내)은 null — 띠도 한 줄도 없다
+ * 결과 띠 · 키패드 결과 한 줄: 풀리면 지금 보정 방식의 노드 좌표(comp = 직접 보정 → 보정 좌표 파랑, 기계 보정 → 도면 좌표 name 색)와
+ * 노란 경고 수, 멈췄으면 첫 경고의 첫 문장. 이름은 name 색. 값이 모자라는 동안(파란 안내)은 null — 띠도 한 줄도 없다
  */
 internal fun roundDock(
     sol: RoundSolution?,
@@ -311,7 +314,7 @@ internal fun roundDock(
     }
     val rows = sol.nodes.mapIndexed { i, n ->
         val p = if (comp) n.prog else n.drawn
-        DockRow("P${nodeNo(sol, i)}", Fmt.fixed3(p.xDia), Fmt.fixed3(p.z), name)
+        DockRow("P${nodeNo(sol, i)}", Fmt.fixed3(p.xDia), Fmt.fixed3(p.z), name, if (comp) null else name)
     }
     val warn = warnings.count { warnLevel(it, type, solved = true) == WarnLevel.Warn }
     return if (warn > 0) DockStatus.Warn(warn, rows) else DockStatus.Ok(rows)
@@ -396,7 +399,8 @@ private fun ToolInputs(s: RoundState, standardTip: Int, tip: Int, onTip: (Int?) 
 }
 
 /**
- * 숫자와 함께 나온 경고 → 노드 표(anchor — 결과 띠가 가리킨다) → 형상 → NC(모드에 따라 보정 / 도면 좌표). 계산이 멈췄으면 없다(까닭은 요약 아래).
+ * 보정 방식 스위치(테이퍼와 같은 자리 · 같은 값) → 원호(3점호) → 숫자와 함께 나온 경고 → 노드 표(anchor — 결과 띠가 가리킨다) → 형상 →
+ * NC(comp = 직접 보정이면 보정 좌표, 아니면 도면 좌표). 계산이 멈췄으면 없다(까닭은 요약 아래).
  * drawn = 노즈R 0 으로 푼 것(도면 좌표 프로그램), inner = 소재가 구멍 쪽(3점호 내경)
  */
 @Composable
@@ -411,6 +415,8 @@ private fun Results(
     inner: Boolean,
 ) {
     if (sol == null) return
+    CompModeSwitch(sol.side)
+    if (type == MANUAL) ArcCard(sol)
     Banners(warnings, type, solved = true)
     NodeTable(sol, comp, anchor)
     RoundViewer(sol, comp, noseR, drawn, inner)
@@ -418,9 +424,9 @@ private fun Results(
     val r = Fmt.nc(noseR).removeSuffix(".")
     if (comp) {
         NcCard(
-            sol.nc,
+            directNc(sol.nc, noseR, sol.tip),
             "가상 인선 팁 ${sol.tip}번 기준 프로그램 좌표입니다 — 기계의 노즈R 보정은 쓰지 않습니다(G40). 원호 R 은 합성 R(볼록 R + r · 오목 R − r)이고, " +
-                "90° 넘는 원호는 나눠 썼습니다. 이송 F 는 넣지 않았습니다.$legNote",
+                "90° 넘는 원호는 나눠 썼습니다. 첫 줄 주석이 그 노즈 R · 팁을 적어 둡니다(기계는 주석을 건너뜁니다). 이송 F 는 넣지 않았습니다.$legNote",
             programName = "직접 보정(G40) 프로그램",
             facts = listOf(NcFact("G41/G42 걸지 말 것 (이중 보정)", WarnLevel.Error), NcFact("원호 = 합성 R"), NcFact("이송 F 없음")),
         )

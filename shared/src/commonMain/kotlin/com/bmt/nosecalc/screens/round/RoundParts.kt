@@ -50,7 +50,6 @@ import com.bmt.nosecalc.ui.LegendGlyph
 import com.bmt.nosecalc.ui.LegendItem
 import com.bmt.nosecalc.ui.MarkKind
 import com.bmt.nosecalc.ui.PillButton
-import com.bmt.nosecalc.ui.Segmented
 import com.bmt.nosecalc.ui.ShapeViewerCard
 import com.bmt.nosecalc.ui.ViewerLine
 import com.bmt.nosecalc.ui.ViewerMark
@@ -175,27 +174,9 @@ internal fun RoundSummary(type: Int, info: String, onBack: () -> Unit) {
     }
 }
 
-/** 모드: 접점(도면 윤곽) / 합성 R 궤적(보정). 같은 계산의 두 보기 */
-@Composable
-internal fun ModeCard(comp: Boolean, onChange: (Boolean) -> Unit) {
-    val c = AppTheme.colors
-    AppCard(Modifier.fillMaxWidth(), padding = 10.dp) {
-        Segmented(listOf("접점 모드", "합성 R 궤적"), if (comp) 1 else 0, { onChange(it == 1) }, Modifier.fillMaxWidth(), color = c.teal, height = 44.dp)
-        Text(
-            // '깎을 때' 가 쪼개져 줄바꿈되지 않게 낱말 이음(\u2060) · 붙임 공백(\u00A0)
-            if (comp) "도면 R ± 노즈R(볼록 R + r · 오목 R − r) 궤적과 가상 인선 좌표 — 보정(G41/G42) 없이 바로 깎\u2060을\u00A0때"
-            else "직선 · 원호가 접하는 점(도면 윤곽) — 기계의 노즈R 보정(G42)으로 깎\u2060을\u00A0때",
-            Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
-            color = c.textMuted,
-            fontSize = 12.5.sp,
-            lineHeight = 18.sp,
-        )
-    }
-}
-
 /**
- * 노드 표: 요소 끝점마다 한 덩어리, 가공 순서. 윗줄은 지금 모드의 X · Z(합성 R = 보정 = 프로그램 좌표 valueComp, 접점 = 도면 좌표 textValue)를
- * 크게(numLarge), 아랫줄은 다른 모드 값을 작게 흐리게('도면 X… Z…' / '보정 X… Z…'). 머리 줄(X (직경) · Z)은 한 번, 왼쪽 끝에 큰 값의 모드 이름.
+ * 노드 표: 요소 끝점마다 한 덩어리, 가공 순서. 윗줄은 지금 보정 방식의 X · Z(직접 보정 = 합성 R 보정 좌표 valueComp, 기계 보정 = 도면 좌표 textValue)를
+ * 크게(numLarge), 아랫줄은 다른 쪽 값을 작게 흐리게('도면 X… Z…' / '보정 X… Z…'). 머리 줄(X (직경) · Z)은 한 번, 왼쪽 끝에 큰 값의 이름.
  * 점 사이 줄에 그 요소의 G01 / G02 · G03 과 R(도면 → 보정)
  */
 @Composable
@@ -281,9 +262,9 @@ internal fun nodeNo(sol: RoundSolution, i: Int) = if (sol.filled == null && i ==
 /**
  * 형상 확인. 소재(빗금) 위에 도면(3.5dp), 그 위에 NC 의 프로그램 경로(1.8dp, 진행 화살). 진입점 □ 에서 첫 점까지는 NC 처럼 이송(G01)이라
  * 경로에 넣는다 — 라운드 NC 는 G00 으로 진입점에 온 뒤 끝까지 이송이라 그릴 급송 토막이 없다.
- * 접점 = 도면 좌표 프로그램(drawn, 노즈R 0 으로 푼 것) · 접점 ○ 번호. 합성 R = 꺾임점의 노즈 원(옅게 칠함)과 가상 인선 꺾쇠 · 노즈 중심(끊은 선) ·
- * 가상 인선 프로그램 · 보정점 • 번호. 원호 중심은 + 와 원호 가운데까지 끊은 지시선, 'R10.000 G02'(합성 R 은 'R10.000 → 10.400 G02') 알약 —
- * 화면 반지름이 14dp 보다 작으면 뷰어가 뺀다. inner = 소재가 구멍 쪽(3점호 내경)
+ * 기계 보정(comp = false) = 도면 좌표 프로그램(drawn, 노즈R 0 으로 푼 것) · 접점 ○ 번호. 직접 보정(comp) = 꺾임점의 노즈 원(옅게 칠함)과 가상 인선 꺾쇠 ·
+ * 노즈 중심(끊은 선) · 가상 인선 프로그램 · 보정점 • 번호. 원호 중심은 + 와 원호 가운데까지 끊은 지시선, 'R10.000 G02'(직접 보정은 합성 R
+ * 'R10.000 → 10.400 G02') 알약 — 화면 반지름이 14dp 보다 작으면 뷰어가 뺀다. inner = 소재가 구멍 쪽(3점호 내경)
  */
 @Composable
 internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: RoundSolution?, inner: Boolean) {
@@ -335,7 +316,7 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
     }
     ShapeViewerCard(
         lines, points + centers + entry, legend,
-        subtitle = if (comp) "합성 R 궤적 · 팁 ${sol.tip}번" else "접점 모드 · 도면 좌표",
+        subtitle = if (comp) "직접 보정(G40) · 합성 R 궤적 · 팁 ${sol.tip}번" else "기계 보정(${sol.side}) · 도면 좌표",
         stock = ViewerStock(sol.drawing, inner),
     )
 }

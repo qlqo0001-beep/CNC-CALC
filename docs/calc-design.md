@@ -352,8 +352,8 @@ object GrooveCalc { const val MAX_STEPS = 1000; fun calc(i: GrooveInput): Groove
 
 ## 라운드R 계산 (`RoundCalc`, 구현됨)
 원본 04.jpg 의 TYPE 1~6(외경, 척 쪽으로 깎음 = G42, 팁 기본 3)과 수동 모드(CAD 3점호, `arc3`).
-화면의 세 모드 가운데 **접점 모드와 합성 R 궤적은 같은 결과의 두 보기**다: 접점 = `drawing`·`nodes[].drawn`,
-합성 R = `center`·`program`·`nodes[].prog`·`arcs[].progR`·`nc`.
+**접점 모드와 합성 R 궤적은 같은 결과의 두 보기**다(화면의 보정 방식 스위치 — 기계 보정 = 접점, 직접 보정 = 합성 R): 접점 = `drawing`·`nodes[].drawn`,
+합성 R = `center`·`program`·`nodes[].prog`·`arcs[].progR`·`nc`(화면은 첫 줄에 주석 `(G40 DIRECT R… T…)` 을 붙인다).
 
 ### 치수 해석 (그림을 보고 정함)
 - Z0 = 부품 오른쪽 끝, X 는 직경값. 모든 TYPE 이 축 위 (Z0, X0) 에서 시작해 왼쪽으로 간다(끝 면 또는 돔 끝).

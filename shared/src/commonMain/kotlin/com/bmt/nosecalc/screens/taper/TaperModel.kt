@@ -114,11 +114,6 @@ internal class TaperState(
     fun shared(name: String): String = values["s/$name"] ?: TaperDefaults.shared(name)
     fun setShared(name: String, v: String) { values["s/$name"] = v }
 
-    /** NC 카드에서 고른 프로그램: 0 = G41/G42(기본), 1 = 직접 보정(G40) */
-    var ncTab: Int
-        get() = values["ui/nc"]?.toIntOrNull() ?: 0
-        set(v) { values["ui/nc"] = v.toString() }
-
     /** 입력 화면을 열 때 키패드를 열어 둘 칸 id(x1 · z2 · insert …). 화면이 처음 그려질 때 한 번 읽는다(스크린샷 시험) */
     var editing: String?
         get() = values["ui/editing"]?.ifEmpty { null }
