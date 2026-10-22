@@ -338,6 +338,29 @@ class HolderCheckTest {
         assertTrue(HolderCheck.overlap(s.drawing, true, barA, r, on(s.program.segs[0], 0.5) - NoseComp.tipVector(2, r)).isEmpty())
     }
 
+    /**
+     * 뒤보링 겹침 그림(X50 Z−10 → R10 → X30 Z0, 바 A16): 입구 반직선이 +Z 로 끝없이 가 띠가 약 250 mm 로 넓어지면 R10 원호가
+     * 현 하나로 그려져 원호와 현 사이(최대 2.6 mm)가 빠졌다. 그린 바처럼 maxZ(Z+3)에서 자르면 띠가 좁아 아래 변이 원호를 따른다
+     */
+    @Test
+    fun backBoringOverlapFollowsArc() {
+        val a3 = Arc3Input(inner = true, noseR = r, x1 = 50.0, z1 = -10.0, x2 = 35.8579, z2 = -7.0711, x3 = 30.0, z3 = 0.0, zClear = 1.0)
+        val s = RoundCalc.arc3(a3).solution!!
+        val bar = BoringBar(16.0, 11.0, InsertShape.C, 9.0, 95.0)
+        val res = HolderCheck.check(s.drawing, s.program, s.entry, s.tip, r, false, bar)
+        val nose = res.hits.first { it.part == HolderPart.BAR }.first.nose
+        val ov = HolderCheck.overlap(s.drawing, false, bar, r, nose, maxZ = 3.0)
+        assertTrue(ov.isNotEmpty())
+        assertTrue(ov.all { c -> c.segs.all { it.start.z <= 3.0 + 1e-9 } }, "Z+3 너머는 자른다")
+        val body = BarShape(bar, r, true).body.pts.map { it + nose }
+        // 원호(중심 Z0 · 반경 25, R10) 바로 위 0.05 mm(소재 안)이고 바 안인 점은 겹친 곳 안
+        for (z in listOf(-8.0, -6.08, -4.0, -2.0)) {
+            val p = Pt(z, 25 - sqrt(100 - z * z) + 0.05)
+            assertTrue(inside(body, p), "바 안 $p")
+            assertTrue(ov.any { inRing(it.segs.map { q -> q.start }, p) }, "겹친 곳 밖 $p")
+        }
+    }
+
     /** 바(공구대 면까지 자름)와 노즈 원호를 넣은 인서트 */
     @Test
     fun outlineShapes() {
@@ -449,6 +472,17 @@ class HolderCheckTest {
     }
 
     private fun mid(a: Arc): Pt = on(a, 0.5)
+
+    /** 닫힌 꺾은선(볼록이 아니어도) 안 — 반직선 교차 수 */
+    private fun inRing(ring: List<Pt>, p: Pt): Boolean {
+        var odd = false
+        for (i in ring.indices) {
+            val a = ring[i]
+            val b = ring[(i + 1) % ring.size]
+            if ((a.x > p.x) != (b.x > p.x) && p.z < a.z + (p.x - a.x) * (b.z - a.z) / (b.x - a.x)) odd = !odd
+        }
+        return odd
+    }
 
     /** 볼록 다각형(반시계) 안 또는 변 위(1e-6) */
     private fun inside(poly: List<Pt>, p: Pt): Boolean =

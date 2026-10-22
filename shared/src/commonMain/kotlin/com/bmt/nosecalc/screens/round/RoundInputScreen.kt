@@ -74,6 +74,7 @@ import com.bmt.nosecalc.ui.ResultDock
 import com.bmt.nosecalc.ui.Segmented
 import com.bmt.nosecalc.ui.WarnLevel
 import com.bmt.nosecalc.ui.WarningBanner
+import com.bmt.nosecalc.ui.keepWords
 import com.bmt.nosecalc.ui.oneLine
 import com.bmt.nosecalc.ui.rememberFieldChain
 import com.bmt.nosecalc.ui.theme.AppTheme
@@ -137,10 +138,10 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
                     RoundTypeArt(type, showDatum = true, l2Ref = s.l2Ref, labels = labels, contradiction = flagged, inner = inner, through = through)
                 }
                 Text(
-                    // ▲ 는 그림의 Z0 표와 같은 색
+                    // ▲ 는 그림의 Z0 표와 같은 색. 큰 글꼴에서 '으 / 로' 처럼 쪼개지지 않게 어절 이음(keepWords), '으로' 는 '(왼쪽)' 에 붙여(NBSP)
                     buildAnnotatedString {
                         withStyle(SpanStyle(color = c.drawT1)) { append("▲") }
-                        append(if (inner) " Z0 = 구멍 입구 끝면 · X 는 지름 · 보링바는 Z− (왼쪽) 으로" else " Z0 = 오른쪽 끝면 · X 는 지름 · 바이트는 Z− (왼쪽) 으로")
+                        append(keepWords(if (inner) " Z0 = 구멍 입구 끝면 · X 는 지름 · 보링바는 Z− (왼쪽)\u00A0으로" else " Z0 = 오른쪽 끝면 · X 는 지름 · 바이트는 Z− (왼쪽)\u00A0으로"))
                     },
                     Modifier.fillMaxWidth().padding(top = 6.dp),
                     color = c.textMuted,
@@ -285,7 +286,7 @@ internal fun ManualScreen(s: RoundState) {
                 Divider()
                 ToolInputs(s, standard, tip, { s.manualTip = it }, leg = null, preview = preview)
             }
-            if (s.inner) HolderCard(s, input.noseR, preview)
+            if (s.inner) HolderCard(s, input.noseR, preview, reverse)
         }
 
         Results(sol, warnings, MANUAL, comp, input.noseR, drawn, anchor, s.inner, holder)
@@ -510,7 +511,7 @@ private fun Results(
             drawn.nc,
             "도면(접점) 좌표 프로그램입니다. 기계의 노즈R 보정(${sol.side} · 공구 보정 R$r · T${sol.tip})과 함께 쓰고, " +
                 "보정 시작 · 취소(${sol.side}/G40) 블록은 기계에 맞게 넣으세요. 이 좌표를 보정 없이 깎으면 노즈R 만큼 형상이 틀립니다. 이송 F 는 넣지 않았습니다.$legNote",
-            programName = "도면 좌표 프로그램 (G41/G42 용)",
+            programName = "도면 좌표 프로그램 (G41/\u2060G42\u00A0용)",
             facts = listOf(
                 NcFact("보정 시작 · 취소 블록은 직접 넣기", WarnLevel.Warn),
                 NcFact("공구 보정: R $r · T ${sol.tip}", WarnLevel.Warn),
@@ -531,7 +532,8 @@ private fun pointColor(i: Int) = when (i) {
 
 @Composable
 private fun Hint(text: String) {
-    Text(text, Modifier.padding(top = 12.dp), color = AppTheme.colors.textMuted, fontSize = 12.5.sp, lineHeight = 18.sp)
+    // 어절 안에서 줄이 바뀌지 않게(… 역방향(역바이트)입 / 니다)
+    Text(keepWords(text), Modifier.padding(top = 12.dp), color = AppTheme.colors.textMuted, fontSize = 12.5.sp, lineHeight = 18.sp)
 }
 
 @Composable

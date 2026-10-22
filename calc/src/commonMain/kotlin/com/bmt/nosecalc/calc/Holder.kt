@@ -182,13 +182,16 @@ object HolderCheck {
         return listOf(closed(body), Contour(ins.zipWithNext { a, b -> Line(a, b) } + close))
     }
 
-    /** 노즈 중심 [nose] 자세에서 공구 조각이 소재와 겹치는 곳(깎는 쪽 벽 · 맞은편 벽)을 닫힌 꺾은선으로 */
-    fun overlap(drawing: Contour, faceAtStart: Boolean, bar: BoringBar, r: Double, nose: Pt): List<Contour> {
+    /**
+     * 노즈 중심 [nose] 자세에서 공구 조각이 소재와 겹치는 곳(깎는 쪽 벽 · 맞은편 벽)을 닫힌 꺾은선으로. [maxZ] 너머는 자른다 —
+     * 그린 바([outline] 의 maxZ)와 같은 곳에서. 뒤보링은 입구 반직선이 끝없이 가 띠가 넓어지면 원호가 현으로 그려졌다
+     */
+    fun overlap(drawing: Contour, faceAtStart: Boolean, bar: BoringBar, r: Double, nose: Pt, maxZ: Double = Double.POSITIVE_INFINITY): List<Contour> {
         if (!(r >= 0 && r.isFinite()) || problems(bar, r).isNotEmpty()) return emptyList()
         val bore = Bore(drawing, faceAtStart)
         if (!bore.monotone) return emptyList()
         val t = BarShape(bar, r, bore.reverse)
-        return (t.inserts + t.body).flatMap { bore.overlap(it, nose) }
+        return (t.inserts + t.body).flatMap { bore.overlap(it, nose, maxZ) }
     }
 
     /** 한 자세(노즈 중심 [nose])의 부분별 여유 — 검사 고리 */
@@ -442,11 +445,12 @@ internal class Bore(drawing: Contour, faceAtStart: Boolean) {
 
     /**
      * 조각이 소재와 겹치는 곳을 z 띠로 잘라 닫힌 꺾은선으로(깎는 쪽 벽 [max(아래, ρ), 위] · 맞은편 벽 [아래, min(위, −ρ)]).
-     * 띠는 조각마다 400 개 이하(폭 0.02 mm 이하가 되게), 조각 꼭짓점과 소재 꺾임점 z 는 띠 경계. 겹침이 띠 안에서 끝나면 그 z 를 이분법으로 찾는다
+     * 띠는 조각마다 400 개 이하(폭 0.02 mm 이하가 되게), 조각 꼭짓점과 소재 꺾임점 z 는 띠 경계. 겹침이 띠 안에서 끝나면 그 z 를 이분법으로 찾는다.
+     * [maxZ] 너머는 보지 않는다(띠가 그만큼 좁아진다)
      */
-    fun overlap(p: Piece, nose: Pt): List<Contour> {
+    fun overlap(p: Piece, nose: Pt, maxZ: Double = Double.POSITIVE_INFINITY): List<Contour> {
         val za = p.zs.first() + nose.z
-        val zb = min(p.zs.last() + nose.z, zTop)
+        val zb = minOf(p.zs.last() + nose.z, zTop, maxZ)
         if (zb - za <= 1e-12) return emptyList()
         val n = min(STRIPS, ceil((zb - za) / STRIP_W).toInt())
         val cuts = ((0..n).map { za + (zb - za) * it / n } + p.zs.map { it + nose.z } + breaks.toList()).filter { it in za..zb }.sorted()

@@ -286,10 +286,10 @@ private class ArtPen(
 
     /**
      * 내경(같은 치수의 구멍): 금속 덩어리 → 구멍 → 치수. 견본은 [sampleInput] 의 내경(입구 Z0 이 오른쪽, 깊이는 왼쪽).
-     * 덩어리 칸(폭 · 높이 비율)에 맞춰 배율을 정하고 가운데 둔다. 지름은 구멍 안 세로 치수(보조선 없음 — 짧으면 이름이 위 끝 너머, 금속 위),
+     * 덩어리 칸(폭 · 높이 비율)에 맞춰 배율을 정하고 가운데 둔다. 지름은 구멍 안 세로 치수(보조선 없음 — 이름이 들어가면 가운데, 아니면 위 끝 너머 금속 안),
      * 길이는 입구에서 안쪽으로 덩어리 아래 줄마다(보조선이 아래 벽에서 내려가고 이름은 치수선 위 — 입구 구멍 깊이가 첫 줄),
      * R 이름은 덩어리 위 한 줄에서 내려 짚는다(겹치지 않게 좌우로 민다). 형상 2 는 공 홈이 커서 R 이름이 홈 안,
-     * 공 뒤 구멍(그림만)은 외경처럼 위 옅은 점선. 형상 5 · 6 의 주 R 은 큰 구멍 안에서 아래 구면을 짚는다
+     * 공 뒤 구멍(그림만)은 외경처럼 위 옅은 점선. 형상 5 · 6 의 주 R 은 큰 구멍 안(D2 오른쪽)에서 아래 구면을 짚는다
      */
     fun drawInner(type: Int, shape: Contour) {
         val upper = Probe.points(shape)
@@ -312,9 +312,12 @@ private class ArtPen(
         val bottom = at(0.0, -half).y / h
         fun row(n: Int) = bottom + .1f * n
         val above = at(0.0, half).y / h - .08f
+        // 지름 이름(구멍이 짧아 위 끝 너머에 설 때)은 금속 위 끝 2dp 아래까지만 — 덩어리 윤곽 · R 이름 줄에 걸치지 않게
+        val top = at(0.0, half).y + with(d) { 2.dp.toPx() }
         fun onSphere(zc: Double, rr: Double, rad: Double) = at(zc + rr * cos(rad), rr * sin(rad))
         // z 의 화면 폭 비율 — 구멍 안 지름 치수(보조선 없이 −r ~ r) · 구멍 안 R 이름 자리
         fun fx(z: Double) = at(z, 0.0).x / w
+        fun dia(key: String, name: String, z: Double, r: Double) = vDim(key, name, fx(z), z, r, centerIfFits = true, labelTop = top)
         when (type) {
             2 -> {
                 val rr = i.mainR!!
@@ -323,10 +326,10 @@ private class ArtPen(
                 val halfL = sqrt(rr * rr - a * a)
                 val zc = -l1 - halfL
                 val zl = zc - halfL
-                // 공 홈 안: 위에 모서리 R(입구 쪽 이음점), 아래에 주 R(아래 구면)
-                leader("cr1", "모서리 R", fx(zc + .15 * rr), at(0.0, .45 * rr).y / h, at(-l1, a))
+                // 공 홈 안: 위에 모서리 R(입구 쪽 이음점), 아래에 주 R(아래 구면). 모서리 R 은 축 가까이(큰 글꼴에서 홈 원호에 닿지 않게)
+                leader("cr1", "모서리 R", fx(zc + .15 * rr), at(0.0, .3 * rr).y / h, at(-l1, a))
                 leader("mainR", "주 R", fx(zc), at(0.0, -.45 * rr).y / h, onSphere(zc, rr, -2.2))
-                vDim("d1", "D1", fx(-l1 / 2), -l1 / 2, a)
+                dia("d1", "D1", -l1 / 2, a)
                 rowDim("l1", "L1", 0.0, -a, -l1, -a, row(1))
                 rowDim("l2", "L2 (B)", -l1, -a, zl, -a, row(2), L2Ref.B)
                 rowDim("l2", "L2 (A)", 0.0, -a, zl, -a, row(3), L2Ref.A)
@@ -340,7 +343,7 @@ private class ArtPen(
                 val leg = i.legLen
                 val ll = rr + (if (type == 4) 1 else -1) * sqrt(rr * rr - hh * hh)
                 val zc = rr - ll - leg
-                vDim("d1", "D", fx(-leg / 2), -leg / 2, hh)
+                dia("d1", "D", -leg / 2, hh)
                 leaders(above, Triple("mainR", "주 R", onSphere(zc, rr, if (type == 3) 2.75 else 2.0)), Triple("cr1", "모서리 R", at(-leg, hh)))
                 rowDim("leg", "입구 구멍 깊이", 0.0, -hh, -leg, -hh, row(1))
                 rowDim("l1", "L", -leg, -hh, zMin, 0.0, row(2))
@@ -365,10 +368,15 @@ private class ArtPen(
                     zc = zs + sqrt(rr * rr - a * a)
                 }
                 val joint = if (type == 5) Pt(-leg, bb) else Pt(-leg, sqrt(rr * rr - (zc + leg) * (zc + leg)))
-                vDim("d2", "D2", fx(-leg / 2), -leg / 2, bb)
-                vDim("d1", "D1", fx(zs - l1 / 2), zs - l1 / 2, a)
+                // D2 는 입구 구멍 안쪽(이음점 쪽)에, 주 R 이름은 그 6dp 오른쪽부터(입구 너머 공기까지) — 가운데에 두면 D2 치수선이
+                // 'R' 과 값 사이를 지났고, 왼쪽으로 비키면 L1 · L2 보조선 · 이음점 ○ 에 걸렸다
+                dia("d2", "D2", -leg * .8, bb)
+                dia("d1", "D1", zs - l1 / 2, a)
                 leaders(above, Triple("cr1", "모서리 R(1)", at(zs, a)), Triple("cr2", "모서리 R(2)", at(joint.z, joint.x)))
-                leader("mainR", "주 R", fx(-leg * .55), at(0.0, -.6 * bb).y / h, onSphere(zc, rr, -(PI - asin(a / rr)) + .45))
+                leader(
+                    "mainR", "주 R", fx(-leg * .8) + with(d) { 6.dp.toPx() } / w, at(0.0, -.6 * bb).y / h,
+                    onSphere(zc, rr, -(PI - asin(a / rr)) + .45), anchor = 0f,
+                )
                 rowDim("leg", "입구 구멍 깊이", 0.0, -bb, -leg, -bb, row(1))
                 rowDim("l2", "L2", -leg, -joint.x, zs, -a, row(2))
                 rowDim("l1", "L1", zs, -a, zMin, -a, row(3))
@@ -408,10 +416,11 @@ private class ArtPen(
         val yy = y * h
         val (lp, rp) = listOf(at(za, xa), at(zb, xb)).sortedBy { it.x }
         val size = measurer.measure(look.text, look.style).size
-        val tl = Offset(inside(max((lp.x + rp.x - size.width) / 2, lp.x), size.width, look), yy - px(1f) - size.height)
+        // 치수보다 긴 이름은 왼쪽 보조선 4dp 오른쪽에서 시작(보조선이 첫 글자를 지나지 않게)
+        val tl = Offset(inside(max((lp.x + rp.x - size.width) / 2, lp.x + px(4f)), size.width, look), yy - px(1f) - size.height)
         val width = px(DrawSpec.dim) * look.weight
         for (p in listOf(lp, rp)) {
-            val under = p.x > tl.x + px(2f) && p.x < tl.x + size.width - px(2f) && tl.y - px(2f) > p.y + px(DrawSpec.extGap)
+            val under = p.x >= tl.x - px(2f) && p.x <= tl.x + size.width + px(2f) && tl.y - px(2f) > p.y + px(DrawSpec.extGap)
             ext(p, if (under) tl.y - px(2f) - px(DrawSpec.extOver) else yy, look.line, px(DrawSpec.ext) * look.weight)
         }
         d.drawLine(look.line, Offset(lp.x, yy), Offset(rp.x, yy), width)
@@ -434,7 +443,8 @@ private class ArtPen(
         val m = c.drawMetal
         val y0 = at(0.0, half).y
         val y1 = at(0.0, -half).y
-        d.drawPath(metal, Brush.verticalGradient(0f to m[0], .28f to m[1], .5f to m[2], .78f to m[3], 1f to m[4], startY = y0, endY = y1))
+        // 축에 대칭인 그라데이션 — 아래 벽도 위 벽과 같은 톤(다크에서 끝 색이 구멍 바탕과 거의 같아 금속 · 공기가 안 갈렸다)
+        d.drawPath(metal, Brush.verticalGradient(0f to m[0], .28f to m[1], .5f to m[2], .72f to m[1], 1f to m[0], startY = y0, endY = y1))
         d.drawPath(bore, c.subtle)
         d.drawPath(metal, c.drawMetalEdge.copy(alpha = .6f), style = Stroke(px(1.1f), join = StrokeJoin.Round))
         val over = Offset(px(10f), 0f)
@@ -589,12 +599,12 @@ private class ArtPen(
     /**
      * 지시선 이름: halo 이름 + 밑줄 + 밑줄 끝에서 대상까지 꺾인 선 + 채운 화살(04). 이름 가운데 = 폭·높이 비율(lx, ly).
      * 밑줄은 대상에 가까운 쪽 끝에서 내려간다 — 대상이 이름 바로 아래면 그 자리에서 곧게(모순이면 밑줄이 빨간 점선).
-     * 이름은 그림 칸 안으로 민다
+     * 이름은 그림 칸 안으로 민다. anchor = lx 가 이름 폭의 어디인가(0 왼쪽 끝 · .5 가운데)
      */
-    private fun leader(key: String, name: String, lx: Float, ly: Float, target: Offset) {
+    private fun leader(key: String, name: String, lx: Float, ly: Float, target: Offset, anchor: Float = .5f) {
         val look = look(key, name) ?: return
         val size = measurer.measure(look.text, look.style).size
-        val tl = Offset(inside(lx * w - size.width / 2f, size.width, look), ly * h - size.height / 2f)
+        val tl = Offset(inside(lx * w - size.width * anchor, size.width, look), ly * h - size.height / 2f)
         val box = d.haloText(measurer, look.text, look.style, look.halo, ks, topLeft = tl, pill = look.focused)
         val width = px(DrawSpec.leader) * look.weight
         val y = tl.y + size.height - px(1.5f)
@@ -625,11 +635,17 @@ private class ArtPen(
         if (look.wrong) underline(box)
     }
 
-    /** 세로 치수(지름): z 의 윤곽 끝(±r)에서 가로 보조선 + 폭 비율 x 의 치수선(짧으면 바깥 화살 · 이름은 위쪽 끝 너머). 값은 이름 아랫줄 */
-    private fun vDim(key: String, name: String, x: Float, z: Double, r: Double) {
+    /**
+     * 세로 치수(지름): z 의 윤곽 끝(±r)에서 가로 보조선 + 폭 비율 x 의 치수선(짧으면 바깥 화살 · 이름은 위쪽 끝 너머). 값은 이름 아랫줄.
+     * 내경은 centerIfFits(이름이 구멍에 들어가면 가운데) · labelTop(바깥 이름이 금속 위 끝을 넘지 않게) — DrawKit.linearDim
+     */
+    private fun vDim(key: String, name: String, x: Float, z: Double, r: Double, centerIfFits: Boolean = false, labelTop: Float = Float.NEGATIVE_INFINITY) {
         val look = look(key, name, stack = true) ?: return
         val top = at(z, r)
-        val box = d.linearDim(at(z, -r), top, x * w - top.x, look.text, look.line, ks * look.weight, measurer, look.style, look.halo, look.focused)
+        val box = d.linearDim(
+            at(z, -r), top, x * w - top.x, look.text, look.line, ks * look.weight, measurer, look.style, look.halo, look.focused,
+            centerIfFits = centerIfFits, labelTop = labelTop,
+        )
         if (look.wrong) underline(box)
     }
 

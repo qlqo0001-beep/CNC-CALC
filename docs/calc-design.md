@@ -553,7 +553,8 @@ object RoundCalc {
   `opposite`(가장 깊은 점 x < 0 = 맞은편 벽), `behind` = 그 점 z − 인선 z. 요소 순, 한 요소 안은 처음 순.
 - `barClear` = 경로 전체에서 바 여유의 최솟값(같으면 앞의 것)과 그 자세 · 요소 — 안 닿을 때 화면의 '가장 좁은 곳'.
 - 그림용: `outline`(바는 maxZ 에서 자름, 인서트는 노즈 원호 포함), `overlap`(조각마다 z 띠 400 개 이하 · 폭 0.02 mm 이하로 깎는 쪽
-  [max(L, ρ), U] · 맞은편 [L, min(U, −ρ)] 를 닫힌 꺾은선으로, 겹침이 띠 안에서 끝나면 이분법).
+  [max(L, ρ), U] · 맞은편 [L, min(U, −ρ)] 를 닫힌 꺾은선으로, 겹침이 띠 안에서 끝나면 이분법. maxZ 너머는 자른다 — 화면은 `outline` 과 같은 maxZ.
+  뒤보링은 입구 반직선이 +Z 로 끝없이(1e5 mm) 가 자르지 않으면 띠가 약 250 mm 라 입구 R 이 현 하나로 그려졌다 — `HolderCheckTest.backBoringOverlapFollowsArc`).
 
 ### 단면이 다루는 것 · 어림 · 보지 않는 것
 - 정확: 둥근 바 자루 — 바 원판에서 축과 가장 먼 점이 y = 0 에 있어 원판이 덮는 반경 [max(0, |x_c| − a), |x_c| + a] 가 단면과 같다
@@ -608,7 +609,7 @@ object HolderCheck {
     fun problems(bar: BoringBar, r: Double): Set<BarField>
     fun check(drawing: Contour, program: Contour, entry: Pt, tip: Int, r: Double, faceAtStart: Boolean, bar: BoringBar): HolderResult
     fun outline(bar: BoringBar, r: Double, nose: Pt, maxZ: Double, reverse: Boolean = false): List<Contour> // [바, 인서트]
-    fun overlap(drawing: Contour, faceAtStart: Boolean, bar: BoringBar, r: Double, nose: Pt): List<Contour>  // 겹친 곳
+    fun overlap(drawing: Contour, faceAtStart: Boolean, bar: BoringBar, r: Double, nose: Pt, maxZ: Double = Double.POSITIVE_INFINITY): List<Contour>  // 겹친 곳
 }
 ```
 

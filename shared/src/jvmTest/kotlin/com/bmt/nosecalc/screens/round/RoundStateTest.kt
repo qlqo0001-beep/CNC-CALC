@@ -319,7 +319,7 @@ class RoundStateTest {
         val bad = bar.copy(f = 8.0)
         assertNull(holderNote(HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, true, bad), bad, sol, drawn, comp = false, drawn.nc))
         val loop = HolderResult(HolderSkip.NOT_MONOTONE, emptyList(), null, null, null)
-        assertEquals("원호가 Z 로 되돌아가는 모양이라 홀더 검사를 하지 않습니다.", holderNote(loop, bar, sol, drawn, comp = false, drawn.nc)!!.text)
+        assertEquals("원호가 Z 로 되돌아가는 모양이라 보링바 간섭 검사를 하지 않습니다.", holderNote(loop, bar, sol, drawn, comp = false, drawn.nc)!!.text)
     }
 
     /** 띠는 4 줄까지, 나머지는 '외 n곳'. 최소 가공경은 바 · 인서트 닿음 뒤에 */
@@ -364,6 +364,14 @@ class RoundStateTest {
         val note = holderNote(res, bar, sol, drawn, comp = false, drawn.nc)!!
         assertEquals(res.hits.size, note.lines.size)
         for ((h, line) in res.hits.zip(note.lines)) assertTrue(line.endsWith("mm ${if (h.behind > 0) "앞" else "뒤"})"), "${h.behind} $line")
+        // 기계 보정의 진입(−2 진입점 · −1 진입 이동) 좌표는 도면 좌표 프로그램의 진입 이동 위 — 뒤보링 진입점은 이미 구멍 안이라
+        // 도면 첫 점(Z−10)이 아니라 제 G00 블록과 같은 Z−11 에서 닿는다
+        assertEquals(-2, res.hits.first().element)
+        assertTrue(note.lines.first().startsWith("1줄 G00 X50. Z-11. — 바가 깎는 쪽 벽에 닿음: 처음 X50.000 Z-11.000,"), note.lines.first())
+        for ((h, line) in res.hits.zip(note.lines).filter { it.first.element < 0 }) {
+            val p = drawn.entry + (drawn.program.segs.first().start - drawn.entry) * h.fromT
+            assertTrue(line.contains("처음 X${Fmt.fixed3(p.xDia)} Z${Fmt.fixed3(p.z)},"), line)
+        }
     }
 
     /** 형상 확인의 빨간 경로 구간: 직접 보정은 가상 인선, 기계 보정은 도면 좌표 경로에서 노즈가 닿는 도면 점 사이(✕ 표와 같은 곳) */

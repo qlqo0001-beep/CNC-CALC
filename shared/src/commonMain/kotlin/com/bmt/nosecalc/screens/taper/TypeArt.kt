@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import com.bmt.nosecalc.ui.DrawSpec
 import com.bmt.nosecalc.ui.arrowHead
+import com.bmt.nosecalc.ui.artFontCap
 import com.bmt.nosecalc.ui.artScale
 import com.bmt.nosecalc.ui.centerLine
 import com.bmt.nosecalc.ui.haloText
@@ -43,7 +44,8 @@ import kotlin.math.sin
 /**
  * TYPE 그림(02·11). 소재 면(빗금)·회전축·꺾은선·T 점·기준 점선·각도 호·이송 화살(T1 → T2)·시작/끝 표·바이트.
  * 개념도라 경사는 그림마다 정한 기울기 그대로다.
- * 외경을 기준으로 그리고, 내경은 위아래(재료가 위), 역방향(mirrored)은 좌우를 뒤집는다 — 바이트도 반대쪽으로 간다.
+ * 외경을 기준으로 그리고, 내경은 위아래(재료가 위), 역방향(mirrored)은 좌우를 뒤집는다 — 바이트도 반대쪽으로 간다
+ * (내경 뒤보링 바는 인서트만 뒤집고 자루는 +Z 구멍 입구 쪽으로 — [boringBar]).
  * 글자는 뒤집지 않는다. 자리는 카드 비율, 선 굵기·글 크기는 02 의 카드 폭(199dp) 기준 배율을 묶어 쓴다(artScale) —
  * 좁은 폰에서 글이 너무 작아지거나 PC 넓은 창에서 너무 커지지 않는다.
  * compact = B 화면 요약 칸(작은 그림): 글 12sp 고정, 각도 글 · 빗금 · 시작/끝 표 · 홈 치수 없이.
@@ -160,8 +162,11 @@ private class Pen(
     val w = d.size.width
     val h = d.size.height
 
-    /** 라벨 거리 단위: 02 카드 폭을 글 배율로 — 라벨은 카드 크기가 아니라 글 크기를 따라 점 곁에 붙는다. 요약 칸은 T 글 12sp(15sp × .8) 에 맞춘다 */
-    val unit = with(d) { 199.dp.toPx() } * if (compact) .8f else kt
+    /**
+     * 라벨 거리 단위: 02 카드 폭을 글 배율로 — 라벨은 카드 크기가 아니라 글 크기를 따라 점 곁에 붙는다. 요약 칸은 T 글 12sp(15sp × .8) 에 맞춘다.
+     * 글꼴 배율 묶음(artFontCap)은 빼고 폭만 따른다 — 큰 글꼴에서 글은 1.1배까지인데 거리만 줄면 라벨이 점에 붙는다
+     */
+    val unit = with(d) { 199.dp.toPx() * if (compact) .8f else kt / artFontCap() }
 
     fun dp(v: Float) = with(d) { (v * ks).dp.toPx() }
 
@@ -202,6 +207,10 @@ private class Pen(
             c.drawProfile,
             style = profile,
         )
+        // 내경 역방향(뒤보링)이고 +Z 쪽(화면 오른쪽 = 꺾은선 왼쪽 끝)이 가로로 열려 있으면 바는 구멍을 지나 +Z 로 나간다.
+        // 자루가 그림을 가로지르므로 점 · 이름보다 먼저 그린다(이름이 바 위에 보이게)
+        val back = flipY && flipX && a.pts[0].y == a.pts[1].y
+        if (back) boringBar(barTop(a, back = true), back = true)
         for (i in 0 until t.size - 1) {
             val label = if (double) "각${i + 1}" else "각도"
             angle(t[i], left, t[i + 1] - t[i], arcR, label, if (double) 11f else 11.5f, hot = focus == "ang")
@@ -228,7 +237,7 @@ private class Pen(
             d.drawCircle(pointColor(c, i), dot, p)
         }
         val boxes = t.mapIndexed { i, p -> text("T${i + 1}", p + shift(a.labels[i]), pointColor(c, i), 15f, FontWeight.SemiBold) }
-        if (flipY) boringBar(barTop(a)) else outerTool()
+        if (!flipY) outerTool() else if (!back) boringBar(barTop(a, back = false), back = false)
         if (hot != null) {
             taken += Rect(t[hot], dp(9f))
             beside(boxes[hot], shift(a.labels[hot]), focus.uppercase())
@@ -417,19 +426,32 @@ private class Pen(
         tool(n, listOf(o(6f, top), o(22f, top), o(22f, a.y - (22f - a.x)), a, o(6f, -3f)))
     }
 
-    /** 내경 보링바(11): 날끝에서 오른쪽으로 누운 두께 15dp 자루(카드 밖으로 잘림), 날끝 밑은 45° 로 깎였다. 꺾은선 아래(구멍 안)에 둔다 */
-    private fun boringBar(top: Float) {
+    /**
+     * 내경 보링바(11): 날끝에서 오른쪽으로 누운 두께 15dp 자루(카드 밖으로 잘림), 날끝 밑은 45° 로 깎였다. 꺾은선 아래(구멍 안)에 둔다.
+     * back = 뒤보링(역방향, +Z 쪽이 열린 구멍): 인서트만 뒤집혀(날이 +Z) 날끝 왼쪽에 서고, 자루는 그대로 화면 오른쪽(+Z, 구멍 입구)
+     * 카드 끝까지 — 척 쪽에서 들어오지 않게. 헤드는 인서트 밑(15dp, 아래 모서리 45°). +Z 쪽이 막힌 역방향(홑 2 · 4)은 통째로 뒤집는다
+     */
+    private fun boringBar(top: Float, back: Boolean) {
         // top = 자루 윗변(화면 높이 비율). 날끝은 그보다 6dp 위
         val n = at(o(.80f, 1 - top)) - Offset(0f, dp(6f))
+        if (back) {
+            // tool() 이 x 를 뒤집으므로 음수 x 가 화면 오른쪽
+            val edge = (w - n.x) / dp(1f) + 2f
+            tool(n, listOf(o(15f, -6f), o(-edge, -6f), o(-edge, -21f), o(9f, -21f), o(15f, -15f)))
+            return
+        }
         val edge = (if (flipX) n.x else w - n.x) / dp(1f) + 2f
         val b = insertB
         tool(n, listOf(o(6f, -6f), o(edge, -6f), o(edge, -21f), o(b.x + 21f + b.y, -21f), b))
     }
 
-    /** 보링바 윗변: 오른쪽(x ≥ 0.7) 꺾은선보다 아래, 0.62~0.70 */
-    private fun barTop(a: Art): Float {
-        val low = a.pts.filter { it.x >= .7f }.maxOfOrNull { 1 - it.y } ?: 0f
-        return (low + .06f).coerceIn(.62f, .70f)
+    /**
+     * 보링바 윗변: 자루가 지나는 꺾은선보다 아래 — 정방향은 오른쪽(x ≥ 0.7), 0.62~0.70.
+     * 뒤보링은 날끝(x 0.8)에서 꺾은선 왼쪽 끝(뒤집혀 화면 오른쪽)까지 지나므로 x ≤ 0.8 모두, 0.62~0.80
+     */
+    private fun barTop(a: Art, back: Boolean): Float {
+        val low = a.pts.filter { if (back) it.x <= .8f else it.x >= .7f }.maxOfOrNull { 1 - it.y } ?: 0f
+        return (low + .06f).coerceIn(.62f, if (back) .80f else .70f)
     }
 
     /**

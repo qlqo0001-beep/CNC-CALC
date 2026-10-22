@@ -60,6 +60,7 @@ import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.Space
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * B 화면 — Outer Groove: 그림 요약 → (침범 경고 · 값을 넣으라는 안내) → 홈 치수 → 공구(기준 인선 TYPE 1 왼쪽 팁 3번 / TYPE 2 오른쪽 팁 4번 ·
@@ -267,9 +268,13 @@ private fun GrooveViewer(sol: GrooveSolution, i: GrooveInput, t: Double) {
     val up = sol.retractXDia / 2
     // 날 자리(반경 x0 ~ x1) — st.z 는 기준 인선 Z 라 날 왼쪽은 st.z − off
     fun blade(z: Double, x0: Double, x1: Double) = (z - off).let { l -> Contour.polyline(Pt(l, x0), Pt(l + t, x0), Pt(l + t, x1), Pt(l, x1), Pt(l, x0)) }
+    // 오른쪽 외경은 부품 끝면 Z0 에서 멈춘다(Z0 = 부품 오른쪽 끝면 — 그 너머는 소재가 없다). 홈이 Z0 에서 시작하면 오른쪽 토막 없음
+    val right = if (z0 <= 0) min(z0 + ext, 0.0) else z0 + ext
     val profile = Contour.polyline(
-        Pt.ofDia(z0 + ext, od), Pt.ofDia(z0, od), Pt.ofDia(z0, d),
-        Pt.ofDia(z0 - w, d), Pt.ofDia(z0 - w, od), Pt.ofDia(z0 - w - ext, od),
+        *listOfNotNull(
+            Pt.ofDia(right, od).takeIf { right > z0 }, Pt.ofDia(z0, od), Pt.ofDia(z0, d),
+            Pt.ofDia(z0 - w, d), Pt.ofDia(z0 - w, od), Pt.ofDia(z0 - w - ext, od),
+        ).toTypedArray(),
     )
     val first = steps.first()
     // 맞춤 보기의 배율(dp/mm) 어림: 폰 뷰어에서 그림이 약 300dp 에 들어간다
@@ -303,7 +308,8 @@ private fun GrooveViewer(sol: GrooveSolution, i: GrooveInput, t: Double) {
             LegendItem(c.drawHatch, "소재", LegendGlyph.Fill),
         ),
         subtitle = "${if (i.ref == GrooveRef.LEFT) "왼쪽" else "오른쪽"} 인선 팁 ${i.ref.tip}번 기준",
-        stock = ViewerStock(profile, inner = false, extendRight = true),
+        // 소재는 윤곽 오른쪽 끝(Z0)에서 세로 면으로 닫는다
+        stock = ViewerStock(profile, inner = false),
         fills = listOf(ViewerFill(Contour.polyline(Pt.ofDia(z0 - w, d), Pt.ofDia(z0, d), Pt.ofDia(z0, od), Pt.ofDia(z0 - w, od), Pt.ofDia(z0 - w, d)), c.amber.copy(alpha = .16f))),
     )
 }

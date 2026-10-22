@@ -72,6 +72,7 @@ import com.bmt.nosecalc.ui.ViewerMark
 import com.bmt.nosecalc.ui.ViewerStock
 import com.bmt.nosecalc.ui.arrowHead
 import com.bmt.nosecalc.ui.haloText
+import com.bmt.nosecalc.ui.keepWords
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.onFill
@@ -262,8 +263,9 @@ internal fun NodeTable(sol: RoundSolution, comp: Boolean, modifier: Modifier = M
         if (comp) {
             LabeledValue("진입점 (G00)", "X${Fmt.fixed3(sol.entry.xDia)}  Z${Fmt.fixed3(sol.entry.z)}")
         } else {
+            // 어절 안에서 줄이 바뀌지 않게(큰 글꼴에서 '윤곽입니 / 다')
             Text(
-                "도면 점 · 원호 R 은 모서리 R 을 접하게 끼운 윤곽입니다(접점은 직선 위 수선의 발, 원 위에서는 두 중심을 잇는 선 위).",
+                keepWords("도면 점 · 원호 R 은 모서리 R 을 접하게 끼운 윤곽입니다(접점은 직선 위 수선의 발, 원 위에서는 두 중심을 잇는 선 위)."),
                 color = c.textMuted,
                 fontSize = 12.5.sp,
                 lineHeight = 18.sp,
@@ -299,6 +301,9 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
     val poses = holder?.let { holderPoses(it.result, sol, r) }.orEmpty()
     var pick by remember(holder?.result) { mutableStateOf(0) }
     val at = poses.getOrNull(pick)?.second
+    // 바는 입구 끝면 너머 max(3, 깊이 15 %) 에서 자른다 — 뷰어가 바 끝까지 맞추지 않게. 겹친 곳도 같은 곳에서
+    val zs = sol.drawing.segs.flatMap { listOf(it.start.z, it.end.z) }
+    val maxZ = zs.max() + max(3.0, 0.15 * (zs.max() - zs.min()))
     val lines = buildList {
         add(ViewerLine(sol.drawing, c.drawProfile, 3.5.dp))
         if (holder != null) {
@@ -316,20 +321,17 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
         }
         if (path != null) add(ViewerLine(Contour(listOf(Line(path.entry, path.program.segs.first().start)) + path.program.segs), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
         if (holder != null && at != null) {
-            // 바는 입구 끝면 너머 max(3, 깊이 15 %) 에서 자른다 — 뷰어가 바 끝까지 맞추지 않게
-            val zs = sol.drawing.segs.flatMap { listOf(it.start.z, it.end.z) }
-            val maxZ = zs.max() + max(3.0, 0.15 * (zs.max() - zs.min()))
             for (part in HolderCheck.outline(holder.bar, r, at, maxZ, backBoring(sol))) add(ViewerLine(part, c.drawHolder, 1.6.dp, fill = c.drawHolderFill))
         }
     }
     // 겹친 곳은 띠마다 소재를 다시 재므로 자리 · 바가 바뀔 때만(키패드가 열리고 닫힐 때 다시 세지 않게)
     val overlap = remember(sol.drawing, holder?.bar, holder?.faceAtStart, r, at) {
-        if (holder != null && at != null) HolderCheck.overlap(sol.drawing, holder.faceAtStart, holder.bar, r, at) else emptyList()
+        if (holder != null && at != null) HolderCheck.overlap(sol.drawing, holder.faceAtStart, holder.bar, r, at, maxZ) else emptyList()
     }.map { ViewerFill(it, c.red.copy(alpha = .5f)) }
     // 처음 닿는 곳 ✕ — 줄마다 하나(바 · 인서트 · 공구대 먼저, 최소 가공경만 걸린 줄은 'Dmin')
     val contacts = if (holder == null) emptyList() else hits.sortedBy { it.part == HolderPart.MIN_BORE }.distinctBy { holder.lineNo(it) }.map { h ->
         val name = if (h.part == HolderPart.MIN_BORE) "Dmin" else "간섭"
-        ViewerMark(if (comp) h.first.tip else h.first.drawn, c.red, "$name ${holder.lineNo(h)}줄", MarkKind.Cross)
+        ViewerMark(hitPoint(h, path, comp), c.red, "$name ${holder.lineNo(h)}줄", MarkKind.Cross)
     }
     val points = if (comp) {
         sol.nodes.mapIndexed { i, n -> ViewerMark(n.prog, c.viewPath, "${nodeNo(sol, i)}", MarkKind.Dot) }

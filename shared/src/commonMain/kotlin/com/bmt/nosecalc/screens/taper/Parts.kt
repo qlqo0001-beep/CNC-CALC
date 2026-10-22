@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -86,6 +87,7 @@ import com.bmt.nosecalc.ui.ResultDock
 import com.bmt.nosecalc.ui.SheetTitle
 import com.bmt.nosecalc.ui.WarnLevel
 import com.bmt.nosecalc.ui.arrowHead
+import com.bmt.nosecalc.ui.keepWords
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.Space
@@ -122,7 +124,7 @@ internal fun SummaryCard(kind: TaperKind, type: Int, mirrored: Boolean, info: St
                 Text("형상 $type", color = c.textStrong, fontSize = 21.sp, fontWeight = FontWeight.Bold)
                 Text(typeName(kind, type), color = c.textBody, fontSize = 13.sp, lineHeight = 18.sp)
                 Spacer(Modifier.height(4.dp))
-                Text(info, color = c.textMuted, fontSize = 12.5.sp, lineHeight = 17.sp)
+                Text(keepWords(info), color = c.textMuted, fontSize = 12.5.sp, lineHeight = 17.sp)
                 Spacer(Modifier.height(8.dp))
                 PillButton("형상 다시 고르기", null, onBack)
             }
@@ -197,13 +199,14 @@ private fun Chip(text: String, on: Boolean, modifier: Modifier, onClick: () -> U
             .clip(shape)
             .background(if (on) c.teal else c.field)
             .border(1.5.dp, if (on) c.teal else c.lineField, shape)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        // 칩보다 긴 직접 값은 "…" 로 — 잘린 숫자가 멀쩡한 값처럼 보이지 않게
+        // 칩보다 긴 직접 값은 "…" 로 — 잘린 숫자가 멀쩡한 값처럼 보이지 않게. 양옆 6dp 띄우고 가운데(넘쳐도 둥근 왼쪽 끝에 붙지 않게)
         Text(
             text, color = if (on) c.onFill(c.teal) else c.textValue, fontSize = 17.sp, fontWeight = FontWeight.Bold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
         )
     }
 }
@@ -497,9 +500,11 @@ internal fun CompModeSwitch(side: Side) {
             }
         }
         Text(
-            // 좁은 폰에서 '좌표로' · '(기계 보정 없음)' 이 쪼개져 줄바꿈되지 않게 낱말 이음(\u2060) · 붙임 공백(\u00A0)
-            if (mode == CompMode.MACHINE) "기계 공구 보정 화면에 R·T 를 넣고 도면 좌\u2060표\u2060로 깎습니다"
-            else "앱이 계산한 좌표 그대로 깎습니다 (기계\u00A0보정\u00A0없음)",
+            // 좁은 폰 · 큰 글꼴에서 낱말이 쪼개져 줄바꿈되지 않게 어절 이음(keepWords) · '(기계 보정 없음)' 은 붙임 공백(\u00A0)
+            keepWords(
+                if (mode == CompMode.MACHINE) "기계 공구 보정 화면에 R·T 를 넣고 도면 좌표로 깎습니다"
+                else "앱이 계산한 좌표 그대로 깎습니다 (기계\u00A0보정\u00A0없음)",
+            ),
             Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
             style = AppType.caption,
             color = c.textMuted,
@@ -605,19 +610,22 @@ internal fun NcCard(
         }
         Spacer(Modifier.height(10.dp))
         val bg = if (copied) c.green else c.teal
+        // 긴 이름(도면 좌표 프로그램 (G41/G42 용))은 좁은 폰 · 큰 글꼴에서 두 줄로 — 잘리지 않게 높이를 늘린다
         Row(
-            Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(10.dp)).background(bg).clickable(onClick = copy).padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(10.dp)).background(bg).clickable(onClick = copy)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(if (copied) AppIcons.Check else AppIcons.Copy, null, Modifier.size(20.dp), tint = c.onFill(bg))
             Spacer(Modifier.width(8.dp))
             Text(
-                if (copied) "복사됨" else "복사 · $programName ${lines.size}줄",
+                if (copied) "복사됨" else keepWords("복사 · $programName ${lines.size}줄"),
                 color = c.onFill(bg),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }

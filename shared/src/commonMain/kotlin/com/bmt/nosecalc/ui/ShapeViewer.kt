@@ -256,8 +256,9 @@ fun ShapeViewer(
             for (m in shown) m.arc?.let { arcLeader(v, m.at, it, m.color) }
             // 라벨 없는 점(보정점 등)을 먼저 — T 점 표시가 그 밑에 묻히지 않게
             for (m in shown.sortedBy { it.label != null }) mark(m.kind, v.toScreen(m.at), m.color, c.viewport)
-            val pills = viewerPills(v, step, stock != null, measurer, sans, c)
-            labels(shown, v, measurer, sans.copy(fontSize = 13.sp), inkOf(lines, v), pills, c.card.copy(alpha = .92f))
+            val pills = viewerPills(v, step, stock != null, measurer, sans, c, shown.map { v.toScreen(it.at) })
+            // 점 라벨 글은 그림 글처럼 시스템 글꼴 1.1배까지(artFontCap) — 큰 글꼴에서 알약끼리 자리가 모자라 빠지지 않게
+            labels(shown, v, measurer, sans.copy(fontSize = (13f * artFontCap()).sp), inkOf(lines, v), pills, c.card.copy(alpha = .92f))
         }
         state.hint?.let { HintPill(state, it, Modifier.align(Alignment.TopCenter).padding(top = 10.dp)) }
     }
@@ -265,9 +266,18 @@ fun ShapeViewer(
 
 /**
  * 뷰어 알약(카드색 α .9, 둥근 6dp)을 긋고 그 칸들을 돌려준다 — 라벨이 피한다. 왼쪽 위 "◀ 척 쪽"(소재가 있을 때),
- * Z0 선 위 끝 "Z0" · 중심선 왼쪽 "중심"(보일 때), 왼쪽 아래 축척(격자 한 칸 길이 막대 2dp, 양 끝 6dp 눈금 + "2 mm · X 반경")
+ * Z0 선 위 끝 "Z0" · 중심선 왼쪽 "중심"(보일 때), 왼쪽 아래 축척(격자 한 칸 길이 막대 2dp, 양 끝 6dp 눈금 + "2 mm · X 반경").
+ * marksAt = 점 표시의 화면 자리 — "중심" 이 덮지 않게 비킨다(내경은 깊은 끝 노드가 축 왼쪽에 선다)
  */
-private fun DrawScope.viewerPills(v: ViewXf, step: Double, chuckSide: Boolean, measurer: TextMeasurer, sans: TextStyle, c: AppColors): List<Rect> {
+private fun DrawScope.viewerPills(
+    v: ViewXf,
+    step: Double,
+    chuckSide: Boolean,
+    measurer: TextMeasurer,
+    sans: TextStyle,
+    c: AppColors,
+    marksAt: List<Offset>,
+): List<Rect> {
     val bg = c.card.copy(alpha = .9f)
     val corner = CornerRadius(6.dp.toPx())
     val pad = 8.dp.toPx()
@@ -312,8 +322,15 @@ private fun DrawScope.viewerPills(v: ViewXf, step: Double, chuckSide: Boolean, m
     if (v.t.y in 0f..size.height) {
         pill("중심", axis) { sz ->
             val mid = Rect(Offset(pad, v.t.y - sz.height / 2), sz)
-            // 축척 · 척 쪽 알약과 겹치면 중심선 위로
-            if (listOfNotNull(scaleBox, chuck).any { it.overlaps(mid) }) Offset(pad, v.t.y - sz.height - 3.dp.toPx()) else mid.topLeft
+            val right = Offset(size.width - pad - sz.width, v.t.y - sz.height / 2)
+            fun covers(r: Rect) = marksAt.any { r.inflate(8.dp.toPx()).contains(it) }
+            when {
+                // 축척 · 척 쪽 알약과 겹치면 중심선 위로
+                listOfNotNull(scaleBox, chuck).any { it.overlaps(mid) } -> Offset(pad, v.t.y - sz.height - 3.dp.toPx())
+                // 점 표시(내경 깊은 끝 노드 등)를 덮으면 중심선 오른쪽 끝으로 — 위 칸은 그 점 · 돔에 또 걸린다
+                covers(mid) && !covers(Rect(right, sz)) -> right
+                else -> mid.topLeft
+            }
         }
     }
     return boxes
@@ -532,9 +549,13 @@ private fun DrawScope.viewerLine(l: ViewerLine, v: ViewXf, bg: Color) {
             }
         }
     }.ifEmpty {
+        // 짧은 토막뿐이면 끝 토막에 하나 — 촉이 끝점 표시(후퇴 □ 8dp 등)에 붙지 않게 끝에서 9dp 앞(□ 가장자리에서 약 4dp)에서 멈춘다.
+        // 그만큼도 안 되면 화살 없이(끝 표시가 끝을 알린다)
         val last = segs.last()
         val d = if (last is Arc) tangent(last, arcAngle(last, 1.0)) else v.toScreen(last.end) - v.toScreen(last.start)
-        listOf(v.toScreen(last.end) - d / max(d.getDistance(), 1e-3f) * half to d)
+        val back = 9.dp.toPx()
+        if ((v.toScreen(last.end) - v.toScreen(last.start)).getDistance() < 2 * half + back + 4.dp.toPx()) emptyList()
+        else listOf(v.toScreen(last.end) - d / max(d.getDistance(), 1e-3f) * (half + back) to d)
     }
     // 촉 길이 10dp · 밑변 7dp 이등변 삼각형. 빈 화살은 바탕색으로 속을 채우고 1.5dp 테두리
     for ((mid, d) in at) {
@@ -645,9 +666,10 @@ private fun DrawScope.inkOf(lines: List<ViewerLine>, v: ViewXf): List<Pair<Offse
  * 점 라벨 = 알약(둥근 5dp · 바탕 bg · 점 색 α .55 테두리 1dp · 13sp 굵은 점 색 글). 점에서 9dp 띄운 여덟 곳
  * (오른쪽 위 · 오른쪽 · 오른쪽 아래 · 아래 · 왼쪽 아래 · 왼쪽 · 왼쪽 위 · 위)에 점수를 매겨 가장 낮은 곳(같으면 앞 순서)에 둔다:
  * 뷰어 4dp 안쪽을 벗어나는 곳은 빼고, 겹친 것마다 앞서 둔 라벨 4 · 다른 점(10dp 칸) 3 · 뷰어 알약(avoid) 4,
- * 제 점보다 다른 점에 더 가까우면 0.75(옆 점 라벨로 읽힌다), 지나는 선 토막마다 0.5(1 까지 — 선은 알약 밑으로 지나도 읽힌다).
- * 가까운 곳이 다 막히면 16dp 씩 더 띄운 바깥 세 겹(겹마다 1)까지 보고, 점에서 16dp 넘게 떨어지면 점 색 α .6 의 1dp 지시선을 긋는다.
- * 모두 뷰어를 벗어나면 가장 나은 곳을 뷰어 안으로 당긴다.
+ * 같은 꼴 점이 제 점만큼(2dp 안) 가까우면 3 · 다른 꼴 점이 더 가까우면 0.75(옆 점 라벨로 읽힌다), 지나는 선 토막마다 0.5(1 까지 — 선은 알약 밑으로
+ * 지나도 읽힌다), 점에서 그 자리까지(지시선)가 지나는 앞 라벨마다 2.
+ * 가까운 곳이 다 막히면 16dp 씩 더 띄운 바깥 세 겹(겹마다 1)까지 보고, 점에서 16dp 넘게 떨어지거나 같은 꼴 다른 점에 더 가까우면 점 색 α .6 의 1dp 지시선을 긋는다.
+ * 모두 뷰어를 벗어나면 가장 나은 곳을 뷰어 안으로 당긴다. 가장 나은 곳도 앞서 둔 라벨과 겹치면 라벨은 빼고 점 표시만 남긴다.
  * [MarkKind] 순서(T 점 → 노드 → 진입·후퇴 → 원호 중심)로 자리를 잡는다. 화면 밖 점은 라벨도 없다
  */
 private fun DrawScope.labels(
@@ -686,8 +708,16 @@ private fun DrawScope.labels(
             return 4.0 * placed.count { it.overlaps(r) } +
                 3.0 * dots.withIndex().count { (j, d) -> j != i && d.overlaps(r) } +
                 4.0 * avoid.count { it.overlaps(r) } +
-                (if (pts.withIndex().any { (j, q) -> j != i && r.distanceTo(q) < own - 1f }) 0.75 else 0.0) +
+                // 같은 꼴 점(노드 둘 등)이 제 점만큼(2dp 안) 가까우면 그 점 라벨로 읽힌다 — 점 겹침과 같은 3(가까운 두 노드에서 번호가 뒤바뀌어 보였다).
+                // 다른 꼴(진입 □ 등)은 제 점보다 더 가까울 때만 0.75
+                when {
+                    pts.withIndex().any { (j, q) -> j != i && marks[j].kind == m.kind && r.distanceTo(q) < own + 2.dp.toPx() } -> 3.0
+                    pts.withIndex().any { (j, q) -> j != i && r.distanceTo(q) < own - 1f } -> 0.75
+                    else -> 0.0
+                } +
                 0.5 * min(2, ink.count { (a, b) -> r.crossedBy(a, b) }) +
+                // 점에서 라벨까지(지시선 자리)가 앞서 둔 라벨을 지나면 — 지시선이 글 사이로 보인다
+                2.0 * placed.count { !it.overlaps(r) && it.crossedBy(p, r.nearest(p)) } +
                 s.second
         }
         val box = spots.filter { (r) -> inside.contains(r.topLeft) && inside.contains(r.bottomRight) }.minByOrNull(::score)?.first
@@ -697,10 +727,14 @@ private fun DrawScope.labels(
                     (inside.top - r.top).coerceAtLeast(0f) + (inside.bottom - r.bottom).coerceAtMost(0f),
                 )
             }
+        // 가장 나은 곳도 둔 라벨과 겹치면 알약은 빼고 점 표시만(겹친 두 글은 다 못 읽는다 — 먼저 둔 것이 남는다)
+        if (placed.any { it.overlaps(box) }) continue
         placed += box
         val near = box.nearest(p)
         val far = (near - p).getDistance()
-        if (far > 16.dp.toPx()) drawLine(m.color.copy(alpha = .6f), p + (near - p) * (6.dp.toPx() / far), near, 1.dp.toPx())
+        // 16dp 넘게 떨어졌거나, 제 점보다 같은 꼴 다른 점에 더 가까우면(그 점 라벨로 읽힌다) 지시선
+        val misread = far > 8.dp.toPx() && pts.withIndex().any { (j, q) -> j != i && marks[j].kind == m.kind && box.distanceTo(q) < far - 1f }
+        if (far > 16.dp.toPx() || misread) drawLine(m.color.copy(alpha = .6f), p + (near - p) * (6.dp.toPx() / far), near, 1.dp.toPx())
         val r = CornerRadius(5.dp.toPx())
         drawRoundRect(bg, box.topLeft, box.size, r)
         drawRoundRect(m.color.copy(alpha = .55f), box.topLeft, box.size, r, style = Stroke(1.dp.toPx()))

@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
@@ -46,12 +47,16 @@ internal object DrawSpec {
 
 /**
  * 그림 폭 w(px)가 기준 폭 base 의 몇 배인지 → (ks 선 배율 0.9~1.3, kt 글 배율 0.95~1.25).
- * 좁은 폰에서 글이 너무 작아지거나 PC 넓은 창에서 너무 커지지 않게 묶는다. 자리(기하)는 그림 폭 비율 그대로 쓴다
+ * 좁은 폰에서 글이 너무 작아지거나 PC 넓은 창에서 너무 커지지 않게 묶는다. 자리(기하)는 그림 폭 비율 그대로 쓴다.
+ * 그림 글(sp)은 시스템 글꼴 배율을 1.1 까지만 따른다 — 자리는 폭만 따르므로 130 % 글꼴이면 이름끼리 · 선과 겹쳤다
  */
 internal fun Density.artScale(w: Float, base: Dp): Pair<Float, Float> {
     val k = w / base.toPx()
-    return k.coerceIn(.9f, 1.3f) to k.coerceIn(.95f, 1.25f)
+    return k.coerceIn(.9f, 1.3f) to k.coerceIn(.95f, 1.25f) * artFontCap()
 }
+
+/** 그림 글이 시스템 글꼴 배율을 1.1 까지만 따르게 곱하는 값(글꼴 1.3 → 0.846). 자리(기하)에 쓴 글 배율은 이것으로 나눠 폭만 따르게 한다 */
+internal fun Density.artFontCap(): Float = minOf(1f, 1.1f / fontScale)
 
 /** 중심선(1점 쇄선): 긴 9 · 틈 2.5 · 점 2 · 틈 2.5dp, 굵기 1dp (× ks) */
 internal fun DrawScope.centerLine(a: Offset, b: Offset, color: Color, ks: Float) {
@@ -112,6 +117,8 @@ internal fun DrawScope.haloText(
  * 이름은 치수선 가운데를 끊고 바로 놓는다(글은 늘 가로). 치수선이 이름 + 화살 둘 + 4dp 보다 짧으면 화살을 보조선 바깥에서
  * 안으로 겨누고(꼬리 9dp) 이름은 오른쪽 끝(세로 치수면 위쪽 끝) 너머에 둔다 — 그림 칸을 벗어나면 두 보조선 사이에(들어가면),
  * 아니면 칸 안(가장자리 2dp)으로 밀고, 밀려서 끝 화살을 덮으면 치수선의 + 쪽 옆으로 비킨다.
+ * centerIfFits = 이름이 두 보조선 사이에 들어가면 칸 밖으로 밀리지 않아도 가운데에(화살은 바깥에서).
+ * labelTop = 바깥 이름의 위 한계(px, 내경 그림의 금속 위 끝 — 윤곽에 걸치지 않게). 그래서 끝 화살에 닿으면 옆으로 비키지 않고 화살 바로 너머에.
  * 이름은 늘 halo 를 두른다(pill 이면 halo 색 알약도 — haloText). 이름 칸을 돌려준다(a = b 면 빈 칸)
  */
 internal fun DrawScope.linearDim(
@@ -125,6 +132,8 @@ internal fun DrawScope.linearDim(
     style: TextStyle,
     halo: Color,
     pill: Boolean = false,
+    centerIfFits: Boolean = false,
+    labelTop: Float = Float.NEGATIVE_INFINITY,
 ): Rect {
     val span = (b - a).getDistance()
     if (span < 1e-3f) return Rect.Zero
@@ -168,11 +177,11 @@ internal fun DrawScope.linearDim(
         val m = 2.dp.toPx() + bg
         fun inside(p: Offset) = Offset(
             p.x.coerceAtMost(size.width - m - text.width / 2).coerceAtLeast(m + text.width / 2),
-            p.y.coerceAtMost(size.height - m - text.height / 2).coerceAtLeast(m + text.height / 2),
+            p.y.coerceAtMost(size.height - m - text.height / 2).coerceAtLeast(max(m, labelTop) + text.height / 2),
         )
         val far = end + dir * (tail + pad + along / 2)
         val p = inside(far)
-        if (p != far && span >= along + 2 * (pad + bg)) {
+        if ((p != far || centerIfFits) && span >= along + 2 * (pad + bg)) {
             drawLine(color, pa + out * tail, pa, dimW)
             drawLine(color, pb, pb - out * tail, dimW)
             (pa + pb) / 2f
@@ -180,7 +189,12 @@ internal fun DrawScope.linearDim(
             drawLine(color, pa + out * tail, pb - out * tail, dimW)
             // 끝에서 이름(알약) 가장자리까지
             val clear = (p.x - end.x) * dir.x + (p.y - end.y) * dir.y - along / 2 - bg
-            if (clear >= arrow + pad) p else inside(p + n * (abs(n.x) * text.width / 2 + abs(n.y) * text.height / 2 + pad))
+            when {
+                clear >= arrow + pad -> p
+                // 위 한계에 눌려 화살에 닿으면 화살 바로 너머(1dp)에
+                labelTop > far.y - text.height / 2 -> end + dir * (arrow + 1.dp.toPx() + along / 2 + bg)
+                else -> inside(p + n * (abs(n.x) * text.width / 2 + abs(n.y) * text.height / 2 + pad))
+            }
         }
     }
     return haloText(measurer, label, style, halo, ks, center = center, pill = pill)

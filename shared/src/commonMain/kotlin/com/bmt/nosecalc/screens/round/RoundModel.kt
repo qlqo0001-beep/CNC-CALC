@@ -20,6 +20,7 @@ import com.bmt.nosecalc.calc.InsertShape
 import com.bmt.nosecalc.calc.L2Ref
 import com.bmt.nosecalc.calc.MAX_MM
 import com.bmt.nosecalc.calc.NoseComp
+import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RoundInput
 import com.bmt.nosecalc.calc.RoundResult
 import com.bmt.nosecalc.calc.RoundSolution
@@ -303,7 +304,7 @@ internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = e
         RoundWarning.CONCAVE_R_LE_NOSE ->
             "오목 R 이 노즈R 이하입니다(R − r ≤ 0). 그 자리의 보정 원호가 없어집니다. R = r 이면 정확하지만, R < r 이면 도면보다 큰 R(= 노즈R)이 남습니다."
         RoundWarning.AGAINST_TOOL -> if (inner) {
-            "형상 일부가 바이트 방향과 반대입니다(구멍 입구 쪽을 향한 면 — 언더컷). 아래 홀더 검사로 인서트 · 바가 닿는지 확인하세요."
+            "형상 일부가 바이트 방향과 반대입니다(구멍 입구 쪽을 향한 면 — 언더컷). 아래 '보링바 (홀더)' 칸에 바 치수를 넣어 인서트 · 바가 닿는지 확인하세요."
         } else {
             "형상 일부가 바이트 방향과 반대입니다(왼쪽 면 · 공의 뒤쪽 등 척 쪽을 향한 면). 그 부분은 35° 인서트 · 역바이트 · 절단 등으로 깎이는지 따로 확인하세요."
         }
@@ -340,7 +341,7 @@ internal fun holderNote(res: HolderResult?, bar: BoringBar?, sol: RoundSolution,
     if (res == null || bar == null) return HolderNote("보링바 값을 넣으면 공구가 소재에 닿는지 봅니다.", emptyList(), false, emptySet())
     when (res.skip) {
         HolderSkip.BAD_INPUT -> return null
-        HolderSkip.NOT_MONOTONE -> return HolderNote("원호가 Z 로 되돌아가는 모양이라 홀더 검사를 하지 않습니다.", emptyList(), false, emptySet())
+        HolderSkip.NOT_MONOTONE -> return HolderNote("원호가 Z 로 되돌아가는 모양이라 보링바 간섭 검사를 하지 않습니다.", emptyList(), false, emptySet())
         null -> {}
     }
     val prog = if (comp) sol else drawn ?: return null
@@ -355,7 +356,7 @@ internal fun holderNote(res: HolderResult?, bar: BoringBar?, sol: RoundSolution,
     val hits = res.hits.sortedBy { it.part == HolderPart.MIN_BORE }
     val texts = hits.map { h ->
         val from = line(h.element, h.first)
-        holderHitText(h, from + 1, line(h.element, h.last) + 1, nc[from], comp, bar, backBoring(sol))
+        holderHitText(h, from + 1, line(h.element, h.last) + 1, nc[from], comp, bar, backBoring(sol), prog)
     }
     val flagged = hits.flatMap { line(it.element, it.first)..line(it.element, it.last) }.toSet()
     val shown = texts.take(4) + listOfNotNull("외 ${texts.size - 4}곳".takeIf { texts.size > 4 })
@@ -372,13 +373,23 @@ internal fun cardLine(prog: RoundSolution, comp: Boolean, e: Int, p: HolderPose)
 internal fun backBoring(sol: RoundSolution): Boolean = sol.drawing.segs.last().end.z > sol.drawing.segs.first().start.z
 
 /**
+ * 닿는 곳의 처음 좌표: comp(직접 보정)면 가상 인선, 아니면 노즈가 닿는 도면 점. 기계 보정의 진입(−2 진입점 · −1 진입 이동)은
+ * 도면 좌표 프로그램 [prog] 의 진입 이동 위(진입점에서 fromT 만큼) — 뒤보링은 진입점이 이미 구멍 안이라, 도면 첫 점으로 적으면 제 NC 줄과 Z 가 달랐다
+ */
+internal fun hitPoint(hit: HolderHit, prog: RoundSolution?, comp: Boolean): Pt = when {
+    comp -> hit.first.tip
+    hit.element < 0 && prog != null -> prog.entry + (prog.program.segs.first().start - prog.entry) * hit.fromT
+    else -> hit.first.drawn
+}
+
+/**
  * 닿는 곳 한 줄: 'a~b줄 NC 블록 — 무엇이 어디에 닿음: 처음 X… Z…, …'. 줄은 1부터, block = 첫 줄의 NC 글.
- * 좌표는 comp(직접 보정)면 가상 인선, 아니면 노즈가 닿는 도면 점. 인서트 · 바는 반경 겹침과 그 점이 인선에서 이송 방향으로 앞 · 뒤 얼마인지 —
+ * 좌표는 [hitPoint](prog = 카드의 프로그램). 인서트 · 바는 반경 겹침과 그 점이 인선에서 이송 방향으로 앞 · 뒤 얼마인지 —
  * 정방향은 +Z 가 뒤, 뒤보링(reverse — 이송 +Z)은 +Z 가 앞
  */
-internal fun holderHitText(hit: HolderHit, lineFrom: Int, lineTo: Int, block: String, comp: Boolean, bar: BoringBar, reverse: Boolean): String {
+internal fun holderHitText(hit: HolderHit, lineFrom: Int, lineTo: Int, block: String, comp: Boolean, bar: BoringBar, reverse: Boolean, prog: RoundSolution? = null): String {
     val lines = if (lineFrom == lineTo) "${lineFrom}줄" else "$lineFrom~${lineTo}줄"
-    val p = if (comp) hit.first.tip else hit.first.drawn
+    val p = hitPoint(hit, prog, comp)
     val at = "처음 X${Fmt.fixed3(p.xDia)} Z${Fmt.fixed3(p.z)}"
     val what = when (hit.part) {
         HolderPart.INSERT, HolderPart.BAR -> {

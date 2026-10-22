@@ -292,8 +292,13 @@ private fun HelpSheet(feature: Feature, help: List<HelpSection>, start: Int, onD
             Spacer(Modifier.width(8.dp))
             PillButton("닫기", AppIcons.Close, onDismiss)
         }
-        LazyColumn(Modifier.weight(1f, fill = false), state = rememberLazyListState(start.coerceIn(sections.indices))) {
+        // 머리 아래 1dp 선 — 반쯤 올라간 글줄이 부제 바로 밑에 붙어 보이지 않게
+        Box(Modifier.padding(top = 10.dp).fillMaxWidth().height(1.dp).background(c.lineCard))
+        val first = start.coerceIn(sections.indices)
+        LazyColumn(Modifier.weight(1f, fill = false), state = rememberLazyListState(first)) {
             items(sections) { HelpBlock(it) }
+            // 뒤 묶음이 짧아도 start 묶음이 맨 위까지 올라오게 끝에 빈 자리
+            if (first > 0) item { Spacer(Modifier.fillParentMaxHeight(.6f)) }
         }
     }
 }

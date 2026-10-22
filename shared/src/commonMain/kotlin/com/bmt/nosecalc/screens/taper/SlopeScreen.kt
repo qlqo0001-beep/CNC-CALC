@@ -67,6 +67,7 @@ import com.bmt.nosecalc.ui.ViewerMark
 import com.bmt.nosecalc.ui.ViewerStock
 import com.bmt.nosecalc.ui.WarnLevel
 import com.bmt.nosecalc.ui.WarningBanner
+import com.bmt.nosecalc.ui.keepWords
 import com.bmt.nosecalc.ui.oneLine
 import com.bmt.nosecalc.ui.rememberFieldChain
 import com.bmt.nosecalc.ui.theme.AppColors
@@ -127,7 +128,8 @@ internal fun SlopeScreen(s: TaperState) {
 
     TaperPage(dock, chain.sheetOpen) { anchor ->
         val dir = if (s.reverse) "역방향 가공 (Z+)" else "정방향 가공 (Z−)"
-        SummaryCard(kind, type, s.reverse, "$dir · 노즈 R$r · 팁 ${tip}번") { s.open = false }
+        // 좁은 폰에서 '노즈 R' · '팁 3번' 이 쪼개지지 않게(라운드 toolText 와 같은 붙임 공백 · 낱말 이음)
+        SummaryCard(kind, type, s.reverse, "$dir · 노즈\u00A0R$r · 팁\u00A0${tip}\u2060번") { s.open = false }
         // 멈춘 까닭은 입력 카드 위에(폰 첫 화면 안에). 다섯 값이 어긋나면 비울 칸을 단추로 권한다
         if (waiting) {
             WarningBanner(taperWarningText(TaperWarning.MISSING_INPUT, form), level = WarnLevel.Info)
@@ -190,17 +192,22 @@ internal fun SlopeScreen(s: TaperState) {
                     // 끝점을 비우면 마지막 T 점(모서리 R 이면 그 끝)에서 끝나 그 좌표를 자동 값으로, 시작점을 비우면 "안 깎음"
                     val last = sol?.cutEnd
                     Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
+                        // 외경 단면은 중심 쪽에서 바깥으로 깎아 시작이 안쪽 Ø(내경은 바깥 Ø). 역방향은 시작(앞 끝)이 척 쪽, 끝이 척 반대쪽
                         NumberField(
-                            if (frontV) "시작 X (단면 바깥 Ø)" else "시작 Z (앞 끝)", start, { s.setPoint("start", it) }, Modifier.weight(1f),
+                            when {
+                                frontV -> if (kind.inner) "시작 X (단면 바깥 Ø)" else "시작 X (단면 안쪽 Ø)"
+                                s.reverse -> "시작 Z (앞 끝 · 척 쪽)"
+                                else -> "시작 Z (앞 끝)"
+                            },
+                            start, { s.setPoint("start", it) }, Modifier.weight(1f),
                             placeholder = "안 깎음", error = "start" in flagged,
                             hint = "T1 앞 요소가 시작하는 좌표 · 비우면 그 요소는 안 깎고 연장선에서 진입",
                             id = "start", figure = figure("start"), preview = preview,
                         )
-                        // 역방향은 끝 요소가 척 반대쪽이다
                         NumberField(
                             when {
                                 backV -> "끝 X (단면 끝 Ø)"
-                                s.reverse -> "끝 Z (뒤 끝)"
+                                s.reverse -> "끝 Z (뒤 끝 · 척 반대쪽)"
                                 else -> "끝 Z (뒤 끝 · 척 쪽)"
                             },
                             end, { s.setPoint("end", it) }, Modifier.weight(1f),
@@ -426,9 +433,12 @@ private fun PointRows(p: TaperPoint, modifier: Modifier, drawn: Boolean, color: 
             }
         }
         if (corner != null) {
+            // 어절 안에서 줄이 바뀌지 않게(keepWords) — '(R ≤ 노즈R)' 는 붙임 공백으로 한 덩이
             Text(
-                "${if (corner.cw) "G02 시계" else "G03 반시계"} · 도면 R${Fmt.fixed3(corner.r)}" +
-                    if (drawn) "" else " → 보정 R" + (corner.progR?.let { Fmt.fixed3(it) } ?: " 없음 (R ≤ 노즈R)"),
+                keepWords(
+                    "${if (corner.cw) "G02 시계" else "G03 반시계"} · 도면 R${Fmt.fixed3(corner.r)}" +
+                        if (drawn) "" else " → 보정 R" + (corner.progR?.let { Fmt.fixed3(it) } ?: " 없음 (R\u00A0≤\u00A0노즈R)"),
+                ),
                 Modifier.padding(top = 2.dp),
                 style = AppType.label,
                 color = c.simArc,

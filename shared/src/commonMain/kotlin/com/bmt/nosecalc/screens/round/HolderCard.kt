@@ -74,10 +74,11 @@ import kotlin.math.sin
 /**
  * 보링바(홀더) 카드 — 내경 TYPE 화면 · 3점호 내경 화면에서 도면 · 공구 카드 다음. 단면 스케치(D · f · κr · κr′ · 돌출 길이) →
  * 프리셋(처음은 직접 입력, 고친 뒤엔 '수정됨' · 출처) → 칸: 바 지름 · 날 길이 · f · 인서트 모양 · 절입각(끝날각 κr′ 계산 줄) · 돌출 길이 · DMIN.
- * 칸 오류는 계산기의 problems 그대로 칸 아래 빨간 글(r = 노즈 R — f · 날 길이 하한). 칸은 화면의 키패드 묶음(다음)에 든다(preview = 키패드 결과 한 줄)
+ * 칸 오류는 계산기의 problems 그대로 칸 아래 빨간 글(r = 노즈 R — f · 날 길이 하한). 칸은 화면의 키패드 묶음(다음)에 든다(preview = 키패드 결과 한 줄).
+ * reverse = 뒤보링(3점호 역방향 내경) — 스케치의 인서트도 뒤집는다
  */
 @Composable
-internal fun HolderCard(s: RoundState, r: Double, preview: String? = null) {
+internal fun HolderCard(s: RoundState, r: Double, preview: String? = null, reverse: Boolean = false) {
     val c = AppTheme.colors
     val bar = s.holderBar()
     val bad = if (bar != null && r >= 0 && r.isFinite()) HolderCheck.problems(bar, r) else emptySet()
@@ -99,7 +100,7 @@ internal fun HolderCard(s: RoundState, r: Double, preview: String? = null) {
     AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
         CardHeader("보링바 (홀더)", "공구가 소재에 닿는지 봅니다 · 카탈로그 값")
         val shape = RoundedCornerShape(10.dp)
-        HolderSketch(Modifier.fillMaxWidth().clip(shape).background(c.subtle).border(1.dp, c.lineCard, shape).aspectRatio(SKETCH_W / SKETCH_H))
+        HolderSketch(Modifier.fillMaxWidth().clip(shape).background(c.subtle).border(1.dp, c.lineCard, shape).aspectRatio(SKETCH_W / SKETCH_H), reverse)
         Spacer(Modifier.height(14.dp))
         PresetField(s.preset, s.presetEdited()) { picking = true }
         s.preset?.let { Text("출처: ${it.host}", Modifier.padding(top = 4.dp), color = c.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
@@ -235,10 +236,11 @@ private const val SKETCH_H = 36f
 
 /**
  * 보링바 단면 스케치: 구멍(위 깎는 벽 · 아래 맞은편 벽, 빗금)에 넣은 견본 바(Ø16 · f 11 · D 7 · κr 93° — 바 · 인서트 모양은 계산기 outline 그대로)와 공구대.
- * 치수 D · f(바 중심선 ~ 인선) · 돌출 길이(인선 ~ 공구대 면), 각 κr(이송 −Z 에서 주절삭날) · κr′(+Z 에서 끝날)
+ * 치수 D · f(바 중심선 ~ 인선) · 돌출 길이(인선 ~ 공구대 면), 각 κr(이송 −Z 에서 주절삭날) · κr′(+Z 에서 끝날).
+ * reverse(뒤보링) = 계산기처럼 인서트를 노즈 중심에서 Z 로 뒤집는다(날이 +Z, 팁 1) — 바는 그대로 +Z 공구대로. 각은 이송 +Z 에서 κr · −Z 에서 κr′
  */
 @Composable
-private fun HolderSketch(modifier: Modifier) {
+private fun HolderSketch(modifier: Modifier, reverse: Boolean) {
     val c = AppTheme.colors
     val measurer = rememberTextMeasurer()
     val sans = AppTheme.sans
@@ -269,8 +271,8 @@ private fun HolderSketch(modifier: Modifier) {
             drawPath(it, c.drawToolLine, style = Stroke(1.dp.toPx()))
         }
         // 바 · 인서트(뷰어와 같은 초록)
-        val nose = Pt(0.0, wall) - NoseComp.tipVector(2, r)
-        for (part in HolderCheck.outline(bar, r, nose, turret)) {
+        val nose = Pt(0.0, wall) - NoseComp.tipVector(if (reverse) 1 else 2, r)
+        for (part in HolderCheck.outline(bar, r, nose, turret, reverse)) {
             val p = path(part)
             drawPath(p, c.drawHolderFill)
             drawPath(p, c.drawHolder, style = Stroke(1.5.dp.toPx(), join = StrokeJoin.Round))
@@ -285,10 +287,17 @@ private fun HolderSketch(modifier: Modifier) {
         linearDim(at(0.0, wall), at(turret, wall), -(6 * s).toFloat(), label("돌출 길이"), line, 1f, measurer, style, c.subtle)
         val k = bar.kappaDeg * PI / 180
         val kp = PI - k - bar.shape.epsDeg * PI / 180
-        angle(at(0.0, wall), 3.5 * s, PI, PI + k, "κr", c.drawAngle, c.subtle, measurer, style)
-        // κr′ 이름은 호 위 깎는 벽 띠에(호 안쪽은 바 윗면과 겹친다)
-        angle(at(0.0, wall), 6.5 * s, 0.0, -kp, "κr′", c.drawAngle, c.subtle, measurer, style, labelAt = 0.3)
-        val muted = style.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = c.textMuted)
+        if (reverse) {
+            // 뒤보링: 주절삭날은 이송 +Z 에서 아래로, 끝날은 −Z 에서. κr 이름은 날과 바 윗면 사이 틈(호 가운데는 바 위)
+            angle(at(0.0, wall), 3.5 * s, 0.0, -k, "κr", c.drawAngle, c.subtle, measurer, style, labelAt = -0.3)
+            angle(at(0.0, wall), 6.5 * s, PI, PI + kp, "κr′", c.drawAngle, c.subtle, measurer, style, labelAt = PI - 0.3)
+        } else {
+            angle(at(0.0, wall), 3.5 * s, PI, PI + k, "κr", c.drawAngle, c.subtle, measurer, style)
+            // κr′ 이름은 호 위 깎는 벽 띠에(호 안쪽은 바 윗면과 겹친다)
+            angle(at(0.0, wall), 6.5 * s, 0.0, -kp, "κr′", c.drawAngle, c.subtle, measurer, style, labelAt = 0.3)
+        }
+        // 벽 이름은 빗금 띠 위라 본문색(textBody — 밝은 테마 drawStock 위 6.3:1, textMuted 는 4:1 이 안 됐다)
+        val muted = style.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = c.textBody)
         haloText(measurer, label("깎는 벽"), muted, c.drawStock, 1f, center = at(face - 6, wall + 1.5))
         haloText(measurer, label("맞은편 벽"), muted, c.drawStock, 1f, center = at(face - 6, -wall - 1.5))
     }
