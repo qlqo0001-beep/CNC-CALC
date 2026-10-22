@@ -75,7 +75,8 @@
   440dp 빈자리), 다음 · 앞 칸으로 가도 시트는 그대로다. 모든 화면의 칸이 묶음 안에 있다 — 묶음 밖 `NumberField` 는 모양만 보이는 견본(누를 수 없음).
 - 키패드(`NumberPad`): 열면 지금 값이 통째 선택돼 처음 누른 숫자 · . · − 가 새 값이 된다(− 로 새 음수, ⌫ 는 원래 값을 고친다). **확인 단추는 없다** — 누를 때마다
   칸 · 결과 · 그림 · NC 에 바로 들어간다. 닫기(닫기 키 · 바깥 누름 · 뒤로 · Esc · 손잡이 끌어내림)는 넣은 값을 그대로 두고, "-" 뿐이면 연 때 값으로. 제목 오른쪽
-  "취소" 는 연 때 값으로 되돌리고 닫는다. 위에 결과 한 줄(`preview` — 넘치면 9sp 까지 줄여 끝 점 좌표가 잘리지 않게), 시트 자리가 넉넉하면(780dp 이상) 제목 아래 작은 그림(`figure`).
+  "취소" 는 연 때 값으로 되돌리고 닫는다. 위에 결과 한 줄(`preview` — 넘치면 9sp 까지 줄여 끝 점 좌표가 잘리지 않게), 시트 자리가 넉넉하면(780dp 이상) 제목 아래 작은 그림(`figure`
+  — 둥근 `subtle` 바탕은 figure 가 받은 Modifier 에: 테이퍼 비율 그림은 제 폭만이라 소재 면이 칸 끝까지, 라운드 형상 그림 · 삼각형 · 3점호는 시트 폭 바탕).
   PC 는 실제 키보드: 숫자 · . · − · Backspace · Delete = C · Enter · Tab = 다음(마지막 칸은 닫기) · Shift+Tab = 앞 칸 · Esc = 닫기.
 
 ### 카드 · 글
@@ -85,11 +86,13 @@
 - `LabeledValue(label, value, modifier, color = textValue, size = 17.sp)` — 이름(12sp 흐림) 위, 고정폭 굵은 값 아래(각도 · G00 진입점 · 단 수 …).
 - `ExpandableHint(short, long)` — 한 줄 설명 + '자세히/접기'(48dp). 긴 규칙 문단은 이렇게 접는다.
 - `keepWords(s)` — 한글 음절 사이 · 한글과 붙은 영문 · 숫자 · 닫는 괄호 사이에 낱말 이음(\u2060)을 넣어 줄이 띄어쓰기에서만 바뀌게 한다
-  (Compose 는 한글 음절 사이 어디서나 줄을 바꿔 '확 / 인하세요' 처럼 어절이 쪼개졌다). `ExpandableHint` 의 두 글 · `WarningBanner` 본문 · 도움말 문단이 쓴다.
+  (Compose 는 한글 음절 사이 어디서나 줄을 바꿔 '확 / 인하세요' 처럼 어절이 쪼개졌다). `ExpandableHint` 의 두 글 · `WarningBanner` 본문 · 도움말 문단 ·
+  키패드 안내 줄 · 결과 띠 '계산 멈춤' 글이 쓴다.
 - `TypeCard(chip, caption, chipColors, selected, onClick, modifier, aspectRatio) { 그림 }` — 형상 카드: 36dp 머리 띠(칩 "형상 N" + 짧은 이름) + 몸통.
   고르면 2dp 청록 테두리 + 옅은 청록 바탕 + 오른쪽 위 체크 원. 테이퍼(민트 칩) · 라운드(홀수 하늘 · 짝수 민트) 고르기 화면이 쓴다.
 - `Segmented(options, selected, onSelect, color = blue, track = segTrack, height = 48.dp, fontSize = 16)` — 고른 칸 글자색은 `c.onFill(color)`
   (바탕 휘도 > 0.3 이면 짙은 글자 — 다크의 밝은 청록 위 흰 글자가 2:1 아래였다). 방향 두 칸 · 외경/내경 · 화면 테마 · L2 기준 등.
+  칸 글은 양옆 6dp 안, 넘치면 0.8배까지 줄이고 그래도 넘치면 '…'(소리 없이 잘려 온전한 낱말처럼 보이지 않게).
 - `OutlineTabs(rows: List<List<String>>, selected, onSelect)` — 테이퍼 가공 종류 탭(02), 번호는 줄을 이어 센다(0~4).
 - `WarningBanner(text, modifier, level = WarnLevel.Warn|Error|Info, collapsedText = null, actions = emptyList())` — 왼쪽 4dp 색 띠 + 모양이 다른 아이콘 + 머리말:
   - `Warn` 노랑 삼각형 "확인 필요 — 결과는 나왔습니다"(숫자와 함께 나온 경고 — 결과 카드 위),
@@ -119,7 +122,7 @@
     급송 = 빈 화살, 40dp 넘는 토막 가운데).
   - `ViewerMark(pt, color, label, kind = MarkKind.Ring|Dot|Square|Cross, info, arc)` — T 점 · 노드 · 진입/후퇴 · 원호 중심. `arc` 가 있으면 중심에서 원호 가운데까지
     끊은 지시선, 화면 반지름 14dp 미만이면 뺀다. 라벨은 점 둘레 **알약**: 8곳 × 4겹 자리에 점수(다른 라벨 · 점 · 알약과 겹침, 지나는 선, 거리)를 매겨
-    고르고(같은 꼴 점 — 노드 둘 — 이 제 점만큼 가까운 자리는 무겁게, 지시선이 앞 라벨을 지나는 자리도), 뷰어 4dp 안쪽만, 16dp 넘게 떨어지거나
+    고르고(같은 꼴 점 — 노드 둘 — 이 제 점만큼 가까운 자리는 무겁게, 지시선이 앞 라벨을 지나는 자리도, 진행 화살을 덮는 자리는 알약처럼), 뷰어 4dp 안쪽만, 16dp 넘게 떨어지거나
     제 점보다 같은 꼴 다른 점에 더 가까우면 지시선, 가장 나은 자리도 앞서 둔 라벨과 겹치면 라벨은 빼고 점 표시만. 라벨 글(13sp)은 글꼴 1.1배까지(`artFontCap`).
     T 점 → 노드 → 진입 · 후퇴 → 원호 중심 순으로 자리를 잡는다. '중심' 알약이 점 표시(내경 깊은 끝 노드)를 덮으면 중심선 오른쪽 끝으로.
     짧은 토막뿐인 선의 화살은 끝에서 9dp 앞에서 멈춘다(끝 표시 □ 에 붙지 않게, 그만큼도 안 되면 화살 없음).
@@ -213,7 +216,7 @@
 | 글(`haloText`) | 바탕색 테(halo 3dp, 둥근 이음)를 먼저 — 흐린 그림자 없음. `pill` 이면 알약(초점 표시) |
 | 중심선(`centerLine`) | 1점 쇄선(9 · 2.5 · 2 · 2.5dp), 1dp, `drawRef`(회색) |
 | 소재(`hatchFill`) | 면 `drawStock` + 그 안 45° 빗금(6dp 간격 · 0.75dp, `drawHatch`) |
-| 배율(`artScale(w, base)`) | 그림 폭 / 기준 폭 → 선 0.9~1.3 · 글 0.95~1.25 배로 묶는다 — 360dp 폰에서 글 10.5sp 아래로, 넓은 PC 창에서 너무 크게 가지 않게. 자리는 폭 비율 그대로. 글은 시스템 글꼴 배율을 1.1 까지만 따른다(그 위는 나눔 — 큰 글꼴에서 이름끼리 겹치지 않게) |
+| 배율(`artScale(w, base)`) | 그림 폭 / 기준 폭 → 선 0.9~1.3 · 글 0.95~1.25 배로 묶는다 — 360dp 폰에서 글 10.5sp 아래로, 넓은 PC 창에서 너무 크게 가지 않게. 자리는 폭 비율 그대로. 글은 시스템 글꼴 배율을 1.1 까지만 따른다(그 위는 나눔 — 큰 글꼴에서 이름끼리 겹치지 않게). 라운드 그림(`RoundTypeArt`) 글은 글꼴 배율을 따르지 않고 폭만 따른다(dp — 이름 자리가 폭 비율이라 1.1배에서도 'L2 (B)' 가 치수선 칸을 넘었다) |
 
 ## 스크린샷 도구 (`shared/src/jvmTest`)
 - `Shots.both(이름, heightDp = 915, frames = 40, setup = { state -> … }, widthDp = 412, fontScale = 1f, frameMs = 100, tapDp = null, scrollToEnd = false) { state -> App(state) }`
@@ -243,7 +246,7 @@
 |---|---|
 | `TaperScreen.kt` | `TaperScreen()` — A 화면(가공 종류 탭 · 방향 두 칸 · 형상 카드 2열, 본문 600dp 넘으면 3열), 도움말 `TaperHelp`. 형상을 누르면 B, 뒤로 키·Esc 는 B → A |
 | `taper/TaperModel.kt` | `TaperKind`(탭 순서 = 02), `TaperState`(화면 상태 + Saver), `TaperDefaults`(처음 값), `TaperSolve`·`Mirror`(역방향), 경고 글 |
-| `taper/TypeArt.kt` | `TypeArt(kind, type, mirrored, modifier, compact, focus)` — TYPE 그림 Canvas(외경 기준, 내경은 위아래·역방향은 좌우 반전, 바이트도 반대쪽 — 단 내경 뒤보링 바는 인서트만 뒤집고 자루는 +Z 구멍 입구로, +Z 가 막힌 홑 2 · 4 만 통째로). compact = 요약 칸 · 키패드 꼴, focus = 고치는 칸만 초점색 |
+| `taper/TypeArt.kt` | `TypeArt(kind, type, mirrored, modifier, compact, focus)` — TYPE 그림 Canvas(외경 기준, 내경은 위아래·역방향은 좌우 반전, 바이트도 반대쪽 — 단 내경 뒤보링 바는 인서트만 뒤집고 자루는 +Z 구멍 입구로, +Z 가 막힌 홑 2 · 4 만 통째로). compact = 요약 칸 · 키패드 꼴, focus = 고치는 칸만 초점색(점 칸 · 시작 · 끝은 그 점에 테 — 그 점 글은 테 밖으로 6dp 더, 시작 · 끝 테는 글보다 먼저. 홈 요약 칸의 'T' 는 홈 바닥 아래, '시작 Z' 는 ØD 윤곽 위 · 카드 끝 9dp 안) |
 | `taper/SlopeScreen.kt` | B 화면(외경·내경 · 2중 테이퍼): 요약 카드 → 입력(도면 치수 · 공구) → 보정 방식 스위치 → 경고 → 결과 카드 → 형상 뷰어 → NC |
 | `taper/GrooveScreen.kt` | B 화면(외경 홈): (침범 경고) → 입력(홈 치수 · 공구 — 기준 인선은 공구 묶음) → 다단 진입 표·정삭 → 형상 → NC |
 | `taper/Parts.kt` | 요약 카드, 점 이름표, 입력 묶음 구분선(`GroupDivider`), 노즈R 칩, 팁 번호 칸·시트·그림(`TipDiagram`, 도움말 `TipHelp`), 보정 방식 스위치, NC 카드(복사) |

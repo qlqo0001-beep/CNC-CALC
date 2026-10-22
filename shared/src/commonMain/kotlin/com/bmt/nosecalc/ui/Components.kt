@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -284,7 +285,15 @@ fun Segmented(
                     .clickable { onSelect(i) },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(s, color = if (on) c.onFill(color) else c.textMuted, fontSize = fontSize.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                // 좁은 폰 · 큰 글꼴에서 칸을 넘으면 0.8배까지 줄이고, 그래도 넘치면 '…'(잘린 글이 온전한 낱말처럼 보이지 않게)
+                BasicText(
+                    s,
+                    Modifier.padding(horizontal = 6.dp),
+                    style = TextStyle(color = if (on) c.onFill(color) else c.textMuted, fontFamily = AppTheme.sans, fontWeight = FontWeight.Bold),
+                    overflow = TextOverflow.Ellipsis,
+                    maxLines = 1,
+                    autoSize = TextAutoSize.StepBased((fontSize * .8f).sp, fontSize.sp, 0.5.sp),
+                )
             }
         }
     }

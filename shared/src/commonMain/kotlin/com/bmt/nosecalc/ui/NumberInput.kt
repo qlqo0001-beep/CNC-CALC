@@ -319,21 +319,21 @@ internal fun NumberPad(
                     ) { Text("취소", color = c.textMuted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
                 }
                 if (figure != null && room >= FIGURE_MIN_H) {
+                    // 둥근 바탕은 그림 칸에(가운데 둔 비율 그림이면 그 폭만) — 넓은 바탕 가운데서 소재 면이 칸 안에서 끊겨 떠 보였다
                     Box(
                         Modifier
                             .padding(bottom = 10.dp)
                             .fillMaxWidth()
-                            .height(if (room >= FIGURE_BIG_H) 170.dp else 150.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(c.subtle),
+                            .height(if (room >= FIGURE_BIG_H) 170.dp else 150.dp),
                         contentAlignment = Alignment.Center,
-                    ) { figure(Modifier.fillMaxHeight()) }
+                    ) { figure(Modifier.fillMaxHeight().clip(RoundedCornerShape(10.dp)).background(c.subtle)) }
                 }
                 PadDisplay(text, unit, fresh, autoValue)
                 Row(Modifier.padding(top = 6.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        if (hint != null) Text(hint, color = c.textBody, fontSize = 13.sp, lineHeight = 18.sp)
-                        Text(if (fresh) "숫자 · − · . 를 누르면 새 값 · ⌫ 로 고치기" else "", color = c.textMuted, fontSize = 12.sp)
+                        // 좁은 폰 · 큰 글꼴에서 '고 / 치기' 처럼 어절 안에서 줄이 바뀌지 않게(keepWords)
+                        if (hint != null) Text(keepWords(hint), color = c.textBody, fontSize = 13.sp, lineHeight = 18.sp)
+                        Text(if (fresh) keepWords("숫자 · − · . 를 누르면 새 값 · ⌫ 로 고치기") else "", color = c.textMuted, fontSize = 12.sp)
                     }
                     if (blankable) {
                         val pill = RoundedCornerShape(50)

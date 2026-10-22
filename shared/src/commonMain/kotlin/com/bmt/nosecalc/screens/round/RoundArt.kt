@@ -38,6 +38,7 @@ import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundInput
 import com.bmt.nosecalc.ui.DrawSpec
 import com.bmt.nosecalc.ui.arrowHead
+import com.bmt.nosecalc.ui.artFontCap
 import com.bmt.nosecalc.ui.artScale
 import com.bmt.nosecalc.ui.centerLine
 import com.bmt.nosecalc.ui.haloText
@@ -144,10 +145,16 @@ private class ArtPen(
 
     /** 치수선 · 보조선 · 지시선 */
     val line = c.textBody
-    val style = TextStyle(fontFamily = sans, fontSize = (11.5f * scale.second).sp, fontWeight = FontWeight.Medium, color = ink, letterSpacing = 0.sp)
 
-    /** 초점 치수의 이름: 굵게 13sp 이상, 초점색 α .16 을 카드에 섞은 알약 위 */
-    val focusStyle = style.copy(fontSize = maxOf(13f, 11.5f * scale.second).sp, fontWeight = FontWeight.Bold)
+    /**
+     * 글 크기(dp): 폭만 따르고 시스템 글꼴 배율은 따르지 않는다 — 이름 자리가 폭 비율이라 글만 커지면 이름끼리 · 치수선에 걸렸다
+     * (130 % 글꼴에서 '5.0' 이 '주 R' 에 붙고 'L2 (B)' 가 칸을 넘어 L2 (A) 줄로 밀렸다. 1.1배로 묶어도 L2 (B) 는 넘친다)
+     */
+    private val textDp = 11.5f * scale.second / with(d) { artFontCap() }
+    val style = TextStyle(fontFamily = sans, fontSize = with(d) { textDp.dp.toSp() }, fontWeight = FontWeight.Medium, color = ink, letterSpacing = 0.sp)
+
+    /** 초점 치수의 이름: 굵게 13dp 이상, 초점색 α .16 을 카드에 섞은 알약 위 */
+    val focusStyle = style.copy(fontSize = with(d) { maxOf(13f, textDp).dp.toSp() }, fontWeight = FontWeight.Bold)
     val pill = c.lineFocus.copy(alpha = .16f).compositeOver(c.card)
 
     /** 자리 길이(dp × k) */
@@ -200,8 +207,9 @@ private class ArtPen(
                 val l = i.l1!!
                 val face = sqrt(r * r - l * l / 4)
                 leader("mainR", "주 R", .582f, .124f, onSphere(-l / 2, r, 1.48))
-                leader("cr1", "모서리 R", .159f, .233f, at(-l, face))
-                leader("cr1", "모서리 R", .818f, .235f, at(0.0, face))
+                // 모서리 R 이름은 모서리보다 조금 위 — 같은 높이면 지시선이 눕고 화살촉이 'R' · '모' 글자에 닿았다
+                leader("cr1", "모서리 R", .159f, .20f, at(-l, face))
+                leader("cr1", "모서리 R", .818f, .20f, at(0.0, face))
                 hDim("l1", "L", 0.0, -face, -l, -face, .857f)
                 vertex(0.0, face, Pt(0.0, -1.0), along(-l / 2, 0.0, face, left = true))
                 vertex(-l, face, Pt(0.0, -1.0), along(-l / 2, -l, face, left = false))
@@ -270,7 +278,8 @@ private class ArtPen(
                 val zc = -l1 - sqrt(r * r - a * a)
                 val zf = -l1 - i.l2!!
                 val hf = sqrt(r * r - (zf - zc) * (zf - zc))
-                vDim("d2", "D2", .165f, zMin, b)
+                // D2 는 플랜지 왼쪽 윤곽에서 떼어(값 'Ø40' 이 윤곽에 붙어 'Ø40)' 처럼 읽혔다)
+                vDim("d2", "D2", .14f, zMin, b)
                 vDim("d1", "D1", .9f, 0.0, a)
                 leader("cr2", "모서리 R(2)", .628f, .146f, at(zf, hf))
                 leader("mainR", "주 R", .646f, .223f, onSphere(zc, r, PI / 4))

@@ -104,8 +104,9 @@ fun BoxScope.ResultDock(status: DockStatus, visible: Boolean, onJump: () -> Unit
                 is DockStatus.Error -> {
                     Icon(AppIcons.Stop, null, Modifier.size(20.dp), tint = c.error.label)
                     Spacer(Modifier.width(10.dp))
+                    // 두 줄에 걸쳐도 어절 안에서 줄이 바뀌지 않게('않습니 / 다.' 이던 것)
                     Text(
-                        "계산 멈춤 — ${status.text}",
+                        keepWords("계산 멈춤 — ${status.text}"),
                         Modifier.weight(1f),
                         color = c.error.value,
                         fontSize = 14.sp,

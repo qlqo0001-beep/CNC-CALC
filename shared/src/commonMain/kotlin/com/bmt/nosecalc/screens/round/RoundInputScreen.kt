@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -122,8 +123,14 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
     val chain = rememberFieldChain(s.editing)
     val through = input.through
     // 키패드 그림: 같은 그림에서 그 치수 하나만 초점색으로
+    // 키패드 그림 바탕(m)은 시트 폭 그대로 — 그림 칸 끝이 보이면 초점 알약이 그 끝에 붙어 보인다(테이퍼 그림만 제 칸 바탕)
     fun figure(key: String): @Composable (Modifier) -> Unit = { m ->
-        RoundTypeArt(type, m.aspectRatio(193f / 189f), showDatum = true, l2Ref = s.l2Ref, labels = labels, contradiction = flagged, focus = key, inner = inner, through = through)
+        Box(m.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            RoundTypeArt(
+                type, Modifier.fillMaxHeight().aspectRatio(193f / 189f), showDatum = true, l2Ref = s.l2Ref, labels = labels,
+                contradiction = flagged, focus = key, inner = inner, through = through,
+            )
+        }
     }
 
     Page(dock, chain.sheetOpen) { anchor ->
@@ -179,8 +186,9 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
                         Column {
                             FieldLabel("L2 기준")
                             Spacer(Modifier.height(6.dp))
+                            // 반쪽 칸에 들게 '오른쪽 끝' → '끝'(그림이 L2 (A) · L2 (B) 를 짚는다) — 360dp 에서 '끝' 이 잘려 A 와 B 의 차이가 사라졌다
                             Segmented(
-                                listOf("A  왼쪽 이음점 ~ 오른쪽 끝", "B  두 이음점 사이"), if (s.l2Ref == L2Ref.A) 0 else 1,
+                                listOf("A  왼쪽 이음점 ~ 끝", "B  두 이음점 사이"), if (s.l2Ref == L2Ref.A) 0 else 1,
                                 { s.l2Ref = if (it == 0) L2Ref.A else L2Ref.B }, Modifier.fillMaxWidth(), color = c.teal, height = 42.dp, fontSize = 14,
                             )
                         }

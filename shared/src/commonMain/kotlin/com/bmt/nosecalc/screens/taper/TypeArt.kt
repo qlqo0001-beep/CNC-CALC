@@ -219,14 +219,20 @@ private class Pen(
         // 시작 · 끝: T1 · 마지막 T 와 이웃한 자유 끝(배열 순서가 아니라 이웃으로 — 어느 쪽이 첫 점이어도 맞다)
         val startLast = a.t.first() == a.pts.lastIndex - 1
         val ends = if (startLast) listOf(pts.last(), pts.first()) else listOf(pts.first(), pts.last())
+        // 입력 중인 끝의 테는 '시작' · '끝' 글보다 먼저(테가 글 위에 그려져 '시' 를 덮었다)
+        val hotEnd = when (focus) {
+            "start" -> 0
+            "end" -> 1
+            else -> null
+        }
+        if (hotEnd != null) ring(ends[hotEnd])
         if (!compact) {
             ends.forEachIndexed { i, p ->
                 d.drawCircle(c.subtle, dp(3.6f), p)
                 d.drawCircle(c.textMuted, dp(2.4f), p)
-                text(if (i == 0) "시작" else "끝", p + shift(a.ends[i]), c.textMuted, 10.5f, FontWeight.Medium)
+                text(if (i == 0) "시작" else "끝", p + shift(a.ends[i]) + clearRing(shift(a.ends[i]), i == hotEnd), c.textMuted, 10.5f, FontWeight.Medium)
             }
         }
-        if (focus == "start" || focus == "end") ring(ends[if (focus == "start") 0 else 1])
         // 입력 중인 점 칸(x1 · z2 · r3): 그 T 점에 테, T 글 바깥 곁에 칸 이름(X1 · Z2 · R3)
         val hot = focus?.takeIf { it.length == 2 && it[0] in "xzr" }?.let { it[1].digitToIntOrNull()?.minus(1) }?.takeIf { it in t.indices }
         if (hot != null) ring(t[hot])
@@ -236,7 +242,7 @@ private class Pen(
             d.drawCircle(c.subtle, dot + dp(1.6f), p)
             d.drawCircle(pointColor(c, i), dot, p)
         }
-        val boxes = t.mapIndexed { i, p -> text("T${i + 1}", p + shift(a.labels[i]), pointColor(c, i), 15f, FontWeight.SemiBold) }
+        val boxes = t.mapIndexed { i, p -> text("T${i + 1}", p + shift(a.labels[i]) + clearRing(shift(a.labels[i]), i == hot), pointColor(c, i), 15f, FontWeight.SemiBold) }
         if (!flipY) outerTool() else if (!back) boringBar(barTop(a, back = false), back = false)
         if (hot != null) {
             taken += Rect(t[hot], dp(9f))
@@ -337,6 +343,15 @@ private class Pen(
     private fun ring(p: Offset) {
         d.drawCircle(c.lineFocus.copy(alpha = .18f), dp(8f), p)
         d.drawCircle(c.lineFocus, dp(8f), p, style = Stroke(dp(2.4f)))
+    }
+
+    /**
+     * 테 둘린 점(on)의 글은 점 → 글 방향(v)으로 6dp 더 민다 — 테(8dp + 굵기 반)가 글자 사이로 비치거나('Tr2') 글 밑을 지났다.
+     * 글 칸 거리는 글 크기를 따르지만 테는 고정 크기라 큰 글꼴 · 요약 칸에서 더 붙었다
+     */
+    private fun clearRing(v: Offset, on: Boolean): Offset {
+        val len = v.getDistance()
+        return if (!on || len < 1e-3f) Offset.Zero else v / len * dp(6f)
     }
 
     /** 입력 중인 치수 글: lineFocus 알약(옅은 속 + 테) — 글 칸 r 을 조금 넓혀 그 위에 씌운다 */
@@ -499,14 +514,20 @@ private class Pen(
         tag("od", "ØD", at(o(.17f, od)) + shift(o(0f, -.05f)))
         tag("bottom", "Ød", at(o((lw + rw) / 2, bottom + .065f)))
         dim("width", "W", at(o(lw, bottom)), at(o(rw, bottom)), .165f * h)
-        dim("insert", "T", at(o(bl, tip)), at(o(rw, tip)), (bottom - tip) / 2 * h)
+        // 요약 칸(키패드 그림)은 날끝과 홈 바닥 사이가 알약보다 낮아 알약이 두 윤곽에 걸린다 — 홈 바닥 10dp 아래로
+        dim("insert", "T", at(o(bl, tip)), at(o(rw, tip)), if (compact) (bottom - tip) * h + dp(10f) else (bottom - tip) / 2 * h)
         // 시작 Z: 오른쪽 벽 위 모서리에서 오른쪽 위로 짧은 지시선, 그 끝에 글(카드 안으로)
         if (shown("zStart")) {
             val corner = at(o(rw, od))
             val end = corner + Offset(dp(7f), -dp(7f))
             d.drawLine(color("zStart"), corner, end, dp(DrawSpec.leader.value))
-            val half = measurer.measure("시작 Z", style(color("zStart"), 10.5f, FontWeight.Bold)).size.width / 2f
-            tag("zStart", "시작 Z", Offset((end.x + dp(2f) + half).coerceAtMost(w - half - dp(5f)), end.y - dp(2f)))
+            val size = measurer.measure("시작 Z", style(color("zStart"), 10.5f, FontWeight.Bold)).size
+            val half = size.width / 2f
+            // 알약(2dp 넓힘 + 테)이 카드 테두리와 ØD 윤곽에 닿지 않게: 오른쪽 끝에서 9dp, 아래는 윤곽에서 5dp 위
+            tag(
+                "zStart", "시작 Z",
+                Offset((end.x + dp(2f) + half).coerceAtMost(w - half - dp(9f)), minOf(end.y - dp(2f), corner.y - size.height / 2f - dp(5f))),
+            )
         }
 
         // 기준 인선: 바탕색 테 + 채운 점 + 글(두 줄). 다른 모서리는 빈 테만

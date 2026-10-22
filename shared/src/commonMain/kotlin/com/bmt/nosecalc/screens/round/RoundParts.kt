@@ -357,6 +357,8 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
             LegendItem(c.viewNose, "노즈 R${Fmt.nc(r).removeSuffix(".")} · 가상 인선 ${sol.tip}번", LegendGlyph.Circle).takeIf { nose },
             LegendItem(c.viewPath, "프로그램 경로"),
             LegendItem(c.viewPath, "보정점 (번호 = 노드 표)", LegendGlyph.Dot),
+            // 직접 보정도 원호 중심 + 와 지시선을 그린다(기계 보정 범례와 같게)
+            LegendItem(c.simArc, "원호 중심", LegendGlyph.Cross).takeIf { centers.isNotEmpty() },
             LegendItem(c.drawHatch, "소재", LegendGlyph.Fill),
         )
     } else {

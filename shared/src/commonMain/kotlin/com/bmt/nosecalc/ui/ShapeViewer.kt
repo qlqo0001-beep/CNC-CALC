@@ -258,7 +258,9 @@ fun ShapeViewer(
             for (m in shown.sortedBy { it.label != null }) mark(m.kind, v.toScreen(m.at), m.color, c.viewport)
             val pills = viewerPills(v, step, stock != null, measurer, sans, c, shown.map { v.toScreen(it.at) })
             // 점 라벨 글은 그림 글처럼 시스템 글꼴 1.1배까지(artFontCap) — 큰 글꼴에서 알약끼리 자리가 모자라 빠지지 않게
-            labels(shown, v, measurer, sans.copy(fontSize = (13f * artFontCap()).sp), inkOf(lines, v), pills, c.card.copy(alpha = .92f))
+            // 진행 화살도 알약처럼 피한다 — 선은 알약 밑으로 지나도 읽히지만 방향을 알리는 촉은 가리면 못 읽는다(급송 후퇴 화살 등)
+            val arrows = lines.flatMap { l -> arrowsAt(l, v).map { (mid) -> Rect(mid, 6.dp.toPx()) } }
+            labels(shown, v, measurer, sans.copy(fontSize = (13f * artFontCap()).sp), inkOf(lines, v), pills + arrows, c.card.copy(alpha = .92f))
         }
         state.hint?.let { HintPill(state, it, Modifier.align(Alignment.TopCenter).padding(top = 10.dp)) }
     }
@@ -531,10 +533,34 @@ private fun DrawScope.viewerLine(l: ViewerLine, v: ViewXf, bg: Color) {
         else -> null
     }
     drawPath(path, l.color, style = Stroke(l.width.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = effect))
-    if (l.arrows == Arrow.None || segs.isEmpty()) return
-    // (화살 가운데, 화면 방향): 화면에서 40dp 넘는 토막의 가운데. 그런 토막이 없으면 촉이 끝점에 닿게 하나
     val half = 5.dp.toPx()
-    val at = segs.mapNotNull { seg ->
+    // 촉 길이 10dp · 밑변 7dp 이등변 삼각형. 빈 화살은 바탕색으로 속을 채우고 1.5dp 테두리
+    for ((mid, d) in arrowsAt(l, v)) {
+        val u = d / max(d.getDistance(), 1e-3f)
+        val n = Offset(-u.y, u.x) * 3.5.dp.toPx()
+        val tip = mid + u * half
+        val base = mid - u * half
+        val tri = Path().apply {
+            moveTo(tip.x, tip.y)
+            lineTo(base.x + n.x, base.y + n.y)
+            lineTo(base.x - n.x, base.y - n.y)
+            close()
+        }
+        if (l.arrows == Arrow.Filled) {
+            drawPath(tri, l.color)
+        } else {
+            drawPath(tri, bg)
+            drawPath(tri, l.color, style = Stroke(1.5.dp.toPx(), join = StrokeJoin.Round))
+        }
+    }
+}
+
+/** 진행 화살 자리(화살 가운데, 화면 방향): 화면에서 40dp 넘는 토막의 가운데. 그런 토막이 없으면 촉이 끝점에 닿게 하나 */
+private fun DrawScope.arrowsAt(l: ViewerLine, v: ViewXf): List<Pair<Offset, Offset>> {
+    val segs = l.contour.segs
+    if (l.arrows == Arrow.None || segs.isEmpty()) return emptyList()
+    val half = 5.dp.toPx()
+    return segs.mapNotNull { seg ->
         when (seg) {
             is Line -> {
                 val a = v.toScreen(seg.start)
@@ -556,25 +582,6 @@ private fun DrawScope.viewerLine(l: ViewerLine, v: ViewXf, bg: Color) {
         val back = 9.dp.toPx()
         if ((v.toScreen(last.end) - v.toScreen(last.start)).getDistance() < 2 * half + back + 4.dp.toPx()) emptyList()
         else listOf(v.toScreen(last.end) - d / max(d.getDistance(), 1e-3f) * (half + back) to d)
-    }
-    // 촉 길이 10dp · 밑변 7dp 이등변 삼각형. 빈 화살은 바탕색으로 속을 채우고 1.5dp 테두리
-    for ((mid, d) in at) {
-        val u = d / max(d.getDistance(), 1e-3f)
-        val n = Offset(-u.y, u.x) * 3.5.dp.toPx()
-        val tip = mid + u * half
-        val base = mid - u * half
-        val tri = Path().apply {
-            moveTo(tip.x, tip.y)
-            lineTo(base.x + n.x, base.y + n.y)
-            lineTo(base.x - n.x, base.y - n.y)
-            close()
-        }
-        if (l.arrows == Arrow.Filled) {
-            drawPath(tri, l.color)
-        } else {
-            drawPath(tri, bg)
-            drawPath(tri, l.color, style = Stroke(1.5.dp.toPx(), join = StrokeJoin.Round))
-        }
     }
 }
 
@@ -665,7 +672,7 @@ private fun DrawScope.inkOf(lines: List<ViewerLine>, v: ViewXf): List<Pair<Offse
 /**
  * 점 라벨 = 알약(둥근 5dp · 바탕 bg · 점 색 α .55 테두리 1dp · 13sp 굵은 점 색 글). 점에서 9dp 띄운 여덟 곳
  * (오른쪽 위 · 오른쪽 · 오른쪽 아래 · 아래 · 왼쪽 아래 · 왼쪽 · 왼쪽 위 · 위)에 점수를 매겨 가장 낮은 곳(같으면 앞 순서)에 둔다:
- * 뷰어 4dp 안쪽을 벗어나는 곳은 빼고, 겹친 것마다 앞서 둔 라벨 4 · 다른 점(10dp 칸) 3 · 뷰어 알약(avoid) 4,
+ * 뷰어 4dp 안쪽을 벗어나는 곳은 빼고, 겹친 것마다 앞서 둔 라벨 4 · 다른 점(10dp 칸) 3 · 뷰어 알약 · 진행 화살(avoid, 화살은 12dp 칸) 4,
  * 같은 꼴 점이 제 점만큼(2dp 안) 가까우면 3 · 다른 꼴 점이 더 가까우면 0.75(옆 점 라벨로 읽힌다), 지나는 선 토막마다 0.5(1 까지 — 선은 알약 밑으로
  * 지나도 읽힌다), 점에서 그 자리까지(지시선)가 지나는 앞 라벨마다 2.
  * 가까운 곳이 다 막히면 16dp 씩 더 띄운 바깥 세 겹(겹마다 1)까지 보고, 점에서 16dp 넘게 떨어지거나 같은 꼴 다른 점에 더 가까우면 점 색 α .6 의 1dp 지시선을 긋는다.
