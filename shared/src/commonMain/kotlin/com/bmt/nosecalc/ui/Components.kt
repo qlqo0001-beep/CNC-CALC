@@ -39,10 +39,14 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.AlignmentLine
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -52,6 +56,7 @@ import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.RoleColors
 import com.bmt.nosecalc.ui.theme.onFill
+import kotlin.math.roundToInt
 
 /** 흰 카드(1.3): 1dp 연한 테두리 + 아주 옅은 그림자, 모서리 12dp */
 @Composable
@@ -146,7 +151,11 @@ private fun HeadChip(text: String, rc: RoleColors) {
     }
 }
 
-/** 카드 머리: 제목(cardTitle) + 아랫줄 부제(caption, 2dp 띄움) + 오른쪽 trailing. 아래로 12dp 띄운다 */
+/**
+ * 카드 머리: 제목(cardTitle) + 아랫줄 부제(caption, 2dp 띄움) + 오른쪽 trailing(12dp 띄움). 아래로 12dp 띄운다.
+ * trailing 은 머리 전체 가운데에 둔다. 다만 부제가 있고 trailing 이 제목 줄보다 낮으면(글) 제목 줄에 붙여 밑줄을 맞추고
+ * 부제는 그 아래 온 폭에 둔다 — 좁은 폰에서 부제가 접혀 그 첫 줄 옆에 trailing 이 와서 한 문장처럼 읽히지 않게
+ */
 @Composable
 fun CardHeader(
     title: String,
@@ -155,12 +164,38 @@ fun CardHeader(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val c = AppTheme.colors
-    Row(modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
+    Layout(
+        {
             Text(title, style = AppType.cardTitle, color = c.textStrong)
             if (subtitle != null) Text(subtitle, Modifier.padding(top = 2.dp), style = AppType.caption, color = c.textMuted)
+            if (trailing != null) Box(Modifier.padding(start = 12.dp)) { trailing() }
+        },
+        modifier.fillMaxWidth().padding(bottom = 12.dp),
+    ) { ms, cs ->
+        val tr = if (trailing != null) ms.last().measure(cs.copy(minWidth = 0, minHeight = 0)) else null
+        val room = if (cs.hasBoundedWidth) (cs.maxWidth - (tr?.width ?: 0)).coerceAtLeast(0) else Constraints.Infinity
+        val t = ms[0].measure(Constraints(maxWidth = room))
+        // 제목 줄에 붙는 trailing 이면 부제는 그 아래 온 폭을 쓴다
+        val onTitle = subtitle != null && tr != null && tr.height <= t.height
+        val s = if (subtitle != null) ms[1].measure(Constraints(maxWidth = if (onTitle) cs.maxWidth else room)) else null
+        val colH = t.height + (s?.height ?: 0)
+        val w = if (cs.hasBoundedWidth) cs.maxWidth else maxOf(t.width + (tr?.width ?: 0), (s?.width ?: 0) + if (onTitle) 0 else tr?.width ?: 0)
+        fun mid(h: Int, size: Int) = ((h - size) / 2f).roundToInt()
+        val tb = t[FirstBaseline]
+        val rb = tr?.get(FirstBaseline) ?: AlignmentLine.Unspecified
+        val trY = when {
+            tr == null -> 0
+            !onTitle -> null
+            tb != AlignmentLine.Unspecified && rb != AlignmentLine.Unspecified -> (tb - rb).coerceAtLeast(0)
+            else -> mid(t.height, tr.height)
         }
-        trailing?.invoke()
+        val h = if (trY != null && tr != null) maxOf(colH, trY + tr.height) else maxOf(colH, tr?.height ?: 0)
+        layout(w, h) {
+            val colY = if (trY != null) 0 else mid(h, colH)
+            t.place(0, colY)
+            s?.place(0, colY + t.height)
+            tr?.place(w - tr.width, trY ?: mid(h, tr.height))
+        }
     }
 }
 

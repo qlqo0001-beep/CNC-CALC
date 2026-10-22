@@ -68,7 +68,7 @@ import kotlin.math.roundToInt
  * value 는 쓴 그대로의 글("5.0", "-25", "" = 빈칸). 숫자는 value.toDoubleOrNull() 로 꺼낸다.
  * 키패드에서 누를 때마다 값이 바로 onValueChange 로 들어간다(결과·그림·NC 가 따라 바뀐다).
  * 값은 단위와 겹치지 않게 길면 줄인다([ValueAndUnit]). 칸 모양은 색 + 표 + 굵기로 가른다(색만으로 가르지 않는다):
- * - autoValue = 빈칸일 때 계산된 값: 청록 옅은 바탕·테두리 + valueComp 글 + 라벨 줄 "자동" 표.
+ * - autoValue = 빈칸일 때 계산된 값: 청록 옅은 바탕·테두리 + valueComp 글 + 라벨 줄 "자동" 표(자리가 모자라도 남긴다, [FieldLabel]).
  *   "" 이면 풀지 못한 것 → 칸에 "—", 표는 "자동 · 계산 안 됨"
  * - error = 이 칸 값이 문제: 빨강 2dp 테두리 · 옅은 빨강 바탕 · 라벨 앞 멈춤 아이콘
  * - tag = 라벨 뒤 회색 표("Ø직경" · "반경")
@@ -114,11 +114,16 @@ fun NumberField(
     Column(if (chain != null) modifier.bringIntoViewRequester(bring).onSizeChanged { size = it } else modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (error) Icon(AppIcons.Stop, null, Modifier.padding(end = 4.dp).size(16.dp), tint = c.error.label)
-            // 라벨이 먼저 자리를 잡고 표는 남은 자리에(어느 칸인지가 먼저)
-            Text(label, style = AppType.label, color = if (error) c.error.label else rc.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (tag != null) FieldChip(tag, c.subtle, c.textBody, c.lineField)
-            if (unsolved) FieldChip("자동 · 계산 안 됨", c.error.bg, c.error.label, short = "계산 안 됨")
-            if (computed) FieldChip("자동", c.teal.copy(alpha = 0.14f), c.tealDeep)
+            FieldLabel(
+                label, if (error) c.error.label else rc.label, tag,
+                when {
+                    unsolved -> listOf("자동 · 계산 안 됨", "계산 안 됨")
+                    computed -> listOf("자동")
+                    else -> emptyList()
+                },
+                if (unsolved) c.error.bg else c.teal.copy(alpha = 0.14f),
+                if (unsolved) c.error.label else c.tealDeep,
+            )
         }
         Spacer(Modifier.height(6.dp))
         ValueAndUnit(
@@ -210,27 +215,53 @@ private data class FitDown(val max: Float, val min: Float) : TextAutoSize {
 private val ValueFit = FitDown(20f, 11f)
 
 /**
- * 라벨 줄 작은 표(11.5sp 굵게, 모서리 4dp): "자동" · "Ø직경". 라벨 다음 남은 자리에 text 가 다 들어가지 않으면 short 로,
- * 그것도 넘치면 그리지 않는다(반쯤 잘린 표 대신)
+ * 라벨 줄: 라벨 + tag 표("Ø직경") + 상태 표(state = 긴 글부터: "자동" · "자동 · 계산 안 됨" → "계산 안 됨").
+ * 라벨이 먼저 자리를 잡고 tag 표는 남은 자리에(어느 칸인지가 먼저). 상태 표는 넣은 값과 계산 값을 가르는 표라 색만 남지 않게
+ * 자리가 모자라면 tag 표를 먼저 빼고, 그래도 모자라면 짧은 글로, 그래도 모자라면 라벨을 "…" 로 줄여서라도 남긴다
+ * (라벨은 앞 [LABEL_KEEP] 만큼은 남긴다). 표는 다 들어가지 않으면 그리지 않는다(반쯤 잘린 표 대신)
  */
 @Composable
-private fun FieldChip(text: String, bg: Color, fg: Color, border: Color = Color.Transparent, short: String? = null) {
-    val shape = RoundedCornerShape(4.dp)
+private fun FieldLabel(label: String, color: Color, tag: String?, state: List<String>, stateBg: Color, stateFg: Color) {
+    val c = AppTheme.colors
     Layout({
-        listOfNotNull(text, short).forEach {
-            Text(
-                it,
-                Modifier.padding(start = 6.dp).clip(shape).background(bg).border(1.dp, border, shape).padding(horizontal = 5.dp),
-                color = fg,
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-            )
-        }
+        Text(label, style = AppType.label, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (tag != null) FieldChip(tag, c.subtle, c.textBody, c.lineField)
+        state.forEach { FieldChip(it, stateBg, stateFg) }
     }) { ms, cs ->
-        val p = ms.firstNotNullOfOrNull { m -> m.measure(Constraints()).takeIf { it.width <= cs.maxWidth } }
-        layout(p?.width ?: 0, p?.height ?: 0) { p?.place(0, 0) }
+        val w = cs.maxWidth
+        val lw = ms[0].maxIntrinsicWidth(Constraints.Infinity)
+        val t = if (tag != null) ms[1].measure(Constraints()) else null
+        val ss = ms.drop(if (tag != null) 2 else 1).map { it.measure(Constraints()) }
+        val s = ss.firstOrNull { lw + it.width <= w } ?: ss.lastOrNull()?.takeIf { minOf(lw, LABEL_KEEP.roundToPx()) + it.width <= w }
+        val sw = s?.width ?: 0
+        val tg = t?.takeIf { lw + sw + it.width <= w }
+        val l = ms[0].measure(if (cs.hasBoundedWidth) Constraints(maxWidth = (w - sw - (tg?.width ?: 0)).coerceAtLeast(0)) else Constraints())
+        val h = maxOf(l.height, tg?.height ?: 0, s?.height ?: 0)
+        layout(l.width + (tg?.width ?: 0) + sw, h) {
+            var x = 0
+            listOfNotNull(l, tg, s).forEach {
+                it.place(x, ((h - it.height) / 2f).roundToInt()) // Row 의 CenterVertically 와 같게
+                x += it.width
+            }
+        }
     }
+}
+
+/** 상태 표가 라벨을 줄여도 라벨은 이만큼은 남긴다("끝 Z …" 처럼 어느 칸인지 알 만큼) */
+private val LABEL_KEEP = 48.dp
+
+/** 라벨 줄 작은 표(11.5sp 굵게, 모서리 4dp, 앞 6dp 띄움): "자동" · "Ø직경" */
+@Composable
+private fun FieldChip(text: String, bg: Color, fg: Color, border: Color = Color.Transparent) {
+    val shape = RoundedCornerShape(4.dp)
+    Text(
+        text,
+        Modifier.padding(start = 6.dp).clip(shape).background(bg).border(1.dp, border, shape).padding(horizontal = 5.dp),
+        color = fg,
+        fontSize = 11.5.sp,
+        fontWeight = FontWeight.Bold,
+        maxLines = 1,
+    )
 }
 
 /**

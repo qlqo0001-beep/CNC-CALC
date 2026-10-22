@@ -47,8 +47,9 @@ enum class TaperWarning {
     NOSE_UNREACHABLE,
 
     /**
-     * 노즈R 이 경사 길이보다 크다. 공구는 경사에 닿고 숫자도 맞다(못 닿으면 이 경고 대신 NOSE_UNREACHABLE 로 멈춘다).
-     * 다만 오목 모서리 쪽에는 R 대신 r 이 남아 경사가 거의 안 남을 수 있으니 도면을 확인할 것
+     * 노즈R 이 경사 길이보다 크고, 그 경사 끝 하나 이상이 오목 모서리(모서리 R < r)다. 공구는 경사에 닿고 숫자도 맞다
+     * (못 닿으면 이 경고 대신 NOSE_UNREACHABLE 로 멈춘다). 다만 오목 모서리 쪽에는 R 대신 r 이 남아 경사가 거의 안 남을 수 있으니
+     * 도면을 확인할 것. 양 끝이 볼록이면(C0.3 면취에 0.8R) 다 깎여 경고하지 않는다
      */
     NOSE_GT_SLOPE,
 
@@ -371,8 +372,11 @@ object TaperCalc {
         val toSeg = if (cutLast) segs.size else segs.size - 1 // 깎는 요소의 끝(끝 요소를 깎지 않으면 빼고)
 
         val warnings = mutableListOf<TaperWarning>()
-        val slopes = 1 until drawn.size - 2 // drawn[k] – drawn[k+1] 이 경사
-        if (slopes.any { r > (drawn[it + 1] - drawn[it]).length }) warnings += TaperWarning.NOSE_GT_SLOPE
+        // 꺾임 k(경로 점 path[k])가 오목이고 모서리 R < r — 그 자리에 R 대신 r 이 남는다(볼록 끝은 다 깎인다)
+        fun leavesR(k: Int) = ((path[k] - path[k - 1]) cross (path[k + 1] - path[k])).let { abs(it) > EPS && (it > 0) != (side == Side.G42) } &&
+            cr[k - 1] < r
+        val slopes = 1 until path.size - 2 // path[k] – path[k+1] 이 경사(앞뒤 요소 빼고)
+        if (slopes.any { r > (path[it + 1] - path[it]).length && (leavesR(it) || leavesR(it + 1)) }) warnings += TaperWarning.NOSE_GT_SLOPE
         // 공구가 원 안쪽(오목): G41 이면 반시계, G42 면 시계 원호
         if (drawing.segs.any { it is Arc && (side == Side.G41) != it.cw && it.radius - r <= EPS }) warnings += TaperWarning.CONCAVE_R_LE_NOSE
         if (tip in 1..4 && againstTool(drawing, side, tip)) warnings += TaperWarning.AGAINST_TOOL

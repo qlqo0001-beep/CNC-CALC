@@ -126,10 +126,11 @@ class ScreenShotTest {
                 setShared("zClear", "1.0")
             }
         }
-        // C0.3 면취 + 노즈 R0.8 → NOSE_GT_SLOPE(노랑, 결과 카드는 그대로)
+        // 형상 3 의 오목 T1 뒤 짧은 경사(0.583) + 노즈 R0.8 → NOSE_GT_SLOPE(노랑, 결과 카드는 그대로).
+        // C0.3 면취(형상 1)는 양 끝이 볼록이라 다 깎여 경고하지 않는다
         taperShot("taper-b-warn-gt", 2800) {
-            TaperState(type = 1, open = true).apply {
-                setPoint("x1", "49.4"); setPoint("z1", "0"); setPoint("x2", "50"); setPoint("z2", "-0.3")
+            TaperState(type = 3, open = true).apply {
+                setPoint("x1", "40"); setPoint("z1", "0"); setPoint("x2", "40.6"); setPoint("z2", "-0.5")
                 setShared("noseR", "0.8")
                 setShared("zClear", "1.0")
             }

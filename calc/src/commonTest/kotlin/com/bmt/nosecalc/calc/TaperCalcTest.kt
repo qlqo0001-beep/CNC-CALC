@@ -456,15 +456,41 @@ class TaperCalcTest {
         assertFailsWith<IllegalArgumentException> { TaperCalc.calc(good.copy(type = 6)) }
     }
 
-    /** C0.3 면취에 노즈 0.8: 볼록 두 모서리라 숫자는 맞다 — 경고만 */
+    /** C0.3 면취에 노즈 0.8: 볼록 두 모서리라 다 깎이고 숫자도 맞다 — 오목 모서리가 없으니 NOSE_GT_SLOPE 도 없다(내경 · 역방향도) */
     @Test
-    fun noseLongerThanChamferWarns() {
+    fun noseLongerThanConvexChamferDoesNotWarn() {
         val r = 0.8
         val res = TaperCalc.calc(TaperInput(noseR = r, x1 = 39.4, z1 = 0.0, x2 = 40.0, z2 = -0.3))
         val s = ok(res)
-        assertEquals(listOf(TaperWarning.NOSE_GT_SLOPE), res.warnings)
+        assertEquals(emptyList(), res.warnings)
         assertPt(Pt(0.0, 19.7) + closedShift(false, true, false, true, 45.0, r), sharp(s.points[0]), 1e-9)
         assertPt(Pt(-0.3, 20.0) + closedShift(false, true, false, false, 45.0, r), sharp(s.points[1]), 1e-9)
+        assertEquals(emptyList(), TaperCalc.calc(TaperInput(inner = true, noseR = r, x1 = 40.6, z1 = 0.0, x2 = 40.0, z2 = -0.3)).warnings)
+        val rev = TaperCalc.calc(TaperInput(reverse = true, noseR = r, x1 = 39.4, z1 = 0.0, x2 = 40.0, z2 = -0.3))
+        ok(rev)
+        assertTrue(TaperWarning.NOSE_GT_SLOPE !in rev.warnings)
+    }
+
+    /**
+     * 오목 T1(외경 TYPE 3)의 짧은 경사 0.583 에 노즈 0.8: 오목에 접한 원이 경사 위 0.8·tan(15.48°) = 0.222 에서 닿아 숫자는 맞지만
+     * T1 에 r 이 남는다 — NOSE_GT_SLOPE(역방향도 같은 모양이라 같다). 오목 모서리 R = r 이면 r 이 남지 않아 CONCAVE_R_LE_NOSE 만
+     */
+    @Test
+    fun noseLongerThanSlopeAtConcaveCornerWarns() {
+        val i = TaperInput(type = 3, noseR = 0.8, x1 = 40.0, z1 = 0.0, x2 = 40.6, z2 = -0.5)
+        val res = TaperCalc.calc(i)
+        ok(res)
+        assertEquals(listOf(TaperWarning.NOSE_GT_SLOPE), res.warnings)
+        val rev = TaperCalc.calc(i.copy(reverse = true))
+        ok(rev)
+        assertTrue(TaperWarning.NOSE_GT_SLOPE in rev.warnings)
+        val fillet = TaperCalc.calc(i.copy(cornerR1 = 0.8))
+        ok(fillet)
+        assertEquals(listOf(TaperWarning.CONCAVE_R_LE_NOSE), fillet.warnings)
+        // 내경 TYPE 3(큰 내경 → 테이퍼 → 작은 내경)도 T1 이 오목
+        val inner = TaperCalc.calc(TaperInput(inner = true, type = 3, noseR = 0.8, x1 = 40.6, z1 = 0.0, x2 = 40.0, z2 = -0.5))
+        ok(inner)
+        assertEquals(listOf(TaperWarning.NOSE_GT_SLOPE), inner.warnings)
     }
 
     /** 오목 모서리 둘(TYPE 4) 사이의 짧은 경사에 큰 노즈: 공구가 경사에 못 닿는다 — 숫자를 내지 않는다 */
