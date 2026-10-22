@@ -171,8 +171,9 @@ val LightColors = AppColors(
     onAccent = Color(0xFFFFFFFF),
     teal = Color(0xFF0D9488),
     tealDeep = Color(0xFF0F766E),
-    appsFill = Color(0xFF14B8A6),
-    appsBorder = Color(0xFF0D9488),
+    // 메뉴 단추: 흰 13sp 글 대비 4.5:1 넘게(#14B8A6 은 2.49:1)
+    appsFill = Color(0xFF0F766E),
+    appsBorder = Color(0xFF115E59),
     appsOpenBg = Color(0xFFF0FDFA),
     green = Color(0xFF16A34A),
     blue = Color(0xFF2B7BC0),
@@ -261,7 +262,8 @@ val DarkColors = AppColors(
     onAccent = Color(0xFFFFFFFF),
     teal = Color(0xFF2DD4BF),
     tealDeep = Color(0xFF5EEAD4),
-    appsFill = Color(0xFF0F8F82),
+    // 메뉴 단추: 흰 글 5.47:1(#0F8F82 는 3.98:1). 키패드 다음 · 닫기 채움도 이 색
+    appsFill = Color(0xFF0F766E),
     appsBorder = Color(0xFF2DD4BF),
     appsOpenBg = Color(0xFF103A3A),
     green = Color(0xFF34D399),

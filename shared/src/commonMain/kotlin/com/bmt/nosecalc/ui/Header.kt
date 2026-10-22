@@ -133,7 +133,7 @@ fun CircleIconButton(
 fun AppsButton(open: Boolean, onClick: () -> Unit) {
     val c = AppTheme.colors
     val shape = RoundedCornerShape(9.dp)
-    val fg = if (open) c.teal else c.onAccent
+    val fg = if (open) c.tealDeep else c.onAccent // 열림 글: 연한 바탕 위 4.5:1 넘게
     Row(
         Modifier
             .minimumInteractiveComponentSize()
