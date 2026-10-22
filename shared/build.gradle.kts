@@ -19,6 +19,8 @@ kotlin {
                 val shots = rootDir.resolve("build/shots")
                 systemProperty("shotsDir", shots.absolutePath)
                 outputs.dir(shots)
+                // 화면 숫자 골든(UiGoldenTest) 다시 쓰기: -DupdateGolden=true
+                providers.systemProperty("updateGolden").orNull?.let { systemProperty("updateGolden", it) }
             }
         }
     }

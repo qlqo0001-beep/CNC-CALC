@@ -16,12 +16,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.resources.Res
-import com.bmt.nosecalc.resources.courier_prime_bold
-import com.bmt.nosecalc.resources.courier_prime_regular
+import com.bmt.nosecalc.resources.jetbrains_mono_bold
+import com.bmt.nosecalc.resources.jetbrains_mono_regular
 import com.bmt.nosecalc.resources.noto_sans_kr
 import org.jetbrains.compose.resources.Font
 
-/** 테마 토큰 한 벌: 색 + 글꼴(본문 Noto Sans KR, 결과 숫자·G코드 고정폭 Courier Prime) */
+/** 테마 토큰 한 벌: 색 + 글꼴(본문 Noto Sans KR, 결과 숫자·G코드 고정폭 JetBrains Mono) */
 @Immutable
 class AppTokens(val colors: AppColors, val sans: FontFamily, val mono: FontFamily)
 
@@ -40,7 +40,7 @@ object AppTheme {
 fun AppTheme(dark: Boolean, content: @Composable () -> Unit) {
     val c = if (dark) DarkColors else LightColors
     val sans = notoSansKr()
-    val mono = courierPrime()
+    val mono = jetBrainsMono()
     val tokens = remember(c, sans, mono) { AppTokens(c, sans, mono) }
     // material3 부품(물결 효과 등)이 쓰는 색만 맞춰 둔다. 화면은 AppTheme.colors 를 쓴다
     val scheme = if (dark) {
@@ -68,9 +68,10 @@ private fun notoSansKr(): FontFamily {
     return remember(fonts) { FontFamily(fonts) }
 }
 
+/** 0 안에 점, 긴 − — G00 이 GOO 로, −5.234 가 5.234 로 읽히지 않게 */
 @Composable
-private fun courierPrime(): FontFamily {
-    val regular = Font(Res.font.courier_prime_regular, FontWeight.Normal)
-    val bold = Font(Res.font.courier_prime_bold, FontWeight.Bold)
+private fun jetBrainsMono(): FontFamily {
+    val regular = Font(Res.font.jetbrains_mono_regular, FontWeight.Normal)
+    val bold = Font(Res.font.jetbrains_mono_bold, FontWeight.Bold)
     return remember(regular, bold) { FontFamily(regular, bold) }
 }

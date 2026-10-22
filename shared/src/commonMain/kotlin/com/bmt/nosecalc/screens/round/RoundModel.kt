@@ -7,11 +7,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import com.bmt.nosecalc.calc.Arc3Input
+import com.bmt.nosecalc.calc.BarField
+import com.bmt.nosecalc.calc.BoringBar
+import com.bmt.nosecalc.calc.Fmt
+import com.bmt.nosecalc.calc.HolderCheck
+import com.bmt.nosecalc.calc.HolderHit
+import com.bmt.nosecalc.calc.HolderPart
+import com.bmt.nosecalc.calc.HolderPose
+import com.bmt.nosecalc.calc.HolderResult
+import com.bmt.nosecalc.calc.HolderSkip
+import com.bmt.nosecalc.calc.InsertShape
 import com.bmt.nosecalc.calc.L2Ref
 import com.bmt.nosecalc.calc.MAX_MM
 import com.bmt.nosecalc.calc.NoseComp
+import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RoundInput
+import com.bmt.nosecalc.calc.RoundResult
+import com.bmt.nosecalc.calc.RoundSolution
 import com.bmt.nosecalc.calc.RoundWarning
+import kotlin.math.abs
+import kotlin.math.floor
 
 /** 수동(CAD 3점호) 카드의 번호. TYPE 1~6 다음 */
 internal const val MANUAL = 7
@@ -22,7 +37,7 @@ internal class DimField(val key: String, val label: String)
 /** 형상(TYPE)마다 그림에 적힌 치수(그림 순서). 형상 1·3·4 의 모서리 R·D·L 은 계산기의 cornerR1·d1·l1 */
 internal fun dims(type: Int): List<DimField> = when (type) {
     1 -> listOf(DimField("mainR", "주 R"), DimField("cr1", "모서리 R"), DimField("l1", "L"))
-    2 -> listOf(DimField("mainR", "주 R"), DimField("cr1", "모서리 R(1)"), DimField("d1", "D1"), DimField("l1", "L1"), DimField("l2", "L2"))
+    2 -> listOf(DimField("mainR", "주 R"), DimField("cr1", "모서리 R"), DimField("d1", "D1"), DimField("l1", "L1"), DimField("l2", "L2"))
     3, 4 -> listOf(DimField("cr1", "모서리 R"), DimField("mainR", "주 R"), DimField("d1", "D"), DimField("l1", "L"))
     else -> listOf(
         DimField("cr2", "모서리 R(2)"), DimField("mainR", "주 R"), DimField("cr1", "모서리 R(1)"),
@@ -38,26 +53,32 @@ internal fun blankable(type: Int): List<String> = when (type) {
     else -> emptyList()
 }
 
-/** TYPE 이름(04 의 모양) */
-internal fun roundTypeName(type: Int): String = when (type) {
-    1 -> "술통 (양끝 면 + 볼록 구면)"
-    2 -> "공 + 양쪽 축 (아령형)"
-    3 -> "원통 + 끝 돔"
-    4 -> "축 + 끝 공"
-    5 -> "큰 원통 → 볼록 구면 → 작은 축"
-    6 -> "플랜지 → 단차 → 돔 → 작은 축"
-    else -> "원호 위 세 점 → 중심 · R · 방향"
+/** 모서리 R 칸. 비우면 0(날카로운 모서리) — 테이퍼와 같다 */
+private val CORNERS = setOf("cr1", "cr2")
+
+/** TYPE 짧은 이름(고르기 카드 머리 · 입력 화면 요약). inner = 같은 치수의 구멍(형상 2~6) */
+internal fun roundTypeShort(type: Int, inner: Boolean = false): String = when (type) {
+    1 -> "술통"
+    2 -> if (inner) "공 모양 홈" else "아령"
+    3 -> if (inner) "돔 바닥" else "원통 + 돔"
+    4 -> if (inner) "공 바닥" else "축 + 공"
+    5 -> if (inner) "구면 단차" else "원통 + 구면 + 축"
+    6 -> if (inner) "돔 단차" else "플랜지 + 돔 + 축"
+    else -> "CAD 3점호"
 }
+
+/** 끝 직선 길이 칸 이름. 내경 3~6 은 실제 치수인 입구 구멍 깊이(Z0 ~ 첫 이론 꼭짓점) */
+internal fun legLabel(type: Int, inner: Boolean): String = if (inner && type != 2) "입구 구멍 깊이" else "끝 직선 길이"
 
 /**
  * 라운드 화면 상태. 입력값은 쓴 그대로의 글.
- * 치수 칸은 TYPE 마다 따로, 노즈R·팁·Z 여유·끝 요소 길이는 함께 쓴다. 수동(3점호) 칸은 따로.
+ * 치수 칸은 TYPE 마다 따로, 노즈R·팁·Z 여유·끝 직선 길이 · 보링바 칸은 함께 쓴다. 수동(3점호) 칸은 따로.
+ * 보링바 칸은 앱을 켠 동안만 둔다(공구 값은 기억하지 않기로 했다)
  */
 @Stable
 internal class RoundState(
     type: Int? = null,
     open: Boolean = false,
-    comp: Boolean = true,
     values: Map<String, String> = emptyMap(),
 ) {
     /** 고른 카드: 1~6 = TYPE, [MANUAL] = 수동(3점호) */
@@ -66,11 +87,12 @@ internal class RoundState(
     /** true = 입력·결과 화면 */
     var open by mutableStateOf(open)
 
-    /** true = 합성 R 궤적(보정), false = 접점 모드(도면) */
-    var comp by mutableStateOf(comp)
+    /** 입력 화면을 열 때 키패드를 열어 둘 칸 id(치수 key · zClear · leg · x1 · z1 …). 화면이 처음 그려질 때 한 번 읽는다(스크린샷 시험) */
+    var editing by mutableStateOf<String?>(null)
     private val values = mutableStateMapOf<String, String>().apply { putAll(values) }
 
-    fun dim(type: Int, key: String): String = values["t$type/$key"] ?: RoundDefaults.dim(type, key)
+    /** 도면 치수. 처음 값은 모두 0(예시 치수 없음) */
+    fun dim(type: Int, key: String): String = values["t$type/$key"] ?: "0"
     fun setDim(type: Int, key: String, v: String) { values["t$type/$key"] = v }
 
     /** TYPE 2 의 L2 기준 */
@@ -81,26 +103,75 @@ internal class RoundState(
     fun shared(name: String): String = values["s/$name"] ?: RoundDefaults.shared(name)
     fun setShared(name: String, v: String) { values["s/$name"] = v }
 
-    /** 팁 번호 직접 지정. null = 표준(TYPE 은 3, 수동은 외경·내경·방향에 따라) */
+    /**
+     * TYPE 화면의 팁 번호 직접 지정. null = 표준(외경 3 · 내경 2). 외경 · 내경([typeInner]) 따로 둔다 —
+     * 외경에서 고른 팁이 내경 보링(G41)으로 넘어가지 않게(테이퍼도 가공 종류마다 따로)
+     */
     var tip: Int?
-        get() = values["tip"]?.toIntOrNull()
-        set(v) { values["tip"] = v?.toString() ?: "" }
+        get() = values[tipKey]?.toIntOrNull()
+        set(v) { values[tipKey] = v?.toString() ?: "" }
+    private val tipKey get() = if (typeInner) "tip/inner" else "tip"
+
+    /** TYPE 화면(고르기 화면 스위치): 내경 = 같은 치수의 구멍(형상 2~6, 보링바 · 팁 2 · G41) */
+    var typeInner: Boolean
+        get() = values["inner"] == "true"
+        set(v) { values["inner"] = v.toString() }
+
+    /** 내경 형상 5 · 6: 관통(바닥 면 없이 D1 구멍이 뚫림). false = 막힘(바닥 면까지) */
+    var through: Boolean
+        get() = values["through"] == "true"
+        set(v) { values["through"] = v.toString() }
+
+    /** 보링바 칸(dia · f · shape · edge · kr · ovh · dmin): 쓴 그대로, 처음은 빈칸 */
+    fun holder(name: String): String = values["h/$name"] ?: ""
+    fun setHolder(name: String, v: String) { values["h/$name"] = v }
+
+    /** 고른 프리셋. null = 직접 입력 */
+    val preset: HolderPreset? get() = HOLDER_PRESETS.firstOrNull { it.code == values["h/preset"] }
+
+    /** 프리셋을 고르면 D · f · DMIN · κr · 모양 · 날 길이를 채운다(돌출 길이 · 노즈 R 은 그대로). null = 직접 입력(칸은 그대로) */
+    fun pickPreset(p: HolderPreset?) {
+        values["h/preset"] = p?.code ?: ""
+        p?.fields()?.forEach { (k, v) -> setHolder(k, v) }
+    }
+
+    /** 프리셋을 고른 뒤 그 값을 고쳤나(프리셋 이름 옆 '(수정됨)') */
+    fun presetEdited(): Boolean = preset?.fields()?.any { (k, v) -> holder(k) != v } ?: false
+
+    /** 보링바 칸 → 계산기 바. D · f · 모양 · 날 길이 · κr 가 비었거나 숫자가 아니면 null. 돌출 길이 · DMIN 은 비우면 null(그 검사 안 함) */
+    fun holderBar(): BoringBar? = BoringBar(
+        dia = holder("dia").toDoubleOrNull() ?: return null,
+        f = holder("f").toDoubleOrNull() ?: return null,
+        shape = InsertShape.entries.firstOrNull { it.name == holder("shape") } ?: return null,
+        edge = holder("edge").toDoubleOrNull() ?: return null,
+        kappaDeg = holder("kr").toDoubleOrNull() ?: return null,
+        overhang = holder("ovh").toDoubleOrNull(),
+        dMin = holder("dmin").toDoubleOrNull(),
+    )
 
     var manualTip: Int?
         get() = values["m/tip"]?.toIntOrNull()
         set(v) { values["m/tip"] = v?.toString() ?: "" }
 
-    /** 수동: x1·z1·x2·z2·x3·z3 */
-    fun point(name: String): String = values["m/$name"] ?: RoundDefaults.point(name)
+    /** 수동: x1·z1·x2·z2·x3·z3. 처음 값은 모두 0 */
+    fun point(name: String): String = values["m/$name"] ?: "0"
     fun setPoint(name: String, v: String) { values["m/$name"] = v }
 
     var inner: Boolean
         get() = values["m/inner"] == "true"
         set(v) { values["m/inner"] = v.toString() }
 
-    /** TYPE 입력을 계산기 입력으로. 그 TYPE 의 칸만 넣고 나머지는 null. 노즈R 빈칸은 NaN(계산기가 BAD_INPUT) */
+    /**
+     * TYPE 입력을 계산기 입력으로. 그 TYPE 의 칸만 넣고 나머지는 null. 노즈R 빈칸은 NaN(계산기가 BAD_INPUT).
+     * 모서리 R 빈칸은 0. 길이 · 지름 · 주 R 은 0 보다 커야 하므로 0(처음 값)은 아직 안 넣은 것 — 빈칸처럼 null 로 넘긴다.
+     * 내경은 형상 2~6 만(형상 1 은 고르기 화면에 없다), 관통은 내경 5 · 6 만
+     */
     fun input(type: Int): RoundInput {
-        fun n(key: String) = if (dims(type).any { it.key == key }) dim(type, key).toDoubleOrNull() else null
+        fun n(key: String): Double? {
+            if (dims(type).none { it.key == key }) return null
+            val v = dim(type, key).toDoubleOrNull()
+            return if (key in CORNERS) v ?: 0.0 else v?.takeIf { it != 0.0 }
+        }
         return RoundInput(
             type = type,
             mainR = n("mainR"),
@@ -112,9 +183,11 @@ internal class RoundState(
             l2 = n("l2"),
             l2Ref = l2Ref,
             noseR = shared("noseR").toDoubleOrNull() ?: Double.NaN,
-            tip = tip ?: STANDARD_TIP,
-            zClear = shared("zClear").toDoubleOrNull() ?: 1.0,
+            tip = tip,
+            zClear = shared("zClear").toDoubleOrNull() ?: 0.0,
             legLen = shared("leg").toDoubleOrNull() ?: 5.0,
+            inner = typeInner && type != 1,
+            through = typeInner && through && type in 5..6,
         )
     }
 
@@ -128,74 +201,91 @@ internal class RoundState(
         z2 = point("z2").toDoubleOrNull(),
         x3 = point("x3").toDoubleOrNull(),
         z3 = point("z3").toDoubleOrNull(),
-        zClear = shared("zClear").toDoubleOrNull() ?: 1.0,
+        zClear = shared("zClear").toDoubleOrNull() ?: 0.0,
     )
 
-    /** 수동 모드의 표준 팁: 끝 Z 가 시작보다 크면 역방향 */
-    fun manualStandardTip(): Int {
+    /** 수동: 끝 Z 가 시작보다 크면 역방향 */
+    fun manualReverse(): Boolean {
         val z1 = point("z1").toDoubleOrNull()
         val z3 = point("z3").toDoubleOrNull()
-        return NoseComp.standardTip(inner, z1 != null && z3 != null && z3 > z1)
+        return z1 != null && z3 != null && z3 > z1
     }
 
-    companion object {
-        /** TYPE 1~6 은 외경 정방향(척 쪽, G42) 하나 */
-        const val STANDARD_TIP = 3
+    /** 수동 모드의 표준 팁(외경 · 내경, 정 · 역방향) */
+    fun manualStandardTip(): Int = NoseComp.standardTip(inner, manualReverse())
 
+    companion object {
         val Saver = listSaver<RoundState, String>(
-            save = { s -> listOf(s.type?.toString() ?: "", s.open.toString(), s.comp.toString()) + s.values.flatMap { listOf(it.key, it.value) } },
-            restore = { l ->
-                RoundState(l[0].toIntOrNull(), l[1].toBoolean(), l[2].toBoolean(), l.drop(3).chunked(2).associate { it[0] to it[1] })
-            },
+            save = { s -> listOf(s.type?.toString() ?: "", s.open.toString()) + s.values.flatMap { listOf(it.key, it.value) } },
+            restore = { l -> RoundState(l[0].toIntOrNull(), l[1].toBoolean(), l.drop(2).chunked(2).associate { it[0] to it[1] }) },
         )
     }
 }
 
 /**
- * 처음 값. TYPE 을 누르면 바로 결과가 보이게 그림 모양대로 맞는 값이다(비울 수 있는 칸 하나는 비워 자동으로 보인다).
- * TYPE 3 은 calc-design.md 의 손 계산 예(Ø20, SR12.5, CR1 → L = 5).
+ * 공구 칸 처음 값. 노즈R 은 흔한 값, 끝 직선 길이는 그림용 5.0. 도면 치수 · 세 점 · Z 여유는 0 에서 시작한다(예시 치수 없음).
+ * Z 여유 0 이어도 계산기가 진입점을 노즈R 만큼 띄운다
  */
 internal object RoundDefaults {
-    fun dim(type: Int, key: String): String = when (type) {
-        1 -> mapOf("mainR" to "10", "cr1" to "1", "l1" to "12")
-        2 -> mapOf("mainR" to "10", "cr1" to "1", "d1" to "10", "l1" to "5", "l2" to "")
-        3 -> mapOf("cr1" to "1", "mainR" to "12.5", "d1" to "20", "l1" to "")
-        4 -> mapOf("cr1" to "1", "mainR" to "10", "d1" to "12", "l1" to "")
-        5 -> mapOf("cr2" to "1", "mainR" to "18", "cr1" to "1", "d2" to "30", "d1" to "10", "l1" to "5", "l2" to "")
-        else -> mapOf("cr2" to "1", "mainR" to "12", "cr1" to "1", "d2" to "40", "d1" to "8", "l1" to "5", "l2" to "8")
-    }[key] ?: ""
-
-    /** 수동: 어깨의 볼록 R10(X30 Z0 → X50 Z−10, 가운데 점은 45° 자리) */
-    fun point(name: String): String = when (name) {
-        "x1" -> "30"
-        "z1" -> "0"
-        "x2" -> "44.1421"
-        "z2" -> "-2.9289"
-        "x3" -> "50"
-        "z3" -> "-10"
-        else -> ""
-    }
-
     fun shared(name: String): String = when (name) {
         "noseR" -> "0.4"
-        "zClear" -> "1.0"
+        "zClear" -> "0"
         "leg" -> "5.0"
         else -> ""
     }
 }
 
-/** 경고 글. 계산을 멈춘 것(solution = null)은 빨강, 나머지는 노랑. type = [MANUAL] 이면 3점호 */
-internal fun roundWarningText(w: RoundWarning, type: Int): String {
+/** 치수 칸 key(mainR · cr1 · cr2 · d1 · d2 · l1 · l2)의 값 */
+internal fun RoundInput.dim(key: String): Double? = when (key) {
+    "mainR" -> mainR
+    "cr1" -> cornerR1
+    "cr2" -> cornerR2
+    "d1" -> d1
+    "d2" -> d2
+    "l1" -> l1
+    "l2" -> l2
+    else -> null
+}
+
+/**
+ * 화면에 보일 경고(오목 R ≤ 노즈R 을 맨 앞에). 3점호의 세 점 가운데 둘이 같은 자리면(처음 값 0 · 0 그대로 등)
+ * 계산기의 모양 불일치 대신 값 부족 — 아직 덜 넣은 것이라 빨강이 아닌 안내로 보인다
+ */
+internal fun shownWarnings(r: RoundResult, arc3: Arc3Input? = null): List<RoundWarning> {
+    val overlap = arc3 != null && listOf(arc3.x1 to arc3.z1, arc3.x2 to arc3.z2, arc3.x3 to arc3.z3).distinct().size < 3
+    return r.warnings
+        .map { if (it == RoundWarning.SHAPE_MISMATCH && overlap) RoundWarning.MISSING_INPUT else it }
+        .sortedBy { it != RoundWarning.CONCAVE_R_LE_NOSE }
+}
+
+/** 경고가 가리키는 치수 칸(빨간 테두리). 값 부족은 안내라 칸을 붉히지 않는다 */
+internal fun roundWarningFields(w: RoundWarning, type: Int): Set<String> = when (w) {
+    RoundWarning.CONTRADICTION -> blankable(type).toSet()
+    RoundWarning.CORNER_R_TOO_BIG -> dims(type).map { it.key }.filter { it in CORNERS }.toSet()
+    else -> emptySet()
+}
+
+/**
+ * 경고 글. 계산을 멈춘 것은 빨강, 숫자와 함께 나온 것은 노랑, 값 부족은 파란 안내. type = [MANUAL] 이면 3점호.
+ * empty = 아직 안 넣은(빈칸 · 0) 치수 칸 key — 값 부족 안내에 넣을 칸 이름을 든다. inner = 내경(구멍) 형상
+ */
+internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = emptySet(), inner: Boolean = false): String {
     val names = dims(type).associate { it.key to it.label }
     val blanks = blankable(type).joinToString(" · ") { names.getValue(it) }
     return when (w) {
-        RoundWarning.MISSING_INPUT -> when {
-            type == MANUAL -> "값이 모자랍니다. 세 점(시작 · 가운데 · 끝)의 X · Z 를 모두 넣으세요."
-            blanks.isEmpty() -> "값이 모자랍니다. ${dims(type).joinToString(" · ") { it.label }} 를 모두 넣으세요. 모서리 R 이 없으면 0 을 넣습니다."
-            else -> "값이 모자랍니다. $blanks 가운데 하나만 비울 수 있고, 나머지 칸은 모두 넣어야 합니다. 모서리 R 이 없으면 0 을 넣습니다."
+        RoundWarning.MISSING_INPUT -> if (type == MANUAL) {
+            "값을 넣으면 바로 계산합니다. 원호 위 세 점(시작 · 가운데 · 끝)의 X · Z 를 서로 다른 자리로 넣으세요."
+        } else {
+            // 비울 수 있는 묶음은 하나는 비워 둬도 되므로 "… 가운데 둘" 처럼 더 넣을 개수로 든다
+            val group = blankable(type).filter { it in empty }
+            val need = listOf(
+                dims(type).filter { it.key in empty && it.key !in blankable(type) }.joinToString(" · ") { it.label },
+                if (group.size > 1) "${group.joinToString(" · ") { names.getValue(it) }} 가운데 ${listOf("하나", "둘", "셋")[group.size - 2]}" else "",
+            ).filter { it.isNotEmpty() }
+            "값을 넣으면 바로 계산합니다." + if (need.isEmpty()) "" else " 넣을 값: ${need.joinToString(", ")}."
         }
         RoundWarning.BAD_INPUT ->
-            "입력이 잘못됐습니다. 길이 · 지름 · R 은 0 보다 크고, 모서리 R · 노즈R · Z 여유는 0 이상, 끝 요소 길이는 0 보다 커야 합니다. X 는 0 이상, 모든 값은 ±${MAX_MM.toInt()} mm 안입니다."
+            "입력이 잘못됐습니다. 길이 · 지름 · R 은 0 보다 크고, 모서리 R · 노즈R · Z 여유는 0 이상, ${legLabel(type, inner)}는 0 보다 커야 합니다. X 는 0 이상, 모든 값은 ±${MAX_MM.toInt()} mm 안입니다."
         RoundWarning.CONTRADICTION ->
             "치수가 서로 맞지 않습니다(0.001 mm 넘게). 주 R 은 중심이 축 위인 구라서 $blanks 가운데 하나는 나머지로 정해집니다. 하나를 비우면 계산합니다."
         RoundWarning.SHAPE_MISMATCH -> when (type) {
@@ -213,7 +303,109 @@ internal fun roundWarningText(w: RoundWarning, type: Int): String {
             else "노즈R 에 비해 요소가 너무 짧거나 좁아 공구가 닿지 못합니다. 도면 형상이 안 나옵니다 — 노즈R 을 줄이세요."
         RoundWarning.CONCAVE_R_LE_NOSE ->
             "오목 R 이 노즈R 이하입니다(R − r ≤ 0). 그 자리의 보정 원호가 없어집니다. R = r 이면 정확하지만, R < r 이면 도면보다 큰 R(= 노즈R)이 남습니다."
-        RoundWarning.AGAINST_TOOL ->
+        RoundWarning.AGAINST_TOOL -> if (inner) {
+            "형상 일부가 바이트 방향과 반대입니다(구멍 입구 쪽을 향한 면 — 언더컷). 아래 '보링바 (홀더)' 칸에 바 치수를 넣어 인서트 · 바가 닿는지 확인하세요."
+        } else {
             "형상 일부가 바이트 방향과 반대입니다(왼쪽 면 · 공의 뒤쪽 등 척 쪽을 향한 면). 그 부분은 35° 인서트 · 역바이트 · 절단 등으로 깎이는지 따로 확인하세요."
+        }
     }
 }
+
+/** 보링바 칸 오류 글(칸 아래). r = 노즈 R. 하한은 다른 칸이 숫자가 아니면 "—" */
+internal fun barFieldText(f: BarField, bar: BoringBar, r: Double): String {
+    fun mm(v: Double) = if (v.isFinite()) Fmt.fixed3(v) else "—"
+    val o = bar.overhang ?: 0.0
+    return when (f) {
+        BarField.DIA -> "바 지름은 0 보다 커야 합니다"
+        BarField.F -> "f 는 ${mm(HolderCheck.fMin(bar.dia, bar.kappaDeg, r))} 이상이어야 합니다 (바 윗면이 노즈보다 낮게)"
+        BarField.EDGE -> "날 길이는 ${mm(HolderCheck.edgeMin(bar.shape, r))} 보다 길어야 합니다 (노즈 R 이 두 날에 닿게)"
+        BarField.KAPPA -> "절입각 κr 은 90° 이상, ${plain(180 - bar.shape.epsDeg)}° 보다 작아야 합니다"
+        // 0 보다 크고 한도 안이면 헤드 길이가 모자란 것(그때는 다른 칸이 다 맞다)
+        BarField.OVERHANG -> if (o > 0 && o <= MAX_MM) "돌출 길이는 헤드 길이 ${mm(HolderCheck.overhangMin(bar, r))} 보다 길어야 합니다" else "돌출 길이는 0 보다 커야 합니다"
+        BarField.DMIN -> "최소 가공경은 0 보다 커야 합니다"
+    }
+}
+
+/**
+ * 보링바 띠. text = 닿으면 제목(‘… — n곳’), 아니면 안내 한 줄. lines = 닿는 곳마다 한 줄(4 줄까지, 나머지는 ‘외 n곳’).
+ * flagged = NC 카드에서 빨갛게 할 줄(0부터, 카드에 주는 목록 기준)
+ */
+internal class HolderNote(val text: String, val lines: List<String>, val contact: Boolean, val flagged: Set<Int>)
+
+/**
+ * 보링바 검사 → 띠. comp = 직접 보정: [sol] 의 G40 프로그램(카드 목록 nc 는 첫 줄 주석부터) · 가상 인선 좌표.
+ * 아니면 기계 보정: [drawn](노즈R 0 으로 푼 도면 좌표 프로그램) · 노즈가 닿는 도면 점. 바 값이 틀리면 null(칸이 빨갛다 — 띠 없음).
+ * 줄은 바 · 인서트 · 공구대 닿음을 먼저, 최소 가공경(입체 어림)은 뒤에 — 둘 다 가공 순서
+ */
+internal fun holderNote(res: HolderResult?, bar: BoringBar?, sol: RoundSolution, drawn: RoundSolution?, comp: Boolean, nc: List<String>): HolderNote? {
+    if (res == null || bar == null) return HolderNote("보링바 값을 넣으면 공구가 소재에 닿는지 봅니다.", emptyList(), false, emptySet())
+    when (res.skip) {
+        HolderSkip.BAD_INPUT -> return null
+        HolderSkip.NOT_MONOTONE -> return HolderNote("원호가 Z 로 되돌아가는 모양이라 보링바 간섭 검사를 하지 않습니다.", emptyList(), false, emptySet())
+        null -> {}
+    }
+    val prog = if (comp) sol else drawn ?: return null
+    fun line(e: Int, p: HolderPose) = cardLine(prog, comp, e, p)
+    if (res.hits.isEmpty()) {
+        val at = res.barClearAt ?: return null
+        return HolderNote(
+            "보링바가 소재에 닿지 않습니다. 바와 구멍 벽 사이 가장 좁은 곳 ${Fmt.fixed3(res.barClear!!)} mm (${line(res.barClearElement!!, at) + 1}줄).",
+            emptyList(), false, emptySet(),
+        )
+    }
+    val hits = res.hits.sortedBy { it.part == HolderPart.MIN_BORE }
+    val texts = hits.map { h ->
+        val from = line(h.element, h.first)
+        holderHitText(h, from + 1, line(h.element, h.last) + 1, nc[from], comp, bar, backBoring(sol), prog)
+    }
+    val flagged = hits.flatMap { line(it.element, it.first)..line(it.element, it.last) }.toSet()
+    val shown = texts.take(4) + listOfNotNull("외 ${texts.size - 4}곳".takeIf { texts.size > 4 })
+    return HolderNote("보링바가 소재에 닿습니다 — ${hits.size}곳", shown, true, flagged)
+}
+
+/**
+ * 보링바 자세가 걸린 NC 카드 줄(0부터). prog = 카드의 프로그램(comp = 직접 보정: G40 풀이 · 가상 인선 좌표 · 첫 줄 주석만큼 밀림,
+ * 아니면 도면 좌표 풀이 · 노즈가 닿는 도면 점), e = 요소(−2 진입점 · −1 진입 이동 · k = segs[k])
+ */
+internal fun cardLine(prog: RoundSolution, comp: Boolean, e: Int, p: HolderPose): Int = prog.lineOf(e, if (comp) p.tip else p.drawn) + (if (comp) 1 else 0)
+
+/** 뒤보링: 도면이 +Z 로 간다(3점호 역방향 내경) — 보링바 검사와 같은 판정 */
+internal fun backBoring(sol: RoundSolution): Boolean = sol.drawing.segs.last().end.z > sol.drawing.segs.first().start.z
+
+/**
+ * 닿는 곳의 처음 좌표: comp(직접 보정)면 가상 인선, 아니면 노즈가 닿는 도면 점. 기계 보정의 진입(−2 진입점 · −1 진입 이동)은
+ * 도면 좌표 프로그램 [prog] 의 진입 이동 위(진입점에서 fromT 만큼) — 뒤보링은 진입점이 이미 구멍 안이라, 도면 첫 점으로 적으면 제 NC 줄과 Z 가 달랐다
+ */
+internal fun hitPoint(hit: HolderHit, prog: RoundSolution?, comp: Boolean): Pt = when {
+    comp -> hit.first.tip
+    hit.element < 0 && prog != null -> prog.entry + (prog.program.segs.first().start - prog.entry) * hit.fromT
+    else -> hit.first.drawn
+}
+
+/**
+ * 닿는 곳 한 줄: 'a~b줄 NC 블록 — 무엇이 어디에 닿음: 처음 X… Z…, …'. 줄은 1부터, block = 첫 줄의 NC 글.
+ * 좌표는 [hitPoint](prog = 카드의 프로그램). 인서트 · 바는 반경 겹침과 그 점이 인선에서 이송 방향으로 앞 · 뒤 얼마인지 —
+ * 정방향은 +Z 가 뒤, 뒤보링(reverse — 이송 +Z)은 +Z 가 앞
+ */
+internal fun holderHitText(hit: HolderHit, lineFrom: Int, lineTo: Int, block: String, comp: Boolean, bar: BoringBar, reverse: Boolean, prog: RoundSolution? = null): String {
+    val lines = if (lineFrom == lineTo) "${lineFrom}줄" else "$lineFrom~${lineTo}줄"
+    val p = hitPoint(hit, prog, comp)
+    val at = "처음 X${Fmt.fixed3(p.xDia)} Z${Fmt.fixed3(p.z)}"
+    val what = when (hit.part) {
+        HolderPart.INSERT, HolderPart.BAR -> {
+            val part = if (hit.part == HolderPart.BAR) "바" else "인서트"
+            val wall = if (hit.opposite) "맞은편 벽" else "깎는 쪽 벽"
+            val side = if ((hit.behind < 0) != reverse) "앞" else "뒤"
+            "${part}가 ${wall}에 닿음: $at, 반경 겹침 최대 ${Fmt.fixed3(hit.depth)} mm (인선에서 ${fixed1(abs(hit.behind))} mm $side)"
+        }
+        HolderPart.TURRET -> "공구대가 소재 끝면에 닿음: $at, 돌출 길이가 ${Fmt.fixed3(hit.depth)} mm 모자람"
+        HolderPart.MIN_BORE -> "최소 가공경 Ø${plain(bar.dMin ?: 0.0)} 보다 좁은 곳에 헤드가 들어감: $at"
+    }
+    return "$lines $block — $what"
+}
+
+/** 0.1 까지(5 는 올림): 1.626 → "1.6", 2 → "2.0" */
+private fun fixed1(v: Double) = Fmt.fixed3(floor(v * 10 + 0.5) / 10).dropLast(2)
+
+/** 쓴 그대로의 숫자: 끝 0 · 소수점 없이(20 → "20", 107.5 → "107.5") */
+internal fun plain(v: Double) = Fmt.nc(v).removeSuffix(".")

@@ -176,6 +176,30 @@ class GeometricVerifyTest {
         rep.finish()
     }
 
+    /** 내경 라운드: 외경 도면을 이 파일에서 따로 뒤집은 구멍, 재료는 위. 막힘 · 관통 */
+    @Test
+    fun roundInner() {
+        val rep = Report("내경 라운드R")
+        // 설계 문서의 내경 예(TYPE 3 Ø20 입구 깊이 10, TYPE 5 Ø40 → Ø30 막힘 · 관통)와 외경 대표값을 뒤집은 것
+        val fixed = listOf(
+            buildRound(3, 12.5, d1 = 20.0, c1 = 1.0, blank = "l1", leg = 10.0, inner = true),
+            buildRound(5, 25.0, d1 = 30.0, d2 = 40.0, l1 = 6.0, blank = "l2", inner = true),
+            buildRound(5, 25.0, d1 = 30.0, d2 = 40.0, l1 = 6.0, blank = "l2", inner = true, through = true),
+            buildRound(2, 8.0, d1 = 10.0, l1 = 5.0, c1 = 0.5, blank = "l2", inner = true),
+            buildRound(2, 8.0, d1 = 10.0, l1 = 5.0, c1 = 0.5, ref = L2Ref.A, inner = true),
+            buildRound(4, 10.0, d1 = 12.0, c1 = 0.5, blank = "l1", inner = true),
+            buildRound(5, 15.0, d1 = 10.0, d2 = 24.0, l1 = 4.0, c1 = 0.5, c2 = 1.0, blank = "l2", inner = true),
+            buildRound(6, 10.0, d1 = 8.0, d2 = 30.0, l1 = 3.0, l2 = 7.165, c1 = 0.5, c2 = 0.5, inner = true),
+            buildRound(6, 10.0, d1 = 8.0, d2 = 30.0, l1 = 3.0, l2 = 7.165, c1 = 0.5, c2 = 0.5, inner = true, through = true),
+            buildRound(4, 10.0, d1 = 2.0, c1 = 0.5, inner = true),
+            buildRound(2, 19.0, d1 = 3.0, l1 = 5.0, c1 = 0.3, inner = true),
+        )
+        for (c in fixed) for (r in listOf(0.2, 0.4, 0.8, 1.2)) runRound(rep, c.withNose(r))
+        val rnd = Random(4343)
+        repeat(600) { runRound(rep, randomRound(rnd.nextInt(2, 7), rnd, inner = true)) }
+        rep.finish()
+    }
+
     @Test
     fun arc3() {
         val rep = Report("3점호")
@@ -361,18 +385,21 @@ class GeometricVerifyTest {
         val warned = TaperWarning.CONCAVE_R_LE_NOSE in res.warnings
         if (warned != small.isNotEmpty()) rep.bad(id, "오목경고", "CONCAVE_R_LE_NOSE=$warned, R ≤ r 인 오목 원호 $small")
         // 직접 보정 NC 는 진입 · 형상 · 후퇴. 시작·끝은 인선을 그 좌표에 둬서 노즈 접점이 바깥 끝에서 r 까지 안쪽일 수 있다.
-        // 시작점을 비우면 시작 요소는 깎지 않는다(진입점에서 첫 꺾임점′ 으로)
+        // 시작점을 비우면 시작 요소는 깎지 않는다(진입점에서 첫 꺾임점′ 으로). 끝점을 비우면 끝 요소도 깎지 않는다(마지막 꺾임점′ 에서 후퇴)
+        val skip = (if (sol.fromStart) emptySet() else setOf(0)) + (if (sol.toEnd) emptySet() else setOf(drawing.lastIndex))
         checkPath(
             rep, id, drawing, reg, leftMat, sol.program.segs.map(::el), sol.center.segs.map(::el), sol.tip, r,
-            sol.ncG40, ncSkip = if (sol.fromStart) emptySet() else setOf(0), looseApproach = false, legTrim = r, exitMove = true,
+            sol.ncG40, ncSkip = skip, looseApproach = false, legTrim = r, exitMove = true,
         ) { it in small && warned }
         checkEnds(rep, id, sol, drawing, sign, r)
-        checkG4x(rep, id, sol.ncG41G42, drawing, reg, expSide, sol.tip, r, sol.tip == physicalTip(inner, reverse), sol.fromStart)
+        checkG4x(rep, id, sol.ncG41G42, drawing, reg, expSide, sol.tip, r, sol.tip == physicalTip(inner, reverse), sol.fromStart, sol.toEnd)
     }
 
     /**
      * 직접 보정 NC 의 시작·끝(진입 G00 다음 첫 형상 점, 후퇴 앞 점)이 인선을 시작·끝점 좌표에 둔 점인지:
      * 앞뒤 요소를 공구 쪽으로 r 밀고 팁 벡터를 더한 선 위에서 시작·끝점에 내린 발. 시작점을 비웠으면 끝만 본다.
+     * 끝점을 비웠으면 끝 요소의 보정선 위, 마지막 꺾임점 곁(끝 요소에 노즈가 닿기 시작하는 자리)에서 멈춰야 한다 —
+     * 경사가 끝까지 깎였는지는 [checkPath] 가 본다.
      */
     private fun checkEnds(rep: Report, id: String, sol: TaperSolution, drawing: List<El>, sign: Double, r: Double) {
         val tv = tipVec(sol.tip, r)
@@ -389,17 +416,30 @@ class GeometricVerifyTest {
         val b = pts[1]
         val onEntry = abs((b - a).unit() cross (s0 - a)) <= NC_TOL && ((s0 - a) dot (b - s0)) >= -NC_TOL
         if (sol.fromStart && (b - s0).len > NC_TOL && !onEntry) rep.bad(id, "시작점", "NC 첫 형상 점 $b, 인선을 시작점에 둔 점은 $s0  NC=${sol.ncG40}")
-        if ((pts[pts.size - 2] - e0).len > NC_TOL) rep.bad(id, "끝점", "NC 끝 점 ${pts[pts.size - 2]}, 인선을 끝점에 둔 점은 $e0  NC=${sol.ncG40}")
+        val end = pts[pts.size - 2]
+        if (sol.toEnd) {
+            if ((end - e0).len > NC_TOL) rep.bad(id, "끝점", "NC 끝 점 $end, 인선을 끝점에 둔 점은 $e0  NC=${sol.ncG40}")
+        } else {
+            val l = drawing.last()
+            val u = l.tangent(0.0)
+            val off = l.leftNormal(0.0) * (sign * r) + tv
+            // 보정점은 요소를 따라 꼭짓점에서 많아야 r + |팁 벡터| 밀린다
+            val along = (end - (l.a + off)) dot u
+            if (abs(u cross (end - (l.a + off))) > NC_TOL || along > (1 + sqrt(2.0)) * r + NC_TOL) {
+                rep.bad(id, "끝점", "끝점을 비웠는데 NC 끝 점 $end 가 끝 요소 보정선의 처음이 아니다  NC=${sol.ncG40}")
+            }
+        }
     }
 
     /**
      * G41/G42 프로그램: 첫 줄 주석 (R… T…) = 노즈R·팁, G00 진입 → G4x G01 시작점(길이 ≥ r) → 형상(도면 좌표) → G40 G00 후퇴(길이 ≥ r).
      * 형상 줄은 도면 위에 있고 도면의 꼭짓점을 모두 지난다(시작점을 비웠으면 시작 요소는 빼고). 첫 형상 줄만은 시작 요소의 연장선 위여도 된다
      * (공구 쪽으로 띄운 G00 점에서 그 선에 직각으로 들어간 뒤 선을 따라가는 줄). 표준 팁이면 진입점·후퇴점(G40 상태의 인선)에서 노즈가 재료 밖이다.
+     * 끝점을 비웠으면(toEnd = false) 끝 요소는 프로그램에 없다.
      */
     private fun checkG4x(
         rep: Report, id: String, nc: List<String>, drawing: List<El>, reg: Region, side: Side, tip: Int, r: Double, standard: Boolean,
-        fromStart: Boolean,
+        fromStart: Boolean, toEnd: Boolean,
     ) {
         val m = Regex("""\(R([\d.]+) T(\d)\)""").matchEntire(nc.firstOrNull() ?: "")
         if (m == null || abs(m.groupValues[1].toDouble() - r) > 0.0005 || m.groupValues[2].toInt() != tip) {
@@ -423,8 +463,9 @@ class GeometricVerifyTest {
             if (dev > NC_TOL && !onLead) rep.bad(id, "G41/G42", "형상 줄이 도면에서 ${fmt(dev)} mm 벗어남  NC=$nc")
         }
         val ncPts = listOf(shape.first().a) + shape.map { it.b }
-        // 시작점을 비웠으면 시작 요소는 프로그램에 없다
-        for (q in (if (fromStart) listOf(drawing.first().a) else emptyList()) + drawing.drop(if (fromStart) 0 else 1).map { it.b }) {
+        // 시작·끝점을 비웠으면 그 요소는 프로그램에 없다
+        val cut = drawing.drop(if (fromStart) 0 else 1).dropLast(if (toEnd) 0 else 1)
+        for (q in (if (fromStart) listOf(drawing.first().a) else emptyList()) + cut.map { it.b }) {
             if (ncPts.none { (it - q).len <= NC_TOL }) rep.bad(id, "G41/G42", "도면 꼭짓점 $q 가 NC 에 없다  NC=$nc")
         }
         if (standard) {
@@ -435,7 +476,7 @@ class GeometricVerifyTest {
         }
     }
 
-    private class RoundCase(
+    internal class RoundCase(
         val input: RoundInput, val outline: List<El>, val bigR: Double, val zc: Double,
         val expect: Map<String, Double>, val corners: List<Double>,
     ) {
@@ -446,10 +487,10 @@ class GeometricVerifyTest {
      * 설계 문서 TYPE 표의 식으로 이론 윤곽(모서리 R 전)과 채워질 값을 만든다. 정해지는 값(TYPE 2 의 L2, 3·4 의 L, 5 의 L2)은
      * 여기서 계산하고, [blank] 이름의 칸을 비워 넣는다.
      */
-    private fun buildRound(
+    internal fun buildRound(
         type: Int, bigR: Double, d1: Double = 0.0, d2: Double = 0.0, l1: Double = 0.0, l2: Double = 0.0,
         c1: Double = 0.0, c2: Double = 0.0, ref: L2Ref = L2Ref.B, blank: String? = null,
-        r: Double = 0.4, tip: Int = 3, zClear: Double = 1.0, leg: Double = 5.0,
+        r: Double = 0.4, tip: Int? = null, zClear: Double = 1.0, leg: Double = 5.0, inner: Boolean = false, through: Boolean = false,
     ): RoundCase {
         val o = V(0.0, 0.0)
         val outline: List<El>
@@ -507,20 +548,37 @@ class GeometricVerifyTest {
                 exp = mapOf("mainR" to bigR, "d1" to d1, "d2" to d2, "l1" to l1, "l2" to l2)
             }
         }
+        // 내경: 2 는 끝 면만 뺀다. 3~6 은 외경 끝(깊이 K)이 구멍 입구 Z0 이 되게 Z 를 뒤집고(뒤집으면 시계 ↔ 반시계) 거꾸로 간다.
+        // 관통은 바닥 면을 뺀다
+        val depth = -outline.last().b.z
+        fun m(p: V) = V(-p.z - depth, p.x)
+        val shape = when {
+            !inner -> outline
+            type == 2 -> outline.drop(1)
+            else -> outline.reversed().map { e ->
+                when (val q = e.reversed()) {
+                    is Ln -> Ln(m(q.a), m(q.b))
+                    is Ac -> Ac(m(q.a), m(q.b), m(q.c), !q.cw)
+                }
+            }.let { if (through) it.dropLast(1) else it }
+        }
         fun pick(k: String) = if (k == blank) null else exp[k]
         val inp = RoundInput(
             type = type, mainR = pick("mainR"), cornerR1 = c1, cornerR2 = if (type >= 5) c2 else null,
             d1 = pick("d1"), d2 = pick("d2"), l1 = pick("l1"), l2 = pick("l2"), l2Ref = ref,
-            noseR = r, tip = tip, zClear = zClear, legLen = leg,
+            noseR = r, tip = tip, zClear = zClear, legLen = leg, inner = inner, through = through,
         )
-        return RoundCase(inp, outline, bigR, zc, exp, if (type >= 5) listOf(c1, c2) else listOf(c1))
+        val center = if (inner && type != 2) -zc - depth else zc
+        return RoundCase(inp, shape, bigR, center, exp, if (type >= 5) listOf(c1, c2) else listOf(c1))
     }
 
-    private fun randomRound(type: Int, rnd: Random): RoundCase {
+    internal fun randomRound(type: Int, rnd: Random, inner: Boolean = false): RoundCase {
         fun cr() = if (rnd.nextInt(10) < 3) 0.0 else r3(rnd.nextDouble(0.05, 2.5))
         fun rr(a: Double, b: Double) = r3(rnd.nextDouble(a, b))
         val r = noseR(rnd)
-        val tip = if (rnd.nextInt(5) == 0) rnd.nextInt(0, 10) else 3
+        val tip = if (rnd.nextInt(5) == 0) rnd.nextInt(0, 10) else null
+        // 내경 5 · 6 은 넷에 하나 관통
+        val through = inner && type >= 5 && rnd.nextInt(4) == 0
         val zClear = rr(0.0, 3.0)
         val leg = rr(1.0, 8.0)
         fun blankOf(vararg k: String) = if (rnd.nextInt(k.size + 1) == 0) null else k[rnd.nextInt(k.size)]
@@ -534,18 +592,24 @@ class GeometricVerifyTest {
                 buildRound(
                     2, rr(d1 / 2 + 0.3, d1 / 2 + 20), d1 = d1, l1 = rr(0.5, 12.0), c1 = cr(),
                     ref = if (rnd.nextBoolean()) L2Ref.A else L2Ref.B, blank = blankOf("mainR", "d1", "l2"),
-                    r = r, tip = tip, zClear = zClear, leg = leg,
+                    r = r, tip = tip, zClear = zClear, leg = leg, inner = inner,
                 )
             }
             3 -> {
                 val bigR = rr(2.0, 40.0)
                 val half = rnd.nextInt(10) == 0 // 반구: 원통과 접해서 이어진다
                 val d1 = if (half) 2 * bigR else rr(0.6 * bigR, 2 * bigR)
-                buildRound(3, bigR, d1 = d1, c1 = cr(), blank = if (half) null else blankOf("mainR", "d1", "l1"), r = r, tip = tip, zClear = zClear, leg = leg)
+                buildRound(
+                    3, bigR, d1 = d1, c1 = cr(), blank = if (half) null else blankOf("mainR", "d1", "l1"), r = r, tip = tip, zClear = zClear, leg = leg,
+                    inner = inner,
+                )
             }
             4 -> {
                 val bigR = rr(2.0, 40.0)
-                buildRound(4, bigR, d1 = rr(0.6 * bigR, 1.9 * bigR), c1 = cr(), blank = blankOf("mainR", "d1", "l1"), r = r, tip = tip, zClear = zClear, leg = leg)
+                buildRound(
+                    4, bigR, d1 = rr(0.6 * bigR, 1.9 * bigR), c1 = cr(), blank = blankOf("mainR", "d1", "l1"), r = r, tip = tip, zClear = zClear, leg = leg,
+                    inner = inner,
+                )
             }
             5 -> {
                 val bigR = rr(3.0, 40.0)
@@ -555,6 +619,7 @@ class GeometricVerifyTest {
                 buildRound(
                     5, bigR, d1 = d1, d2 = d2, l1 = rr(1.0, 10.0), c1 = cr(), c2 = cr(),
                     blank = if (tangent) null else blankOf("mainR", "d2", "d1", "l2"), r = r, tip = tip, zClear = zClear, leg = leg,
+                    inner = inner, through = through,
                 )
             }
             else -> {
@@ -569,7 +634,10 @@ class GeometricVerifyTest {
                     if (l2 < 0.1 || abs(dz) >= bigR - 0.01) continue
                     val top = if (dz <= 0) bigR else sqrt(bigR * bigR - dz * dz)
                     val d2 = r3(2 * (top + rnd.nextDouble(0.3, 10.0)))
-                    c = buildRound(6, bigR, d1 = d1, d2 = d2, l1 = l1, l2 = l2, c1 = cr(), c2 = cr(), r = r, tip = tip, zClear = zClear, leg = leg)
+                    c = buildRound(
+                        6, bigR, d1 = d1, d2 = d2, l1 = l1, l2 = l2, c1 = cr(), c2 = cr(), r = r, tip = tip, zClear = zClear, leg = leg,
+                        inner = inner, through = through,
+                    )
                 }
                 c
             }
@@ -597,7 +665,7 @@ class GeometricVerifyTest {
         }
         val drawing = sol.drawing.segs.map(::el)
         // 도면 윤곽 점검: 꼭짓점은 이론 윤곽 위, 모서리 원호는 입력 R 이고 이웃과 접한다, 주 원호는 축 위 중심
-        if ((drawing.first().a - V(0.0, 0.0)).len > 1e-9) rep.bad(id, "도면", "시작이 (Z0, X0) 가 아니다: ${drawing.first().a}")
+        if ((drawing.first().a - rc.outline.first().a).len > 1e-9) rep.bad(id, "도면", "시작 ${drawing.first().a} ≠ ${rc.outline.first().a}")
         if ((drawing.last().b - rc.outline.last().b).len > 1e-6) rep.bad(id, "도면", "끝 ${drawing.last().b} ≠ ${rc.outline.last().b}")
         for ((k, e) in drawing.withIndex()) {
             for (p in listOf(e.a, e.b)) {
@@ -614,16 +682,28 @@ class GeometricVerifyTest {
             if (prev != null && (prev.tangent(1.0) - e.tangent(0.0)).len > 1e-6) rep.bad(id, "도면", "${k}번 모서리 원호가 앞 요소와 접하지 않는다")
             if (next != null && (e.tangent(1.0) - next.tangent(0.0)).len > 1e-6) rep.bad(id, "도면", "${k}번 모서리 원호가 뒤 요소와 접하지 않는다")
         }
-        val reg = regionOf(drawing, materialBelow = true)
+        val reg = regionOf(drawing, materialBelow = !inp.inner)
         val leftMat = leftIsMaterial(reg, drawing)
         val sign = if (leftMat) -1.0 else 1.0
-        if (sol.tip != inp.tip) rep.bad(id, "팁", "팁 ${sol.tip} ≠ 입력 ${inp.tip}")
+        val expTip = inp.tip ?: physicalTip(inp.inner, false)
+        if (sol.tip != expTip) rep.bad(id, "팁", "팁 ${sol.tip}, 입력 ${inp.tip} · 바이트가 깎는 모서리로 본 팁 $expTip")
         val expSide = if (leftMat) Side.G42 else Side.G41
         if (sol.side != expSide) rep.bad(id, "보정쪽", "${sol.side}, 재료 반대쪽은 $expSide")
         val r = inp.noseR
         val small = drawing.indices.filter { k -> concave(drawing[k], sign) && (drawing[k] as Ac).r <= r + 1e-9 }.toSet()
         val warned = RoundWarning.CONCAVE_R_LE_NOSE in res.warnings
         if (warned != small.isNotEmpty()) rep.bad(id, "오목경고", "CONCAVE_R_LE_NOSE=$warned, R ≤ r 인 오목 원호 $small")
+        if (inp.inner) {
+            // 구멍은 축 대칭: 노즈 원이 축 너머 맞은편 벽(도면을 X 로 뒤집은 것, 재료는 아래)도 파지 않는다
+            val far = drawing.map { e ->
+                when (e) {
+                    is Ln -> Ln(V(e.a.z, -e.a.x), V(e.b.z, -e.b.x))
+                    is Ac -> Ac(V(e.a.z, -e.a.x), V(e.b.z, -e.b.x), V(e.c.z, -e.c.x), !e.cw)
+                }
+            }
+            val (cl, at) = clearance(sol.program.segs.map(::el), tipVec(sol.tip, r), r, regionOf(far, materialBelow = true))
+            if (cl < -TOL) rep.bad(id, "맞은편벽", "노즈 원이 맞은편 벽으로 ${fmt(-cl)} mm 들어감, 노즈 중심 $at")
+        }
         checkPath(
             rep, id, drawing, reg, leftMat, sol.program.segs.map(::el), sol.center.segs.map(::el), sol.tip, r,
             sol.nc, ncSkip = emptySet(), looseApproach = false,
@@ -644,15 +724,22 @@ class GeometricVerifyTest {
         val sign = if (leftMat) -1.0 else 1.0
         val sol = res.solution
         val tooSmall = concave(arc, sign) && arc.r < r - 1e-9
+        // 내경: 노즈 중심(원호를 공구 쪽으로 r 민 것)이 축 아래로 가면 노즈가 맞은편 벽을 판다 — 멈춰야 한다. 경계 ±1e-7 은 둘 다 된다
+        val off = Ac(arc.a + arc.leftNormal(0.0) * (sign * r), arc.b + arc.leftNormal(1.0) * (sign * r), arc.c, arc.cw)
+        val bottom = V(off.c.z, off.c.x - off.r)
+        val lowest = min(min(off.a.x, off.b.x), if (off.dist(bottom) < 1e-9) bottom.x else Double.POSITIVE_INFINITY)
+        val crosses = inner && !tooSmall && lowest < -1e-7
         if (sol == null) {
             rep.stop(res.warnings.toString())
-            if (!(tooSmall && res.warnings == listOf(RoundWarning.NOSE_UNREACHABLE))) {
-                rep.bad(id, "예상밖멈춤", "${res.warnings}, 오목 R<r=$tooSmall (R ${arc.r})")
+            val axis = inner && !tooSmall && lowest < 1e-7
+            if (!((tooSmall || axis) && res.warnings == listOf(RoundWarning.NOSE_UNREACHABLE))) {
+                rep.bad(id, "예상밖멈춤", "${res.warnings}, 오목 R<r=$tooSmall (R ${arc.r}), 노즈 중심 가장 낮은 X ${fmt(2 * lowest)}")
             }
             return
         }
         rep.solved++
         if (tooSmall) rep.bad(id, "멈춤없음", "오목 R ${arc.r} < 노즈R $r 인데 숫자를 냈다")
+        if (crosses) rep.bad(id, "멈춤없음", "내경인데 노즈 중심이 축 아래(X${fmt(2 * lowest)})로 간다")
         val d = sol.drawing.segs.singleOrNull()?.let(::el) as? Ac
         if (d == null || (d.c - arc.c).len > 1e-6 || d.cw != arc.cw || (d.a - p1).len > 1e-9 || (d.b - p3).len > 1e-9) {
             rep.bad(id, "도면", "도면 원호 ${sol.drawing.segs} ≠ 세 점의 원호 중심 ${arc.c} cw=${arc.cw}")
@@ -988,7 +1075,7 @@ private fun physicalTip(inner: Boolean, reverse: Boolean): Int =
 // -------------------------------------------------------------------- 기하(구현과 따로)
 
 /** 점·벡터. x 는 반경 */
-private data class V(val z: Double, val x: Double) {
+internal data class V(val z: Double, val x: Double) {
     operator fun plus(o: V) = V(z + o.z, x + o.x)
     operator fun minus(o: V) = V(z - o.z, x - o.x)
     operator fun times(k: Double) = V(z * k, x * k)
@@ -1013,7 +1100,7 @@ private fun angOf(v: V) = atan2(v.x, v.z)
 
 private fun polar(c: V, r: Double, a: Double) = V(c.z + r * cos(a), c.x + r * sin(a))
 
-private sealed interface El {
+internal sealed interface El {
     val a: V
     val b: V
     val length: Double
@@ -1033,7 +1120,7 @@ private sealed interface El {
     fun reversed(): El
 }
 
-private class Ln(override val a: V, override val b: V) : El {
+internal class Ln(override val a: V, override val b: V) : El {
     private val d = b - a
     override val length = d.len
     override fun at(t: Double) = if (t >= 1) b else a + d * t
@@ -1058,7 +1145,7 @@ private class Ln(override val a: V, override val b: V) : El {
 }
 
 /** cw = 이 그림(Z 오른쪽, X 위)에서 시계 */
-private class Ac(override val a: V, override val b: V, val c: V, val cw: Boolean) : El {
+internal class Ac(override val a: V, override val b: V, val c: V, val cw: Boolean) : El {
     val r = (a - c).len
     private val s = if (cw) -1.0 else 1.0
     private val a0 = angOf(a - c)
@@ -1127,7 +1214,7 @@ private fun circum(p1: V, p2: V, p3: V): V {
 }
 
 /** 닫힌 고리로 둘러싼 재료 */
-private class Region(val loop: List<El>) {
+internal class Region(val loop: List<El>) {
     fun inside(p: V) = abs(loop.sumOf { it.wind(p) }) > PI
     fun dist(p: V) = loop.minOf { it.dist(p) }
     fun sd(p: V): Double {
@@ -1140,7 +1227,7 @@ private class Region(val loop: List<El>) {
  * 열린 도면 윤곽으로 재료 영역을 만든다: 양 끝을 접선 방향으로 큰 원까지 늘이고 큰 원호로 닫는다.
  * 닫는 방향은 외경이면 아주 아래 점, 내경이면 아주 위 점이 안에 들도록 고른다(Z 가 한쪽으로만 가는 선반 윤곽).
  */
-private fun regionOf(drawing: List<El>, materialBelow: Boolean): Region {
+internal fun regionOf(drawing: List<El>, materialBelow: Boolean): Region {
     val pts = drawing.flatMap { listOf(it.a, it.b) }
     val o = V(pts.sumOf { it.z } / pts.size, pts.sumOf { it.x } / pts.size)
     fun far(p: V, u: V): V {
@@ -1322,7 +1409,7 @@ private fun sweptGap(q: V, a: V, b: V, tr: V, best: Double): Double {
 private val NC_LINE = Regex("""(G0[0-3])((?: [XZR]-?\d+\.\d*)+)""")
 
 /** G00/G01 직선, G02/G03 끝점 R 원호. 빠진 축은 앞 줄 값(모달). X 는 직경 → 반경 */
-private fun parseNc(lines: List<String>): List<El> {
+internal fun parseNc(lines: List<String>): List<El> {
     var z: Double? = null
     var x: Double? = null
     val out = mutableListOf<El>()
@@ -1351,7 +1438,7 @@ private fun parseNc(lines: List<String>): List<El> {
 }
 
 /** R 지령(180° 이하) 원호. G02 = 이 그림에서 시계 → 중심은 현 진행 방향 오른쪽 */
-private fun arcR(a: V, b: V, rr: Double, cw: Boolean): Ac {
+internal fun arcR(a: V, b: V, rr: Double, cw: Boolean): Ac {
     val ch = b - a
     val h = ch.len / 2
     val d = sqrt(max(rr * rr - h * h, 0.0))
@@ -1413,7 +1500,7 @@ private fun bulge(p: V, q: V, ratio: Double): Ac {
 
 // -------------------------------------------------------------------- 결과 모으기
 
-private class Report(val name: String) {
+internal class Report(val name: String) {
     private val fails = linkedMapOf<String, MutableList<String>>()
     private val failedCases = mutableSetOf<String>()
     var cases = 0
