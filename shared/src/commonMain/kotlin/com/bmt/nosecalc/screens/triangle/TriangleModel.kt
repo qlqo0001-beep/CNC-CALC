@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
+import com.bmt.nosecalc.calc.MAX_MM
 import com.bmt.nosecalc.calc.TriangleInput
 import com.bmt.nosecalc.calc.TriangleSolution
 import com.bmt.nosecalc.calc.TriangleWarning
@@ -80,7 +81,8 @@ internal class TriangleState(
 internal fun triangleWarningText(w: TriangleWarning): String = when (w) {
     TriangleWarning.MISSING_INPUT -> "값 두 개를 넣으세요 — 변 하나는 꼭 포함."
     TriangleWarning.ANGLES_ONLY -> "각도 둘만으로는 크기를 알 수 없습니다(A\u00A0+\u00A0B\u00A0=\u00A090° 라 사실상 하나). 밑변 · 높이 · 빗변 가운데 하나를 넣으세요."
-    TriangleWarning.BAD_INPUT -> "입력이 잘못됐습니다. 밑변 · 높이 · 빗변은 0 보다 커야 합니다."
+    TriangleWarning.BAD_INPUT ->
+        "입력이 잘못됐습니다. 밑변 · 높이 · 빗변은 0 보다 크고 ${MAX_MM.toInt()}\u00A0mm 이하여야 합니다(각도가 0° 나 90° 에 너무 가까우면 계산한 변이 그보다 길어집니다)."
     TriangleWarning.BAD_ANGLE -> "각도는 0° 보다 크고 90° 보다 작아야 합니다."
     TriangleWarning.HYPOTENUSE_TOO_SHORT -> "빗변은 밑변 · 높이보다 길어야 합니다."
     TriangleWarning.CONTRADICTION -> "넣은 값이 서로 맞지 않습니다(길이 0.001 mm · 각도 0.001° 넘게). 셋 이상 넣었다면 하나를 비우세요."

@@ -17,7 +17,7 @@ enum class TriangleWarning {
     /** 각도 둘만 넣었다 — 크기를 정할 수 없다 */
     ANGLES_ONLY,
 
-    /** 길이 ≤ 0, 숫자가 아님 */
+    /** 길이 ≤ 0, 숫자가 아님, 변(넣은 값 · 계산값)이 [MAX_MM] 를 넘음 */
     BAD_INPUT,
 
     /** 각이 0° 이하·90° 이상 */
@@ -68,7 +68,7 @@ object RightTriangle {
         val sides = listOf(i.a, i.b, i.c)
         val angles = listOf(i.angleA, i.angleB)
         val given = (sides + angles).filterNotNull()
-        if (given.any { !it.isFinite() } || sides.any { it != null && it <= 0 }) return stop(TriangleWarning.BAD_INPUT)
+        if (given.any { !it.isFinite() } || sides.any { it != null && it <= 0 } || tooBig(i.a, i.b, i.c)) return stop(TriangleWarning.BAD_INPUT)
         if (angles.any { it != null && (it <= 0 || it >= 90) }) return stop(TriangleWarning.BAD_ANGLE)
         if (given.size < 2) return stop(TriangleWarning.MISSING_INPUT)
         if (sides.all { it == null }) return stop(TriangleWarning.ANGLES_ONLY)
@@ -90,6 +90,9 @@ object RightTriangle {
             }
         }
         val hyp = hypot(a, b)
+        // 각이 0° · 90° 에 아주 가까우면 계산된 변이 한도를 넘는다 — 큰 수가 Fmt 에서 잘려 틀린 값으로 보이지 않게 멈춘다.
+        // 넣은 빗변은 위에서 봤다(다시 구한 hyp 는 부동소수 오차만큼 넘을 수 있어 한도 그대로인 빗변을 막지 않게)
+        if (tooBig(a, b) || (c == null && tooBig(hyp))) return stop(TriangleWarning.BAD_INPUT)
         val degA = atan2(b, a) * 180 / PI
         val degB = 90 - degA
         val off = listOf(i.a to a, i.b to b, c to hyp).any { (g, v) -> g != null && abs(g - v) > LEN_TOL } ||

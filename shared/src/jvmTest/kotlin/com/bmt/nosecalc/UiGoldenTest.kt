@@ -124,6 +124,9 @@ class UiGoldenTest {
         triangle("triangle-swap", TriangleState(mapOf("b" to "12", "c" to "13"), baseIsZ = false))
         triangle("triangle-steep", TriangleState(mapOf("a" to "3", "b" to "12")))
         triangle("triangle-error", TriangleState(mapOf("angA" to "30", "angB" to "60")))
+        // 12자리 · 89.999° 는 한도(MAX_MM)에서 멈춘다(예전엔 Long 끝값으로 잘린 숫자), 3-4-5 셋은 서로 맞아 풀린다
+        triangle("triangle-huge", TriangleState(mapOf("a" to "999999999999", "angA" to "89.999")))
+        triangle("triangle-three", TriangleState(mapOf("a" to "3", "b" to "4", "c" to "5")))
     }
 
     /** SlopeScreen 의 입력 → SlopeForm 그대로 */

@@ -225,6 +225,14 @@ fun LabeledValue(
     }
 }
 
+/**
+ * 한글 어절이 줄 끝에서 쪼개지지 않게(Compose 는 한글 음절 사이 어디서나 줄을 바꾼다) 한글과 그에 붙은 영문 · 숫자 · 닫는 괄호 사이에
+ * 낱말 이음(\u2060)을 넣는다 — 줄은 띄어쓰기에서만 바뀐다("3번" · "노즈R" · "휠)으로" 도 한 덩이). 안드로이드 · PC 같게
+ */
+internal fun keepWords(s: String): String = s.replace(hangulJoin, "\u2060")
+
+private val hangulJoin = Regex("(?<=[가-힣])(?=[가-힣A-Za-z0-9])|(?<=[A-Za-z0-9)\\]])(?=[가-힣])")
+
 /** 한 줄 안내 + '자세히' 단추(48dp 높이): 누르면 긴 설명을 편다. 처음엔 접혀 있고, 다른 화면에 다녀와도 그대로 */
 @Composable
 fun ExpandableHint(short: String, long: String, modifier: Modifier = Modifier) {
@@ -232,7 +240,7 @@ fun ExpandableHint(short: String, long: String, modifier: Modifier = Modifier) {
     var open by rememberSaveable { mutableStateOf(false) }
     Column(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(short, Modifier.weight(1f), color = c.textBody, fontSize = 13.sp, lineHeight = 19.sp)
+            Text(keepWords(short), Modifier.weight(1f), color = c.textBody, fontSize = 13.sp, lineHeight = 19.sp)
             Row(
                 Modifier
                     .heightIn(min = 48.dp)
@@ -246,7 +254,7 @@ fun ExpandableHint(short: String, long: String, modifier: Modifier = Modifier) {
                 Icon(AppIcons.ChevronDown, null, Modifier.size(14.dp).rotate(if (open) 180f else 0f), tint = c.tealDeep)
             }
         }
-        if (open) Text(long, style = AppType.caption, color = c.textMuted)
+        if (open) Text(keepWords(long), style = AppType.caption, color = c.textMuted)
     }
 }
 
@@ -384,7 +392,7 @@ fun WarningBanner(
                 if (headline != null) {
                     Text(headline, Modifier.padding(bottom = 2.dp), color = rc.label, fontSize = 14.sp, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
                 }
-                Text(text, color = rc.value, fontSize = 13.5.sp, lineHeight = 19.sp)
+                Text(keepWords(text), color = rc.value, fontSize = 13.5.sp, lineHeight = 19.sp)
                 if (actions.isNotEmpty()) {
                     FlowRow(
                         Modifier.padding(top = 10.dp),

@@ -617,7 +617,8 @@ object HolderCheck {
 - 변 둘이 있으면 변으로(빗변과 변이면 √(c² − 변²)), 아니면 변 하나와 각으로 푼다. 각은 늘 atan2(b, a) 로 다시 구한다.
   셋 이상 넣으면 맞는지 본다(길이 0.001 mm, 각 0.001°) → `CONTRADICTION`.
 - 좌표 연동: 밑변 = Z, 높이 = X 반경으로 보고 `dz` = a, `dxDia` = 2b. `baseIsZ = false` 면 반대(dz = b, dxDia = 2a).
-- 경고(모두 계산을 멈춤): `MISSING_INPUT`(둘 미만), `ANGLES_ONLY`, `BAD_INPUT`(길이 ≤ 0, 숫자 아님), `BAD_ANGLE`(0° 이하·90° 이상),
+- 경고(모두 계산을 멈춤): `MISSING_INPUT`(둘 미만), `ANGLES_ONLY`, `BAD_INPUT`(길이 ≤ 0, 숫자 아님, 넣은 변이나 계산한 변이 `MAX_MM` 넘음 —
+  0° · 90° 에 아주 가까운 각. 넣은 빗변은 다시 구한 값이 아니라 넣은 값으로 본다: 한도 그대로인 빗변이 부동소수 오차로 막히지 않게), `BAD_ANGLE`(0° 이하·90° 이상),
   `HYPOTENUSE_TOO_SHORT`(빗변 ≤ 변), `CONTRADICTION`.
 - `RightTriangleTest` 가 다섯 값의 모든 둘 조합 × 크기 3 × 각 7(1°~89°)을 sin·cos 로 만든 정답과 맞춰 본다.
 

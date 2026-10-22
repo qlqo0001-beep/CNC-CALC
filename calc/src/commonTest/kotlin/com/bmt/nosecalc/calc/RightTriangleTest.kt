@@ -111,4 +111,21 @@ class RightTriangleTest {
         stops(TriangleWarning.BAD_INPUT, RightTriangle.calc(TriangleInput(a = Double.NaN, b = 4.0)))
         stops(TriangleWarning.BAD_INPUT, RightTriangle.calc(TriangleInput(a = 3.0, b = Double.POSITIVE_INFINITY)))
     }
+
+    /** 변이 MAX_MM(10 m)를 넘으면 멈춘다 — 넣은 값(12자리)도, 90° 가까운 각으로 계산된 변도. 한도 그대로는 풀린다 */
+    @Test
+    fun overLimit() {
+        stops(TriangleWarning.BAD_INPUT, RightTriangle.calc(TriangleInput(a = 999999999999.0, angleA = 89.999)))
+        stops(TriangleWarning.BAD_INPUT, RightTriangle.calc(TriangleInput(a = 999999999999.0)))
+        // 밑변 10 · 89.999° → 높이 ≈ 572958 mm
+        stops(TriangleWarning.BAD_INPUT, RightTriangle.calc(TriangleInput(a = 10.0, angleA = 89.999)))
+        // 높이 10 · 0.001° → 밑변 ≈ 572958 mm
+        stops(TriangleWarning.BAD_INPUT, RightTriangle.calc(TriangleInput(b = 10.0, angleA = 0.001)))
+        // 빗변만 넘는다: 8000² + 8000² → 11314
+        stops(TriangleWarning.BAD_INPUT, RightTriangle.calc(TriangleInput(a = 8000.0, b = 8000.0)))
+        stops(TriangleWarning.BAD_INPUT, RightTriangle.calc(TriangleInput(a = 30.0, b = 40.0, c = 10_000.001)))
+        near(10_000.0, ok(RightTriangle.calc(TriangleInput(a = 6_000.0, b = 8_000.0))).c, "c = 한도")
+        // 빗변 = 한도: 다시 구한 빗변이 부동소수 오차로 한도를 살짝 넘는 각(약 5%)에서도 풀린다
+        for (k in 1 until 900) assertNotNull(RightTriangle.calc(TriangleInput(c = MAX_MM, angleA = k / 10.0)).solution, "c = 한도, A = ${k / 10.0}")
+    }
 }

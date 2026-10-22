@@ -201,7 +201,7 @@ class ScreenShotTest {
             listOf(roundWarningText(RoundWarning.CONCAVE_R_LE_NOSE, 2) to WarnLevel.Warn) +
             listOf(false, true).map { roundWarningText(RoundWarning.AGAINST_TOOL, 2, inner = it) to WarnLevel.Info }
         val triangle = TriangleWarning.entries.map { triangleWarningText(it) to if (it == TriangleWarning.MISSING_INPUT) WarnLevel.Info else WarnLevel.Error }
-        Shots.both("texts-warn-round", heightDp = 2680, frames = 12) { AppHost(it) { Texts(listOf("라운드 R" to round, "직각삼각형" to triangle)) } }
+        Shots.both("texts-warn-round", heightDp = 2800, frames = 12) { AppHost(it) { Texts(listOf("라운드 R" to round, "직각삼각형" to triangle)) } }
     }
 
     /**

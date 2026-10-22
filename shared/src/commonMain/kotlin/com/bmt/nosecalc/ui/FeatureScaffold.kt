@@ -308,7 +308,7 @@ private fun HelpBlock(s: HelpSection) {
         s.items.forEach { p ->
             Row {
                 Text("•", Modifier.width(16.dp), color = c.teal, fontSize = 14.5.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold)
-                Text(p, color = c.textBody, fontSize = 14.5.sp, lineHeight = 22.sp)
+                Text(keepWords(p), color = c.textBody, fontSize = 14.5.sp, lineHeight = 22.sp)
             }
         }
     }

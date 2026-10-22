@@ -122,13 +122,19 @@ private fun Swatch(bg: Color, border: Color) {
 private fun InputCard(s: TriangleState, result: TriangleResult, wrong: Set<TriField>) {
     val c = AppTheme.colors
     val count = TriField.entries.count { s.given(it) }
-    val ok = count == 2 && result.solution != null
+    val ok = count >= 2 && result.solution != null
+    // 셋 이상은 "3 / 2" 가 넘친 것처럼 읽혀 맞는지만 적는다(안 맞으면 빨간 띠가 알린다)
+    val counter = when {
+        count <= 2 -> "넣은 값 $count / 2"
+        ok -> "넣은 값 $count · 서로 맞음"
+        else -> "넣은 값 $count"
+    }
     AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("아는 값", color = c.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(8.dp))
             Text(
-                "넣은 값 $count / 2",
+                counter,
                 color = if (ok) accent() else c.textMuted,
                 fontSize = 12.5.sp,
                 fontWeight = if (ok) FontWeight.Bold else FontWeight.Normal,

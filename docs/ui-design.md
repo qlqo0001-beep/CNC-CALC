@@ -84,6 +84,8 @@
 - `CoordPair(x, z, color, modifier, size = 24.sp, dx, dz)` — X | Z 두 칸, 축 글자가 제 값 바로 옆, 오른쪽 맞춤 고정폭, 아래 "Δ …". 칸보다 길면 12sp 까지 줄여 한 줄.
 - `LabeledValue(label, value, modifier, color = textValue, size = 17.sp)` — 이름(12sp 흐림) 위, 고정폭 굵은 값 아래(각도 · G00 진입점 · 단 수 …).
 - `ExpandableHint(short, long)` — 한 줄 설명 + '자세히/접기'(48dp). 긴 규칙 문단은 이렇게 접는다.
+- `keepWords(s)` — 한글 음절 사이 · 한글과 붙은 영문 · 숫자 · 닫는 괄호 사이에 낱말 이음(\u2060)을 넣어 줄이 띄어쓰기에서만 바뀌게 한다
+  (Compose 는 한글 음절 사이 어디서나 줄을 바꿔 '확 / 인하세요' 처럼 어절이 쪼개졌다). `ExpandableHint` 의 두 글 · `WarningBanner` 본문 · 도움말 문단이 쓴다.
 - `TypeCard(chip, caption, chipColors, selected, onClick, modifier, aspectRatio) { 그림 }` — 형상 카드: 36dp 머리 띠(칩 "형상 N" + 짧은 이름) + 몸통.
   고르면 2dp 청록 테두리 + 옅은 청록 바탕 + 오른쪽 위 체크 원. 테이퍼(민트 칩) · 라운드(홀수 하늘 · 짝수 민트) 고르기 화면이 쓴다.
 - `Segmented(options, selected, onSelect, color = blue, track = segTrack, height = 48.dp, fontSize = 16)` — 고른 칸 글자색은 `c.onFill(color)`
