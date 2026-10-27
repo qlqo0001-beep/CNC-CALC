@@ -178,7 +178,7 @@ class ScreenShotTest {
     /** 경고 글 모아 보기(띠 색은 화면과 같게): 글 · 줄바꿈 · 한글 · 다크 대비 */
     @Test
     fun warningTexts() {
-        val f = SlopeForm(TaperKind.OUTER, 1, false, 0.4, null, listOf(40.0, 50.0), listOf(0.0, -5.0), null, 1.0, listOf(0.0, 0.0))
+        val f = SlopeForm(TaperKind.OUTER, 1, false, 0.4, null, listOf(40.0, 50.0), listOf(0.0, -5.0), null, 1.0, listOf(0.0, 0.0), angleRef = AngleRef.X)
         val back = f.copy(z = listOf(0.0, 5.0))
         val double = f.copy(kind = TaperKind.OUTER_DOUBLE, x = listOf(40.0, 50.0, 40.0), z = listOf(0.0, -5.0, -10.0), corners = listOf(0.0, 0.0, 0.0))
         val taper = TaperWarning.entries.flatMap { w ->

@@ -70,6 +70,19 @@ class AppState(private val store: KeyValueStore) {
             store.put(KEY_COMP, v.name)
         }
 
+    private var angle by mutableStateOf(if (store.get(KEY_ANGLE) == AngleRef.Z.name) AngleRef.Z else AngleRef.X)
+
+    /**
+     * 테이퍼 각도 기준(각도 칸 옆 스위치) — 테이퍼 화면 전체 하나, 다음에 켜도 그대로. 처음은 X축(단면).
+     * 계산(TaperCalc)은 늘 Z 축 각이라 화면 경계에서 바꾼다(screens/taper 의 AngleRef.toZ · fromZ). 스위치는 칸 값도 같이 바꾼다(switchAngleRef)
+     */
+    var angleRef: AngleRef
+        get() = angle
+        set(v) {
+            angle = v
+            store.put(KEY_ANGLE, v.name)
+        }
+
     /** 기능 화면으로. 이미 쌓인 화면이면 그 위를 걷어 내고 돌아간다(같은 화면이 두 번 쌓이지 않게) */
     fun open(f: Feature) {
         menuOpen = false
@@ -125,11 +138,18 @@ class AppState(private val store: KeyValueStore) {
     private companion object {
         const val KEY_THEME = "theme"
         const val KEY_COMP = "compMode"
+        const val KEY_ANGLE = "taperAngleRef"
     }
 }
 
 /** 노즈R 보정 방식: 기계 보정(G41/G42 · 도면 좌표, 기계가 보정) · 직접 보정(G40 · 앱이 계산한 보정 좌표 그대로) */
 enum class CompMode { MACHINE, DIRECT }
+
+/**
+ * 테이퍼 각도를 어느 축에서 재나: X = X축(단면 · 세로선)에서 잰 각, Z = Z축(축 · 가로선)에서 잰 각. 같은 경사면 X 각 = 90° − Z 각.
+ * 도면의 각이 단면과 이루는 각이면 X, 축과 이루는 각이면 Z(사용자 결정 2026-10-28, 처음은 X)
+ */
+enum class AngleRef { X, Z }
 
 val LocalAppState = staticCompositionLocalOf<AppState> { error("App 안에서만 쓴다") }
 

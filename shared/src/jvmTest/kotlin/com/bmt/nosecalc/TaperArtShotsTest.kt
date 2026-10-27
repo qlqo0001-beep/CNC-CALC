@@ -48,6 +48,46 @@ class TaperArtShotsTest {
     fun flip() {
         Shots.both("art-taper-flip", heightDp = 3050, widthDp = 430) { AppHost(it) { Gallery(199.dp, flipped) } }
     }
+
+    /**
+     * 각도 기준(사용자 결정 2026-10-28): 같은 형상을 X축 기준(왼쪽 · 처음 값 — 경사의 왼쪽 점에서 세로 점선과 경사 사이 호)과
+     * Z축 기준(오른쪽 — 오른쪽 점에서 가로 점선과 경사 사이 호, 전과 같음)으로 나란히. 줄 끝은 요약 칸(132dp) X · Z
+     */
+    @Test
+    fun angleRef() {
+        Shots.both("art-taper-ref", heightDp = 3250, widthDp = 720) { AppHost(it) { RefGallery() } }
+    }
+}
+
+/** 각도 기준 비교 줄: 종류, 역방향, 형상, 뒤집기 */
+private val refRows = listOf(
+    Triple(TaperKind.OUTER, false, 1), Triple(TaperKind.OUTER, false, 2), Triple(TaperKind.OUTER, false, 3), Triple(TaperKind.OUTER, false, 4),
+    Triple(TaperKind.OUTER, false, 5), Triple(TaperKind.INNER, false, 1), Triple(TaperKind.INNER, false, 4), Triple(TaperKind.OUTER, true, 3),
+    Triple(TaperKind.OUTER_DOUBLE, false, 1), Triple(TaperKind.OUTER_DOUBLE, false, 2), Triple(TaperKind.OUTER_DOUBLE, false, 3),
+    Triple(TaperKind.OUTER_DOUBLE, false, 4), Triple(TaperKind.INNER_DOUBLE, true, 2),
+)
+
+@Composable
+private fun RefGallery() {
+    val c = AppTheme.colors
+    val shape = RoundedCornerShape(12.dp)
+    Column(Modifier.fillMaxSize().padding(Space.gutter), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        refRows.forEach { (kind, reverse, type) ->
+            Text("${kind.label}${if (reverse) " · 역방향" else ""} 형상 $type — X축 기준 · Z축 기준 · 요약 칸 X · Z", style = AppType.caption, color = c.textMuted)
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                for (ref in AngleRef.entries) {
+                    Box(Modifier.width(199.dp).aspectRatio(1.08f).clip(shape).background(c.subtle).border(1.dp, c.lineCard, shape)) {
+                        TypeArt(kind, type, reverse, angleRef = ref)
+                    }
+                }
+                for (ref in AngleRef.entries) {
+                    Box(Modifier.width(132.dp).aspectRatio(1.08f).clip(RoundedCornerShape(8.dp)).background(c.subtle).border(1.5.dp, c.lineStrong, RoundedCornerShape(8.dp))) {
+                        TypeArt(kind, type, reverse, compact = true, focus = "ang", angleRef = ref)
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** 한 줄 묶음: 이름, 종류, 역방향, 형상 번호들, 가공 방향 뒤집기 */

@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
+import com.bmt.nosecalc.AngleRef
+import com.bmt.nosecalc.AppState
 import com.bmt.nosecalc.calc.Arc
 import com.bmt.nosecalc.calc.CompPoint
 import com.bmt.nosecalc.calc.Contour
@@ -24,6 +26,7 @@ import com.bmt.nosecalc.calc.TaperPoint
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
 import kotlin.math.abs
+import kotlin.math.round
 
 /** 가공 종류. 순서 = 02 의 탭 번호(1줄 3칸 + 2줄 2칸) */
 internal enum class TaperKind(val label: String, val types: Int, val inner: Boolean) {
@@ -173,6 +176,14 @@ internal class TaperState(
     /** 다섯 값이 어긋날 때(CONTRADICTION) 비우자고 권할 칸: 마지막에 채운 자동 칸 · 각도 가운데 지금 찬 것(둘까지) */
     fun contradictionFixes(): List<String> = listOfNotNull(lastAuto, "ang").distinct().filter { point(it).isNotEmpty() }
 
+    /**
+     * 각도 기준을 바꿀 때([switchAngleRef]): 모든 종류 · 형상 · 방향의 각도 칸을 같은 실제 경사의 다른 기준 값으로(30 → 60, [complementText]).
+     * 각도 칸은 기준을 따로 적지 않고 지금 기준(AppState.angleRef)으로 읽으므로 한꺼번에 바꾼다. 빈칸(자동)은 빈칸 — 화면이 새 기준으로 다시 보인다
+     */
+    fun complementAngles() {
+        values.keys.filter { it.startsWith("p/") && it.endsWith("/ang") }.forEach { k -> values[k] = complementText(values.getValue(k)) }
+    }
+
     companion object {
         /** 단일 테이퍼에서 하나를 비워 계산하는 다섯 값 */
         private val FIVE = setOf("x1", "z1", "x2", "z2", "ang")
@@ -227,7 +238,12 @@ internal data class SlopeForm(
     val end: Double? = null,
     /** 가공 방향 뒤집기: x · z · corners 의 T1 = 그림의 반대 끝 점(먼저 깎는 점), start = 그 앞 요소. calc 의 TaperInput.flip 과 같은 뜻 */
     val flip: Boolean = false,
+    /** [angle] 을 잰 축(화면 스위치 AppState.angleRef). 기본이 없다 — 부르는 쪽이 늘 밝힌다(calc 에는 [zAngle]) */
+    val angleRef: AngleRef,
 ) {
+    /** calc 의 각(Z 축에서 잰 각). X 기준이면 90° − 각도 칸 */
+    val zAngle: Double? get() = angle?.let(angleRef::toZ)
+
     /**
      * 도면 치수를 아직 다 넣지 않았다: X(직경) 0 인 점이 있거나 두 점 이상이 Z 0 에 겹친다(처음 값 그대로).
      * 이때 계산이 멈춘 것은 빨간 멈춤이 아니라 "값을 넣으면 계산합니다" 안내로 보인다
@@ -277,7 +293,7 @@ internal object TaperSolve {
         } else {
             TaperCalc.calc(
                 TaperInput(
-                    f.kind.inner, f.type, false, f.noseR, tip, f.x[0], zz(f.z[0]), f.x[1], zz(f.z[1]), f.angle, f.zClear,
+                    f.kind.inner, f.type, false, f.noseR, tip, f.x[0], zz(f.z[0]), f.x[1], zz(f.z[1]), f.zAngle, f.zClear,
                     cornerR1 = c[0], cornerR2 = c[1], start = start, end = end, flip = f.flip, approach = !m,
                 ),
             )
@@ -307,6 +323,45 @@ internal object TaperSolve {
 
 /** 깎기가 끝나는 도면 점(끝점 칸의 자동 값): 끝점을 넣었으면 그 좌표, 비웠으면 마지막 T 점(모서리 R 이면 그 끝) */
 internal val TaperSolution.cutEnd: Pt get() = drawing.segs.let { if (toEnd) it.last().end else it[it.lastIndex - 1].end }
+
+/*
+ * 각도 기준(사용자 결정 2026-10-28): 계산(TaperCalc)의 각은 늘 Z 축에서 잰 각이고, 화면은 X축(단면) · Z축 기준을 고른다(AppState.angleRef, 처음 X).
+ * 바꾸는 곳은 화면 경계 — 각도 칸 → SlopeForm.zAngle, 결과 각 → shownAngles. X 각 = 90° − Z 각이라 두 쪽이 같은 식이다
+ */
+
+/** 이 기준으로 잰 각(°) → calc 의 Z 축 각 */
+internal fun AngleRef.toZ(deg: Double): Double = if (this == AngleRef.X) 90.0 - deg else deg
+
+/** calc 의 Z 축 각(°) → 이 기준으로 잰 각 */
+internal fun AngleRef.fromZ(zDeg: Double): Double = toZ(zDeg)
+
+/** 칸 · 결과 이름 뒤에 붙는 기준: "X축 기준" · "Z축 기준" */
+internal val AngleRef.label: String get() = if (this == AngleRef.X) "X축 기준" else "Z축 기준"
+
+/** 결과 각(칸 순서 — 2중은 각1 · 각2)을 이 기준으로 */
+internal fun TaperSolution.shownAngles(ref: AngleRef): List<Double> = anglesDeg.map(ref::fromZ)
+
+/**
+ * 각도 칸 글을 다른 기준의 같은 경사로: 90 − 값, 넣은 소수 자리 그대로(30 → 60, 59.744 → 30.256, 12.50 → 77.50).
+ * 숫자가 아니면(빈칸 · "-") 그대로. 두 번 바꾸면 처음 숫자
+ */
+internal fun complementText(t: String): String {
+    val v = t.toDoubleOrNull() ?: return t
+    val dec = if ('.' in t) t.substringAfter('.').length else 0
+    var scale = 1L
+    repeat(dec) { scale *= 10 }
+    val m = round(abs(90.0 - v) * scale).toLong()
+    val sign = if (90.0 - v < 0 && m != 0L) "-" else ""
+    val frac = if (dec > 0) "." + (m % scale).toString().padStart(dec, '0') else ""
+    return "$sign${m / scale}$frac"
+}
+
+/** 각도 기준 스위치: 기준을 바꾸고(저장) 각도 칸을 같은 실제 경사의 새 기준 값으로. 같은 기준이면 그대로 */
+internal fun switchAngleRef(app: AppState, s: TaperState, to: AngleRef) {
+    if (app.angleRef == to) return
+    s.complementAngles()
+    app.angleRef = to
+}
 
 /** Z 뒤집기(그림 좌우 반전) */
 internal object Mirror {
@@ -394,7 +449,7 @@ internal fun taperWarningText(w: TaperWarning, f: SlopeForm): String = when (w) 
     }
     TaperWarning.BAD_INPUT ->
         "입력이 잘못됐습니다. 지름은 0 보다 크고, 노즈R·모서리 R·Z 여유는 0 이상이어야 합니다(노즈R 이 0 이면 Z 여유를 넣으세요 — 진입 거리가 없습니다). " +
-            "좌표·치수는 ±${MAX_MM.toInt()} mm 안이어야 합니다(각도가 너무 작으면 점이 그 밖으로 나갑니다)."
+            "좌표·치수는 ±${MAX_MM.toInt()} mm 안이어야 합니다(각도가 0° 나 90° 에 너무 가까우면 계산한 점이 그 밖으로 나갑니다)."
     TaperWarning.BAD_LEG ->
         "시작점·끝점 값이 맞지 않습니다. 그 요소 방향(단면은 X, 수평은 Z)으로 T 점 바깥에 있어야 하고, 노즈R 보다 충분히 떨어져야 합니다 " +
             "(가까우면 공구가 되돌아가거나 노즈가 그 요소에 닿지 못합니다)."

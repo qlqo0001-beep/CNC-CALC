@@ -1,5 +1,6 @@
 package com.bmt.nosecalc.screens.taper
 
+import com.bmt.nosecalc.AngleRef
 import com.bmt.nosecalc.calc.GrooveCalc
 import com.bmt.nosecalc.calc.GrooveInput
 import com.bmt.nosecalc.calc.GrooveWarning
@@ -14,7 +15,7 @@ class TaperWarningsTest {
     private fun form(
         kind: TaperKind, type: Int, x: List<Double?>, z: List<Double?>, reverse: Boolean = false, angle: Double? = null,
         r: Double = 0.4, corners: List<Double> = List(x.size) { 0.0 }, zClear: Double = 1.0,
-    ) = SlopeForm(kind, type, reverse, r, null, x, z, angle, zClear, corners)
+    ) = SlopeForm(kind, type, reverse, r, null, x, z, angle, zClear, corners, angleRef = AngleRef.Z) // 각도 숫자는 Z축 기준(taper-b-error 의 30°)
 
     private fun stop(f: SlopeForm): TaperWarning = TaperSolve.solve(f).warnings.single()
 

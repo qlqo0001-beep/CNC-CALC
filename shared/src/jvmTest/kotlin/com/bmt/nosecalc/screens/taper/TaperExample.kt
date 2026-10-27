@@ -36,6 +36,22 @@ internal object TaperExample {
     val groove = mapOf("zStart" to "-10", "width" to "8", "od" to "40", "bottom" to "30", "xClear" to "1.0")
 }
 
+/**
+ * 사용자 예(2026-10-28 폰 화면, 질문 "41−34.7=6.3, ÷2=3.15, ×tan30=1.818, +23.8=25.61 인데 왜 29.xxx 부터?"):
+ * 외경 형상 type · T1 ⇄ T2 바꿈(G41) · 노즈 R0.8, T1 X41(Z1 비움) · T2 X34.7 Z-23.8, 각도 30.
+ * 도면의 30° 는 단면(X축)에서 잰 각 — X축 기준이면 Z1 = −23.8 − 3.15 × tan30° = −25.619, 예전처럼 Z축 기준이면 −23.8 − 3.15 ÷ tan30° = −29.256.
+ * 각도 기준은 화면 상태가 아니라 AppState.angleRef 라 부르는 쪽이 정한다
+ */
+internal fun userAngleExample(type: Int = 3): TaperState = TaperState(type = type, open = true).apply {
+    toggleFlip()
+    setPoint("x1", "41")
+    setPoint("z1", "")
+    setPoint("x2", "34.7")
+    setPoint("z2", "-23.8")
+    setPoint("ang", "30")
+    setShared("noseR", "0.8")
+}
+
 /** 이 상태(종류 · 형상 · 방향)의 점 X · Z 와 Z 여유, 또는 홈 치수에 [TaperExample] 값을 넣는다 */
 internal fun TaperState.example(): TaperState = apply {
     if (kind.groove) {
