@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,8 +59,10 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -71,6 +75,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
+import com.bmt.nosecalc.AngleRef
 import com.bmt.nosecalc.CompMode
 import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.calc.Fmt
@@ -103,10 +108,11 @@ import kotlin.math.sqrt
 
 /**
  * B 화면 맨 위: 고른 형상의 작은 그림(요약 꼴 — 글 12sp · 각도 글 없이) + 종류·형상 번호·이름·방향/팁 + 형상 다시 고르기.
- * 그림을 눌러도 형상을 다시 고른다. flip = 가공 방향 뒤집기(그림의 T 이름 · 이송 화살과 이름의 순서가 반대 끝부터)
+ * 그림을 눌러도 형상을 다시 고른다. flip = 가공 방향 뒤집기(그림의 T 이름 · 이송 화살과 이름의 순서가 반대 끝부터),
+ * angleRef = 그림의 각도 호 기준(테이퍼 화면은 AppState.angleRef 를 넘긴다 — 홈은 각도가 없다)
  */
 @Composable
-internal fun SummaryCard(kind: TaperKind, type: Int, mirrored: Boolean, info: String, flip: Boolean = false, onBack: () -> Unit) {
+internal fun SummaryCard(kind: TaperKind, type: Int, mirrored: Boolean, info: String, flip: Boolean = false, angleRef: AngleRef = AngleRef.X, onBack: () -> Unit) {
     val c = AppTheme.colors
     AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -118,7 +124,7 @@ internal fun SummaryCard(kind: TaperKind, type: Int, mirrored: Boolean, info: St
                     .clickable(onClick = onBack)
                     .semantics { contentDescription = "형상 다시 고르기" },
             ) {
-                TypeArt(kind, type, mirrored, compact = true, flip = flip)
+                TypeArt(kind, type, mirrored, compact = true, flip = flip, angleRef = angleRef)
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
@@ -183,6 +189,54 @@ internal fun FlipSwitch(title: String, status: String, on: Boolean, onToggle: ()
                 }
             } else {
                 Box(Modifier.size(14.dp).clip(CircleShape).background(c.textMuted))
+            }
+        }
+    }
+}
+
+/**
+ * 각도 기준 스위치(홑테이퍼는 각도 칸 옆 반 줄, 2중 테이퍼는 결과 각 아래): 라벨 "각도 기준"(칸 라벨과 같은 줄) + 두 칸 52dp —
+ * "X축 기준 / 단면" · "Z축 기준 / 수평". 고른 칸은 청록 바탕 · 흰 글(색만으로 가르지 않게 고르지 않은 칸은 흐린 글),
+ * 칸 하나가 48dp 넘게 누르는 자리. 좁은 폰 · 큰 글꼴(360dp · 1.3배)에서 첫 줄이 칸을 넘으면 "X축" · "Z축" 만(잘린 "X축 …" 대신),
+ * 두 줄이 52dp 를 넘으면 줄이 글에 맞춰 높아진다(아랫줄이 칸 끝에서 잘리지 않게). 읽는 글은 늘 "X축 기준" 한 번(안 놓은 짧은 글은 빼고)
+ */
+@Composable
+internal fun AngleRefSwitch(ref: AngleRef, onPick: (AngleRef) -> Unit, modifier: Modifier = Modifier) {
+    val c = AppTheme.colors
+    Column(modifier) {
+        FieldLabel("각도 기준")
+        Spacer(Modifier.height(6.dp))
+        val shape = RoundedCornerShape(9.dp)
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 52.dp).height(IntrinsicSize.Min)
+                .clip(shape).background(c.segTrack).border(1.dp, c.lineCard, shape).padding(3.dp),
+        ) {
+            listOf(AngleRef.X to "단면", AngleRef.Z to "수평").forEach { (r, sub) ->
+                val on = r == ref
+                val fg = if (on) c.onFill(c.teal) else c.textMuted
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(if (on) c.teal else Color.Transparent)
+                        .selectable(on, role = Role.RadioButton) { onPick(r) }
+                        .padding(horizontal = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    // 다 들어가면 "X축 기준", 아니면 "X축". 두 글을 다 컴포즈하니 의미 글은 "X축 기준" 하나로(TalkBack 이 두 번 읽지 않게)
+                    Layout({
+                        for (t in listOf(r.label, "${r.name}축")) {
+                            Text(t, color = if (on) fg else c.textBody, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, lineHeight = 18.sp)
+                        }
+                    }, Modifier.clearAndSetSemantics { text = AnnotatedString(r.label) }) { ms, cs ->
+                        val long = ms[0].measure(Constraints())
+                        val p = if (long.width <= cs.maxWidth) long else ms[1].measure(Constraints(maxWidth = cs.maxWidth))
+                        layout(p.width, p.height) { p.place(0, 0) }
+                    }
+                    Text(sub, color = fg, fontSize = 11.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, lineHeight = 14.sp)
+                }
             }
         }
     }

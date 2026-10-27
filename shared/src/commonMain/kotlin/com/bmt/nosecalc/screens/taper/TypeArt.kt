@@ -25,6 +25,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
+import com.bmt.nosecalc.AngleRef
 import com.bmt.nosecalc.ui.DrawSpec
 import com.bmt.nosecalc.ui.arrowHead
 import com.bmt.nosecalc.ui.artFontCap
@@ -52,6 +53,7 @@ import kotlin.math.sin
  * focus = 입력 중인 칸 이름(x1 · z2 · ang · r1 · start · end, 홈은 od · bottom · width · insert · zStart) — 그 점 · 치수를 짚는다.
  * flip = 가공 방향 뒤집기(T1 ⇄ 마지막 T): 형상 · 바이트는 그대로, T 이름 · 이송 화살 · 시작/끝 표가 반대 끝부터. 각도 호는 그 경사 그대로
  * (2중은 각1 · 각2 이름만 칸 순서로).
+ * angleRef = 각도 기준(화면 스위치): X 는 세로(X 방향) 점선과 경사 사이, Z 는 가로(Z 방향) 점선과 경사 사이에 호를 긋는다(홈은 상관없음).
  */
 @Composable
 internal fun TypeArt(
@@ -62,6 +64,7 @@ internal fun TypeArt(
     compact: Boolean = false,
     focus: String? = null,
     flip: Boolean = false,
+    angleRef: AngleRef = AngleRef.X,
 ) {
     val c = AppTheme.colors
     val measurer = rememberTextMeasurer()
@@ -69,7 +72,7 @@ internal fun TypeArt(
     Canvas(modifier) {
         val (ks, kt) = artScale(size.width, 199.dp)
         val pen = Pen(this, c, measurer, sans, ks, kt, kind.inner, mirrored, compact, focus)
-        if (kind.groove) pen.groove(type) else pen.slope(art(kind, type), kind.double, flip)
+        if (kind.groove) pen.groove(type) else pen.slope(art(kind, type), kind.double, flip, angleRef == AngleRef.X)
     }
 }
 
@@ -135,9 +138,10 @@ private fun art(kind: TaperKind, type: Int): Art = if (!kind.double) {
             ends = listOf(o(0f, .06f), o(0f, .06f)), flipTool = o(.06f, .21f),
         )
         // 형상 4: 아래 두 경사를 T1 쪽으로 줄여 T3 가 칩과 떨어지게 하고(각도는 그대로), T2 글은 왼쪽 점선 위가 아닌
-        // 아래(이송 화살 밑)에, T3 글은 각2 글과 떨어지게 다리 위 왼쪽에 둔다
+        // 아래(이송 화살 밑)에, T3 글은 각2 글과 떨어지게 다리 위 왼쪽에 둔다. T2 는 X축 기준 각1 글(T2 위 세로 점선 옆)이
+        // T1 점에 붙지 않게 첫 경사를 조금 눕혔다(.47, .55 → .44, .53)
         else -> Art(
-            listOf(o(.05f, .70f), o(.28f, .70f), o(.47f, .55f), o(.60f, .36f), o(.84f, .36f)), listOf(3, 2, 1),
+            listOf(o(.05f, .70f), o(.28f, .70f), o(.44f, .53f), o(.60f, .36f), o(.84f, .36f)), listOf(3, 2, 1),
             listOf(o(.08f, -.069f), o(.04f, .08f), o(-.13f, -.06f)), .22f,
             ends = listOf(o(0f, .06f), o(0f, .05f)), flipTool = o(.07f, .57f),
         )
@@ -193,8 +197,12 @@ private class Pen(
     /** 점에서 라벨까지(02 카드 폭 비율) → 화면 거리 */
     fun shift(v: Offset) = Offset(if (flipX) -v.x else v.x, if (flipY) -v.y else v.y) * unit
 
-    /** flip = 가공 방향 뒤집기: T 이름 · 라벨 자리 · 이송 화살 · 시작/끝을 반대 끝부터. 기준 점선 · 각도 호는 그림 순서(오른쪽 점에서) 그대로 */
-    fun slope(a: Art, double: Boolean, flip: Boolean = false) {
+    /**
+     * flip = 가공 방향 뒤집기: T 이름 · 라벨 자리 · 이송 화살 · 시작/끝을 반대 끝부터. 기준 점선 · 각도 호는 그림 순서 그대로.
+     * xRef = 각도 기준: 경사(오른쪽 점 P → 왼쪽 점 Q)와 두 축 방향 선이 만드는 직각삼각형 P–Q–C(C = Q 의 Z, P 의 X) 안쪽에 호를 둔다 —
+     * Z 기준은 P 에서 가로(Z) 점선과 경사 사이(전과 같다), X 기준은 Q 에서 세로(X) 점선과 경사 사이. 두 호가 경사의 같은 쪽이라 이송 화살(반대쪽)과 겹치지 않는다
+     */
+    fun slope(a: Art, double: Boolean, flip: Boolean = false, xRef: Boolean = false) {
         val pts = a.pts.map(::at)
         // 그림 순서(오른쪽 점부터)와 칸 순서(T1 = 먼저 깎는 점). 라벨 자리는 점 자리를 따라간다
         val order = if (flip) a.t.indices.reversed() else a.t.indices
@@ -205,13 +213,19 @@ private class Pen(
         val endShift = if (flip) a.ends.reversed() else a.ends
         val left = Offset(if (flipX) 1f else -1f, 0f)
         val refLen = a.ref * w
+        // 경사마다 (호 꼭짓점, 기준선 방향, 경사 방향): Z 기준은 오른쪽 점에서 가로, X 기준은 왼쪽 점에서 오른쪽 점 높이 쪽으로 세로
+        val refs = (0 until tp.size - 1).map { i ->
+            val p = tp[i]
+            val q = tp[i + 1]
+            if (xRef) Triple(q, Offset(0f, if (p.y > q.y) 1f else -1f), p - q) else Triple(p, left, q - p)
+        }
         val arcR = maxOf((if (double) .10f else .135f) * w, dp(22f))
         // 맨 밑에 소재 면(빗금)과 회전축(1점 쇄선, 외경·내경 모두 아래). 기준 점선도 꺾은선 밑에 깐다
         fillStock(stock(a.pts))
         d.centerLine(Offset(0f, .94f * h), Offset(w, .94f * h), c.drawRef, ks)
-        for (i in 0 until tp.size - 1) {
+        for ((at, dir) in refs) {
             d.drawLine(
-                c.drawRef, tp[i], tp[i] + left * refLen, dp(1.1f),
+                c.drawRef, at, at + dir * refLen, dp(1.1f),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(dp(4f), dp(3f))),
             )
         }
@@ -234,10 +248,10 @@ private class Pen(
             // 뒤집은 내경도 자루가 시작 끝 곁에서 오른쪽 끝까지 꺾은선 밑을 가로지른다 — 뒤보링처럼 이름보다 먼저
             boringBar(barTop(a, back = false, x = toolX), back = false, x = toolX)
         }
-        for (i in 0 until tp.size - 1) {
+        refs.forEachIndexed { i, (at, dir, slope) ->
             // 2중의 각 이름은 칸 순서(결과 카드의 각1 = T1–T2): 뒤집으면 그림 오른쪽 경사가 각2
             val label = if (double) "각${if (flip) tp.size - 1 - i else i + 1}" else "각도"
-            angle(tp[i], left, tp[i + 1] - tp[i], arcR, label, if (double) 11f else 11.5f, hot = focus == "ang")
+            angle(at, dir, slope, arcR, label, if (double) 11f else 11.5f, hot = focus == "ang")
         }
         feed(t[0], t[1], left)
         // 시작 · 끝: T1 · 마지막 T 와 이웃한 자유 끝(배열 순서가 아니라 이웃으로 — 어느 쪽이 첫 점이어도 맞다)

@@ -165,6 +165,39 @@ class AppStateTest {
         assertEquals(CompMode.DIRECT, AppState(KeyValueStore(file)).compMode)
     }
 
+    /**
+     * 각도 기준은 테이퍼 화면 전체 하나(처음 X축): 각도 칸 옆 'Z축 기준' 을 누르면 넣은 각도가 같은 경사의 Z축 값으로 바뀌고(60 → 30)
+     * 칸 이름 · 결과 카드의 각도가 Z축 기준이 되며(결과는 같은 경사라 그대로), 다음에 켜도 그대로
+     */
+    @Test
+    fun angleRefSwitchConvertsFieldAndIsRemembered() {
+        val file = File.createTempFile("bmt-kv", ".properties").apply { delete() }
+        val s = AppState(KeyValueStore(file))
+        assertEquals(AngleRef.X, s.angleRef)
+        // 외경 형상 1 X40 Z0 / X50, Z2 비움 · X축 60° (= Z축 30°) → Z2 −8.660
+        val st = TaperState(type = 1, open = true).example().apply {
+            setPoint("z2", "")
+            setPoint("ang", "60")
+        }
+        val scene = ImageComposeScene(400, 1800, Density(1f)) { AppHost(s) { TaperScreen(st) } }
+        try {
+            scene.render(0)
+            val before = scene.texts()
+            assertTrue("각도 (X축 기준)" in before, "$before")
+            assertTrue("-8.660" in before, "$before")
+            scene.tap("Z축 기준")
+            scene.render(100_000_000)
+            assertEquals(AngleRef.Z, s.angleRef)
+            assertEquals("30", st.point("ang"))
+            val after = scene.texts()
+            assertTrue("각도 (Z축 기준)" in after && "각도 (X축 기준)" !in after, "$after")
+            assertTrue("-8.660" in after, "같은 경사: $after")
+        } finally {
+            scene.close()
+        }
+        assertEquals(AngleRef.Z, AppState(KeyValueStore(file)).angleRef)
+    }
+
     @OptIn(ExperimentalComposeUiApi::class)
     private fun ImageComposeScene.texts(): List<String> {
         fun walk(n: SemanticsNode): List<SemanticsNode> = listOf(n) + n.children.flatMap(::walk)

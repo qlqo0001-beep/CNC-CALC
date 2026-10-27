@@ -35,6 +35,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bmt.nosecalc.AngleRef
 import com.bmt.nosecalc.CompMode
 import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.calc.Arc
@@ -97,6 +98,9 @@ internal fun SlopeScreen(s: TaperState) {
     val zClear = s.shared("zClear")
     val standard = NoseComp.standardTip(kind.inner, s.reverse)
     val flip = s.flip
+    val app = LocalAppState.current
+    // 각도 기준(테이퍼 화면 전체 하나, 저장): 각도 칸 · 결과 각 · 그림의 호가 이 축에서 잰다. 계산은 Z 축 각(SlopeForm.zAngle)
+    val angleRef = app.angleRef
     val form = SlopeForm(
         kind, type, s.reverse,
         noseR.toDoubleOrNull() ?: Double.NaN,
@@ -109,6 +113,7 @@ internal fun SlopeScreen(s: TaperState) {
         start.toDoubleOrNull(),
         end.toDoubleOrNull(),
         flip,
+        angleRef = angleRef,
     )
     val result = remember(form) { TaperSolve.solve(form) }
     val sol = result.solution
@@ -121,13 +126,14 @@ internal fun SlopeScreen(s: TaperState) {
     val flagged = if (sol == null && !waiting) result.warnings.flatMap { taperWarningFields(it, form) }.toSet() else emptySet()
     fun auto(text: String, v: Double?) = if (waiting) null else autoValue(text, v)
     val r = if (form.noseR.isFinite()) Fmt.nc(form.noseR).removeSuffix(".") else "—"
-    val direct = LocalAppState.current.compMode == CompMode.DIRECT
+    val direct = app.compMode == CompMode.DIRECT
+    val pickRef = { r: AngleRef -> switchAngleRef(app, s, r) }
     val dock = slopeDock(result, form, waiting, direct, c)
     val preview = dock?.oneLine()
     val chain = rememberFieldChain(s.editing)
     // 키패드 그림: 요약 칸 그림에서 그 칸의 점 · 치수만 짚는다
     fun figure(key: String): @Composable (Modifier) -> Unit = { m ->
-        TypeArt(kind, type, s.reverse, m.aspectRatio(199f / 184f), compact = true, focus = key, flip = flip)
+        TypeArt(kind, type, s.reverse, m.aspectRatio(199f / 184f), compact = true, focus = key, flip = flip, angleRef = angleRef)
     }
 
     TaperPage(dock, chain.sheetOpen) { anchor ->
@@ -138,7 +144,7 @@ internal fun SlopeScreen(s: TaperState) {
             else -> "정방향 바이트 · 반대 끝부터 (Z+)"
         }
         // 좁은 폰에서 '노즈 R' · '팁 3번' 이 쪼개지지 않게(라운드 toolText 와 같은 붙임 공백 · 낱말 이음)
-        SummaryCard(kind, type, s.reverse, "$dir · 노즈\u00A0R$r · 팁\u00A0${tip}\u2060번", flip) { s.open = false }
+        SummaryCard(kind, type, s.reverse, "$dir · 노즈\u00A0R$r · 팁\u00A0${tip}\u2060번", flip, angleRef) { s.open = false }
         // 멈춘 까닭은 입력 카드 위에(폰 첫 화면 안에). 다섯 값이 어긋나면 비울 칸을 단추로 권한다
         if (waiting) {
             WarningBanner(taperWarningText(TaperWarning.MISSING_INPUT, form), level = WarnLevel.Info)
@@ -190,14 +196,15 @@ internal fun SlopeScreen(s: TaperState) {
                         }
                     }
                     if (!kind.double) {
+                        // 각도 칸 옆 반 줄에 기준 스위치 — 바꾸면 칸 값이 같은 경사의 새 기준 값으로(30 → 60), 빈칸(자동)은 새 기준으로 다시 보인다
                         Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                             NumberField(
-                                "각도 (Z축 기준)", ang, { s.setPoint("ang", it) }, Modifier.weight(1f),
-                                unit = "°", autoValue = auto(ang, sol?.anglesDeg?.first()), error = "ang" in flagged,
-                                hint = "Z축(가로선)에서 잰 한쪽 각 · 도면이 꼭지각이면 ÷2 · X축 기준이면 90 − 값", blankable = true,
+                                "각도 (${angleRef.label})", ang, { s.setPoint("ang", it) }, Modifier.weight(1f),
+                                unit = "°", autoValue = auto(ang, sol?.shownAngles(angleRef)?.first()), error = "ang" in flagged,
+                                hint = angleHint(angleRef), blankable = true,
                                 id = "ang", figure = figure("ang"), preview = preview,
                             )
-                            Spacer(Modifier.weight(1f))
+                            AngleRefSwitch(angleRef, pickRef, Modifier.weight(1f))
                         }
                     }
                     // 시작점·끝점: 그 요소가 단면이면 X(직경), 수평이면 Z. 넣었을 때만 그 요소를 깎는다.
@@ -276,7 +283,7 @@ internal fun SlopeScreen(s: TaperState) {
                         WarningBanner(taperWarningText(it, form), level = WarnLevel.Warn)
                     }
                 }
-                if (direct) CompCard(sol) else MachineCard(sol, form.noseR)
+                if (direct) CompCard(sol, angleRef, pickRef) else MachineCard(sol, form.noseR, angleRef, pickRef)
             }
             SlopeViewer(sol, form.noseR, r, kind.inner, s.reverse, direct)
             // 역방향(뒤집기 없음)은 역바이트가 척 쪽에서 시작해 첫 G00 이 척 쪽 — 내경이면 구멍 안이다. G00 은 X · Z 가 따로 움직일 수 있어
@@ -352,7 +359,7 @@ private fun autoValue(text: String, v: Double?): String? = if (text.isNotEmpty()
  * 모서리 R 이 있는 점은 R 시작·끝 접점 둘(도면 좌표를 아래에)과 원호 방향·도면 R·보정 R. 아래 각도·G00 진입점
  */
 @Composable
-private fun CompCard(sol: TaperSolution) {
+private fun CompCard(sol: TaperSolution, angleRef: AngleRef, onRef: (AngleRef) -> Unit) {
     val c = AppTheme.colors
     AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
         CardHeader("보정 좌표", "직접 보정(G40) 프로그램 좌표 · 팁 ${sol.tip}번") {
@@ -367,7 +374,7 @@ private fun CompCard(sol: TaperSolution) {
             }
         }
         Rule()
-        Angles(sol, entry = true)
+        Angles(sol, entry = true, angleRef, onRef)
     }
 }
 
@@ -377,7 +384,7 @@ private fun CompCard(sol: TaperSolution) {
  * 그 좌표를 G41/G42 프로그램에 넣으면 노즈R 이 두 번 들어가서
  */
 @Composable
-private fun MachineCard(sol: TaperSolution, noseR: Double) {
+private fun MachineCard(sol: TaperSolution, noseR: Double, angleRef: AngleRef, onRef: (AngleRef) -> Unit) {
     val c = AppTheme.colors
     var more by rememberSaveable { mutableStateOf(false) }
     AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
@@ -406,7 +413,7 @@ private fun MachineCard(sol: TaperSolution, noseR: Double) {
             }
         }
         Rule()
-        Angles(sol, entry = false)
+        Angles(sol, entry = false, angleRef, onRef)
         Rule()
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp)).clickable { more = !more },
@@ -428,20 +435,31 @@ private fun MachineCard(sol: TaperSolution, noseR: Double) {
     }
 }
 
-/** 각도(2중 테이퍼는 경사 둘 — 그림의 각1 = T1–T2 · 각2 = T2–T3)와 entry 면 G00 진입점(단일은 각도 옆, 2중은 아랫줄) */
+/**
+ * 각도(2중 테이퍼는 경사 둘 — 그림의 각1 = T1–T2 · 각2 = T2–T3)를 고른 기준(angleRef)으로, entry 면 G00 진입점(단일은 각도 옆, 2중은 아랫줄).
+ * 2중 테이퍼는 각도 칸이 없어 기준 스위치를 결과 각 바로 아래에 둔다(홑테이퍼는 입력 카드의 각도 칸 옆)
+ */
 @Composable
-private fun Angles(sol: TaperSolution, entry: Boolean) {
+private fun Angles(sol: TaperSolution, entry: Boolean, angleRef: AngleRef, onRef: (AngleRef) -> Unit) {
     val size = AppType.numLarge.fontSize
     val at = "X${Fmt.fixed3(sol.entry.xDia)}  Z${Fmt.fixed3(sol.entry.z)}"
-    val angles = sol.anglesDeg
+    val angles = sol.shownAngles(angleRef)
     Row {
         angles.forEachIndexed { i, a ->
-            LabeledValue(if (angles.size == 1) "각도 (Z축 기준)" else "각${i + 1} (Z축 기준)", "${Fmt.fixed3(a)}°", Modifier.weight(1f), size = size)
+            LabeledValue(if (angles.size == 1) "각도 (${angleRef.label})" else "각${i + 1} (${angleRef.label})", "${Fmt.fixed3(a)}°", Modifier.weight(1f), size = size)
         }
         if (entry && angles.size == 1) LabeledValue("G00 진입점", at, Modifier.weight(1.5f), size = size)
     }
+    if (angles.size > 1) AngleRefSwitch(angleRef, onRef, Modifier.padding(top = 10.dp).fillMaxWidth())
     if (entry && angles.size > 1) LabeledValue("G00 진입점", at, Modifier.padding(top = 10.dp), size = size)
 }
+
+/**
+ * 각도 칸 키패드의 안내 줄(기준마다). 도면 꼭지각(원뿔 전체 각)은 축에서 잰 반각이 Z 각이라 Z축 기준에서만 ÷2 가 그대로 맞는다
+ */
+private fun angleHint(ref: AngleRef): String =
+    if (ref == AngleRef.X) "단면(세로선)에서 잰 각 · 축(가로선)에서 잰 각이나 꼭지각 ÷2 는 옆 스위치를 Z축으로"
+    else "축(가로선)에서 잰 한쪽 각 · 도면이 꼭지각이면 ÷2 · 단면(세로선)에서 잰 각은 옆 스위치를 X축으로"
 
 @Composable
 private fun Rule() {

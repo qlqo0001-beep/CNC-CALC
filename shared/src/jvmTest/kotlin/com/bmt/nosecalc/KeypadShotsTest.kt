@@ -48,9 +48,9 @@ class KeypadShotsTest {
         Shots.both("field-states-w360", heightDp = 540, widthDp = 360, fontScale = 1.3f) { AppHost(it) { FieldStates() } }
     }
 
-    /** 빈칸(자동) 칸의 키패드: 안내 줄 · "자동 -7.385"(뒤 화면 taper-b-auto 의 Z2) · "비우기 · 자동 계산" */
+    /** 빈칸(자동) 칸의 키패드: 안내 줄 · "자동 -7.385"(뒤 화면 taper-b-auto 의 Z2 — 34.1° 는 Z축 기준) · "비우기 · 자동 계산" */
     @Test
-    fun keypadAuto() = Shots.both("keypad-auto") {
+    fun keypadAuto() = Shots.both("keypad-auto", setup = { it.angleRef = AngleRef.Z }) {
         AppHost(it) {
             TaperScreen(
                 TaperState(type = 1, open = true).example().apply {

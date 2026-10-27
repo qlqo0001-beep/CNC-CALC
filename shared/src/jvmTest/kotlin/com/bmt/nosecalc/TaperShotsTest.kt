@@ -12,10 +12,14 @@ import com.bmt.nosecalc.screens.taper.TaperState
 import com.bmt.nosecalc.screens.taper.TipHelp
 import com.bmt.nosecalc.screens.taper.TipSheet
 import com.bmt.nosecalc.screens.taper.example
+import com.bmt.nosecalc.screens.taper.userAngleExample
 import com.bmt.nosecalc.ui.AppCard
 import kotlin.test.Test
 
-/** 테이퍼·홈 화면 A·B 를 라이트/다크로 → build/shots/taper-*. 원본 02·11 과 나란히 본다. 보정 방식은 처음 값(기계 보정), comp 로 바꿔 찍는다 */
+/**
+ * 테이퍼·홈 화면 A·B 를 라이트/다크로 → build/shots/taper-*. 원본 02·11 과 나란히 본다. 보정 방식은 처음 값(기계 보정), comp 로 바꿔 찍는다.
+ * 각도 기준도 처음 값(X축), ref 로 바꿔 찍는다
+ */
 class TaperShotsTest {
     private fun shot(
         name: String,
@@ -24,8 +28,9 @@ class TaperShotsTest {
         frameMs: Long = 100,
         scrollToEnd: Boolean = false,
         comp: CompMode = CompMode.MACHINE,
+        ref: AngleRef = AngleRef.X,
         state: () -> TaperState,
-    ) = Shots.both(name, heightDp, frames, setup = { it.compMode = comp }, frameMs = frameMs, scrollToEnd = scrollToEnd) {
+    ) = Shots.both(name, heightDp, frames, setup = { it.compMode = comp; it.angleRef = ref }, frameMs = frameMs, scrollToEnd = scrollToEnd) {
         AppHost(it) { TaperScreen(state()) }
     }
 
@@ -65,8 +70,8 @@ class TaperShotsTest {
         }
         // 내경 형상 1(원본 06): 끝점 = 구멍 깊이 Z-20
         shot("taper-b-inner1", 2440) { TaperState(TaperKind.INNER, type = 1, open = true).example().apply { setPoint("end", "-20") } }
-        // Z2 를 비우고 각도로 풀면 "자동" 값이 단위와 겹치지 않아야 한다(412dp)
-        shot("taper-b-auto", 1100) {
+        // Z2 를 비우고 각도로 풀면 "자동" 값이 단위와 겹치지 않아야 한다(412dp). 34.1° 는 Z축 기준 숫자(골든과 같게 기준을 밝힘)
+        shot("taper-b-auto", 1100, ref = AngleRef.Z) {
             TaperState(type = 1, open = true).example().apply {
                 setPoint("z2", "")
                 setPoint("ang", "34.1")
@@ -76,7 +81,7 @@ class TaperShotsTest {
         shot("taper-b-reverse", 2540, comp = CompMode.DIRECT) { TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example() }
         shot("taper-b-double", 2640) { TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1") } }
         // 각도 30 ≠ 두 점의 45° → CONTRADICTION: 빨간 띠는 요약 바로 아래(그 아래 '각도 비우고 계산'), X1 · Z1 · X2 · Z2 · 각도에 빨간 테
-        shot("taper-b-error", 1150) { TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") } }
+        shot("taper-b-error", 1150, ref = AngleRef.Z) { TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") } }
         // 정방향인데 Z2 를 + 로(척 반대쪽) → Z 부호 글, Z 칸만 빨간 테
         shot("taper-b-zsign", 1150) { TaperState(type = 1, open = true).example().apply { setPoint("z2", "5") } }
         // Z 여유 0.5 < 노즈 R 0.8 → 진입은 노즈 R 만큼(입력 칸 아래 파란 안내)
@@ -116,6 +121,24 @@ class TaperShotsTest {
         shot("taper-b-flip-keypad", frames = 150, frameMs = 16) { TaperState(type = 1, open = true).example().apply { toggleFlip(); editing = "x1" } }
     }
 
+    /**
+     * 각도 기준(사용자 결정 2026-10-28): 사용자 예(외경 형상 3 · 뒤집기 · R0.8, 각도 30, Z1 비움)를 X축 기준(처음) · Z축 기준으로 —
+     * 각도 칸 옆 스위치, 자동 Z1(−25.619 · −29.256), 요약 그림의 호(세로 점선 · 가로 점선), 결과 카드의 각도 이름.
+     * 2중 테이퍼는 결과 각 아래 스위치(taper-b-double · -flip-double), 좁은 폰 · 큰 글꼴은 taper-b-w360 · -angle-w360
+     */
+    @Test
+    fun angleRef() {
+        shot("taper-b-angle-x30", 1500) { userAngleExample() }
+        shot("taper-b-angle-z30", 1500, ref = AngleRef.Z) { userAngleExample() }
+        shot("taper-a-angle-z", ref = AngleRef.Z) { TaperState() }
+        Shots.both("taper-b-angle-w360", heightDp = 1500, widthDp = 360, fontScale = 1.3f) {
+            AppHost(it) { TaperScreen(userAngleExample()) }
+        }
+        Shots.both("taper-b-double-w360", heightDp = 3200, widthDp = 360, fontScale = 1.3f) {
+            AppHost(it) { TaperScreen(TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example()) }
+        }
+    }
+
     /** 좁은 폰 · 큰 글꼴(360dp · 1.3): 보정 방식 스위치 두 줄 칸 · 기계 보정 카드의 R · T 와 도면 좌표가 잘리지 않는다 */
     @Test
     fun narrow() {
@@ -145,11 +168,11 @@ class TaperShotsTest {
     @Test
     fun dock() {
         shot("taper-b-top", comp = CompMode.DIRECT) { TaperState(type = 1, open = true).example() }
-        shot("taper-b-error-dock", 640, scrollToEnd = true) { TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") } }
+        shot("taper-b-error-dock", 640, scrollToEnd = true, ref = AngleRef.Z) { TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") } }
     }
 
     /**
-     * 각도 칸(taper-b 의 (114, 635)dp — T1 ⇄ T2 바꾸기 줄 아래)을 눌러 연 키패드: 안내 줄(Z축 기준 · 꼭지각 ÷2 · X축 기준 90 − 값) · '비우기 · 자동 계산'.
+     * 각도 칸(taper-b 의 (114, 635)dp — T1 ⇄ T2 바꾸기 줄 아래)을 눌러 연 키패드: 처음 기준(X축)의 안내 줄(단면에서 잰 각 · 가로선 · 꼭지각은 Z축으로) · 그림의 세로 점선 호 · '비우기 · 자동 계산'.
      * 묶음 키패드라 칸이 시트 위로 올라온다 — 폰 프레임(16ms)으로 찍는다
      */
     @Test

@@ -8,9 +8,9 @@
 | 파일 | 내용 |
 |---|---|
 | `App.kt` | `App(state)` — 7기능 라우팅, `AppHost`(테마 + 위층 + 뒤로) |
-| `AppState.kt` | 화면 쌓임(`open`·`back`·`hasBackStep`), `menuOpen`·`helpOpen`, 테마 저장(`setTheme(null\|false\|true)`), 보정 방식 `compMode`, `toast(글)`, PC 키(`handleKey`), `OnBack` |
+| `AppState.kt` | 화면 쌓임(`open`·`back`·`hasBackStep`), `menuOpen`·`helpOpen`, 테마 저장(`setTheme(null\|false\|true)`), 보정 방식 `compMode`, 테이퍼 각도 기준 `angleRef`(`AngleRef` X · Z), `toast(글)`, PC 키(`handleKey`), `OnBack` |
 | `Feature.kt` | 7기능 이름(메뉴용·헤더용)·`ready`(다 만든 기능), 메뉴 순서 |
-| `KeyValueStore.kt` | expect/actual 설정 저장(안드로이드 SharedPreferences, PC `~/.bmt-nosecalc/settings.properties`) — 테마 · 보정 방식 · PC 창 크기 |
+| `KeyValueStore.kt` | expect/actual 설정 저장(안드로이드 SharedPreferences, PC `~/.bmt-nosecalc/settings.properties`) — 테마 · 보정 방식 · 테이퍼 각도 기준 · PC 창 크기 |
 | `screens/*Screen.kt` | 기능마다 한 파일 + 도움말 `XxxHelp`(`HelpSection` 목록). 아직 안 만든 기능은 `ComingSoonPage` |
 | `screens/TaperScreen.kt`, `screens/taper/` | 테이퍼·홈 화면(아래 절) |
 | `screens/RoundScreen.kt`, `screens/round/` | 라운드 R 화면(아래 절) |
@@ -246,11 +246,11 @@
 | 파일 | 내용 |
 |---|---|
 | `TaperScreen.kt` | `TaperScreen()` — A 화면(가공 종류 탭 · 방향 두 칸 · 형상 카드 2열, 본문 600dp 넘으면 3열), 도움말 `TaperHelp`. 형상을 누르면 B, 뒤로 키·Esc 는 B → A |
-| `taper/TaperModel.kt` | `TaperKind`(탭 순서 = 02), `TaperState`(화면 상태 + Saver, 뒤집기 `flip`·`toggleFlip`), `TaperDefaults`(처음 값), `TaperSolve`·`Mirror`(역방향), `screenSide`·`travelText`(뒤집기 스위치 한 줄), 경고 글 |
-| `taper/TypeArt.kt` | `TypeArt(kind, type, mirrored, modifier, compact, focus, flip)` — TYPE 그림 Canvas(외경 기준, 내경은 위아래·역방향은 좌우 반전, 바이트도 반대쪽 — 단 내경 뒤보링 바는 인서트만 뒤집고 자루는 +Z 구멍 입구로, +Z 가 막힌 홑 2 · 4 만 통째로). compact = 요약 칸 · 키패드 꼴, focus = 고치는 칸만 초점색(점 칸 · 시작 · 끝은 그 점에 테 — 그 점 글은 테 밖으로 6dp 더, 시작 · 끝 테는 글보다 먼저. 홈 요약 칸의 'T' 는 홈 바닥 아래, '시작 Z' 는 ØD 윤곽 위 · 카드 끝 9dp 안), flip = T 이름 · 이송 화살 · 시작/끝을 반대 끝부터(아래 '가공 방향 뒤집기') |
+| `taper/TaperModel.kt` | `TaperKind`(탭 순서 = 02), `TaperState`(화면 상태 + Saver, 뒤집기 `flip`·`toggleFlip`), `TaperDefaults`(처음 값), `TaperSolve`·`Mirror`(역방향), `screenSide`·`travelText`(뒤집기 스위치 한 줄), 각도 기준(`AngleRef.toZ`·`fromZ`·`shownAngles`·`complementText`·`switchAngleRef`), 경고 글 |
+| `taper/TypeArt.kt` | `TypeArt(kind, type, mirrored, modifier, compact, focus, flip, angleRef)` — TYPE 그림 Canvas(외경 기준, 내경은 위아래·역방향은 좌우 반전, 바이트도 반대쪽 — 단 내경 뒤보링 바는 인서트만 뒤집고 자루는 +Z 구멍 입구로, +Z 가 막힌 홑 2 · 4 만 통째로). compact = 요약 칸 · 키패드 꼴, focus = 고치는 칸만 초점색(점 칸 · 시작 · 끝은 그 점에 테 — 그 점 글은 테 밖으로 6dp 더, 시작 · 끝 테는 글보다 먼저. 홈 요약 칸의 'T' 는 홈 바닥 아래, '시작 Z' 는 ØD 윤곽 위 · 카드 끝 9dp 안), flip = T 이름 · 이송 화살 · 시작/끝을 반대 끝부터(아래 '가공 방향 뒤집기'), angleRef = 각도 호 · 기준 점선이 세로(X축) · 가로(Z축)(아래 '각도 기준') |
 | `taper/SlopeScreen.kt` | B 화면(외경·내경 · 2중 테이퍼): 요약 카드 → 입력(도면 치수 · 공구) → 보정 방식 스위치 → 경고 → 결과 카드 → 형상 뷰어 → NC |
 | `taper/GrooveScreen.kt` | B 화면(외경 홈): (침범 경고) → 입력(홈 치수 · 공구 — 기준 인선은 공구 묶음) → 다단 진입 표·정삭 → 형상 → NC |
-| `taper/Parts.kt` | 요약 카드, 뒤집기 스위치(`FlipSwitch`), 점 이름표, 입력 묶음 구분선(`GroupDivider`), 노즈R 칩, 팁 번호 칸·시트·그림(`TipDiagram`, 도움말 `TipHelp`), 보정 방식 스위치, NC 카드(복사) |
+| `taper/Parts.kt` | 요약 카드, 뒤집기 스위치(`FlipSwitch`), 각도 기준 스위치(`AngleRefSwitch`), 점 이름표, 입력 묶음 구분선(`GroupDivider`), 노즈R 칩, 팁 번호 칸·시트·그림(`TipDiagram`, 도움말 `TipHelp`), 보정 방식 스위치, NC 카드(복사) |
 
 - **역방향 = 그림을 좌우로 뒤집은 형상**(역바이트로 Z+ 쪽으로 깎음, T1 = 처음 깎는 왼쪽 점, 표준 팁 외경 4 · 내경 1, 보정 쪽 반대).
   계산기 `TaperCalc` 의 `reverse = true` 는 "형상은 그대로, 방향만 Z+" 라 화면 그림과 뜻이 다르다(그대로 쓰면 TYPE 1~4 가 모두 바이트 반대).
@@ -275,7 +275,7 @@
   모서리 R·Z 여유·X 여유는 비우면 0, 겹침은 비우면 기본값.
 - 입력 카드(사용자 결정 2026-10-17, E19 '두 묶음으로 정리'): **'도면 치수'** — 머리 오른쪽에 '단위 mm · X 는 직경' 을 한 번 적고 칸 안의 mm 는 뺐다.
   머리 아래 'T1 ⇄ T2 바꾸기' 스위치 한 줄(아래 '가공 방향 뒤집기') → 점마다 한 줄 [T 표 38dp][X][Z][모서리 R(폭 0.8)](옛 따로 줄 'T1 모서리 R' 은 없앴다 — 칸 이름 '모서리 R', 점 이름은 키패드 안내 줄에),
-  단일 테이퍼는 각도 반 줄, 시작 · 끝 → 구분선(1dp, 위아래 14dp) → **'공구'** — 노즈 R 칩 → [Z 여유 (mm)][팁 번호](라운드의 공구 칸과 같은 순서).
+  단일 테이퍼는 [각도][각도 기준 스위치](아래 '각도 기준'), 시작 · 끝 → 구분선(1dp, 위아래 14dp) → **'공구'** — 노즈 R 칩 → [Z 여유 (mm)][팁 번호](라운드의 공구 칸과 같은 순서).
   칸 묶음 '다음' 은 X1 → Z1 → 모서리 R → X2 … 시작 → 끝 → Z 여유. 노즈 R 은 요약 카드 정보 줄에도 있다.
   홈은 **'홈 치수'** [시작 Z][홈 폭 W] / [외경 ØD][바닥 Ød] → **'공구'** 기준 인선 → [인서트 폭 T][단 겹침][X 여유](한 줄 셋).
 - 시작·끝점 칸: 그 요소가 단면이면 "시작점 X (T1 앞)", 수평이면 "시작점 Z (T1 앞)" 처럼 라벨이 형상·종류에 따라 바뀐다(`legsVertical`:
@@ -315,6 +315,29 @@
     `TaperWarningsTest.zSignFollowsFlip` · `pastAxisTextForFaceToCenter`(X0 끝: 글과 `G01 X-0.8` → Z 후퇴). 골든(접근 줄이 있으면 "접근 줄 [...]" 한 줄 더) `taper-b-flip`(외경 1) · `-outer3` · `-inner1` ·
     `-double` · `-reverse`(내경 역방향 1) — 안 뒤집은 골든은 그대로. 스크린샷 `taper-b-flip*`(직접 보정 · 키패드 · 360dp 큰 글꼴 포함) · `taper-a-flip` · `art-taper-flip`.
     입력 카드에 스위치 줄이 생겨 각도 칸이 내려갔다 — `taper-b-keypad-ang` 의 누르는 자리 (114, 635)dp.
+- **각도 기준 — X축 · Z축**(사용자 결정 2026-10-28, `calc-design.md` '빈 값 풀기'): 현장 질문 "41 − 34.7 = 6.3, ÷2 = 3.15, × tan30 = 1.818, + 23.8 = 25.61 이니까
+  Z-25.61 부터인데 왜 29.xxx 부터?" — 앱은 각도를 Z 축(가로선)에서 잰 각으로 받아 3.15 ÷ tan30° = 5.456(→ Z-29.256)을 냈고, 사용자는 도면의 30° 를
+  단면(X 축 · 세로선)에서 잰 각으로 읽었다(3.15 × tan30° = 1.819 → Z-25.619). 그래서 **도면의 각이 단면(세로선)과 이루는 각이면 X축, 축(가로선)과 이루는 각이면 Z축**을
+  고르게 했다(도움말에도 이 한 줄과 이 예). 처음은 X축, 마지막 선택은 `AppState.angleRef`(키 `taperAngleRef`, 테이퍼 화면 전체 하나)로 다음에 켜도 그대로.
+  - 계산은 바꾸지 않는다: `SlopeForm.angleRef` 가 각도 칸의 기준이고 `zAngle`(X 면 90° − 값)을 calc 에 넘긴다. 결과 각은 `shownAngles(ref)` 로 되돌려 보인다.
+    `SlopeForm` 의 `angleRef` 는 기본값이 없다 — 테스트도 기준을 밝힌다(옛 테스트의 각도 숫자는 Z축 기준: `TaperSolveTest` · `TaperWarningsTest` · 골든 `taper-b-auto` · `-error`).
+  - 스위치 `AngleRefSwitch`: 홑테이퍼는 각도 칸 옆 반 줄(라벨 '각도 기준' + 두 칸 52dp "X축 기준 / 단면" · "Z축 기준 / 수평", 칸을 넘으면 "X축" · "Z축" 만 —
+    360dp · 큰 글꼴. 두 줄이 52dp 를 넘는 큰 글꼴이면 줄이 글에 맞춰 높아진다 — 고정 52dp 였을 때 1.3배에서 '단면' · '수평' 아래가 잘렸다),
+    2중 테이퍼는 각도가 결과라 결과 카드의 각1 · 각2 바로 아래. 칸이 읽히는 글은 "X축 기준, 단면" 한 번(안 놓는 짧은 글 "X축" 은 의미에서 뺐다). 바꾸면 `switchAngleRef` 가 모든 종류 · 형상 · 방향의 각도 칸을 같은 실제 경사의
+    새 기준 값으로 바꾼다(`complementText`: 90 − 값, 넣은 소수 자리 그대로 — 30 → 60, 12.50 → 77.50. 칸 글은 기준을 따로 적지 않고 지금 기준으로 읽기 때문).
+    빈칸(자동) 각도는 빈칸이고 새 기준으로 다시 보인다. 결과(점 · 보정점 · NC)는 같은 경사라 그대로.
+  - 글: 각도 칸 이름 · 결과 카드 '각도 (X축 기준)' · '각1 (X축 기준)', 키패드 안내 줄은 기준마다(X: "단면(세로선)에서 잰 각 · 축(가로선)에서 잰 각이나 꼭지각 ÷2 는
+    옆 스위치를 Z축으로" — 꼭지각의 반은 축에서 잰 각이라 Z축에서만 ÷2 가 그대로 맞다). 결과 띠 · 키패드 결과 한 줄 · 형상 뷰어에는 각도가 없다.
+    경고 글(`BAD_ANGLE` "0° 보다 크고 90° 보다 작아야") · `CONTRADICTION` 은 90° − θ 에 대해 같아 그대로. `BAD_INPUT` 의 괄호는 기준과 상관없게
+    "각도가 0° 나 90° 에 너무 가까우면 계산한 점이 그 밖으로"(옛 "너무 작으면" 은 X축에서 각도를 넣고 Z 를 비운 흔한 경우에 거꾸로였다).
+  - 그림 `TypeArt(…, angleRef)`(A 화면 카드 · 요약 칸 · 키패드 그림): 경사(그림의 오른쪽 점 P → 왼쪽 점 Q)와 두 축 방향 선이 만드는 직각삼각형 P–Q–C 안쪽에 호를 둔다 —
+    Z축은 P 에서 가로 점선과 경사 사이(전과 같다), X축은 Q 에서 P 높이 쪽으로 세로 점선과 경사 사이. 두 호가 경사의 같은 쪽이라 이송 화살(반대쪽) 규칙이 그대로다.
+    2중 형상 4 는 X축 각1 글이 T1 점에 붙어 T2 자리를 (.47, .55) → (.44, .53) 으로 조금 옮겼다(개념도). 호 옆 '각도' · '각1' 글은 그대로.
+  - 테스트 `AngleRefTest`: 사용자 예 그대로(형상 1~4, X축 → Z1 −25.619 · Z축 → −29.256), 모든 종류 · 형상 · 방향 · 뒤집기 × 빈칸 넷 × 7각 × 모서리 R 에서
+    같은 경사를 두 기준으로 넣은 결과(경고 · 점 · 보정점 · 진입 · 두 NC)가 글자까지 같음(2중은 보이는 각만 90 − θ), 칸 글 바꾸기 · 스위치 전환(다른 형상의 칸 · 자동 칸) ·
+    저장 · 되살리기. `AppStateTest.angleRefSwitchConvertsFieldAndIsRemembered` 는 화면에서 'Z축 기준' 을 눌러 본다. `InputRobustnessTest` 는 기준도 난수로.
+    골든 `taper-b-angle-x30` · `-z30`(사용자 예), 나머지 테이퍼 골든은 각도 줄만 "각도 X축 기준 [45.000]"(예가 모두 45°라 숫자 그대로 — 보정점 · NC 는 한 글자도 안 바뀜).
+    스크린샷 `taper-b-angle-x30` · `-z30` · `-w360`, `taper-a-angle-z`, `taper-b-double-w360`, 그림 비교 `art-taper-ref`(X · Z 나란히, 요약 칸 포함).
 - 보정 방식(사용자 결정 2026-10-17, E21 · E20): 결과 맨 위 스위치 하나 **"기계 보정 (G41/G42 · 도면 좌표)" / "직접 보정 (G40 · 보정 좌표)"** —
   테이퍼 · 라운드가 함께 쓰는 `AppState.compMode`(키 `compMode`, 처음은 기계 보정)라 한쪽에서 바꾸면 다른 쪽도 바뀌고 다음에 켜도 그대로다.
   옛 NC 카드 탭과 라운드의 '접점 모드 / 합성 R 궤적' 카드를 대신한다. 결과 카드 · 형상 확인 · NC · 결과 띠가 모두 이것을 따른다.

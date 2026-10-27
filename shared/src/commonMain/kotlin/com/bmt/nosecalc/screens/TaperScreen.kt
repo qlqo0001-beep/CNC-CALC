@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.Feature
+import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.OnBack
 import com.bmt.nosecalc.screens.taper.GrooveScreen
 import com.bmt.nosecalc.screens.taper.SlopeScreen
@@ -75,6 +76,8 @@ private fun PickScreen(s: TaperState) {
     val c = AppTheme.colors
     val kind = s.kind
     val mirrored = s.reverse && !kind.groove
+    // 그림의 각도 호는 입력 화면과 같은 기준(테이퍼 화면 전체 하나)
+    val angleRef = LocalAppState.current.angleRef
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 2.dp, bottom = 12.dp)) {
         OutlineTabs(
             TaperKind.tabRows, kind.ordinal,
@@ -117,7 +120,7 @@ private fun PickScreen(s: TaperState) {
                                     s.open = true
                                 },
                                 Modifier.weight(1f), aspectRatio = 199f / 221f,
-                            ) { TypeArt(kind, type, mirrored, flip = flipped) }
+                            ) { TypeArt(kind, type, mirrored, flip = flipped, angleRef = angleRef) }
                         }
                         repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
                     }
@@ -171,8 +174,12 @@ internal val TaperHelp = listOf(
             "형상을 누르면 입력 화면이 열립니다(맨 위 작은 그림을 누르면 형상을 다시 고릅니다). 입력 카드는 '도면 치수'(점마다 X · Z · 모서리 R, 각도, 시작 · 끝)와 " +
                 "'공구'(노즈 R · Z 여유 · 팁 번호) 두 묶음입니다. 도면 치수 칸은 0 에서 시작하고, 값을 넣으면 바로 계산합니다. " +
                 "X 는 직경값(도면 Ø 그대로, Ø40 → 40), Z 는 도면 좌표입니다(Z0 = 부품 오른쪽 끝면, 척 쪽은 −). " +
-                "단일 테이퍼(외경·내경)는 X1·Z1·X2·Z2·각도 가운데 넷을 넣으면 나머지 하나를 계산합니다(보통 각도를 비워 둡니다). " +
-                "각도는 Z축(가로선)에서 잰 한쪽 각입니다 — 도면이 꼭지각이면 ÷2, X축 기준이면 90 − 값.",
+                "단일 테이퍼(외경·내경)는 X1·Z1·X2·Z2·각도 가운데 넷을 넣으면 나머지 하나를 계산합니다(보통 각도를 비워 둡니다).",
+            "각도는 각도 칸 옆 '각도 기준' 에서 어느 선에서 잰 각인지 고릅니다(처음은 X축, 다음에 켜도 그대로). " +
+                "도면의 각이 단면(세로선)과 이루는 각이면 X축, 축(가로선)과 이루는 각이면 Z축입니다 — 같은 경사면 X축 각 = 90° − Z축 각. " +
+                "예: 지름 41 → 34.7(반경 차 3.15)에 X축 30° 면 Z 길이는 3.15 × tan30° = 1.819, Z축 30° 면 3.15 ÷ tan30° = 5.456 입니다. " +
+                "도면이 꼭지각(원뿔 전체 각)이면 Z축 기준으로 ÷2 를 넣습니다. 기준을 바꾸면 넣은 각도는 같은 경사의 새 기준 값으로 바뀌고(30 → 60), " +
+                "결과 카드의 각도 · 그림의 각도 호도 그 기준을 따릅니다. 2중 테이퍼는 각도가 결과라 결과 카드의 각1 · 각2 아래에 같은 스위치가 있습니다.",
             "T1 은 먼저 깎는 점입니다. '도면 치수' 맨 위의 'T1 ⇄ T2 바꾸기'(2중 테이퍼는 'T1 ⇄ T3')를 켜면 같은 형상을 같은 바이트로 반대 끝부터 깎습니다 — " +
                 "예: 외경 형상 1 을 외경 쪽(위)에서 면취를 타고 내려와 단면을 중심 쪽으로. 진행이 반대라 G41/G42 가 바뀌고(외경 형상 1 은 G42 → G41), " +
                 "진입 · 후퇴와 NC 순서도 바뀝니다. 꼭짓점의 보정 좌표는 같은 값이고 순서만 반대입니다. 바꿀 때 넣은 값은 같은 실제 점에 남도록 칸끼리 자리를 바꿉니다" +

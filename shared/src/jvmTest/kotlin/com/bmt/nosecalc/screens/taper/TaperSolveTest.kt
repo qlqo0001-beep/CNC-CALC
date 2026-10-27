@@ -1,5 +1,6 @@
 package com.bmt.nosecalc.screens.taper
 
+import com.bmt.nosecalc.AngleRef
 import com.bmt.nosecalc.calc.DoubleTaperInput
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.GrooveCalc
@@ -27,11 +28,12 @@ import kotlin.test.assertTrue
  * 같은 실물 형상을 계산기의 reverse = true(형상 그대로, Z+ 로 깎음)로 따로 풀어 숫자·두 NC 가 같은지 맞춰 본다.
  */
 class TaperSolveTest {
+    /** 이 파일의 각도 숫자는 calc 와 같은 Z축 기준(화면 처음 값은 X축 — 두 기준은 AngleRefTest) */
     private fun form(
         kind: TaperKind, type: Int, reverse: Boolean, x: List<Double?>, z: List<Double?>,
         r: Double = 0.4, tip: Int? = null, angle: Double? = null,
         corners: List<Double> = List(x.size) { 0.0 }, start: Double? = null, end: Double? = null, flip: Boolean = false,
-    ) = SlopeForm(kind, type, reverse, r, tip, x, z, angle, 1.0, corners, start, end, flip)
+    ) = SlopeForm(kind, type, reverse, r, tip, x, z, angle, 1.0, corners, start, end, flip, angleRef = AngleRef.Z)
 
     /** 화면의 뒤집기 스위치와 같은 칸 맞바꿈(TaperState.toggleFlip): 점 순서 · 모서리 R 을 거꾸로, 시작점 ↔ 끝점 */
     private fun SlopeForm.flipped() = copy(x = x.reversed(), z = z.reversed(), corners = corners.reversed(), start = end, end = start, flip = !flip)
@@ -493,14 +495,14 @@ class TaperSolveTest {
         }
     }
 
-    /** SlopeScreen 의 입력 → SlopeForm 그대로 */
+    /** SlopeScreen 의 입력 → SlopeForm 그대로. 각도 칸은 Z축 기준 숫자(toggleFlipSwapsFields 의 30°) */
     private fun formOf(s: TaperState): SlopeForm {
         val n = s.kind.points
         return SlopeForm(
             s.kind, s.type!!, s.reverse, s.shared("noseR").toDouble(), s.tip,
             (1..n).map { s.point("x$it").toDoubleOrNull() }, (1..n).map { s.point("z$it").toDoubleOrNull() }, s.point("ang").toDoubleOrNull(),
             s.shared("zClear").toDoubleOrNull() ?: 0.0, (1..n).map { s.point("r$it").toDoubleOrNull() ?: 0.0 },
-            s.point("start").toDoubleOrNull(), s.point("end").toDoubleOrNull(), s.flip,
+            s.point("start").toDoubleOrNull(), s.point("end").toDoubleOrNull(), s.flip, angleRef = AngleRef.Z,
         )
     }
 
@@ -528,7 +530,7 @@ class TaperSolveTest {
             val start = if (frontV) x[0] + dx else z[0] + (if (rev != flip) -6.0 else 6.0)
             for (r in listOf(0.4, 0.8)) for (r1 in listOf(0.0, 1.0)) for (lead in listOf(false, true)) for (zc in clear) {
                 val corners = List(kind.points) { if (it == 0) r1 else 0.0 }
-                val f = SlopeForm(kind, type, rev, r, null, x, z, null, zc, corners, if (lead) start else null, flip = flip)
+                val f = SlopeForm(kind, type, rev, r, null, x, z, null, zc, corners, if (lead) start else null, flip = flip, angleRef = AngleRef.Z)
                 val what = "${kind.label} 형상 $type ${if (rev) "역" else "정"} 뒤집기 $flip r$r R$r1 시작점 $lead Z 여유 $zc"
                 val s = assertNotNull(TaperSolve.solve(f).solution, what)
                 val c = maxOf(zc, r)

@@ -35,8 +35,11 @@ import com.bmt.nosecalc.screens.taper.TaperState
 import com.bmt.nosecalc.screens.taper.cutEnd
 import com.bmt.nosecalc.screens.taper.directNc
 import com.bmt.nosecalc.screens.taper.example
+import com.bmt.nosecalc.screens.taper.label
+import com.bmt.nosecalc.screens.taper.shownAngles
 import com.bmt.nosecalc.screens.taper.signed
 import com.bmt.nosecalc.screens.taper.travelText
+import com.bmt.nosecalc.screens.taper.userAngleExample
 import com.bmt.nosecalc.screens.triangle.TriField
 import com.bmt.nosecalc.screens.triangle.TriangleState
 import java.io.File
@@ -85,16 +88,28 @@ class UiGoldenTest {
             },
         )
         slope("taper-b-inner1", TaperState(TaperKind.INNER, type = 1, open = true).example().apply { setPoint("end", "-20") })
+        // 34.1° · 30° 는 Z축 기준 숫자(각도 기준이 생기기 전 골든) — 기준을 밝혀 숫자 · NC 가 그대로
         slope(
             "taper-b-auto",
             TaperState(type = 1, open = true).example().apply {
                 setPoint("z2", "")
                 setPoint("ang", "34.1")
             },
+            AngleRef.Z,
         )
         slope("taper-b-reverse", TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example())
         slope("taper-b-double", TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1") })
-        slope("taper-b-error", TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") })
+        slope("taper-b-error", TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") }, AngleRef.Z)
+    }
+
+    /**
+     * 각도 기준(사용자 결정 2026-10-28, 처음 X축): 사용자 예 [userAngleExample] — 같은 칸(각도 30)을 X축 기준이면 Z1 −25.619, Z축 기준이면 −29.256.
+     * 다른 골든은 처음 값(X축)으로 각도 줄만 X축 각이 된다
+     */
+    @Test
+    fun taperAngleRef() {
+        slope("taper-b-angle-x30", userAngleExample(), AngleRef.X)
+        slope("taper-b-angle-z30", userAngleExample(), AngleRef.Z)
     }
 
     /**
@@ -167,8 +182,8 @@ class UiGoldenTest {
         triangle("triangle-three", TriangleState(mapOf("a" to "3", "b" to "4", "c" to "5")))
     }
 
-    /** SlopeScreen 의 입력 → SlopeForm 그대로 */
-    private fun slope(name: String, s: TaperState) {
+    /** SlopeScreen 의 입력 → SlopeForm 그대로. ref = 각도 기준(AppState.angleRef, 화면 처음 값 X축) — 각도 칸을 읽는 축이고 각도 줄도 그 기준 */
+    private fun slope(name: String, s: TaperState, ref: AngleRef = AngleRef.X) {
         val kind = s.kind
         val type = s.type!!
         val n = kind.points
@@ -184,6 +199,7 @@ class UiGoldenTest {
             s.point("start").toDoubleOrNull(),
             s.point("end").toDoubleOrNull(),
             s.flip,
+            angleRef = ref,
         )
         val r = TaperSolve.solve(form)
         val text = buildString {
@@ -200,7 +216,7 @@ class UiGoldenTest {
                     line("  모서리 ${if (it.cw) "G02" else "G03"} R${f(it.r)} → 보정 R${f(it.progR)} 중심 ${xz(it.center)}")
                 }
             }
-            line("각도 ${sol.anglesDeg.map(::f)}")
+            line("각도 ${ref.label} ${sol.shownAngles(ref).map(::f)}")
             line("진입점 ${xz(sol.entry)} 후퇴점 ${xz(sol.exit)}")
             // 뒤집어 척 쪽에서 시작할 때만(안 뒤집은 골든은 그대로)
             if (sol.approach.isNotEmpty()) line("접근 줄 ${sol.approach.map(::xz)}")
