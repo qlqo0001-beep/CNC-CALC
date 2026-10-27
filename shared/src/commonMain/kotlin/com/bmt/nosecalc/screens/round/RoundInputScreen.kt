@@ -49,8 +49,9 @@ import com.bmt.nosecalc.CompMode
 import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.calc.BoringBar
 import com.bmt.nosecalc.calc.Fmt
-import com.bmt.nosecalc.calc.HolderCheck
-import com.bmt.nosecalc.calc.HolderResult
+import com.bmt.nosecalc.calc.HolderPlan
+import com.bmt.nosecalc.calc.HolderSkip
+import com.bmt.nosecalc.calc.HolderStop
 import com.bmt.nosecalc.calc.L2Ref
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.RoundCalc
@@ -78,6 +79,7 @@ import com.bmt.nosecalc.ui.WarningBanner
 import com.bmt.nosecalc.ui.keepWords
 import com.bmt.nosecalc.ui.oneLine
 import com.bmt.nosecalc.ui.rememberFieldChain
+import com.bmt.nosecalc.ui.rememberViewerState
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.Space
 import kotlinx.coroutines.launch
@@ -100,7 +102,7 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
     // 노즈R 0 으로 푼 것 = 도면 좌표 프로그램(기계 보정의 NC · 뷰어 경로)
     val drawn = remember(input) { RoundCalc.calc(input.copy(noseR = 0.0)).solution }
     val sol = result.solution
-    val holder = holderOf(s, sol, input.noseR, inner, faceAtStart = true)
+    val holder = holderOf(s, sol, drawn, input.noseR, inner, faceAtStart = true)
     val blanks = blankable(type)
     val warnings = shownWarnings(result)
     val flagged = warnings.flatMap { roundWarningFields(it, type) }.toSet()
@@ -118,7 +120,7 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
             else -> DimShown("", DimKind.Missing)
         }?.let { f.key to it }
     }.toMap() + ("leg" to DimShown(s.shared("leg").ifEmpty { "5.0" }))
-    val dock = roundDock(sol, warnings, type, comp, empty, c.textStrong, holder?.result?.hits?.isNotEmpty() == true)
+    val dock = roundDock(sol, warnings, type, comp, empty, c.textStrong, holder?.needsCare == true)
     val preview = dock?.oneLine()
     val chain = rememberFieldChain(s.editing)
     val through = input.through
@@ -255,8 +257,8 @@ internal fun ManualScreen(s: RoundState) {
     val tip = s.manualTip ?: standard
     val reverse = s.manualReverse()
     // 3점호는 입구 끝면을 모른다 — 시작 접선을 거꾸로 늘인다(입구 R 이면 끝면)
-    val holder = holderOf(s, sol, input.noseR, s.inner, faceAtStart = false)
-    val dock = roundDock(sol, warnings, MANUAL, comp, name = c.textStrong, holderContact = holder?.result?.hits?.isNotEmpty() == true)
+    val holder = holderOf(s, sol, drawn, input.noseR, s.inner, faceAtStart = false)
+    val dock = roundDock(sol, warnings, MANUAL, comp, name = c.textStrong, holderContact = holder?.needsCare == true)
     val preview = dock?.oneLine()
     val chain = rememberFieldChain(s.editing)
 
@@ -334,7 +336,7 @@ private fun Page(dock: DockStatus?, sheetOpen: Boolean, content: @Composable Col
 
 /**
  * 결과 띠 · 키패드 결과 한 줄: 풀리면 지금 보정 방식의 노드 좌표(comp = 직접 보정 → 보정 좌표 파랑, 기계 보정 → 도면 좌표 name 색)와
- * 노란 경고 수(보링바가 닿으면 하나 더 — holderContact), 멈췄으면 첫 경고의 첫 문장. 이름은 name 색. 값이 모자라는 동안(파란 안내)은 null — 띠도 한 줄도 없다
+ * 노란 경고 수(보링바가 닿거나 안전 끝점에서 끊으면 하나 더 — holderContact), 멈췄으면 첫 경고의 첫 문장. 이름은 name 색. 값이 모자라는 동안(파란 안내)은 null — 띠도 한 줄도 없다
  */
 internal fun roundDock(
     sol: RoundSolution?,
@@ -360,18 +362,26 @@ internal fun roundDock(
 }
 
 /**
- * 내경 결과의 보링바: bar = 칸 값(모자라면 null), result = 검사(풀이 · 바가 없으면 null).
+ * 내경 결과의 보링바: bar = 칸 값(모자라면 null), plan = 간섭 검사 + 안전 끝점 · 잘린 NC(풀이 · 바가 없으면 null).
  * faceAtStart = 도면 시작이 구멍 입구 끝면(TYPE 화면). 3점호는 시작 접선을 거꾸로 늘여 입구를 찾는다
  */
-private class Holder(val bar: BoringBar?, val result: HolderResult?, val faceAtStart: Boolean)
+private class Holder(val bar: BoringBar?, val plan: HolderPlan?, val faceAtStart: Boolean) {
+    /** 확인할 것이 있나(결과 띠의 노란 수): 닿거나, 안전 여유가 모자라 끊거나, 깎을 수 없거나 */
+    val needsCare: Boolean get() = plan != null && plan.result.skip == null && (plan.result.hits.isNotEmpty() || plan.end != null || plan.warnings.isNotEmpty())
+}
 
-/** 내경이면 보링바 칸을 읽어 검사한다(외경은 null — 보링바 칸 · 띠가 없다). r = 노즈 R */
+/**
+ * 내경이면 보링바 칸을 읽어 검사하고 안전 끝점에서 끊은 NC 를 만든다(외경은 null — 보링바 칸 · 카드가 없다). drawn = 노즈R 0 으로 푼 도면 좌표 풀이
+ * (기계 보정 잘린 NC), r = 노즈 R. 값이 바뀔 때만 다시 센다(JVM 에서 10~60 ms)
+ */
 @Composable
-private fun holderOf(s: RoundState, sol: RoundSolution?, r: Double, inner: Boolean, faceAtStart: Boolean): Holder? {
+private fun holderOf(s: RoundState, sol: RoundSolution?, drawn: RoundSolution?, r: Double, inner: Boolean, faceAtStart: Boolean): Holder? {
     if (!inner) return null
     val bar = s.holderBar()
-    val result = remember(sol, bar) { if (sol != null && bar != null) HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, r, faceAtStart, bar) else null }
-    return Holder(bar, result, faceAtStart)
+    // 칸 글을 열쇠로(숫자가 아니면 NaN — NaN 은 자기와 같지 않아 열쇠로 쓰면 그릴 때마다 다시 센다)
+    val safeText = s.holder("safe")
+    val plan = remember(sol, drawn, bar, safeText) { if (sol != null && bar != null) HolderStop.plan(sol, drawn, r, faceAtStart, bar, s.holderSafe()) else null }
+    return Holder(bar, plan, faceAtStart)
 }
 
 /** 요약 끝 공구 글: 노즈 R(쓴 그대로) · 팁 번호. 붙임 공백 · 낱말 이음(\u2060)으로 "팁 3번" 이 쪼개져 줄바꿈되지 않게 */
@@ -468,9 +478,11 @@ private fun ToolInputs(
 }
 
 /**
- * 보정 방식 스위치(테이퍼와 같은 자리 · 같은 값) → 원호(3점호) → 숫자와 함께 나온 경고 → 보링바 띠(내경) → 노드 표(anchor — 결과 띠가 가리킨다) →
- * 형상 → NC(comp = 직접 보정이면 보정 좌표, 아니면 도면 좌표 — 보링바가 닿는 줄은 빨갛게). 계산이 멈췄으면 없다(까닭은 요약 아래).
- * drawn = 노즈R 0 으로 푼 것(도면 좌표 프로그램), inner = 소재가 구멍 쪽(내경), holder = 내경의 보링바
+ * 보정 방식 스위치(테이퍼와 같은 자리 · 같은 값) → 원호(3점호) → 숫자와 함께 나온 경고 → 보링바(내경: 간섭 목록 · 가공 가능 끝점, 값이 없으면 파란 안내) →
+ * 노드 표(anchor — 결과 띠가 가리킨다) → 형상 → NC(comp = 직접 보정이면 보정 좌표, 아니면 도면 좌표). 계산이 멈췄으면 없다(까닭은 요약 아래).
+ * drawn = 노즈R 0 으로 푼 것(도면 좌표 프로그램), inner = 소재가 구멍 쪽(내경), holder = 내경의 보링바.
+ * 보링바가 닿거나 안전 여유가 모자라면 NC 는 안전 끝점에서 끊고 빠지는 잘린 NC 가 처음이고, 스위치로 전체(확인용 · 간섭 포함)를 본다
+ * (사용자 요청 2026-10-27 — 예전 결정 D5 '숫자 · NC 는 그대로' 를 바꿈). 간섭 목록의 줄을 누르면 형상 확인이 그 자리로 가고 NC 는 전체로 바뀌어 그 줄을 짚는다
  */
 @Composable
 private fun Results(
@@ -488,46 +500,141 @@ private fun Results(
     CompModeSwitch(sol.side)
     if (type == MANUAL) ArcCard(sol)
     Banners(warnings, type, solved = true, inner = inner)
-    // NC 카드에 주는 목록(직접 보정은 첫 줄 주석부터) — 보링바 띠의 줄 번호 · 빨간 줄이 이것을 센다
-    val nc = if (comp) directNc(sol.nc, noseR, sol.tip) else drawn?.nc
-    val note = if (holder != null && nc != null) holderNote(holder.result, holder.bar, sol, drawn, comp, nc) else null
-    if (note != null) {
-        WarningBanner((listOf(note.text) + note.lines.map { "· $it" }).joinToString("\n"), level = if (note.contact) WarnLevel.Warn else WarnLevel.Info)
+    val bar = holder?.bar
+    val plan = holder?.plan
+    when {
+        holder == null -> {}
+        bar == null || plan == null -> WarningBanner("보링바 값을 넣으면 공구가 소재에 닿는지 봅니다.", level = WarnLevel.Info)
+        plan.result.skip == HolderSkip.NOT_MONOTONE -> WarningBanner("원호가 Z 로 되돌아가는 모양이라 보링바 간섭 검사를 하지 않습니다.", level = WarnLevel.Info)
+        // 값이 틀리면(BAD_INPUT) 칸이 빨갛다 — 카드 없음
+        else -> {}
     }
+    val checked = plan?.takeIf { it.result.skip == null }
+    val rows = if (checked != null && bar != null) remember(checked, comp) { hitRows(checked, comp, bar, backBoring(sol)) } else emptyList()
+    val stop = if (checked != null && bar != null) remember(checked, comp, noseR) { stopView(checked, comp, sol, drawn, noseR, bar) } else null
+    val viewer = rememberViewerState()
+    val bring = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    // 목록에서 누른 간섭 · NC 전체 보기 — 결과나 보정 방식이 바뀌면 처음(잘린 NC)으로
+    var focus by remember(checked, comp) { mutableStateOf<HitRow?>(null) }
+    var full by remember(checked, comp) { mutableStateOf(false) }
+    if (rows.isNotEmpty()) {
+        HolderHitsCard(rows, comp, focus) { row ->
+            focus = row
+            full = true
+            viewer.focus(row.from, FOCUS_ZOOM)
+            scope.launch { bring.bringIntoView() }
+        }
+    }
+    if (stop != null && checked != null) SafeEndCard(stop, comp, checked.safe)
     NodeTable(sol, comp, anchor)
-    val shown = holder?.result?.takeIf { it.skip == null }
-    val prog = if (comp) sol else drawn
     RoundViewer(
         sol, comp, noseR, drawn, inner,
-        if (shown != null && holder.bar != null && prog != null) HolderShow(holder.bar, shown, holder.faceAtStart) { cardLine(prog, comp, it.element, it.first) + 1 } else null,
+        if (holder != null && checked != null && bar != null) HolderShow(bar, checked.result, holder.faceAtStart, rows, stop) else null,
+        viewer, focus, Modifier.bringIntoViewRequester(bring),
     )
     // 내경 3~6 은 끝 직선이 입구 구멍(처음)이라 마지막 줄은 바닥
     val legNote = if (type in 2..6 && !(inner && type != 2)) " 마지막 줄은 끝 직선의 끝(끝 직선 길이)까지입니다." else ""
     val r = Fmt.nc(noseR).removeSuffix(".")
-    val flagged = note?.flagged.orEmpty()
-    if (comp) {
-        NcCard(
-            nc!!,
-            "가상 인선 팁 ${sol.tip}번 기준 프로그램 좌표입니다 — 기계의 노즈R 보정은 쓰지 않습니다(G40). 원호 R 은 합성 R(볼록 R + r · 오목 R − r)이고, " +
-                "90° 넘는 원호는 나눠 썼습니다. 첫 줄 주석이 그 노즈 R · 팁을 적어 둡니다(기계는 주석을 건너뜁니다). 이송 F 는 넣지 않았습니다.$legNote",
-            programName = "직접 보정(G40) 프로그램",
-            facts = listOf(NcFact("G41/G42 걸지 말 것 (이중 보정)", WarnLevel.Error), NcFact("원호 = 합성 R"), NcFact("이송 F 없음")),
-            flagged = flagged,
-        )
-    } else if (drawn != null) {
-        NcCard(
-            drawn.nc,
-            "도면(접점) 좌표 프로그램입니다. 기계의 노즈R 보정(${sol.side} · 공구 보정 R$r · T${sol.tip})과 함께 쓰고, " +
-                "보정 시작 · 취소(${sol.side}/G40) 블록은 기계에 맞게 넣으세요. 이 좌표를 보정 없이 깎으면 노즈R 만큼 형상이 틀립니다. 이송 F 는 넣지 않았습니다.$legNote",
-            programName = "도면 좌표 프로그램 (G41/\u2060G42\u00A0용)",
-            facts = listOf(
-                NcFact("보정 시작 · 취소 블록은 직접 넣기", WarnLevel.Warn),
-                NcFact("공구 보정: R $r · T ${sol.tip}", WarnLevel.Warn),
-                NcFact("이송 F 없음"),
-            ),
-            flagged = flagged,
-        )
+    when {
+        holder != null -> HolderNc(sol, drawn, comp, noseR, r, legNote, rows, stop, full, focus) { full = it }
+        comp -> NcCard(directNc(sol.nc, noseR, sol.tip), directNote(sol, legNote), programName = DIRECT_NAME, facts = directFacts())
+        drawn != null -> NcCard(drawn.nc, machineNote(sol, r, legNote), programName = MACHINE_NAME, facts = machineFacts(sol, r))
     }
+}
+
+/** 간섭 목록에서 누른 자리로 갈 때 확대(맞춤의 배수) */
+private const val FOCUS_ZOOM = 3f
+
+private const val DIRECT_NAME = "직접 보정(G40) 프로그램"
+private const val MACHINE_NAME = "도면 좌표 프로그램 (G41/\u2060G42\u00A0용)"
+
+private fun directNote(sol: RoundSolution, legNote: String) =
+    "가상 인선 팁 ${sol.tip}번 기준 프로그램 좌표입니다 — 기계의 노즈R 보정은 쓰지 않습니다(G40). 원호 R 은 합성 R(볼록 R + r · 오목 R − r)이고, " +
+        "90° 넘는 원호는 나눠 썼습니다. 첫 줄 주석이 그 노즈 R · 팁을 적어 둡니다(기계는 주석을 건너뜁니다). 이송 F 는 넣지 않았습니다.$legNote"
+
+private fun machineNote(sol: RoundSolution, r: String, legNote: String) =
+    "도면(접점) 좌표 프로그램입니다. 기계의 노즈R 보정(${sol.side} · 공구 보정 R$r · T${sol.tip})과 함께 쓰고, " +
+        "보정 시작 · 취소(${sol.side}/G40) 블록은 기계에 맞게 넣으세요. 이 좌표를 보정 없이 깎으면 노즈R 만큼 형상이 틀립니다. 이송 F 는 넣지 않았습니다.$legNote"
+
+private fun directFacts() = listOf(NcFact("G41/G42 걸지 말 것 (이중 보정)", WarnLevel.Error), NcFact("원호 = 합성 R"), NcFact("이송 F 없음"))
+
+private fun machineFacts(sol: RoundSolution, r: String) = listOf(
+    NcFact("보정 시작 · 취소 블록은 직접 넣기", WarnLevel.Warn),
+    NcFact("공구 보정: R $r · T ${sol.tip}", WarnLevel.Warn),
+    NcFact("이송 F 없음"),
+)
+
+/**
+ * 내경의 NC 카드: 잘린 NC 가 있으면 처음은 그것(끊은 줄 초록 · 후퇴 줄 파랑, 기계 보정은 '보정 시작만 넣기 · G40 은 있음')이고 스위치로
+ * 전체(확인용 — 간섭 줄 빨강, 노랑 테 복사 단추)를 본다. 깎을 수 없으면(진입점부터 · 깎기 전에 멈춤 · 기계 보정 잘린 NC 없음) 전체만 — 확인용 표시와 함께.
+ * 닿지 않고 끝까지 안전하면 예전 카드와 같다. focus = 간섭 목록에서 누른 줄(전체 보기에서 짚는다)
+ */
+@Composable
+private fun HolderNc(
+    sol: RoundSolution,
+    drawn: RoundSolution?,
+    comp: Boolean,
+    noseR: Double,
+    r: String,
+    legNote: String,
+    rows: List<HitRow>,
+    stop: StopView?,
+    full: Boolean,
+    focus: HitRow?,
+    onFull: (Boolean) -> Unit,
+) {
+    val whole = if (comp) directNc(sol.nc, noseR, sol.tip) else drawn?.nc ?: return
+    val cutNc = stop?.nc
+    val top: (@Composable () -> Unit)? = if (cutNc != null) ({ CutSwitch(full, onFull) }) else null
+    if (stop != null && cutNc != null && !full) {
+        val tones = buildMap {
+            stop.endLine?.let { put(it, NcTone.END) }
+            stop.retractLines?.forEach { put(it, NcTone.RETRACT) }
+        }
+        HolderNcCard(
+            cutNc,
+            if (comp) {
+                "안전 끝점까지 깎고 빠지는 직접 보정(G40) 프로그램입니다 — 보링바가 소재와 안전 여유를 지키는 마지막 자리에서 끊고(초록 줄) 후퇴합니다(파란 줄). " +
+                    "나머지는 다른 공구로 깎으세요. 앞 줄은 전체 프로그램과 같은 글이고, 끊은 원호는 같은 중심 · 같은 R 입니다. " + directNote(sol, legNote)
+            } else {
+                "안전 끝점까지 깎고 빠지는 도면 좌표 프로그램입니다 — 마지막 블록(초록 줄)은 기계가 끝 블록에서 법선으로 보정해 노즈가 안전 끝점에 서는 명령점에서 끊었고, " +
+                    "첫 후퇴 줄에 G40 이 들어 있습니다(다시 넣지 마세요). 나머지는 다른 공구로 깎으세요. 보정 시작(${sol.side}) 블록과 공구 보정 R$r · T${sol.tip} 은 기계에 맞게 넣으세요. " +
+                    "끝 블록 보정 · 취소는 FANUC 취소 형식 A(블록 끝 법선 → 끝점으로 곧게)로 보았습니다 — 취소 방식이 다른 기계는 첫 후퇴 줄을 확인하세요. 이송 F 는 넣지 않았습니다.$legNote"
+            },
+            programName = if (comp) "직접 보정(G40) 잘린 프로그램" else "도면 좌표 잘린 프로그램 (${sol.side}\u00A0용)",
+            facts = if (comp) {
+                listOf(NcFact("안전 끝점까지 · 후퇴 포함", WarnLevel.Info)) + directFacts()
+            } else {
+                listOf(
+                    NcFact("보정 시작 ${sol.side} 만 넣기 · G40 은 있음", WarnLevel.Warn),
+                    NcFact("공구 보정: R $r · T ${sol.tip}", WarnLevel.Warn),
+                    NcFact("이송 F 없음"),
+                )
+            },
+            tones = tones,
+            top = top,
+        )
+        return
+    }
+    // 전체: 간섭 줄 빨강, 목록에서 누른 줄은 초점색. 닿거나 안전 여유가 모자라면 확인용 표시(빨간 칩 · 노랑 테 복사 단추)
+    val careful = rows.isNotEmpty() || (stop != null && stop.kind != StopKind.CLEAR)
+    val note = if (comp) directNote(sol, legNote) else machineNote(sol, r, legNote)
+    HolderNcCard(
+        whole,
+        if (careful) "전체 프로그램(확인용)입니다 — 이대로 끝까지 깎으면 보링바가 소재에 닿거나 안전 여유를 지키지 못합니다. $note" else note,
+        programName = when {
+            !careful -> if (comp) DIRECT_NAME else MACHINE_NAME
+            rows.isNotEmpty() -> "전체 (간섭 포함)"
+            else -> "전체 (확인용)"
+        },
+        facts = (if (careful) listOf(NcFact(if (rows.isNotEmpty()) "간섭 포함 — 확인용" else "안전 여유 안 지킴 — 확인용", WarnLevel.Error)) else emptyList()) +
+            if (comp) directFacts() else machineFacts(sol, r),
+        tones = rows.flatMap { it.line..it.lineTo }.associateWith { NcTone.HIT },
+        focus = focus?.line,
+        danger = careful,
+        top = top,
+    )
 }
 
 /** 점 배지 색(그림의 P1 · P2 · P3 와 같다). 끝점도 보통 요소라 빨강이 아닌 남색 */

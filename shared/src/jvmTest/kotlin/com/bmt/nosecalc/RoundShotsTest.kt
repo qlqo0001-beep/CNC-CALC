@@ -8,7 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import com.bmt.nosecalc.calc.HolderCheck
+import com.bmt.nosecalc.calc.HolderStop
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.screens.RoundScreen
 import com.bmt.nosecalc.screens.round.HolderCard
@@ -16,9 +16,16 @@ import com.bmt.nosecalc.screens.round.HolderShow
 import com.bmt.nosecalc.screens.round.MANUAL
 import com.bmt.nosecalc.screens.round.RoundState
 import com.bmt.nosecalc.screens.round.RoundViewer
-import com.bmt.nosecalc.screens.round.cardLine
+import com.bmt.nosecalc.screens.round.HitRow
+import com.bmt.nosecalc.screens.round.HolderNcCard
+import com.bmt.nosecalc.screens.round.NcTone
+import com.bmt.nosecalc.screens.round.hitRows
+import com.bmt.nosecalc.screens.round.stopView
 import com.bmt.nosecalc.screens.round.roundExample
+import com.bmt.nosecalc.screens.round.roundInnerDomeA
 import com.bmt.nosecalc.screens.round.roundInnerExample
+import com.bmt.nosecalc.screens.round.roundInnerSocketF
+import com.bmt.nosecalc.screens.round.roundManualBackBoring
 import com.bmt.nosecalc.screens.round.roundInnerStep
 import com.bmt.nosecalc.screens.round.roundManualInnerMouth
 import com.bmt.nosecalc.screens.round.roundManualInnerRev
@@ -93,16 +100,54 @@ class RoundShotsTest {
     }
 
     /**
-     * 내경: 고르기(형상 2~6 · 언더컷 표), 손 계산 돔(바 없음 — 파란 안내), 프리셋 A16R-SCLCR 09 로 닿음(기계 보정 — 띠 · 빨간 줄 · 단면) ·
-     * 관통 단차는 안 닿음(직접 보정), 3점호 입구 R(안 닿음)
+     * 내경: 고르기(형상 2~6 · 언더컷 표), 손 계산 돔(바 없음 — 파란 안내), 프리셋 A16R-SCLCR 09 로 닿음(기계 보정 — DMIN 20 이라 깎기 전에 멈춤) ·
+     * 관통 단차는 안 닿음(직접 보정 — 끝까지 안전), 3점호 입구 R
      */
     @Test
     fun inner() {
         shot("round-pick-inner", 1180) { RoundState().apply { typeInner = true } }
         shot("round-inner-b3", 3700, comp = CompMode.DIRECT) { roundInnerExample(3) }
-        shot("round-inner-b3-holder", 4100) { roundInnerExample(3).withA16() }
-        shot("round-inner-b5-through-holder-clear", 4200, comp = CompMode.DIRECT) { roundInnerStep().withA16() }
-        shot("round-manual-inner-holder", 3850) { roundManualInnerMouth().withA16() }
+        shot("round-inner-b3-holder", 5000) { roundInnerExample(3).withA16() }
+        shot("round-inner-b5-through-holder-clear", 4700, comp = CompMode.DIRECT) { roundInnerStep().withA16() }
+        shot("round-manual-inner-holder", 4700) { roundManualInnerMouth().withA16() }
+    }
+
+    /**
+     * 안전 끝점(사용자 요청 2026-10-27): calc-design 보링바 예 A(돔 + 바 A, 기계 보정 — 구 원호 중간에서 끊고 온 길을 거꾸로) ·
+     * F(소켓 + Ø8 바, 직접 보정 — 아래 인서트 조각이 맞은편 벽) · 뒤보링(DMIN 22, 기계 보정 — 헤드가 Ø20 쪽에서 모자람, X 빼고 Z 로).
+     * 간섭 없음은 [inner] 의 관통 단차
+     */
+    @Test
+    fun safeStop() {
+        shot("round-inner-a-stop", 4900) { roundInnerDomeA() }
+        shot("round-inner-f-stop", 4900, comp = CompMode.DIRECT) { roundInnerSocketF() }
+        shot("round-manual-back-stop", 4600) { roundManualBackBoring() }
+        // 간섭 목록의 첫 줄(바 · 맞은편 벽)을 누른 뒤: 초점색 띠, 형상 확인이 그 처음 점으로 3배, 그 자세의 보링바, NC 가 전체로 바뀌어 5줄을 짚음
+        Shots.both(
+            "round-inner-a-stop-tap", 4900,
+            setup = { it.open(Feature.ROUND) }, tapDp = Offset(150f, 2395f),
+        ) { AppHost(it) { RoundScreen(roundInnerDomeA()) } }
+    }
+
+    /** NC 카드 전체 보기: 간섭 목록에서 누른 줄(초점색 바탕) · 간섭 줄(빨강) — 예 A 의 기계 보정 */
+    @Test
+    fun ncFullFocus() {
+        Shots.both("round-inner-nc-full-focus", 430, setup = { it.open(Feature.ROUND) }) {
+            AppHost(it) {
+                val s = remember { roundInnerDomeA() }
+                val input = s.input(3)
+                val sol = remember { RoundCalc.calc(input).solution!! }
+                val drawn = remember { RoundCalc.calc(input.copy(noseR = 0.0)).solution!! }
+                val bar = s.holderBar()!!
+                val rows: List<HitRow> = remember { hitRows(HolderStop.plan(sol, drawn, input.noseR, true, bar), false, bar, false) }
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Space.gutter)) {
+                    HolderNcCard(
+                        drawn.nc, "전체 프로그램(확인용)입니다 — 확인용.", "전체 (간섭 포함)", emptyList(),
+                        tones = rows.flatMap { r -> r.line..r.lineTo }.associateWith { NcTone.HIT }, focus = rows.first().line, danger = true,
+                    )
+                }
+            }
+        }
     }
 
     /** 보링바 칸만: 프리셋을 고른 뒤 f 를 8 로 고침 — '수정됨' · 끝날각 줄 · f 오류 */
@@ -116,19 +161,25 @@ class RoundShotsTest {
         }
     }
 
-    /** 형상 확인 크게 보기(돔 + A16R-SCLCR 09, 기계 보정): 카드 머리 오른쪽 '크게 보기' 를 눌러 연다 — 보링바 자리 고르기도 아래 단추 줄과 함께 */
+    /**
+     * 형상 확인 크게 보기(보링바 예 A — 돔 + 바 A, 기계 보정): 카드 머리 오른쪽 '크게 보기' 를 눌러 연다 — 안전 끝 깃발 · 후퇴 점선 · 그 자세의 보링바,
+     * 보링바 자리 고르기도 아래 단추 줄과 함께
+     */
     @Test
     fun holderFull() {
         Shots.both("round-inner-holder-full", setup = { it.open(Feature.ROUND) }, tapDp = Offset(366f, 50f)) {
             AppHost(it) {
-                val s = remember { roundInnerExample(3).withA16() }
+                val s = remember { roundInnerDomeA() }
                 val input = s.input(3)
                 val sol = remember { RoundCalc.calc(input).solution!! }
                 val drawn = remember { RoundCalc.calc(input.copy(noseR = 0.0)).solution!! }
                 val bar = s.holderBar()!!
-                val res = remember { HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, input.noseR, true, bar) }
+                val plan = remember { HolderStop.plan(sol, drawn, input.noseR, true, bar, s.holderSafe()) }
                 Column(Modifier.fillMaxSize().padding(Space.gutter)) {
-                    RoundViewer(sol, false, input.noseR, drawn, true, HolderShow(bar, res, true) { h -> cardLine(drawn, false, h.element, h.first) + 1 })
+                    RoundViewer(
+                        sol, false, input.noseR, drawn, true,
+                        HolderShow(bar, plan.result, true, hitRows(plan, false, bar, false), stopView(plan, false, sol, drawn, input.noseR, bar)),
+                    )
                 }
             }
         }

@@ -56,6 +56,29 @@ internal class NcLines {
         }
     }
 
+    /**
+     * [a] 를 원호 위 점 [p] 에서 끊어 쓴다(보링바 안전 끝점). 조각은 [arc] 가 전체 원호를 나눈 그대로 두고 p 앞에서 끝나는 것은
+     * 그 글 그대로, 마지막 조각만 p 까지 — 앞 블록이 원래 프로그램과 같은 글이다. p 가 원호 끝을 조금 넘어도 된다(볼록 모서리에서
+     * 늘인 보정선). p 는 진행 방향으로 시작 뒤여야 한다
+     */
+    fun arcUntil(a: Arc, p: Pt) {
+        val k = max(1, ceil(a.sweepDeg / 90 - 1e-3).toInt())
+        val a0 = angleOf(a.start - a.center)
+        val sw = a.sweepRad()
+        val sign = if (a.cw) -1 else 1
+        // 조각 끝은 [arc] 와 같은 식(같은 글)
+        val step = sign * sw / k
+        val along = wrap2Pi(sign * (angleOf(p - a.center) - a0))
+        val g = if (a.cw) "G02" else "G03"
+        val tail = " R" + Fmt.nc(a.radius)
+        var q = 1
+        while (q < k && sw * q / k < along - 1e-12) {
+            put(g, a.center + Pt(cos(a0 + step * q), sin(a0 + step * q)) * a.radius, tail, q - 1, k)
+            q++
+        }
+        put(g, p, tail, q - 1, k)
+    }
+
     private fun put(g: String, p: Pt, tail: String, piece: Int, pieces: Int) {
         val nx = Fmt.nc(p.xDia)
         val nz = Fmt.nc(p.z)

@@ -48,6 +48,7 @@ import com.bmt.nosecalc.calc.BarField
 import com.bmt.nosecalc.calc.BoringBar
 import com.bmt.nosecalc.calc.Contour
 import com.bmt.nosecalc.calc.HolderCheck
+import com.bmt.nosecalc.calc.HolderStop
 import com.bmt.nosecalc.calc.InsertShape
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.Pt
@@ -63,6 +64,7 @@ import com.bmt.nosecalc.ui.arrowHead
 import com.bmt.nosecalc.ui.centerLine
 import com.bmt.nosecalc.ui.hatchFill
 import com.bmt.nosecalc.ui.haloText
+import com.bmt.nosecalc.ui.keepWords
 import com.bmt.nosecalc.ui.linearDim
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
@@ -73,7 +75,8 @@ import kotlin.math.sin
 
 /**
  * 보링바(홀더) 카드 — 내경 TYPE 화면 · 3점호 내경 화면에서 도면 · 공구 카드 다음. 단면 스케치(D · f · κr · κr′ · 돌출 길이) →
- * 프리셋(처음은 직접 입력, 고친 뒤엔 '수정됨' · 출처) → 칸: 바 지름 · 날 길이 · f · 인서트 모양 · 절입각(끝날각 κr′ 계산 줄) · 돌출 길이 · DMIN.
+ * 프리셋(처음은 직접 입력, 고친 뒤엔 '수정됨' · 출처) → 칸: 바 지름 · 날 길이 · f · 인서트 모양 · 절입각(끝날각 κr′ 계산 줄) · 돌출 길이 · DMIN ·
+ * 안전 여유(기본 0.5 — 반경 방향으로 이만큼 떨어진 마지막 자리에서 멈추고 빠진다, 프리셋이 바꾸지 않는다).
  * 칸 오류는 계산기의 problems 그대로 칸 아래 빨간 글(r = 노즈 R — f · 날 길이 하한). 칸은 화면의 키패드 묶음(다음)에 든다(preview = 키패드 결과 한 줄).
  * reverse = 뒤보링(3점호 역방향 내경) — 스케치의 인서트도 뒤집는다
  */
@@ -129,6 +132,22 @@ internal fun HolderCard(s: RoundState, r: Double, preview: String? = null, rever
             }
             field("ovh", "돌출 길이 (비우면 공구대 검사 안 함)", BarField.OVERHANG, Modifier.fillMaxWidth(), "인선에서 공구대 면까지 Z 거리", placeholder = "검사 안 함")
             field("dmin", "최소 가공경 Dmin (비우면 검사 안 함)", BarField.DMIN, Modifier.fillMaxWidth(), "카탈로그 DMIN · 헤드가 들어가는 가장 작은 구멍 지름", placeholder = "검사 안 함")
+            // 안전 여유(사용자 결정 2026-10-27): 계산기 BarField 가 아니라 따로 본다 — 0 도 되고 음수 · 숫자 아님만 막는다
+            Column {
+                val badSafe = !HolderStop.safeOk(s.holderSafe())
+                NumberField(
+                    "안전 여유 (mm)", s.holder("safe"), { s.setHolder("safe", it) }, Modifier.fillMaxWidth(),
+                    unit = "mm", placeholder = plain(HolderStop.SAFE_DEFAULT), error = badSafe,
+                    hint = "바 · 인서트 · 공구대 · 최소 가공경과 소재 사이(반경 방향, 공구대는 Z) · 비우면 ${plain(HolderStop.SAFE_DEFAULT)}", id = "h/safe", preview = preview,
+                )
+                Text(
+                    keepWords(if (badSafe) "안전 여유는 0 이상이어야 합니다" else "바 · 인서트 · 공구대 · 최소 가공경이 소재와 반경(X) 방향으로 이만큼(공구대는 Z) 떨어진 마지막 자리에서 멈추고 빠집니다 (인서트 날은 깎는 벽에 붙어도 됨). 바 앞면이 비스듬히 지나는 곳은 직선 거리가 더 짧을 수 있어 끝점 카드에 따로 보입니다."),
+                    Modifier.padding(top = 4.dp),
+                    color = if (badSafe) c.error.label else c.textMuted,
+                    fontSize = 12.5.sp,
+                    lineHeight = 17.sp,
+                )
+            }
         }
     }
     if (picking) {

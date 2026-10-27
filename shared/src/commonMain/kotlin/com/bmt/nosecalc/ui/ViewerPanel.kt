@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -56,8 +57,8 @@ import com.bmt.nosecalc.ui.theme.Radius
 import com.bmt.nosecalc.ui.theme.Space
 import kotlin.math.max
 
-/** 범례 그림: 선(실선 · 끊은 선 · 점선) · 점([MarkKind] 넷과 같은 모양) · 노즈 원 · 면 */
-enum class LegendGlyph { Line, Dashed, Dotted, Ring, Dot, Square, Cross, Circle, Fill }
+/** 범례 그림: 선(실선 · 끊은 선 · 점선) · 점([MarkKind] 다섯과 같은 모양 — 깃발은 칸 높이에 맞춰 줄임) · 노즈 원 · 면 */
+enum class LegendGlyph { Line, Dashed, Dotted, Ring, Dot, Square, Flag, Cross, Circle, Fill }
 
 /** 범례 한 칸 */
 @Immutable
@@ -236,6 +237,11 @@ private fun DrawScope.legendGlyph(l: LegendItem, bg: Color) {
         LegendGlyph.Ring -> mark(MarkKind.Ring, center, l.color, bg)
         LegendGlyph.Dot -> mark(MarkKind.Dot, center, l.color, bg)
         LegendGlyph.Square -> mark(MarkKind.Square, center, l.color, bg)
+        // 깃발(14dp)은 12dp 칸에 넘쳐 0.75 배로
+        LegendGlyph.Flag -> {
+            val foot = Offset(center.x - 3.dp.toPx(), size.height - 1.5.dp.toPx())
+            scale(.75f, foot) { mark(MarkKind.Flag, foot, l.color, bg) }
+        }
         LegendGlyph.Cross -> mark(MarkKind.Cross, center, l.color, bg)
         LegendGlyph.Circle -> {
             drawCircle(l.color.copy(alpha = .10f), 5.5.dp.toPx())

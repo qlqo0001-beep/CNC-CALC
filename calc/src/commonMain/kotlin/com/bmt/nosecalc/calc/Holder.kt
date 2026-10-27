@@ -111,7 +111,8 @@ object HolderCheck {
     /**
      * [program] = G40 프로그램 경로(가상 인선 [tip]), [entry] = G00 진입점, [drawing] = 도면(요소 번호가 같다), [r] = 노즈R.
      * [faceAtStart] = 도면 시작이 구멍 입구 끝면 위(TYPE 화면). 도면이 +Z 로 가면 뒤보링으로 본다.
-     * 진입점에 선 자세, 진입 이동, 프로그램 요소마다 [STEP] 간격으로 여유를 재고, 닿는 구간의 처음 · 끝은 이분법으로 1e-4 mm 쯤까지 좁힌다.
+     * 진입점에 선 자세, 진입 이동, 프로그램 요소마다 [STEP] 간격으로 여유를 재고, 닿는 구간의 처음 · 끝은 이분법 40번으로 좁힌다
+     * (표본 간격의 2⁻⁴⁰ — 1e-6 mm 보다 훨씬 작다).
      * 요소 첫 점에서 이미 닿아 있으면(앞 요소에서 이어짐) 처음은 0
      */
     fun check(drawing: Contour, program: Contour, entry: Pt, tip: Int, r: Double, faceAtStart: Boolean, bar: BoringBar): HolderResult {
@@ -210,7 +211,7 @@ object HolderCheck {
     private fun skipped(s: HolderSkip) = HolderResult(s, emptyList(), null, null, null)
 
     /** 요소 k 위에서 노즈 중심 c 와 가장 가까운 도면 점(원호는 원호 안, 중심이면 가운데). −2 · −1 은 도면 첫 점 */
-    private fun drawnOf(drawing: Contour, k: Int, c: Pt): Pt = when (val s = drawing.segs.getOrNull(k)) {
+    internal fun drawnOf(drawing: Contour, k: Int, c: Pt): Pt = when (val s = drawing.segs.getOrNull(k)) {
         null -> drawing.segs.first().start
         is Line -> {
             val d = s.end - s.start
@@ -373,6 +374,9 @@ internal class Bore(drawing: Contour, faceAtStart: Boolean) {
 
     /** 공구대가 닿는 입구 면 z. 입구 쪽 반직선이 축에 닿지 않고 +Z 로 비스듬히 멀어지면 면이 어디인지 몰라 null */
     val face: Double?
+
+    /** 반직선으로 늘인 윤곽(소재 경계의 깎는 쪽 절반) — 안전 끝점 후퇴의 노즈 원 거리 */
+    internal val ext: List<Seg>
     private val zMin: Double
     private val closed: Boolean
     private val spans: List<Span>
@@ -383,7 +387,7 @@ internal class Bore(drawing: Contour, faceAtStart: Boolean) {
         val last = drawing.segs.last()
         val head = if (faceAtStart) null else ray(first.start, tangent(first, first.start) * -1.0)?.let { Line(it, first.start) }
         val tail = if (last.end.x > EPS) ray(last.end, tangent(last, last.end))?.let { Line(last.end, it) } else null
-        val ext = listOfNotNull(head) + drawing.segs + listOfNotNull(tail)
+        ext = listOfNotNull(head) + drawing.segs + listOfNotNull(tail)
         monotone = ext.all { oneWay(it, if (reverse) 1.0 else -1.0) }
         val a = ext.first().start
         val b = ext.last().end
@@ -410,6 +414,43 @@ internal class Bore(drawing: Contour, faceAtStart: Boolean) {
             g = band(p.zs[i] + nose.z, p.zs[i + 1] + nose.z, p.uM[i], uB, p.lM[i], lB, g)
         }
         return g
+    }
+
+    /**
+     * [gap] 을 둘로 나눠: (깎는 쪽 벽 ρ − 위, 맞은편 벽 ρ + 아래). 토막 · 후보 점은 [band] 와 같다 — 안전 끝점([HolderStop])은
+     * 인서트의 깎는 쪽(날이 원래 닿는 쪽)과 맞은편에 다른 기준을 쓴다
+     */
+    fun sides(p: Piece, nose: Pt): Pair<Gap, Gap> {
+        var cut = Gap.CLEAR
+        var opp = Gap.CLEAR
+        for (i in 0 until p.zs.size - 1) {
+            val uM = p.uM[i]
+            val lM = p.lM[i]
+            val uB = p.uB[i] + nose.x - uM * nose.z
+            val lB = p.lB[i] + nose.x - lM * nose.z
+            val za = p.zs[i] + nose.z
+            val zb = p.zs[i + 1] + nose.z
+            fun look(sp: Span, z: Double) {
+                val rho = sp.rho(z)
+                val u = uM * z + uB
+                val l = lM * z + lB
+                if (rho - u < cut.m) cut = Gap(rho - u, z, u)
+                if (rho + l < opp.m) opp = Gap(rho + l, z, l)
+            }
+            var lo = za
+            var j = breaks.indexOfFirst { it > za }.let { if (it < 0) breaks.size else it }
+            while (lo < zb) {
+                val hi = if (j < breaks.size && breaks[j] < zb) breaks[j++] else zb
+                val sp = if (hi - lo > 1e-12) spanAt((lo + hi) / 2) else null
+                if (sp != null) {
+                    look(sp, lo)
+                    look(sp, hi)
+                    if (sp is Round) for (z in listOf(sp.flat(uM), sp.flat(-lM))) if (z > lo && z < hi) look(sp, z)
+                }
+                lo = hi
+            }
+        }
+        return cut to opp
     }
 
     /** z ∈ [z0, z1] 에서 가장 좁은 반경 */
@@ -595,7 +636,7 @@ internal class Bore(drawing: Contour, faceAtStart: Boolean) {
 
 private fun rad(deg: Double) = deg * PI / 180
 
-private fun lengthOf(s: Seg): Double = when (s) {
+internal fun lengthOf(s: Seg): Double = when (s) {
     is Line -> (s.end - s.start).length
     is Arc -> s.sweepRad() * s.radius
 }
@@ -606,7 +647,7 @@ private fun tangent(s: Seg, p: Pt): Pt = when (s) {
 }
 
 /** 요소 위 길이 비율 t 의 점(t = 1 은 끝점 그대로) */
-private fun pointOn(s: Seg, t: Double): Pt {
+internal fun pointOn(s: Seg, t: Double): Pt {
     if (t >= 1) return s.end
     return when (s) {
         is Line -> s.start + (s.end - s.start) * t

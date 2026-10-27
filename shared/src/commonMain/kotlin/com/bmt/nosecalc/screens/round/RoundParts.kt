@@ -69,10 +69,12 @@ import com.bmt.nosecalc.ui.ShapeViewerCard
 import com.bmt.nosecalc.ui.ViewerFill
 import com.bmt.nosecalc.ui.ViewerLine
 import com.bmt.nosecalc.ui.ViewerMark
+import com.bmt.nosecalc.ui.ViewerState
 import com.bmt.nosecalc.ui.ViewerStock
 import com.bmt.nosecalc.ui.arrowHead
 import com.bmt.nosecalc.ui.haloText
 import com.bmt.nosecalc.ui.keepWords
+import com.bmt.nosecalc.ui.rememberViewerState
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.onFill
@@ -279,8 +281,11 @@ private val POINT_COL = 34.dp
 /** 노드 번호. 3점호(filled == null)는 노드가 시작 · 끝 둘뿐이라 입력 칸 P1 · P3 와 이름을 맞춘다 */
 internal fun nodeNo(sol: RoundSolution, i: Int) = if (sol.filled == null && i == sol.nodes.lastIndex) 3 else i + 1
 
-/** 형상 확인에 그릴 보링바: 바 · 검사 결과(건너뛰지 않은 것) · 도면 시작이 입구 끝면인가 · 닿는 곳의 NC 줄 번호(1부터, 지금 카드 그대로) */
-internal class HolderShow(val bar: BoringBar, val result: HolderResult, val faceAtStart: Boolean, val lineNo: (HolderHit) -> Int)
+/**
+ * 형상 확인에 그릴 보링바: 바 · 검사 결과(건너뛰지 않은 것) · 도면 시작이 입구 끝면인가 · 간섭 목록([hitRows] — 지금 NC 의 좌표 · 줄) ·
+ * 가공 가능 끝점([stopView] — 깃발 · 후퇴 길 · 그 자세의 보링바)
+ */
+internal class HolderShow(val bar: BoringBar, val result: HolderResult, val faceAtStart: Boolean, val rows: List<HitRow>, val stop: StopView? = null)
 
 /**
  * 형상 확인. 소재(빗금) 위에 도면(3.5dp), 그 위에 NC 의 프로그램 경로(1.8dp, 진행 화살). 진입점 □ 에서 첫 점까지는 NC 처럼 이송(G01)이라
@@ -289,21 +294,46 @@ internal class HolderShow(val bar: BoringBar, val result: HolderResult, val face
  * 노즈 중심(끊은 선) · 가상 인선 프로그램 · 보정점 • 번호. 원호 중심은 + 와 원호 가운데까지 끊은 지시선, 'R10.000 G02'(직접 보정은 합성 R
  * 'R10.000 → 10.400 G02') 알약 — 화면 반지름이 14dp 보다 작으면 뷰어가 뺀다. inner = 소재가 구멍 쪽(내경).
  * holder(내경 보링바)가 있으면 지름 전체 단면(맞은편 벽 · 1dp 뒤집은 도면)에 고른 자리의 바 · 인서트 단면(초록, 입구 끝면 너머는 자름),
- * 겹친 곳(빨강 α .5), 닿는 경로 구간(빨강 3dp, 경로 밑), 처음 닿는 곳 ✕ '간섭 n줄'. 카드 아래 알약으로 자리를 고른다
+ * 겹친 곳(빨강 α .5), 닿는 경로 구간(빨강 3dp, 경로 밑), 처음 닿는 곳 ✕ '간섭 n줄'(전체 NC 줄), 안전 끝점 초록 깃발 '안전 끝 n줄' 과
+ * 잘린 NC 의 후퇴 길(파란 점선 · 빈 화살 — 그 NC 글을 다시 읽은 것). 카드 아래 알약으로 자리를 고른다(처음은 안전 끝 — 그 자세의 보링바).
+ * state = 보기(간섭 목록이 그 자리로 옮긴다), focus = 목록에서 누른 간섭(그 처음 자세를 알약 맨 앞에 두고 고른다)
  */
 @Composable
-internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: RoundSolution?, inner: Boolean, holder: HolderShow? = null) {
+internal fun RoundViewer(
+    sol: RoundSolution,
+    comp: Boolean,
+    r: Double,
+    drawn: RoundSolution?,
+    inner: Boolean,
+    holder: HolderShow? = null,
+    state: ViewerState = rememberViewerState(),
+    focus: HitRow? = null,
+    modifier: Modifier = Modifier,
+) {
     val c = AppTheme.colors
     val path = if (comp) sol else drawn
     val nose = comp && r > 0
-    val hits = holder?.result?.hits.orEmpty()
-    // 보링바를 그릴 자리(이름 → 노즈 중심). 처음은 첫 간섭, 닿지 않으면 가장 좁은 곳
-    val poses = holder?.let { holderPoses(it.result, sol, r) }.orEmpty()
-    var pick by remember(holder?.result) { mutableStateOf(0) }
+    // 지금 NC 의 간섭 목록 그대로 — 기계 보정은 진입(G00 점 · 보정 시작 블록)이 직접 보정과 달라 그 프로그램 자기 진입에서 닿는 곳
+    val hits = holder?.rows.orEmpty().map { it.hit }
+    val stop = holder?.stop
+    val stopCol = stopColor()
+    val backCol = retractColor()
+    // 보링바를 그릴 자리(이름 → 노즈 중심). 처음은 목록에서 누른 간섭, 아니면 안전 끝, 없으면 첫 간섭, 닿지 않으면 가장 좁은 곳
+    val poses = holder?.let {
+        listOfNotNull(focus?.let { f -> "간섭 ${f.lines}" to f.hit.first.nose }, stop?.nose?.let { n -> "안전 끝" to n }) + holderPoses(hits, it.result, sol, r)
+    }.orEmpty()
+    var pick by remember(holder?.result, comp, focus) { mutableStateOf(0) }
     val at = poses.getOrNull(pick)?.second
     // 바는 입구 끝면 너머 max(3, 깊이 15 %) 에서 자른다 — 뷰어가 바 끝까지 맞추지 않게. 겹친 곳도 같은 곳에서
     val zs = sol.drawing.segs.flatMap { listOf(it.start.z, it.end.z) }
     val maxZ = zs.max() + max(3.0, 0.15 * (zs.max() - zs.min()))
+    // 잘린 NC 의 후퇴 길: 끊은 줄 끝(멈추는 좌표)에서 후퇴 줄을 다시 읽는다
+    val retract = stop?.let { v ->
+        val nc = v.nc
+        val back = v.retractLines
+        val from = v.at
+        if (nc == null || back == null || from == null) null else ncMoves(from, nc.slice(back)).takeIf { it.isNotEmpty() }?.let(::Contour)
+    }
     val lines = buildList {
         add(ViewerLine(sol.drawing, c.drawProfile, 3.5.dp))
         if (holder != null) {
@@ -320,6 +350,7 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
             add(ViewerLine(sol.center, c.viewNose, 1.4.dp, dashed = true))
         }
         if (path != null) add(ViewerLine(Contour(listOf(Line(path.entry, path.program.segs.first().start)) + path.program.segs), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
+        retract?.let { add(ViewerLine(it, backCol, 1.8.dp, dotted = true, arrows = Arrow.Hollow)) }
         if (holder != null && at != null) {
             for (part in HolderCheck.outline(holder.bar, r, at, maxZ, backBoring(sol))) add(ViewerLine(part, c.drawHolder, 1.6.dp, fill = c.drawHolderFill))
         }
@@ -328,11 +359,15 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
     val overlap = remember(sol.drawing, holder?.bar, holder?.faceAtStart, r, at) {
         if (holder != null && at != null) HolderCheck.overlap(sol.drawing, holder.faceAtStart, holder.bar, r, at, maxZ) else emptyList()
     }.map { ViewerFill(it, c.red.copy(alpha = .5f)) }
-    // 처음 닿는 곳 ✕ — 줄마다 하나(바 · 인서트 · 공구대 먼저, 최소 가공경만 걸린 줄은 'Dmin')
-    val contacts = if (holder == null) emptyList() else hits.sortedBy { it.part == HolderPart.MIN_BORE }.distinctBy { holder.lineNo(it) }.map { h ->
-        val name = if (h.part == HolderPart.MIN_BORE) "Dmin" else "간섭"
-        ViewerMark(hitPoint(h, path, comp), c.red, "$name ${holder.lineNo(h)}줄", MarkKind.Cross)
+    // 처음 닿는 곳 ✕ — 줄마다 하나(바 · 인서트 · 공구대 먼저, 최소 가공경만 걸린 줄은 'Dmin'). 좌표 · 줄은 간섭 목록과 같다
+    val contacts = holder?.rows.orEmpty().distinctBy { it.line }.map { row ->
+        val name = if (row.hit.part == HolderPart.MIN_BORE) "Dmin" else "간섭"
+        ViewerMark(row.from, c.red, "$name ${row.line + 1}줄", MarkKind.Cross)
     }
+    // 안전 끝점 깃발: 끊고 빠지면 그 줄, 깎기 전에 멈추면 그 자리만
+    val flag = listOfNotNull(
+        stop?.at?.let { ViewerMark(it, stopCol, if (stop.endLine != null) "안전 끝 ${stop.endLine + 1}줄" else "안전 끝", MarkKind.Flag) },
+    )
     val points = if (comp) {
         sol.nodes.mapIndexed { i, n -> ViewerMark(n.prog, c.viewPath, "${nodeNo(sol, i)}", MarkKind.Dot) }
     } else {
@@ -348,7 +383,12 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
     val holderLegend = if (holder == null) {
         emptyList()
     } else {
-        listOfNotNull(LegendItem(c.drawHolderFill, "보링바 단면", LegendGlyph.Fill), LegendItem(c.red.copy(alpha = .5f), "간섭", LegendGlyph.Fill).takeIf { hits.isNotEmpty() })
+        listOfNotNull(
+            LegendItem(c.drawHolderFill, "보링바 단면", LegendGlyph.Fill),
+            LegendItem(c.red.copy(alpha = .5f), "간섭", LegendGlyph.Fill).takeIf { hits.isNotEmpty() },
+            LegendItem(stopCol, "안전 끝", LegendGlyph.Flag).takeIf { flag.isNotEmpty() },
+            LegendItem(backCol, "후퇴 (잘린 NC)", LegendGlyph.Dotted).takeIf { retract != null },
+        )
     }
     val legend = holderLegend + if (comp) {
         listOfNotNull(
@@ -371,20 +411,22 @@ internal fun RoundViewer(sol: RoundSolution, comp: Boolean, r: Double, drawn: Ro
         )
     }
     ShapeViewerCard(
-        lines, points + centers + entry + contacts, legend,
+        lines, points + centers + entry + flag + contacts, legend,
+        modifier = modifier,
         subtitle = if (comp) "직접 보정(G40) · 합성 R 궤적 · 팁 ${sol.tip}번" else "기계 보정(${sol.side}) · 도면 좌표",
         stock = ViewerStock(sol.drawing, inner, mirror = holder != null),
         fills = overlap,
+        state = state,
         footer = if (poses.isEmpty()) null else ({ PosePicker(poses.map { it.first }, pick) { pick = it } }),
     )
 }
 
 /**
- * 보링바를 그릴 자리 → 노즈 중심: 첫 간섭(바 · 인서트 · 공구대 — 없으면 최소 가공경) · 가장 깊은 곳 · 가장 좁은 곳(바와 벽) ·
+ * 보링바를 그릴 자리 → 노즈 중심: 첫 간섭(바 · 인서트 · 공구대 — 없으면 최소 가공경, 지금 NC 의 간섭 목록 [hits]) · 가장 깊은 곳 · 가장 좁은 곳(바와 벽) ·
  * 노드 P1…Pn(그 점에 선 공구)
  */
-private fun holderPoses(res: HolderResult, sol: RoundSolution, r: Double): List<Pair<String, Pt>> {
-    val real = res.hits.filter { it.part != HolderPart.MIN_BORE }.ifEmpty { res.hits }
+private fun holderPoses(hits: List<HolderHit>, res: HolderResult, sol: RoundSolution, r: Double): List<Pair<String, Pt>> {
+    val real = hits.filter { it.part != HolderPart.MIN_BORE }.ifEmpty { hits }
     val tv = NoseComp.tipVector(sol.tip, r)
     return listOfNotNull(
         real.firstOrNull()?.let { "첫 간섭" to it.first.nose },
@@ -395,7 +437,8 @@ private fun holderPoses(res: HolderResult, sol: RoundSolution, r: Double): List<
 
 /**
  * 닿는 구간: 보이는 경로(path)의 그 요소에서 처음 · 마지막 닿는 곳 사이 — comp(직접 보정)는 가상 인선 점, 기계 보정은 노즈가 닿는 도면 점
- * (✕ 표와 같은 곳. 도면 좌표 경로의 요소는 보정 경로와 길이가 달라 길이 비율로는 어긋난다). 진입 이동(−1)은 길이 비율로, 진입점에 선 자세(−2)는 점이라 없다
+ * (✕ 표와 같은 곳. 도면 좌표 경로의 요소는 보정 경로와 길이가 달라 길이 비율로는 어긋난다). 진입 이동(−1)은 그 프로그램 진입 이동 위 길이 비율로
+ * (기계 보정은 그 프로그램 자기 보정 시작 블록에서 잰 비율 — [hitRows] 의 기계 보정 진입), 진입점에 선 자세(−2)는 점이라 없다
  */
 internal fun contactBand(path: RoundSolution, h: HolderHit, comp: Boolean): Contour? {
     if (h.element < 0) {

@@ -34,6 +34,27 @@ internal fun roundManualInnerMouth(): RoundState = roundExample(MANUAL, open = t
 /** 보링바 프리셋 A16R-SCLCR 09(Ø16 · f 11 · DMIN 20 · κr 95° · C 9)를 고른 상태 */
 internal fun RoundState.withA16(): RoundState = apply { pickPreset(HOLDER_PRESETS.single { it.code == "A16R-SCLCR 09" }) }
 
+/** 보링바 칸을 직접 넣은 상태(프리셋 없음): D · f · 인서트 모양 · 날 길이 · κr(· DMIN) */
+internal fun RoundState.withBar(dia: String, f: String, shape: String, edge: String, kr: String, dmin: String = ""): RoundState = apply {
+    mapOf("dia" to dia, "f" to f, "shape" to shape, "edge" to edge, "kr" to kr, "dmin" to dmin).forEach { (k, v) -> setHolder(k, v) }
+}
+
+/** calc-design.md 보링바 예 A: 내경 돔 바닥(Ø20 · 깊이 10, SR12.5, CR1) + 바 Ø16 · f 11 · C 9.67 · κr 95° — 구 원호에서 바가 맞은편 벽 */
+internal fun roundInnerDomeA(): RoundState = roundInnerExample(3).withBar("16", "11", "C", "9.67", "95")
+
+/** 보링바 예 F: 내경 소켓(형상 4, Ø10 · 깊이 5, SR8, CR1) + 바 Ø8 · f 4.5 · D 7.75 · κr 93° — 아래 인서트 조각이 맞은편 벽부터 */
+internal fun roundInnerSocketF(): RoundState = roundInnerExample(4).apply {
+    setDim(4, "mainR", "8")
+    setDim(4, "d1", "10")
+    setShared("leg", "5")
+}.withBar("8", "4.5", "D", "7.75", "93")
+
+/** 보링바 뒤보링 예: 3점호 역방향 내경(방 안 뒷면 X30 Z−20 → X24 Z−19 → R5 → X20 Z−15, 팁 1 · G42) + 바 Ø12 · f 12 · C 9.67 · κr 95° · DMIN 22 */
+internal fun roundManualBackBoring(): RoundState = roundExample(MANUAL, open = true).apply {
+    inner = true
+    mapOf("x1" to "30", "z1" to "-20", "x2" to "24", "z2" to "-19", "x3" to "20", "z3" to "-15").forEach { (k, v) -> setPoint(k, v) }
+}.withBar("12", "12", "C", "9.67", "95", dmin = "22")
+
 /** 내경 · 역방향 3점호(보링 안쪽의 R10 을 Z+ 로, X50 Z−10 → X30 Z0): 그림이 위아래 · 좌우로 뒤집힌다 */
 internal fun roundManualInnerRev(): RoundState = roundExample(MANUAL, open = true).apply {
     inner = true
