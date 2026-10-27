@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -55,6 +56,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -101,10 +103,10 @@ import kotlin.math.sqrt
 
 /**
  * B 화면 맨 위: 고른 형상의 작은 그림(요약 꼴 — 글 12sp · 각도 글 없이) + 종류·형상 번호·이름·방향/팁 + 형상 다시 고르기.
- * 그림을 눌러도 형상을 다시 고른다
+ * 그림을 눌러도 형상을 다시 고른다. flip = 가공 방향 뒤집기(그림의 T 이름 · 이송 화살과 이름의 순서가 반대 끝부터)
  */
 @Composable
-internal fun SummaryCard(kind: TaperKind, type: Int, mirrored: Boolean, info: String, onBack: () -> Unit) {
+internal fun SummaryCard(kind: TaperKind, type: Int, mirrored: Boolean, info: String, flip: Boolean = false, onBack: () -> Unit) {
     val c = AppTheme.colors
     AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -116,13 +118,13 @@ internal fun SummaryCard(kind: TaperKind, type: Int, mirrored: Boolean, info: St
                     .clickable(onClick = onBack)
                     .semantics { contentDescription = "형상 다시 고르기" },
             ) {
-                TypeArt(kind, type, mirrored, compact = true)
+                TypeArt(kind, type, mirrored, compact = true, flip = flip)
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(kind.label, color = c.tealDeep, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Text("형상 $type", color = c.textStrong, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                Text(typeName(kind, type), color = c.textBody, fontSize = 13.sp, lineHeight = 18.sp)
+                Text(typeName(kind, type, flip), color = c.textBody, fontSize = 13.sp, lineHeight = 18.sp)
                 Spacer(Modifier.height(4.dp))
                 Text(keepWords(info), color = c.textMuted, fontSize = 12.5.sp, lineHeight = 17.sp)
                 Spacer(Modifier.height(8.dp))
@@ -140,6 +142,50 @@ internal fun PointBadge(text: String, color: Color, modifier: Modifier = Modifie
         modifier.clip(shape).background(color.copy(alpha = 0.12f)).border(1.5.dp, color.copy(alpha = 0.55f), shape),
         contentAlignment = Alignment.Center,
     ) { Text(text, color = color, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+}
+
+/**
+ * 가공 방향 뒤집기 스위치(도면 치수 묶음 머리): 한 줄 전체를 누른다(56dp 이상). 왼쪽 제목("T1 ⇄ T2 바꾸기") + 지금 방향 한 줄
+ * (예 "T1 아래 → T2 위 · G42"), 오른쪽 손잡이 — 켜지면 청록 바탕 · 오른쪽 손잡이에 체크, 꺼지면 테두리만 · 왼쪽 작은 손잡이(색만으로 가르지 않게)
+ */
+@Composable
+internal fun FlipSwitch(title: String, status: String, on: Boolean, onToggle: () -> Unit) {
+    val c = AppTheme.colors
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(shape)
+            .background(if (on) c.teal.copy(alpha = .10f) else c.field)
+            .border(1.5.dp, if (on) c.teal else c.lineField, shape)
+            .toggleable(on, role = Role.Switch) { onToggle() }
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = c.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(keepWords(status), color = if (on) c.tealDeep else c.textMuted, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, lineHeight = 17.sp)
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(
+            Modifier
+                .size(48.dp, 28.dp)
+                .clip(CircleShape)
+                .background(if (on) c.teal else c.segTrack)
+                .border(2.dp, if (on) c.teal else c.textMuted, CircleShape)
+                .padding(horizontal = if (on) 3.dp else 6.dp),
+            contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
+        ) {
+            if (on) {
+                Box(Modifier.size(22.dp).clip(CircleShape).background(c.onFill(c.teal)), contentAlignment = Alignment.Center) {
+                    Icon(AppIcons.Check, null, Modifier.size(14.dp), tint = c.teal)
+                }
+            } else {
+                Box(Modifier.size(14.dp).clip(CircleShape).background(c.textMuted))
+            }
+        }
+    }
 }
 
 /** 입력 카드 안 묶음('도면 치수' · '공구') 사이 구분선: 1dp, 위아래 14dp(라운드 입력 카드와 같다) */

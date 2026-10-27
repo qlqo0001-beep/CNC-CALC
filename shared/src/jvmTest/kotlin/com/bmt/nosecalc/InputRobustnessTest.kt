@@ -71,9 +71,12 @@ class InputRobustnessTest {
     @Test
     fun taper() {
         val kinds = listOf(TaperKind.OUTER, TaperKind.INNER, TaperKind.OUTER_DOUBLE, TaperKind.INNER_DOUBLE)
+        // 뒤집기(T1 ⇄ 마지막 T)는 따로 난수 — 원래 사례(같은 난수 순서)는 그대로 두고 절반쯤을 뒤집어 본다
+        val flips = Random(20261027)
         repeat(60_000) {
             val kind = kinds[rnd.nextInt(kinds.size)]
             val st = TaperState(kind, rnd.nextBoolean(), 1 + rnd.nextInt(kind.types), open = true).example()
+            if (flips.nextBoolean()) st.toggleFlip()
             val n = kind.points
             val names = (1..n).flatMap { listOf("x$it", "z$it", "r$it") } + listOf("ang", "start", "end")
             for (name in names) if (rnd.nextInt(3) == 0) st.setPoint(name, nudge(st.point(name)))
@@ -92,6 +95,7 @@ class InputRobustnessTest {
                 (1..n).map { st.point("r$it").toDoubleOrNull() ?: 0.0 },
                 st.point("start").toDoubleOrNull(),
                 st.point("end").toDoubleOrNull(),
+                st.flip,
             )
             check("테이퍼 $f") {
                 val s = TaperSolve.solve(f).solution ?: return@check

@@ -108,14 +108,16 @@ private fun PickScreen(s: TaperState) {
                 (1..kind.types).chunked(cols).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         row.forEach { type ->
+                            // 뒤집어 둔 형상은 그림의 T 자리만으로는 잘 안 보여 이름 앞에 스위치와 같은 ⇄ 를 붙인다
+                            val flipped = !kind.groove && s.flipped(type)
                             TypeCard(
-                                "형상 $type", typeShort(kind, type), c.chipMint, type == s.type,
+                                "형상 $type", (if (flipped) "⇄ " else "") + typeShort(kind, type), c.chipMint, type == s.type,
                                 {
                                     s.type = type
                                     s.open = true
                                 },
                                 Modifier.weight(1f), aspectRatio = 199f / 221f,
-                            ) { TypeArt(kind, type, mirrored) }
+                            ) { TypeArt(kind, type, mirrored, flip = flipped) }
                         }
                         repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
                     }
@@ -171,6 +173,14 @@ internal val TaperHelp = listOf(
                 "X 는 직경값(도면 Ø 그대로, Ø40 → 40), Z 는 도면 좌표입니다(Z0 = 부품 오른쪽 끝면, 척 쪽은 −). " +
                 "단일 테이퍼(외경·내경)는 X1·Z1·X2·Z2·각도 가운데 넷을 넣으면 나머지 하나를 계산합니다(보통 각도를 비워 둡니다). " +
                 "각도는 Z축(가로선)에서 잰 한쪽 각입니다 — 도면이 꼭지각이면 ÷2, X축 기준이면 90 − 값.",
+            "T1 은 먼저 깎는 점입니다. '도면 치수' 맨 위의 'T1 ⇄ T2 바꾸기'(2중 테이퍼는 'T1 ⇄ T3')를 켜면 같은 형상을 같은 바이트로 반대 끝부터 깎습니다 — " +
+                "예: 외경 형상 1 을 외경 쪽(위)에서 면취를 타고 내려와 단면을 중심 쪽으로. 진행이 반대라 G41/G42 가 바뀌고(외경 형상 1 은 G42 → G41), " +
+                "진입 · 후퇴와 NC 순서도 바뀝니다. 꼭짓점의 보정 좌표는 같은 값이고 순서만 반대입니다. 바꿀 때 넣은 값은 같은 실제 점에 남도록 칸끼리 자리를 바꿉니다" +
+                "(X1·Z1 ↔ X2·Z2, 모서리 R, 시작점 ↔ 끝점). 스위치 아래 한 줄이 지금 방향과 보정 코드를 보여 줍니다. " +
+                "뒤집으면 시작이 척 · 구멍 바닥 쪽이라, 넣은 시작점(척 쪽 외경 · 구멍 깊이)은 그 Z 에서 X 로 들어가고 끝 단면은 Z 로 빠집니다 — " +
+                "넣은 좌표 너머로 급송하지 않습니다. 단면을 중심(끝 X0)까지 깎으면 노즈가 중심에 닿을 때까지(인선 X −2×노즈R) 간 뒤 Z 로 빠집니다. " +
+                "첫 진입점이 척 쪽(내경은 구멍 안)이라 NC 는 먼저 부품 앞 끝면 바깥에서 X 를 맞추고(G00) Z 로만 들어갑니다(G00) — " +
+                "두 축이 함께 움직여 입구나 부품 앞에 닿지 않게.",
             "칸을 누르면 키패드가 열리고 값 아래에 그 칸의 뜻이 한 줄로 나옵니다. 누를 때마다 값이 바로 들어가고(확인 단추 없음), 처음 누른 숫자가 원래 값을 덮어씁니다. " +
                 "칸을 비우려면 키패드의 '비우기 · 자동 계산' 을 누릅니다. '다음' 이 있으면 키패드를 닫지 않고 다음 칸으로 갑니다.",
             "노즈 R 은 인서트 날끝의 반경입니다. 기계 공구 보정 화면의 R 칸에 넣는 공구 반경(밀링의 공구 반경과 같은 역할)이고, 팁 번호는 그 화면의 T 칸에 넣습니다.",

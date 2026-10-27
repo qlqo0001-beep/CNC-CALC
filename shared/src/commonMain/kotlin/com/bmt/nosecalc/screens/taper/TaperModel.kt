@@ -10,6 +10,7 @@ import com.bmt.nosecalc.calc.Arc
 import com.bmt.nosecalc.calc.CompPoint
 import com.bmt.nosecalc.calc.Contour
 import com.bmt.nosecalc.calc.DoubleTaperInput
+import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.GrooveInput
 import com.bmt.nosecalc.calc.GrooveWarning
 import com.bmt.nosecalc.calc.Line
@@ -46,19 +47,41 @@ internal enum class TaperKind(val label: String, val types: Int, val inner: Bool
 
 /**
  * 앞(T1 앞)·뒤(마지막 T 뒤) 요소가 단면인가 — 시작·끝점 칸이 X(직경)를 받는지(아니면 Z). calc-design.md 의 TYPE 표.
- * 겹테이퍼는 둘 다 수평. 화면 역방향은 그림을 뒤집을 뿐이라 같다
+ * 겹테이퍼는 둘 다 수평. 화면 역방향은 그림을 뒤집을 뿐이라 같다. 뒤집기(flip)는 T1 이 반대 끝이라 앞뒤가 바뀐다
+ * (뒤집으면 시작이 단면인 형상은 2 · 4, 끝이 단면인 형상은 1 · 2)
  */
-internal fun legsVertical(kind: TaperKind, type: Int): Pair<Boolean, Boolean> =
-    if (kind.double) false to false else (type <= 2) to (type == 2 || type == 4)
+internal fun legsVertical(kind: TaperKind, type: Int, flip: Boolean = false): Pair<Boolean, Boolean> =
+    (if (kind.double) false to false else (type <= 2) to (type == 2 || type == 4)).let { if (flip) it.second to it.first else it }
 
-/** 형상(TYPE) 이름(가공 순서로 읽는다: 앞 요소 → 경사 → 뒤 요소) */
-internal fun typeName(kind: TaperKind, type: Int): String = when (kind) {
+/** 형상(TYPE) 이름(가공 순서로 읽는다: 앞 요소 → 경사 → 뒤 요소). 뒤집으면(flip) 화살로 이은 이름은 순서를 거꾸로 */
+internal fun typeName(kind: TaperKind, type: Int, flip: Boolean = false): String = when (kind) {
     TaperKind.OUTER -> listOf("단면 → 면취 → 외경", "단면 → 경사 → 단면", "작은 외경 → 테이퍼 → 큰 외경", "작은 외경 → 테이퍼 → 어깨 단면", "역테이퍼 (척 쪽으로 작아짐)")
     TaperKind.INNER -> listOf("단면 → 입구 면취 → 내경", "단면 → 경사 → 단면", "큰 내경 → 테이퍼 → 작은 내경", "큰 내경 → 테이퍼 → 안쪽 단면", "역테이퍼 (안쪽으로 커짐)")
     TaperKind.OUTER_DOUBLE -> listOf("지름이 두 번 커짐 (2단 테이퍼)", "가운데 지름이 큼 (산)", "가운데 지름이 작음 (골)", "지름이 두 번 작아짐 (역테이퍼 2단)")
     TaperKind.INNER_DOUBLE -> listOf("지름이 두 번 작아짐 (안쪽 2단 테이퍼)", "가운데 지름이 작음", "가운데 지름이 큼", "지름이 두 번 커짐 (역테이퍼 2단)")
     TaperKind.GROOVE -> listOf("왼쪽 인선 기준 (팁 3번)", "오른쪽 인선 기준 (팁 4번)")
-}[type - 1]
+}[type - 1].let { if (flip) it.split(" → ").reversed().joinToString(" → ") else it }
+
+/**
+ * 화면의 보정 쪽(G41/G42 = 진행 방향에서 본 공구 쪽). 역방향(그림 좌우 반전 · 역바이트)과 뒤집기(같은 바이트로 반대 끝부터)는
+ * 둘 다 진행을 반대로 하므로 하나만 켜졌으면 반대 쪽 — 외경 형상 1 을 뒤집으면 G41. 계산 결과의 side 와 같다(TaperSolveTest)
+ */
+internal fun screenSide(inner: Boolean, reverse: Boolean, flip: Boolean): Side = Side.of(inner, reverse != flip)
+
+/**
+ * 뒤집기 스위치 아래 한 줄: T1 → 마지막 T 가 그림에서 어디서 어디로 가는지와 보정 쪽(예: "T1 아래 → T2 위 · G42").
+ * 홑테이퍼는 위아래 — 외경 1~4 는 T1 이 아래(5 는 위), 내경은 그림이 위아래로 뒤집혀 반대. 2중은 위아래가 한쪽으로 가지 않아(산 · 골)
+ * 좌우 — 정방향은 T1 이 오른쪽, 역방향(그림 좌우 반전)은 왼쪽. 뒤집으면 T1 자리가 반대 끝이다
+ */
+internal fun travelText(kind: TaperKind, type: Int, reverse: Boolean, flip: Boolean): String {
+    val ends = when {
+        kind.double -> if (reverse) "왼쪽" to "오른쪽" else "오른쪽" to "왼쪽"
+        (type == 5) == kind.inner -> "아래" to "위"
+        else -> "위" to "아래"
+    }
+    val (a, b) = if (flip) ends.second to ends.first else ends
+    return "T1 $a → T${kind.points} $b · ${screenSide(kind.inner, reverse, flip)}"
+}
 
 /** 형상 카드 머리 띠의 짧은 이름(A 화면). 긴 이름은 [typeName] */
 internal fun typeShort(kind: TaperKind, type: Int): String = when (kind) {
@@ -73,6 +96,7 @@ internal fun typeShort(kind: TaperKind, type: Int): String = when (kind) {
  * 테이퍼 화면 상태. 입력값은 쓴 그대로의 글로 둔다.
  * 점 칸(X·Z·각도·모서리 R·시작점·끝점)은 (종류, TYPE, 방향)마다 따로다 — 방향을 바꾸면 그림이 좌우로 뒤집혀 T1·T2 의
  * Z 순서가 바뀌고, TYPE 마다 X 오르내림과 시작·끝점의 뜻(X 또는 Z)이 다르다. 노즈R·Z 여유는 공구·기계 쪽 값이라 함께 쓴다.
+ * 가공 방향 뒤집기([flip], T1 ⇄ 마지막 T)도 점 칸과 같은 (종류, TYPE, 방향)마다 — 칸 값이 그 뜻(T1 = 먼저 깎는 점)을 따라 자리를 바꾸므로.
  */
 @Stable
 internal class TaperState(
@@ -105,6 +129,33 @@ internal class TaperState(
     /** 비어 있다가 마지막으로 값이 들어온 다섯 값 칸(x1 · z1 · x2 · z2 · ang, 종류 · 형상 · 방향마다). 없으면 null */
     val lastAuto: String? get() = values[lastAutoKey]
     private val lastAutoKey get() = "ui/lastAuto/${kind.name}/$type/$dir"
+
+    /**
+     * 가공 방향 뒤집기(종류 · 형상 · 방향마다, 처음은 꺼짐 — 이 열쇠가 없던 옛 저장 값도 꺼짐). 켜면 T1 = 그림의 반대 끝 점(먼저 깎는 점)이고
+     * 같은 바이트로 그 끝부터 깎는다(G41/G42 가 바뀜). 바꿀 때는 [toggleFlip] — 칸 값을 같은 실제 점에 남게 맞바꾼다
+     */
+    val flip: Boolean get() = flipped(type)
+
+    /** 형상 t 의 뒤집기(A 화면 카드 그림이 형상마다 읽는다) */
+    fun flipped(t: Int?): Boolean = values["flip/${kind.name}/$t/$dir"] == "1"
+
+    /**
+     * T1 ⇄ 마지막 T(2중은 T3, T2 그대로). 넣은 값이 같은 실제 점에 남게 칸을 맞바꾼다: X1·Z1 ↔ X2·Z2(2중 X3·Z3), 모서리 R1 ↔ R2(R3),
+     * 시작점 ↔ 끝점(앞뒤 요소가 맞바뀐다 — 단면이면 X, 수평이면 Z 인 뜻도 따라간다). 빈칸(자동)은 빈칸으로 옮긴다. 각도는 같은 경사라 그대로.
+     * 마지막에 채운 자동 칸(lastAuto)도 같은 칸으로 따라간다
+     */
+    fun toggleFlip() {
+        val n = kind.points
+        val pairs = listOf("x1" to "x$n", "z1" to "z$n", "r1" to "r$n", "start" to "end")
+        for ((a, b) in pairs) {
+            val va = point(a)
+            values[pointKey(a)] = point(b)
+            values[pointKey(b)] = va
+        }
+        val swap = pairs.flatMap { (a, b) -> listOf(a to b, b to a) }.toMap()
+        lastAuto?.let { values[lastAutoKey] = swap[it] ?: it }
+        values["flip/${kind.name}/$type/$dir"] = if (flip) "" else "1"
+    }
 
     /** 팁 번호 직접 지정(종류·방향마다). null = 표준 */
     var tip: Int?
@@ -174,6 +225,8 @@ internal data class SlopeForm(
     /** 시작점(T1 앞)·끝점(마지막 T 뒤): 그 요소가 단면이면 X(직경), 수평이면 Z. null = 그 요소는 깎지 않는다(그림은 5 mm) */
     val start: Double? = null,
     val end: Double? = null,
+    /** 가공 방향 뒤집기: x · z · corners 의 T1 = 그림의 반대 끝 점(먼저 깎는 점), start = 그 앞 요소. calc 의 TaperInput.flip 과 같은 뜻 */
+    val flip: Boolean = false,
 ) {
     /**
      * 도면 치수를 아직 다 넣지 않았다: X(직경) 0 인 점이 있거나 두 점 이상이 Z 0 에 겹친다(처음 값 그대로).
@@ -181,12 +234,15 @@ internal data class SlopeForm(
      */
     val waiting: Boolean get() = x.any { it == 0.0 } || z.count { it == 0.0 } > 1
 
-    /** Z 가 방향과 거꾸로 간다: 정방향은 척 쪽(Z−)으로 깎으니 마지막 Z 가 T1 보다 크면, 역방향은 작으면 */
+    /**
+     * Z 가 방향과 거꾸로 간다: 정방향은 척 쪽(Z−)으로 깎으니 마지막 Z 가 T1 보다 크면, 역방향은 작으면.
+     * 뒤집으면(flip) 반대 끝부터 깎으므로 반대
+     */
     val zBackward: Boolean
         get() {
             val a = z.first() ?: return false
             val b = z.last() ?: return false
-            return if (reverse) b < a else b > a
+            return if (reverse != flip) b < a else b > a
         }
 }
 
@@ -196,14 +252,17 @@ internal data class SlopeForm(
  * Z 를 뒤집어 정방향 형상으로 풀고 결과(점·경로·진입점·NC·팁·보정 쪽)를 다시 뒤집는다.
  * 노즈R 보정은 거울에 대해 그대로 옮겨지는 기하라(팁 3↔4, 2↔1, G42↔G41) 계산기의 정방향 해법을 그대로 쓴다.
  * 계산기의 reverse = true 는 "형상은 그대로 두고 방향만 Z+" 라서 화면의 역방향과 뜻이 다르다(TaperSolveTest 가 두 쪽을 맞춰 본다).
+ * 뒤집기(flip)는 계산기의 flip 에 그대로 넘긴다 — 칸의 뜻(T1 = 먼저 깎는 반대 끝 점)이 같고, 거울에 대해서도 그대로 옮겨진다.
+ * 다만 계산기의 접근 줄(뒤집어 척 쪽에서 시작할 때 앞 끝면 바깥에서 X 를 맞추고 Z 로 들어가는 G00)은 계산기의 +Z 가 부품 앞이라는 뜻이라
+ * 거울로 푸는 역방향에서는 끈다(approach = false) — 거울의 +Z 는 실제 척 쪽이고, 역방향 + 뒤집기의 실제 진입은 부품 앞(자유 끝)이다.
  */
 internal object TaperSolve {
     fun solve(f: SlopeForm): TaperResult {
         val m = f.reverse
         fun zz(v: Double?) = if (m) v?.let { -it } else v
         val tip = if (m) f.tip?.let(Mirror::tip) else f.tip
-        // 시작·끝점이 Z 면 같이 뒤집는다(X 는 그대로)
-        val (fv, bv) = legsVertical(f.kind, f.type)
+        // 시작·끝점이 Z 면 같이 뒤집는다(X 는 그대로). 뒤집기면 시작·끝 요소가 맞바뀐 뜻으로
+        val (fv, bv) = legsVertical(f.kind, f.type, f.flip)
         val start = if (fv) f.start else zz(f.start)
         val end = if (bv) f.end else zz(f.end)
         val c = f.corners
@@ -212,14 +271,14 @@ internal object TaperSolve {
                 DoubleTaperInput(
                     f.kind.inner, false, f.noseR, tip,
                     f.x[0], zz(f.z[0]), f.x[1], zz(f.z[1]), f.x[2], zz(f.z[2]), f.zClear,
-                    cornerR1 = c[0], cornerR2 = c[1], cornerR3 = c[2], start = start, end = end,
+                    cornerR1 = c[0], cornerR2 = c[1], cornerR3 = c[2], start = start, end = end, flip = f.flip, approach = !m,
                 ),
             ).let { doubleShape(it, f) }
         } else {
             TaperCalc.calc(
                 TaperInput(
                     f.kind.inner, f.type, false, f.noseR, tip, f.x[0], zz(f.z[0]), f.x[1], zz(f.z[1]), f.angle, f.zClear,
-                    cornerR1 = c[0], cornerR2 = c[1], start = start, end = end,
+                    cornerR1 = c[0], cornerR2 = c[1], start = start, end = end, flip = f.flip, approach = !m,
                 ),
             )
         }
@@ -228,10 +287,11 @@ internal object TaperSolve {
 
     /**
      * 겹테이퍼 계산기는 세 점이면 어떤 꺾임도 받는다. 고른 TYPE 그림과 X 오르내림이 다르면 멈춘다.
-     * TYPE 1 = 두 번 커짐, 2 = 가운데가 큼, 3 = 가운데가 작음, 4 = 두 번 작아짐(외경 기준, 내경은 반대).
+     * TYPE 1 = 두 번 커짐, 2 = 가운데가 큼, 3 = 가운데가 작음, 4 = 두 번 작아짐(외경 기준, 내경은 반대) — 그림 순서(T1 = 오른쪽)로 본다.
+     * 뒤집으면 점이 칸 순서(그림 왼쪽부터)라 거꾸로 놓고 본다
      */
     private fun doubleShape(r: TaperResult, f: SlopeForm): TaperResult {
-        val p = r.solution?.points ?: return r
+        val p = r.solution?.points?.let { if (f.flip) it.reversed() else it } ?: return r
         val s = if (f.kind.inner) -1 else 1
         val up1 = s * (p[1].vertex.x - p[0].vertex.x) > 0
         val up2 = s * (p[2].vertex.x - p[1].vertex.x) > 0
@@ -306,6 +366,7 @@ internal object Mirror {
         side = if (s.side == Side.G41) Side.G42 else Side.G41,
         entry = pt(s.entry),
         exit = pt(s.exit),
+        approach = s.approach.map(::pt),
         ncG41G42 = s.ncG41G42.map(::nc),
         ncG40 = s.ncG40.map(::nc),
         drawing = contour(s.drawing),
@@ -326,6 +387,8 @@ internal fun taperWarningText(w: TaperWarning, f: SlopeForm): String = when (w) 
     TaperWarning.BAD_ANGLE -> "각도는 0° 보다 크고 90° 보다 작아야 합니다. 두 점이 수평·수직으로 놓이면 경사가 아닙니다."
     TaperWarning.SHAPE_MISMATCH -> when {
         !f.zBackward -> "값이 고른 형상 그림과 맞지 않습니다. 점의 좌우 순서(그림의 T1·T2 자리)와 X 가 커지는 쪽을 확인하세요."
+        f.flip && f.reverse -> "Z 부호 · 순서를 확인하세요. T1 ⇄ T${f.x.size} 를 바꿔 T1 이 척 반대쪽이라 Z 가 작아집니다 (예: Z1 −25 → Z${f.x.size} −30)."
+        f.flip -> "Z 부호 · 순서를 확인하세요. T1 ⇄ T${f.x.size} 를 바꿔 T1 이 척 쪽이라 Z 가 커집니다 (예: Z1 −5 → Z${f.x.size} 0). 척 쪽 Z 는 − 입니다."
         f.reverse -> "Z 부호 · 순서를 확인하세요. 역방향은 T1 이 척 쪽이라 Z 가 커집니다 (예: Z1 −30 → Z2 −25)."
         else -> "Z 부호 · 순서를 확인하세요. 정방향은 척 쪽으로 깎아 Z 가 작아집니다 (예: Z1 0 → Z2 −5). 척 쪽 Z 는 − 입니다."
     }
@@ -341,8 +404,23 @@ internal fun taperWarningText(w: TaperWarning, f: SlopeForm): String = when (w) 
     TaperWarning.NOSE_GT_SLOPE -> "노즈R 이 경사 길이보다 큽니다. 숫자는 맞지만 오목 모서리 쪽에 노즈R 이 남아 경사가 거의 안 남을 수 있습니다. 도면을 확인하세요."
     TaperWarning.CONCAVE_R_LE_NOSE ->
         "오목 모서리 R 이 노즈R 이하입니다. 같으면 꼭 맞고, 작으면 그 자리에 노즈R 만큼의 R 이 남습니다. G41/G42 프로그램은 기계가 간섭 알람을 낼 수 있습니다."
-    TaperWarning.AGAINST_TOOL -> "형상 일부가 바이트 방향과 반대입니다(역테이퍼 꼴·반대쪽 단면). 실제 바이트의 끝날 여유각이 맞아야 깎입니다. 정/역방향을 확인하세요."
-    TaperWarning.ENTRY_PAST_AXIS -> "진입점이나 후퇴점이 중심(X0)을 넘습니다. Z 여유를 줄이세요."
+    // 뒤집으면 모양뿐 아니라 진행 방향도 본다(calc: 팁의 Z 와 반대로 45° 보다 눕힌 요소를 깎음 — 외경 · 내경을 바이트 반대쪽으로)
+    TaperWarning.AGAINST_TOOL ->
+        if (f.flip) {
+            "형상 일부나 가공 방향이 바이트와 반대입니다(역테이퍼 꼴·반대쪽 단면, 또는 뒤집어서 외경·내경처럼 누운 요소를 바이트 반대쪽으로 깎음). " +
+                "실제 바이트의 끝날 여유각이 맞아야 깎입니다. 정/역방향과 T1 ⇄ T${f.x.size} 바꾸기를 확인하세요."
+        } else {
+            "형상 일부가 바이트 방향과 반대입니다(역테이퍼 꼴·반대쪽 단면). 실제 바이트의 끝날 여유각이 맞아야 깎입니다. 정/역방향을 확인하세요."
+        }
+    // 끝 단면을 중심(X0)까지 깎으면 노즈가 중심에 닿게 인선이 일부러 중심 너머 X −2r 까지 간 뒤 Z 로 빠진다(calc: 중심에 살이 안 남게) —
+    // Z 여유를 줄이라는 말은 맞지 않는다
+    TaperWarning.ENTRY_PAST_AXIS ->
+        if (legsVertical(f.kind, f.type, f.flip).second && f.end == 0.0) {
+            "단면을 중심(X0)까지 깎아 인선이 중심 너머 X−${Fmt.nc(2 * f.noseR)} 까지 간 뒤 Z 로 빠집니다(노즈 끝이 중심을 다 깎게 — 중심에 살이 남지 않습니다). " +
+                "기계가 X− 로 그만큼 갈 수 있는지 확인하세요."
+        } else {
+            "진입점이나 후퇴점이 중심(X0)을 넘습니다. Z 여유를 줄이세요."
+        }
 }
 
 internal fun grooveWarningText(w: GrooveWarning): String = when (w) {

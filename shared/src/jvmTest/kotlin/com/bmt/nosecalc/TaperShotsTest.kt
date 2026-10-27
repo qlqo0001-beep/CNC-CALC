@@ -72,8 +72,8 @@ class TaperShotsTest {
                 setPoint("ang", "34.1")
             }
         }
-        // 내경 역방향 · 직접 보정: 팁 1번이 NC 첫 줄 주석에도
-        shot("taper-b-reverse", 2480, comp = CompMode.DIRECT) { TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example() }
+        // 내경 역방향 · 직접 보정: 팁 1번이 NC 첫 줄 주석에도. 척 쪽(구멍 안)에서 시작해 NC 위에 접근 줄 안내 띠(접힘)
+        shot("taper-b-reverse", 2540, comp = CompMode.DIRECT) { TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example() }
         shot("taper-b-double", 2640) { TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1") } }
         // 각도 30 ≠ 두 점의 45° → CONTRADICTION: 빨간 띠는 요약 바로 아래(그 아래 '각도 비우고 계산'), X1 · Z1 · X2 · Z2 · 각도에 빨간 테
         shot("taper-b-error", 1150) { TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") } }
@@ -92,10 +92,40 @@ class TaperShotsTest {
         shot("taper-groove-error") { TaperState(TaperKind.GROOVE, type = 2, open = true).example().apply { setShared("insert", "9") } }
     }
 
+    /**
+     * T1 ⇄ T2 바꾸기를 켠 화면(골든 UiGoldenTest.taperFlip 과 같은 상태): 스위치(켜짐 · 지금 방향 한 줄), 요약 그림의 T 이름 · 이송 화살 ·
+     * 이름 순서, 칸 값이 같은 실제 점에 남음, 결과 카드 · 뷰어 라벨 · NC 가 새 순서(G41). 외경 형상 1 은 직접 보정도. 척 쪽에서 시작하므로 NC 위에 접근 줄 안내 띠(접힘),
+     * 고르기 화면의 뒤집은 카드 이름 앞에 ⇄
+     */
+    @Test
+    fun flip() {
+        shot("taper-b-flip", 2680) { TaperState(type = 1, open = true).example().apply { toggleFlip() } }
+        shot("taper-b-flip-direct", 2760, comp = CompMode.DIRECT) { TaperState(type = 1, open = true).example().apply { toggleFlip() } }
+        shot("taper-b-flip-outer3", 2760) {
+            TaperState(type = 3, open = true).example().apply {
+                setPoint("r2", "0.5")
+                setPoint("end", "-20")
+                toggleFlip()
+            }
+        }
+        shot("taper-b-flip-inner1", 2660) { TaperState(TaperKind.INNER, type = 1, open = true).example().apply { setPoint("end", "-20"); toggleFlip() } }
+        shot("taper-b-flip-double", 2780) { TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1"); toggleFlip() } }
+        // 고르기 화면: 뒤집은 형상 1 카드만 T 이름 · 화살이 반대
+        shot("taper-a-flip") { TaperState(type = 1).apply { toggleFlip() } }
+        // 키패드 그림도 뒤집은 T1(위 왼쪽 점)을 짚는다
+        shot("taper-b-flip-keypad", frames = 150, frameMs = 16) { TaperState(type = 1, open = true).example().apply { toggleFlip(); editing = "x1" } }
+    }
+
     /** 좁은 폰 · 큰 글꼴(360dp · 1.3): 보정 방식 스위치 두 줄 칸 · 기계 보정 카드의 R · T 와 도면 좌표가 잘리지 않는다 */
     @Test
-    fun narrow() = Shots.both("taper-b-w360", heightDp = 3000, widthDp = 360, fontScale = 1.3f) {
-        AppHost(it) { TaperScreen(TaperState(type = 1, open = true).example()) }
+    fun narrow() {
+        Shots.both("taper-b-w360", heightDp = 3000, widthDp = 360, fontScale = 1.3f) {
+            AppHost(it) { TaperScreen(TaperState(type = 1, open = true).example()) }
+        }
+        // 뒤집기 스위치의 제목 · 방향 한 줄과 바뀐 시작 · 끝 칸 이름이 좁은 폰 · 큰 글꼴에서 잘리지 않는다
+        Shots.both("taper-b-flip-w360", heightDp = 1400, widthDp = 360, fontScale = 1.3f) {
+            AppHost(it) { TaperScreen(TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { toggleFlip() }) }
+        }
     }
 
     /**
@@ -119,11 +149,11 @@ class TaperShotsTest {
     }
 
     /**
-     * 각도 칸(taper-b 의 (114, 550)dp)을 눌러 연 키패드: 안내 줄(Z축 기준 · 꼭지각 ÷2 · X축 기준 90 − 값) · '비우기 · 자동 계산'.
+     * 각도 칸(taper-b 의 (114, 635)dp — T1 ⇄ T2 바꾸기 줄 아래)을 눌러 연 키패드: 안내 줄(Z축 기준 · 꼭지각 ÷2 · X축 기준 90 − 값) · '비우기 · 자동 계산'.
      * 묶음 키패드라 칸이 시트 위로 올라온다 — 폰 프레임(16ms)으로 찍는다
      */
     @Test
-    fun keypadHint() = Shots.both("taper-b-keypad-ang", frames = 150, frameMs = 16, tapDp = Offset(114f, 550f)) {
+    fun keypadHint() = Shots.both("taper-b-keypad-ang", frames = 150, frameMs = 16, tapDp = Offset(114f, 635f)) {
         AppHost(it) { TaperScreen(TaperState(type = 1, open = true).example()) }
     }
 

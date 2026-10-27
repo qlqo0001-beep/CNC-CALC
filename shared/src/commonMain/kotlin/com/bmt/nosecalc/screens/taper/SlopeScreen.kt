@@ -96,6 +96,7 @@ internal fun SlopeScreen(s: TaperState) {
     val noseR = s.shared("noseR")
     val zClear = s.shared("zClear")
     val standard = NoseComp.standardTip(kind.inner, s.reverse)
+    val flip = s.flip
     val form = SlopeForm(
         kind, type, s.reverse,
         noseR.toDoubleOrNull() ?: Double.NaN,
@@ -107,11 +108,14 @@ internal fun SlopeScreen(s: TaperState) {
         rs.map { it.toDoubleOrNull() ?: 0.0 },
         start.toDoubleOrNull(),
         end.toDoubleOrNull(),
+        flip,
     )
     val result = remember(form) { TaperSolve.solve(form) }
     val sol = result.solution
     val tip = s.tip ?: standard
-    val (frontV, backV) = legsVertical(kind, type)
+    // 시작 · 끝 요소는 뒤집기를 따라 맞바뀐다. 척 쪽에서 시작하는가 = 역방향과 뒤집기 가운데 하나만 켜짐
+    val (frontV, backV) = legsVertical(kind, type, flip)
+    val chuckFirst = s.reverse != flip
     // 치수를 아직 다 넣지 않았으면(0 · 빈칸) 빨간 멈춤 대신 파란 안내. 멈춘 경고는 그 칸들을 빨간 테로 짚는다
     val waiting = sol == null && (TaperWarning.MISSING_INPUT in result.warnings || form.waiting)
     val flagged = if (sol == null && !waiting) result.warnings.flatMap { taperWarningFields(it, form) }.toSet() else emptySet()
@@ -123,13 +127,18 @@ internal fun SlopeScreen(s: TaperState) {
     val chain = rememberFieldChain(s.editing)
     // 키패드 그림: 요약 칸 그림에서 그 칸의 점 · 치수만 짚는다
     fun figure(key: String): @Composable (Modifier) -> Unit = { m ->
-        TypeArt(kind, type, s.reverse, m.aspectRatio(199f / 184f), compact = true, focus = key)
+        TypeArt(kind, type, s.reverse, m.aspectRatio(199f / 184f), compact = true, focus = key, flip = flip)
     }
 
     TaperPage(dock, chain.sheetOpen) { anchor ->
-        val dir = if (s.reverse) "역방향 가공 (Z+)" else "정방향 가공 (Z−)"
+        // 뒤집으면 바이트(정/역)는 그대로이고 가는 Z 쪽만 반대
+        val dir = when {
+            !flip -> if (s.reverse) "역방향 가공 (Z+)" else "정방향 가공 (Z−)"
+            s.reverse -> "역방향 바이트 · 반대 끝부터 (Z−)"
+            else -> "정방향 바이트 · 반대 끝부터 (Z+)"
+        }
         // 좁은 폰에서 '노즈 R' · '팁 3번' 이 쪼개지지 않게(라운드 toolText 와 같은 붙임 공백 · 낱말 이음)
-        SummaryCard(kind, type, s.reverse, "$dir · 노즈\u00A0R$r · 팁\u00A0${tip}\u2060번") { s.open = false }
+        SummaryCard(kind, type, s.reverse, "$dir · 노즈\u00A0R$r · 팁\u00A0${tip}\u2060번", flip) { s.open = false }
         // 멈춘 까닭은 입력 카드 위에(폰 첫 화면 안에). 다섯 값이 어긋나면 비울 칸을 단추로 권한다
         if (waiting) {
             WarningBanner(taperWarningText(TaperWarning.MISSING_INPUT, form), level = WarnLevel.Info)
@@ -146,10 +155,13 @@ internal fun SlopeScreen(s: TaperState) {
             }
         }
 
-        // 입력 카드: '도면 치수'(점마다 X · Z · 모서리 R → 각도 → 시작 · 끝, 단위는 머리에 한 번) → '공구'(노즈 R → Z 여유 · 팁 번호)
+        // 입력 카드: '도면 치수'(T1 ⇄ T2 바꾸기 → 점마다 X · Z · 모서리 R → 각도 → 시작 · 끝, 단위는 머리에 한 번) → '공구'(노즈 R → Z 여유 · 팁 번호)
         AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
             FieldChainHost(chain) {
                 CardHeader("도면 치수") { Text("단위 mm · X 는 직경", style = AppType.caption, color = c.textMuted) }
+                // 가공 방향 뒤집기: T1 = 먼저 깎는 점. 바꾸면 칸 값이 같은 실제 점에 남게 맞바뀐다(TaperState.toggleFlip)
+                FlipSwitch("T1 ⇄ T$n 바꾸기", travelText(kind, type, s.reverse, flip), flip, s::toggleFlip)
+                Spacer(Modifier.height(Space.fieldGap))
                 // 단일 테이퍼는 다섯 값 가운데 하나를 비워 계산한다(키패드 '비우기 · 자동 계산')
                 val blankable = !kind.double
                 Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
@@ -192,11 +204,12 @@ internal fun SlopeScreen(s: TaperState) {
                     // 끝점을 비우면 마지막 T 점(모서리 R 이면 그 끝)에서 끝나 그 좌표를 자동 값으로, 시작점을 비우면 "안 깎음"
                     val last = sol?.cutEnd
                     Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
-                        // 외경 단면은 중심 쪽에서 바깥으로 깎아 시작이 안쪽 Ø(내경은 바깥 Ø). 역방향은 시작(앞 끝)이 척 쪽, 끝이 척 반대쪽
+                        // 외경 단면은 중심 쪽에서 바깥으로 깎아 시작이 안쪽 Ø(내경은 바깥 Ø) — 뒤집으면 반대 끝 단면을 바깥(내경은 안쪽)에서 들어온다.
+                        // 역방향 · 뒤집기 가운데 하나만 켜졌으면 시작(앞 끝)이 척 쪽, 끝이 척 반대쪽
                         NumberField(
                             when {
-                                frontV -> if (kind.inner) "시작 X (단면 바깥 Ø)" else "시작 X (단면 안쪽 Ø)"
-                                s.reverse -> "시작 Z (앞 끝 · 척 쪽)"
+                                frontV -> if (kind.inner != flip) "시작 X (단면 바깥 Ø)" else "시작 X (단면 안쪽 Ø)"
+                                chuckFirst -> "시작 Z (척 쪽)"
                                 else -> "시작 Z (앞 끝)"
                             },
                             start, { s.setPoint("start", it) }, Modifier.weight(1f),
@@ -207,12 +220,12 @@ internal fun SlopeScreen(s: TaperState) {
                         NumberField(
                             when {
                                 backV -> "끝 X (단면 끝 Ø)"
-                                s.reverse -> "끝 Z (뒤 끝 · 척 반대쪽)"
-                                else -> "끝 Z (뒤 끝 · 척 쪽)"
+                                chuckFirst -> "끝 Z (앞 끝)"
+                                else -> "끝 Z (척 쪽)"
                             },
                             end, { s.setPoint("end", it) }, Modifier.weight(1f),
                             autoValue = auto(end, last?.let { if (backV) it.xDia else it.z }), error = "end" in flagged,
-                            hint = (if (s.reverse) "T$n 뒤 요소의 실제 끝 좌표" else "척·턱 쪽 실제 끝 좌표") + " · 비우면 T$n 에서 끝남 (자동 값)",
+                            hint = (if (chuckFirst) "T$n 뒤 요소의 실제 끝 좌표" else "척·턱 쪽 실제 끝 좌표") + " · 비우면 T$n 에서 끝남 (자동 값)",
                             id = "end", figure = figure("end"), preview = preview,
                         )
                     }
@@ -254,7 +267,11 @@ internal fun SlopeScreen(s: TaperState) {
             Column(anchor, verticalArrangement = Arrangement.spacedBy(Space.cardGap)) {
                 result.warnings.forEach {
                     if (it == TaperWarning.AGAINST_TOOL) {
-                        WarningBanner(taperWarningText(it, form), level = WarnLevel.Info, collapsedText = "바이트 반대쪽 면 있음 (역테이퍼 꼴) — 눌러서 자세히")
+                        // 뒤집으면 모양뿐 아니라 진행 방향(누운 요소를 바이트 반대쪽으로)도 이 경고를 낸다
+                        WarningBanner(
+                            taperWarningText(it, form), level = WarnLevel.Info,
+                            collapsedText = if (flip) "바이트와 반대 (면 · 방향) — 눌러서 자세히" else "바이트 반대쪽 면 있음 (역테이퍼 꼴) — 눌러서 자세히",
+                        )
                     } else {
                         WarningBanner(taperWarningText(it, form), level = WarnLevel.Warn)
                     }
@@ -262,6 +279,25 @@ internal fun SlopeScreen(s: TaperState) {
                 if (direct) CompCard(sol) else MachineCard(sol, form.noseR)
             }
             SlopeViewer(sol, form.noseR, r, kind.inner, s.reverse, direct)
+            // 역방향(뒤집기 없음)은 역바이트가 척 쪽에서 시작해 첫 G00 이 척 쪽 — 내경이면 구멍 안이다. G00 은 X · Z 가 따로 움직일 수 있어
+            // (dog-leg) 앞 위치에서 바로 오면 입구 단면 · 면취나 부품에 닿는다. 그 앞에 넣을 접근 줄을 알린다(검증 2026-10-27).
+            // 뒤집기(같은 바이트로 척 쪽부터)는 계산 결과의 NC 에 접근 줄이 이미 있다(calc: 앞 끝면 바깥에서 X 를 맞추고 Z 로)
+            if (chuckFirst && !flip) {
+                val g00 = if (direct) sol.ncG40.first() else sol.ncG41G42[1]
+                val x = Regex("X(-?[\\d.]+)").find(g00)?.groupValues?.get(1) ?: ""
+                WarningBanner(
+                    if (kind.inner) {
+                        "첫 줄 $g00 은 구멍 안쪽(척 쪽)입니다. 앞 위치에서 바로 이 줄로 오면 X · Z 가 따로 움직여 입구 단면 · 면취에 닿을 수 있습니다 — " +
+                            "그 앞에 구멍 밖(끝면 바깥 Z)에서 X$x 로 먼저 맞추는 줄을 넣고 Z 로 들어가세요."
+                    } else {
+                        "첫 줄 $g00 은 척 쪽입니다. 앞 위치에서 바로 이 줄로 오면 X · Z 가 따로 움직여 부품에 닿을 수 있습니다 — " +
+                            "그 앞에 부품의 가장 큰 지름 바깥에서 Z 를 먼저 맞추는 줄을 넣고 X 로 내려오세요."
+                    },
+                    level = WarnLevel.Info,
+                    // 좁은 폰(360dp)에서도 한 줄에 들게 짧게
+                    collapsedText = if (kind.inner) "첫 G00 이 구멍 안 — 접근 줄 안내" else "첫 G00 이 척 쪽 — 접근 줄 안내",
+                )
+            }
             NcCard(
                 if (direct) directNc(sol.ncG40, form.noseR, sol.tip) else sol.ncG41G42,
                 if (direct) {
@@ -474,7 +510,7 @@ internal fun SmallLabel(text: String) {
 
 /**
  * 도면(굵게) 위에 직접 보정(G40) 경로(진입점에서 G01 포함, 채운 화살) · 노즈 중심(끊은 선) · 보정점마다 노즈 원과 가상 인선 꺾쇠 ·
- * G00 후퇴(점선, 빈 화살). 점: T 점(○) · 보정점(●) · 진입 · 후퇴(□) · 모서리 R 중심(+ 도면 R → 보정 R).
+ * G00 후퇴와 진입 앞 접근 줄(점선, 빈 화살). 점: T 점(○) · 보정점(●) · 진입 · 후퇴(□) · 모서리 R 중심(+ 도면 R → 보정 R).
  * 소재는 빗금(내경은 구멍 위) — 척 쪽(왼쪽)으로 이어지고, 역방향은 끝 요소가 Z0 쪽(오른쪽)으로도 이어진다.
  * 시작·끝점을 비웠으면 프로그램이 그 요소를 깎지 않으므로(진입점에서 첫 꺾임점′ 으로, 마지막 꺾임점′ 에서 후퇴) 그 토막은 그리지 않는다.
  * direct = false(기계 보정)면 프로그램은 도면 좌표 그대로라 도면의 깎는 토막을 경로로 그리고(모서리 R 은 도면 R),
@@ -501,6 +537,10 @@ private fun SlopeViewer(sol: TaperSolution, r: Double, rText: String, inner: Boo
         }
         if (direct) {
             add(ViewerLine(Contour.polyline(program.last().end, sol.exit), c.viewRapid, 2.dp, dotted = true, arrows = Arrow.Hollow))
+            // 뒤집어 척 쪽에서 시작하면 진입 앞 접근 줄(G00): 앞 끝면 바깥에서 X 를 맞추고 Z 로
+            if (sol.approach.isNotEmpty()) {
+                add(ViewerLine(Contour.polyline(*(sol.approach + sol.entry).toTypedArray()), c.viewRapid, 2.dp, dotted = true, arrows = Arrow.Hollow))
+            }
             // 진입점에서 첫 점까지는 G01 이송
             add(ViewerLine(Contour(listOf(Line(sol.entry, program.first().start)) + program), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
         } else {

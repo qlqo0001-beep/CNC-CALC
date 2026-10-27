@@ -30,6 +30,7 @@ import com.bmt.nosecalc.screens.taper.cutEnd
 import com.bmt.nosecalc.screens.taper.directNc
 import com.bmt.nosecalc.screens.taper.example
 import com.bmt.nosecalc.screens.taper.signed
+import com.bmt.nosecalc.screens.taper.travelText
 import com.bmt.nosecalc.screens.triangle.TriField
 import com.bmt.nosecalc.screens.triangle.TriangleState
 import java.io.File
@@ -90,6 +91,27 @@ class UiGoldenTest {
         slope("taper-b-error", TaperState(type = 3, open = true).example().apply { setPoint("ang", "30") })
     }
 
+    /**
+     * T1 ⇄ T2 바꾸기(같은 형상 · 같은 바이트를 반대 끝부터): 위 스크린샷 상태에서 스위치만 켠 것 — 넣은 값은 같은 실제 점에 남는다.
+     * 외경 형상 1 은 calc-design.md 의 손 계산(G41, `G00 X52. Z-6.` …), 형상 3 · 내경 1 은 앞 요소(외경 · 구멍)를 Z+ 로 깎아 바이트 반대(AGAINST_TOOL)
+     */
+    @Test
+    fun taperFlip() {
+        slope("taper-b-flip", TaperState(type = 1, open = true).example().apply { toggleFlip() })
+        slope(
+            "taper-b-flip-outer3",
+            TaperState(type = 3, open = true).example().apply {
+                setPoint("r2", "0.5")
+                setPoint("end", "-20")
+                toggleFlip()
+            },
+        )
+        slope("taper-b-flip-inner1", TaperState(TaperKind.INNER, type = 1, open = true).example().apply { setPoint("end", "-20"); toggleFlip() })
+        slope("taper-b-flip-double", TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1"); toggleFlip() })
+        // 화면 역방향(그림 좌우 반전 · 역바이트)과 함께 — 네 조합 가운데 하나
+        slope("taper-b-flip-reverse", TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example().apply { toggleFlip() })
+    }
+
     @Test
     fun groove() {
         groove("taper-groove", TaperState(TaperKind.GROOVE, type = 1, open = true).example())
@@ -145,10 +167,13 @@ class UiGoldenTest {
             (1..n).map { s.point("r$it").toDoubleOrNull() ?: 0.0 },
             s.point("start").toDoubleOrNull(),
             s.point("end").toDoubleOrNull(),
+            s.flip,
         )
         val r = TaperSolve.solve(form)
         val text = buildString {
-            line("표준 팁 T${NoseComp.standardTip(kind.inner, s.reverse)} · ${Side.of(kind.inner, s.reverse)}")
+            // 뒤집은 상태만 머리에 한 줄 더(안 뒤집은 골든은 그대로)
+            if (s.flip) line("T1 ⇄ T${n} 바꿈 · ${travelText(kind, type, s.reverse, true)}")
+            line("표준 팁 T${NoseComp.standardTip(kind.inner, s.reverse)} · ${Side.of(kind.inner, s.reverse != s.flip)}")
             line("경고 ${r.warnings}")
             val sol = r.solution ?: return@buildString
             line("팁 T${sol.tip} · ${sol.side} · 시작 요소 깎음 ${sol.fromStart} · 끝 요소 깎음 ${sol.toEnd}")
@@ -161,6 +186,8 @@ class UiGoldenTest {
             }
             line("각도 ${sol.anglesDeg.map(::f)}")
             line("진입점 ${xz(sol.entry)} 후퇴점 ${xz(sol.exit)}")
+            // 뒤집어 척 쪽에서 시작할 때만(안 뒤집은 골든은 그대로)
+            if (sol.approach.isNotEmpty()) line("접근 줄 ${sol.approach.map(::xz)}")
             line("도면 끝 ${xz(sol.drawing.segs.last().end)} · 깎는 끝 ${xz(sol.cutEnd)}")
             line("NC G41/G42")
             sol.ncG41G42.forEach { line("  $it") }

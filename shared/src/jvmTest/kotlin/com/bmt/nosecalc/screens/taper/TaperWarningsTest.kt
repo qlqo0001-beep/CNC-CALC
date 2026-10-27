@@ -73,6 +73,50 @@ class TaperWarningsTest {
         assertEquals(setOf("x1", "x2", "z1", "z2"), taperWarningFields(TaperWarning.SHAPE_MISMATCH, x))
     }
 
+    /**
+     * 뒤집으면(T1 = 반대 끝 점) Z 가 가는 쪽도 반대: 정방향 뒤집기는 T1 이 척 쪽이라 Z 가 커지고, 역방향 뒤집기는 작아진다.
+     * 거꾸로 넣으면 Z 칸만 빨간 테와 그 방향의 예. 바이트 반대 글은 뒤집은 진행도 말한다
+     */
+    @Test
+    fun zSignFollowsFlip() {
+        val ok = form(TaperKind.OUTER, 1, listOf(50.0, 40.0), listOf(-5.0, 0.0)).copy(flip = true)
+        assertTrue(TaperSolve.solve(ok).solution != null)
+        assertFalse(ok.zBackward)
+        val bad = form(TaperKind.OUTER, 1, listOf(50.0, 40.0), listOf(0.0, -5.0)).copy(flip = true)
+        assertEquals(TaperWarning.SHAPE_MISMATCH, stop(bad))
+        assertTrue(bad.zBackward)
+        assertEquals(setOf("z1", "z2"), taperWarningFields(TaperWarning.SHAPE_MISMATCH, bad))
+        assertTrue(taperWarningText(TaperWarning.SHAPE_MISMATCH, bad).contains("T1 이 척 쪽이라 Z 가 커집니다"))
+        val rev = form(TaperKind.OUTER, 1, listOf(50.0, 40.0), listOf(-30.0, -25.0), reverse = true).copy(flip = true)
+        assertEquals(TaperWarning.SHAPE_MISMATCH, stop(rev))
+        assertTrue(rev.zBackward)
+        assertTrue(taperWarningText(TaperWarning.SHAPE_MISMATCH, rev).contains("T1 이 척 반대쪽이라 Z 가 작아집니다"))
+        // 뒤집은 외경 형상 3 의 시작점(외경 Z-20)부터 깎으면 외경을 Z+ 로 — 바이트 반대(진행), 글은 T1 ⇄ T2 도 말한다
+        val back = form(TaperKind.OUTER, 3, listOf(50.0, 40.0), listOf(-5.0, 0.0)).copy(flip = true, start = -20.0)
+        assertTrue(TaperWarning.AGAINST_TOOL in TaperSolve.solve(back).warnings)
+        assertTrue(taperWarningText(TaperWarning.AGAINST_TOOL, back).contains("T1 ⇄ T2"))
+        assertFalse(taperWarningText(TaperWarning.AGAINST_TOOL, back.copy(flip = false)).contains("⇄"))
+    }
+
+    /**
+     * 뒤집은 외경 형상 1 로 단면을 중심(끝 X0)까지 깎으면 노즈가 중심에 닿게 인선이 일부러 중심 너머 X −2r 까지 가서 ENTRY_PAST_AXIS —
+     * 글은 Z 여유를 줄이라고 하지 않고 그 X 와 Z 로 빠진다는 것을 말한다(검증 2026-10-27). 끝 X 를 넣은 것이 아니면 지금 글
+     */
+    @Test
+    fun pastAxisTextForFaceToCenter() {
+        val face = form(TaperKind.OUTER, 1, listOf(50.0, 40.0), listOf(-5.0, 0.0)).copy(flip = true, end = 0.0)
+        assertTrue(TaperWarning.ENTRY_PAST_AXIS in TaperSolve.solve(face).warnings)
+        val t = taperWarningText(TaperWarning.ENTRY_PAST_AXIS, face)
+        assertTrue(t.startsWith("단면을 중심(X0)까지 깎아") && "Z 여유를 줄이세요" !in t && "X−0.8" in t && "Z 로 빠집니다" in t, t)
+        // 그 글대로: 인선 X-0.8 까지 깎고 Z 로 후퇴(두 프로그램 모두)
+        val s = TaperSolve.solve(face).solution!!
+        assertEquals(listOf("G01 X-0.8", "G00 Z1."), s.ncG40.takeLast(2))
+        assertEquals(listOf("G01 X-0.8", "G40 G00 Z1."), s.ncG41G42.takeLast(2))
+        assertTrue(taperWarningText(TaperWarning.ENTRY_PAST_AXIS, face.copy(end = 30.0)).endsWith("Z 여유를 줄이세요."))
+        // 끝 X30 은 공구 쪽(+Z)으로 빠져 중심을 넘지 않는다
+        assertTrue(TaperWarning.ENTRY_PAST_AXIS !in TaperSolve.solve(face.copy(end = 30.0)).warnings)
+    }
+
     @Test
     fun badInputFlagsTheValue() {
         val f = form(TaperKind.OUTER, 1, listOf(-40.0, 50.0), listOf(0.0, -5.0), corners = listOf(-1.0, 0.0))

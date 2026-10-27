@@ -71,25 +71,27 @@ class GeometricVerifyTest {
     @Test
     fun taper() {
         val rep = Report("테이퍼")
-        // 대표값: 외경/내경 × TYPE 1~5 × 정/역 × 노즈R 4가지 × 각 5가지, X40 Z0 에서 Z 로 5 만큼
-        for (inner in BOOLS) for (type in 1..5) for (rev in BOOLS) for (r in TaperCalc.NOSE_R_CHOICES) {
+        // 대표값: 외경/내경 × TYPE 1~5 × 정/역 × 뒤집기 × 노즈R 4가지 × 각 5가지, X40 Z0 에서 Z 로 5 만큼
+        for (inner in BOOLS) for (type in 1..5) for (rev in BOOLS) for (flip in BOOLS) for (r in TaperCalc.NOSE_R_CHOICES) {
             for (deg in listOf(15.0, 30.0, 45.0, 60.0, 75.0)) {
                 val dx = 5 * tan(deg * PI / 180)
                 val t2 = V(-5.0, 20 + (if (rises(inner, type)) dx else -dx))
-                runTaper(rep, inner, type, rev, r, null, V(0.0, 20.0), t2, blank = 4, zClear = 1.0, leg = null)
+                runTaper(rep, inner, type, rev, r, null, V(0.0, 20.0), t2, blank = 4, zClear = 1.0, leg = null, flip = flip)
             }
         }
         // 모서리 R: 볼록·오목, R < r · R = r · R > r
-        for (inner in BOOLS) for (type in 1..5) for (rev in BOOLS) for (r in listOf(0.4, 1.2)) {
+        for (inner in BOOLS) for (type in 1..5) for (rev in BOOLS) for (flip in BOOLS) for (r in listOf(0.4, 1.2)) {
             for (deg in listOf(30.0, 60.0)) for (cr in listOf(listOf(0.3, 1.5), listOf(1.5, 0.4), listOf(1.2, 1.2))) {
                 val dx = 6 * tan(deg * PI / 180)
                 val t2 = V(-6.0, 20 + (if (rises(inner, type)) dx else -dx))
-                runTaper(rep, inner, type, rev, r, null, V(0.0, 20.0), t2, blank = 4, zClear = 1.0, leg = 6.0, cr = cr)
+                runTaper(rep, inner, type, rev, r, null, V(0.0, 20.0), t2, blank = 4, zClear = 1.0, leg = 6.0, cr = cr, flip = flip)
             }
         }
-        // 설계 문서의 손 계산 예 두 개
+        // 설계 문서의 손 계산 예 두 개와 외경 TYPE 1 뒤집기(외경 쪽부터 면취를 내려와 단면을 중심 쪽으로, G41) — 시작·끝 6 mm 도
         runTaper(rep, false, 1, false, 0.4, null, V(0.0, 20.0), V(-5.0, 25.0), blank = 4, zClear = 1.0, leg = null)
         runTaper(rep, true, 1, false, 0.4, null, V(0.0, 20.0), V(-2.0, 17.0), blank = 4, zClear = 1.0, leg = null)
+        runTaper(rep, false, 1, false, 0.4, null, V(0.0, 20.0), V(-5.0, 25.0), blank = 4, zClear = 1.0, leg = null, flip = true)
+        runTaper(rep, false, 1, false, 0.4, null, V(0.0, 20.0), V(-5.0, 25.0), blank = 4, zClear = 1.0, leg = 6.0, flip = true)
         // C0.1 면취(경사 0.141)를 0.4R 로: 노즈R > 경사지만 양 끝이 볼록이라 닿는다(통과해야 정상)
         runTaper(rep, false, 1, false, 0.4, null, V(0.0, 19.9), V(-0.1, 20.0), blank = 4, zClear = 1.0, leg = null)
         val rnd = Random(20261017)
@@ -109,11 +111,15 @@ class GeometricVerifyTest {
                 t2 = V(r3(z1 - dz), x2 / 2)
                 if (x2 >= 0.2 && deg in 2.0..88.0) break
             }
-            runTaper(
-                rep, inner, type, rnd.nextBoolean(), noseR(rnd), randomTip(rnd), t1, t2,
-                blank = rnd.nextInt(-1, 5), zClear = r3(rnd.nextDouble(0.05, 3.0)),
-                leg = if (rnd.nextInt(4) == 0) null else r3(rnd.nextDouble(1.0, 8.0)), cr = listOf(cornerR(rnd), cornerR(rnd)),
-            )
+            val rev = rnd.nextBoolean()
+            val r = noseR(rnd)
+            val tip = randomTip(rnd)
+            val blank = rnd.nextInt(-1, 5)
+            val zClear = r3(rnd.nextDouble(0.05, 3.0))
+            val leg = if (rnd.nextInt(4) == 0) null else r3(rnd.nextDouble(1.0, 8.0))
+            val cr = listOf(cornerR(rnd), cornerR(rnd))
+            // 같은 사례를 뒤집어서도(반대 끝부터)
+            for (flip in BOOLS) runTaper(rep, inner, type, rev, r, tip, t1, t2, blank = blank, zClear = zClear, leg = leg, cr = cr, flip = flip)
         }
         rep.finish()
     }
@@ -128,12 +134,12 @@ class GeometricVerifyTest {
             listOf(V(0.0, 15.0), V(-4.0, 18.0), V(-10.0, 25.0)),
             listOf(V(0.0, 25.0), V(-6.0, 22.0), V(-10.0, 15.0)),
         )
-        for (s in shapes) for (inner in BOOLS) for (rev in BOOLS) for (r in TaperCalc.NOSE_R_CHOICES) {
-            runDouble(rep, inner, rev, r, null, s, 1.0, null)
-            runDouble(rep, inner, rev, r, null, s, 1.0, 6.0, listOf(1.0, 2.0, 0.5))
+        for (s in shapes) for (inner in BOOLS) for (rev in BOOLS) for (flip in BOOLS) for (r in TaperCalc.NOSE_R_CHOICES) {
+            runDouble(rep, inner, rev, r, null, s, 1.0, null, flip = flip)
+            runDouble(rep, inner, rev, r, null, s, 1.0, 6.0, listOf(1.0, 2.0, 0.5), flip = flip)
         }
         // 경사 1.22 > 노즈R 1.2 인데 T2 골(사이각 74°)에 붙은 원이 T1 을 넘어간다
-        runDouble(rep, false, false, 1.2, null, listOf(V(0.0, 25.0), V(-1.0, 24.3), V(-3.0, 30.0)), 1.0, null)
+        for (flip in BOOLS) runDouble(rep, false, false, 1.2, null, listOf(V(0.0, 25.0), V(-1.0, 24.3), V(-3.0, 30.0)), 1.0, null, flip = flip)
         val rnd = Random(77)
         repeat(400) {
             val pts = mutableListOf(V(r3(rnd.nextDouble(-10.0, 5.0)), r3(rnd.nextDouble(4.0, 80.0)) / 2))
@@ -145,11 +151,15 @@ class GeometricVerifyTest {
                 val deg = atan2(dxd / 2, dz) * 180 / PI
                 if (xd >= 0.2 && deg in 3.0..87.0) pts += V(r3(p.z - dz), xd / 2)
             }
-            runDouble(
-                rep, rnd.nextBoolean(), rnd.nextBoolean(), noseR(rnd), randomTip(rnd), pts,
-                r3(rnd.nextDouble(0.05, 3.0)), if (rnd.nextInt(4) == 0) null else r3(rnd.nextDouble(1.0, 8.0)),
-                listOf(cornerR(rnd), cornerR(rnd), cornerR(rnd)),
-            )
+            val inner = rnd.nextBoolean()
+            val rev = rnd.nextBoolean()
+            val r = noseR(rnd)
+            val tip = randomTip(rnd)
+            val zClear = r3(rnd.nextDouble(0.05, 3.0))
+            val leg = if (rnd.nextInt(4) == 0) null else r3(rnd.nextDouble(1.0, 8.0))
+            val cr = listOf(cornerR(rnd), cornerR(rnd), cornerR(rnd))
+            // 같은 사례를 뒤집어서도(T1 ⇄ T3, 반대 끝부터)
+            for (flip in BOOLS) runDouble(rep, inner, rev, r, tip, pts, zClear, leg, cr, flip)
         }
         rep.finish()
     }
@@ -285,9 +295,13 @@ class GeometricVerifyTest {
 
     // ---------------------------------------------------------------- 계산기마다
 
+    /**
+     * t1·t2·cr 는 그림 순서(오른쪽 점부터). flip = 같은 그림을 반대 끝부터 깎기 — 칸에는 왼쪽 점이 T1 으로, 그 앞 요소가 시작점으로
+     * 들어간다(설계 문서 "가공 방향 뒤집기")
+     */
     private fun runTaper(
         rep: Report, inner: Boolean, type: Int, reverse: Boolean, r: Double, tip: Int?, t1: V, t2: V,
-        blank: Int, zClear: Double, leg: Double?, cr: List<Double> = listOf(0.0, 0.0),
+        blank: Int, zClear: Double, leg: Double?, cr: List<Double> = listOf(0.0, 0.0), flip: Boolean = false,
     ) {
         val deg = atan2(abs(t2.x - t1.x), t1.z - t2.z) * 180 / PI
         val v = arrayOf<Double?>(2 * t1.x, t1.z, 2 * t2.x, t2.z, deg)
@@ -300,38 +314,56 @@ class GeometricVerifyTest {
         val backV = type == 2 || type == 4
         val front = if (frontV) V(t1.z, max(t1.x - up * len, 0.0)) else V(t1.z + len, t1.x)
         val back = if (backV) V(t2.z, max(t2.x + up * len, 0.0)) else V(t2.z - len, t2.x)
-        val inp = TaperInput(
-            inner = inner, type = type, reverse = reverse, noseR = r, tip = tip,
-            x1 = v[0], z1 = v[1], x2 = v[2], z2 = v[3], angleDeg = v[4], zClear = zClear, cornerR1 = cr[0], cornerR2 = cr[1],
-            start = leg?.let { if (frontV) 2 * front.x else front.z }, end = leg?.let { if (backV) 2 * back.x else back.z },
-        )
+        val frontIn = leg?.let { if (frontV) 2 * front.x else front.z }
+        val backIn = leg?.let { if (backV) 2 * back.x else back.z }
+        val inp = if (flip) {
+            TaperInput(
+                inner = inner, type = type, reverse = reverse, noseR = r, tip = tip,
+                x1 = v[2], z1 = v[3], x2 = v[0], z2 = v[1], angleDeg = v[4], zClear = zClear, cornerR1 = cr[1], cornerR2 = cr[0],
+                start = backIn, end = frontIn, flip = true,
+            )
+        } else {
+            TaperInput(
+                inner = inner, type = type, reverse = reverse, noseR = r, tip = tip,
+                x1 = v[0], z1 = v[1], x2 = v[2], z2 = v[3], angleDeg = v[4], zClear = zClear, cornerR1 = cr[0], cornerR2 = cr[1],
+                start = frontIn, end = backIn,
+            )
+        }
         val res = TaperCalc.calc(inp)
-        checkTaper(rep, "$inp → 경고 ${res.warnings}", res, inner, reverse, r, tip, listOf(t1, t2), listOf(front, t1, t2, back), cr)
+        checkTaper(rep, "$inp → 경고 ${res.warnings}", res, inner, reverse, flip, r, tip, listOf(t1, t2), listOf(front, t1, t2, back), cr)
     }
 
+    /** t·cr 는 그림 순서(오른쪽부터). flip 이면 칸에 T1 ⇄ T3·시작 ⇄ 끝을 바꿔 넣는다 */
     private fun runDouble(
         rep: Report, inner: Boolean, reverse: Boolean, r: Double, tip: Int?, t: List<V>, zClear: Double, leg: Double?,
-        cr: List<Double> = listOf(0.0, 0.0, 0.0),
+        cr: List<Double> = listOf(0.0, 0.0, 0.0), flip: Boolean = false,
     ) {
         val len = leg ?: 5.0
+        val k = if (flip) listOf(2, 1, 0) else listOf(0, 1, 2)
+        val right = leg?.let { t[0].z + it }
+        val left = leg?.let { t[2].z - it }
         val inp = DoubleTaperInput(
             inner = inner, reverse = reverse, noseR = r, tip = tip,
-            x1 = 2 * t[0].x, z1 = t[0].z, x2 = 2 * t[1].x, z2 = t[1].z, x3 = 2 * t[2].x, z3 = t[2].z,
-            zClear = zClear, cornerR1 = cr[0], cornerR2 = cr[1], cornerR3 = cr[2],
-            start = leg?.let { t[0].z + it }, end = leg?.let { t[2].z - it },
+            x1 = 2 * t[k[0]].x, z1 = t[k[0]].z, x2 = 2 * t[k[1]].x, z2 = t[k[1]].z, x3 = 2 * t[k[2]].x, z3 = t[k[2]].z,
+            zClear = zClear, cornerR1 = cr[k[0]], cornerR2 = cr[k[1]], cornerR3 = cr[k[2]],
+            start = if (flip) left else right, end = if (flip) right else left, flip = flip,
         )
         val pts = listOf(V(t[0].z + len, t[0].x)) + t + V(t[2].z - len, t[2].x)
         val res = TaperCalc.calcDouble(inp)
-        checkTaper(rep, "$inp → 경고 ${res.warnings}", res, inner, reverse, r, tip, t, pts, cr)
+        checkTaper(rep, "$inp → 경고 ${res.warnings}", res, inner, reverse, flip, r, tip, t, pts, cr)
     }
 
-    /** pts = 그림 오른쪽부터 [시작점, T1, T2, (T3,) 끝점], cr = T 점마다 모서리 R */
+    /**
+     * drawn·pts·cr 는 그림 순서: pts = 오른쪽부터 [시작점, T1, T2, (T3,) 끝점], cr = T 점마다 모서리 R.
+     * 가공은 역방향(역바이트)과 뒤집기 가운데 하나만 켜졌으면 왼쪽부터. 결과의 points 는 칸 순서(뒤집으면 왼쪽 점부터)
+     */
     private fun checkTaper(
-        rep: Report, id: String, res: TaperResult, inner: Boolean, reverse: Boolean, r: Double, tipIn: Int?,
+        rep: Report, id: String, res: TaperResult, inner: Boolean, reverse: Boolean, flip: Boolean, r: Double, tipIn: Int?,
         drawn: List<V>, pts: List<V>, cr: List<Double>,
     ) {
         rep.cases++
-        val drawing = filletPolyline(if (reverse) pts.reversed() else pts, if (reverse) cr.reversed() else cr)
+        val leftFirst = reverse != flip
+        val drawing = filletPolyline(if (leftFirst) pts.reversed() else pts, if (leftFirst) cr.reversed() else cr)
         val sol = res.solution
         if (drawing == null) {
             rep.stop(res.warnings.toString())
@@ -357,10 +389,12 @@ class GeometricVerifyTest {
             return
         }
         rep.solved++
+        val typed = if (flip) drawn.reversed() else drawn
         for ((k, p) in sol.points.withIndex()) {
-            if ((vOf(p.vertex) - drawn[k]).len > 1e-6) rep.bad(id, "도면점", "T${k + 1} 꼭짓점 ${vOf(p.vertex)} ≠ 입력 ${drawn[k]}")
+            if ((vOf(p.vertex) - typed[k]).len > 1e-6) rep.bad(id, "도면점", "T${k + 1} 꼭짓점 ${vOf(p.vertex)} ≠ 입력 ${typed[k]}")
         }
         sameDrawing(rep, id, sol.drawing, drawing)
+        // 바이트(팁)는 방향 스위치만 따른다 — 뒤집어도 같은 바이트. 보정 쪽은 진행 방향에서 본 재료 반대쪽
         val expTip = tipIn ?: physicalTip(inner, reverse)
         if (sol.tip != expTip) rep.bad(id, "팁", "팁 ${sol.tip}, 바이트가 깎는 모서리로 본 팁 $expTip")
         val expSide = if (leftMat) Side.G42 else Side.G41
@@ -389,10 +423,13 @@ class GeometricVerifyTest {
         val skip = (if (sol.fromStart) emptySet() else setOf(0)) + (if (sol.toEnd) emptySet() else setOf(drawing.lastIndex))
         checkPath(
             rep, id, drawing, reg, leftMat, sol.program.segs.map(::el), sol.center.segs.map(::el), sol.tip, r,
-            sol.ncG40, ncSkip = skip, looseApproach = false, legTrim = r, exitMove = true,
+            sol.ncG40, ncSkip = skip, looseApproach = false, legTrim = r, exitMove = true, lead = sol.approach.size,
         ) { it in small && warned }
-        checkEnds(rep, id, sol, drawing, sign, r)
-        checkG4x(rep, id, sol.ncG41G42, drawing, reg, expSide, sol.tip, r, sol.tip == physicalTip(inner, reverse), sol.fromStart, sol.toEnd)
+        checkEnds(rep, id, sol, drawing, sign, r, inner)
+        // 외경 단면을 중심(X0)까지 깎아 끝나면 G41/G42 는 그 단면을 중심 너머 r(X −2r)까지 쓰고 Z 로 빼며 취소한다(설계 문서 "가공 방향 뒤집기" ②)
+        val lu = drawing.last().tangent(0.0)
+        val toAxis = !inner && sol.toEnd && drawing.last() is Ln && abs(lu.z) < 1e-9 && lu.x < 0 && drawing.last().b.x <= 1e-9
+        checkG4x(rep, id, sol.ncG41G42, drawing, reg, expSide, sol.tip, r, sol.tip == physicalTip(inner, reverse), sol.fromStart, sol.toEnd, toAxis)
     }
 
     /**
@@ -400,8 +437,10 @@ class GeometricVerifyTest {
      * 앞뒤 요소를 공구 쪽으로 r 밀고 팁 벡터를 더한 선 위에서 시작·끝점에 내린 발. 시작점을 비웠으면 끝만 본다.
      * 끝점을 비웠으면 끝 요소의 보정선 위, 마지막 꺾임점 곁(끝 요소에 노즈가 닿기 시작하는 자리)에서 멈춰야 한다 —
      * 경사가 끝까지 깎였는지는 [checkPath] 가 본다.
+     * 하나만 다르다: 외경 단면을 중심(X0)까지 깎아 끝나면 너머는 이미 깎은 같은 면이라, 인선을 X0 에 두었을 때 노즈 중심이 반경 > 0 에 서면
+     * (인선이 노즈보다 앞서 가는 팁) 노즈 중심이 중심선에 닿을 때까지 더 간다 — 안 그러면 중심에 살이 남는다(설계 문서 "가공 방향 뒤집기" ②).
      */
-    private fun checkEnds(rep: Report, id: String, sol: TaperSolution, drawing: List<El>, sign: Double, r: Double) {
+    private fun checkEnds(rep: Report, id: String, sol: TaperSolution, drawing: List<El>, sign: Double, r: Double, inner: Boolean) {
         val tv = tipVec(sol.tip, r)
         fun foot(e: El, p: V): V {
             val u = e.tangent(0.0)
@@ -410,7 +449,8 @@ class GeometricVerifyTest {
         }
         val s0 = foot(drawing.first(), drawing.first().a)
         val e0 = foot(drawing.last(), drawing.last().b)
-        val pts = ncPoints(sol.ncG40)
+        // 접근 줄(뒤집어 척 쪽에서 시작할 때 진입 G00 앞의 G00)은 빼고 진입 G00 부터
+        val pts = ncPoints(sol.ncG40).drop(sol.approach.size)
         // 시작 요소가 수평이면 진입점·시작점′·다음 점이 한 직선이라 시작점′ 을 따로 쓰지 않는다 — 그때는 진입선 위에 있으면 된다
         val a = pts[0]
         val b = pts[1]
@@ -418,7 +458,10 @@ class GeometricVerifyTest {
         if (sol.fromStart && (b - s0).len > NC_TOL && !onEntry) rep.bad(id, "시작점", "NC 첫 형상 점 $b, 인선을 시작점에 둔 점은 $s0  NC=${sol.ncG40}")
         val end = pts[pts.size - 2]
         if (sol.toEnd) {
-            if ((end - e0).len > NC_TOL) rep.bad(id, "끝점", "NC 끝 점 $end, 인선을 끝점에 둔 점은 $e0  NC=${sol.ncG40}")
+            val lu = drawing.last().tangent(0.0)
+            val toAxis = !inner && drawing.last() is Ln && abs(lu.z) < 1e-9 && lu.x < 0 && drawing.last().b.x <= 1e-9
+            val want = if (toAxis) e0 + lu * max(0.0, (e0 - tv).x) else e0
+            if ((end - want).len > NC_TOL) rep.bad(id, "끝점", "NC 끝 점 $end, 인선을 끝점에 둔 점은 $e0 (중심까지 깎으면 노즈 중심이 중심선에 닿는 $want)  NC=${sol.ncG40}")
         } else {
             val l = drawing.last()
             val u = l.tangent(0.0)
@@ -435,17 +478,32 @@ class GeometricVerifyTest {
      * G41/G42 프로그램: 첫 줄 주석 (R… T…) = 노즈R·팁, G00 진입 → G4x G01 시작점(길이 ≥ r) → 형상(도면 좌표) → G40 G00 후퇴(길이 ≥ r).
      * 형상 줄은 도면 위에 있고 도면의 꼭짓점을 모두 지난다(시작점을 비웠으면 시작 요소는 빼고). 첫 형상 줄만은 시작 요소의 연장선 위여도 된다
      * (공구 쪽으로 띄운 G00 점에서 그 선에 직각으로 들어간 뒤 선을 따라가는 줄). 표준 팁이면 진입점·후퇴점(G40 상태의 인선)에서 노즈가 재료 밖이다.
-     * 끝점을 비웠으면(toEnd = false) 끝 요소는 프로그램에 없다.
+     * 끝점을 비웠으면(toEnd = false) 끝 요소는 프로그램에 없다. toAxis = 외경 단면을 중심(X0)까지 깎아 끝남 — 그 단면은 중심 너머 r 까지
+     * (노즈 중심이 중심선에 닿게, 그 끝 점이 NC 에 있다).
      */
     private fun checkG4x(
-        rep: Report, id: String, nc: List<String>, drawing: List<El>, reg: Region, side: Side, tip: Int, r: Double, standard: Boolean,
-        fromStart: Boolean, toEnd: Boolean,
+        rep: Report, id: String, nc: List<String>, drawing0: List<El>, reg: Region, side: Side, tip: Int, r: Double, standard: Boolean,
+        fromStart: Boolean, toEnd: Boolean, toAxis: Boolean = false,
     ) {
+        val drawing = if (!toAxis) drawing0 else drawing0.dropLast(1) + drawing0.last().let { Ln(it.a, it.b + it.tangent(0.0) * r) }
         val m = Regex("""\(R([\d.]+) T(\d)\)""").matchEntire(nc.firstOrNull() ?: "")
         if (m == null || abs(m.groupValues[1].toDouble() - r) > 0.0005 || m.groupValues[2].toInt() != tip) {
             rep.bad(id, "G41/G42", "첫 줄 주석 ${nc.firstOrNull()} ≠ 노즈R $r 팁 $tip")
         }
-        val body = nc.drop(1)
+        // 보정 시작 줄 앞은 G40 상태 G00 들(뒤집어 척 쪽에서 시작하면 접근 줄 + 진입). 접근 줄은 한 축씩 움직이고 노즈가 재료 밖이어야 한다
+        val all = nc.drop(1)
+        val k0 = all.indexOfFirst { it.startsWith("${side.name} G01 ") }
+        if (k0 < 1 || all.subList(0, k0).any { !it.startsWith("G00 ") }) {
+            rep.bad(id, "G41/G42", "보정 시작 줄 앞이 G00 이 아니다: $nc")
+            return
+        }
+        val pre = parseNc(all.take(k0))
+        for (e in pre) if (e.a.x != e.b.x && e.a.z != e.b.z) rep.bad(id, "G41/G42", "접근 줄이 두 축을 함께 움직인다  NC=$nc")
+        if (standard && pre.isNotEmpty()) {
+            val (cl, at) = clearance(pre, tipVec(tip, r), r, reg)
+            if (cl < -NC_TOL) rep.bad(id, "G41/G42", "접근 줄에서 노즈 원이 재료로 ${fmt(-cl)} mm 들어감, 노즈 중심 $at  NC=$nc")
+        }
+        val body = all.drop(k0 - 1).let { b -> listOf(ncFull(all.take(k0))) + b.drop(1) }
         if (body.size < 4 || !body[1].startsWith("${side.name} G01 ") || !body.last().startsWith("G40 G00 ")) {
             rep.bad(id, "G41/G42", "보정 시작·취소 줄이 약속과 다르다: $nc")
             return
@@ -874,7 +932,7 @@ class GeometricVerifyTest {
         rep: Report, id: String, drawing: List<El>, reg: Region, leftMat: Boolean,
         program: List<El>, center: List<El>?, tip: Int, r: Double,
         nc: List<String>?, ncSkip: Set<Int>, looseApproach: Boolean,
-        legTrim: Double = 0.0, exitMove: Boolean = false,
+        legTrim: Double = 0.0, exitMove: Boolean = false, lead: Int = 0,
         mayBeUncut: (Int) -> Boolean,
     ) {
         val tv = tipVec(tip, r)
@@ -932,8 +990,9 @@ class GeometricVerifyTest {
             rep.bad(id, "NC", e.message ?: "$e")
             return
         }
-        // NC 글이 계산 경로(program)에서 얼마나 벗어나나. 첫 이동(진입)·후퇴는 program 에 없어 뺀다
-        for (e in ncEls.drop(1).dropLast(if (exitMove) 1 else 0)) {
+        // NC 글이 계산 경로(program)에서 얼마나 벗어나나. 첫 이동(진입)·후퇴와 그 앞 접근 줄(lead 개)은 program 에 없어 뺀다.
+        // 접근 줄도 아래 노즈 굴리기(clearance)에는 들어간다
+        for (e in ncEls.drop(1 + lead).dropLast(if (exitMove) 1 else 0)) {
             val n = max(20, ceil(e.length / STEP).toInt())
             val dev = (0..n).maxOf { k -> program.minOf { it.dist(e.at(k.toDouble() / n)) } }
             if (dev > NC_TOL) {
@@ -1043,6 +1102,12 @@ private fun filletPolyline(p: List<V>, cr: List<Double>): List<El>? {
 }
 
 /** NC 줄마다 그 뒤의 위치(주석은 건너뜀). X 는 직경 → 반경 */
+/** G00 줄들의 마지막 점을 두 축 다 쓴 G00 한 줄로(앞 줄과 같은 축 값을 빼는 모달 표기를 풀어) */
+private fun ncFull(g00: List<String>): String {
+    val p = ncPoints(g00).last()
+    return "G00 X${p.x * 2} Z${p.z}"
+}
+
 private fun ncPoints(nc: List<String>): List<V> {
     var z = 0.0
     var x = 0.0

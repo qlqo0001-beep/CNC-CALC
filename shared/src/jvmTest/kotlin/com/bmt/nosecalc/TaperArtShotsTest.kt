@@ -42,10 +42,16 @@ class TaperArtShotsTest {
     fun focus() {
         Shots.both("art-taper-focus", heightDp = 3900, widthDp = 540) { AppHost(it) { FocusGallery() } }
     }
+
+    /** T1 ⇄ T2 바꾸기(flip): T 이름 · 이송 화살 · 시작/끝 표가 반대 끝부터, 각도 호 · 바이트는 그대로 — 모든 홑 · 2중 형상(정 · 역방향) */
+    @Test
+    fun flip() {
+        Shots.both("art-taper-flip", heightDp = 3050, widthDp = 430) { AppHost(it) { Gallery(199.dp, flipped) } }
+    }
 }
 
-/** 한 줄 묶음: 이름, 종류, 역방향, 형상 번호들 */
-private class ArtSet(val title: String, val kind: TaperKind, val reverse: Boolean, val types: List<Int>)
+/** 한 줄 묶음: 이름, 종류, 역방향, 형상 번호들, 가공 방향 뒤집기 */
+private class ArtSet(val title: String, val kind: TaperKind, val reverse: Boolean, val types: List<Int>, val flip: Boolean = false)
 
 private val all = listOf(
     ArtSet("외경", TaperKind.OUTER, false, (1..5).toList()),
@@ -55,6 +61,14 @@ private val all = listOf(
     ArtSet("내경 2중 테이퍼", TaperKind.INNER_DOUBLE, false, (1..4).toList()),
     ArtSet("외경 2중 테이퍼 · 역방향", TaperKind.OUTER_DOUBLE, true, (1..4).toList()),
     ArtSet("내경 2중 테이퍼 · 역방향", TaperKind.INNER_DOUBLE, true, (1..4).toList()),
+)
+
+private val flipped = listOf(
+    ArtSet("외경 · T1 ⇄ T2", TaperKind.OUTER, false, (1..5).toList(), flip = true),
+    ArtSet("내경 · T1 ⇄ T2", TaperKind.INNER, false, (1..5).toList(), flip = true),
+    ArtSet("외경 · 역방향 · T1 ⇄ T2", TaperKind.OUTER, true, (1..5).toList(), flip = true),
+    ArtSet("외경 2중 테이퍼 · T1 ⇄ T3", TaperKind.OUTER_DOUBLE, false, (1..4).toList(), flip = true),
+    ArtSet("내경 2중 테이퍼 · 역방향 · T1 ⇄ T3", TaperKind.INNER_DOUBLE, true, (1..4).toList(), flip = true),
 )
 
 private val wide = listOf(
@@ -105,7 +119,7 @@ private fun Gallery(cardW: Dp, sets: List<ArtSet>) {
                             Text("형상 $type", style = AppType.caption, color = c.textMuted)
                             Box(
                                 Modifier.width(cardW).aspectRatio(1.08f).clip(shape).background(c.subtle).border(1.dp, c.lineCard, shape),
-                            ) { TypeArt(s.kind, type, s.reverse) }
+                            ) { TypeArt(s.kind, type, s.reverse, flip = s.flip) }
                         }
                     }
                 }

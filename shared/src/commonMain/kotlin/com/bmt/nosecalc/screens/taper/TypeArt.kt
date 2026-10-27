@@ -50,6 +50,8 @@ import kotlin.math.sin
  * 좁은 폰에서 글이 너무 작아지거나 PC 넓은 창에서 너무 커지지 않는다.
  * compact = B 화면 요약 칸(작은 그림): 글 12sp 고정, 각도 글 · 빗금 · 시작/끝 표 · 홈 치수 없이.
  * focus = 입력 중인 칸 이름(x1 · z2 · ang · r1 · start · end, 홈은 od · bottom · width · insert · zStart) — 그 점 · 치수를 짚는다.
+ * flip = 가공 방향 뒤집기(T1 ⇄ 마지막 T): 형상 · 바이트는 그대로, T 이름 · 이송 화살 · 시작/끝 표가 반대 끝부터. 각도 호는 그 경사 그대로
+ * (2중은 각1 · 각2 이름만 칸 순서로).
  */
 @Composable
 internal fun TypeArt(
@@ -59,6 +61,7 @@ internal fun TypeArt(
     modifier: Modifier = Modifier.fillMaxSize(),
     compact: Boolean = false,
     focus: String? = null,
+    flip: Boolean = false,
 ) {
     val c = AppTheme.colors
     val measurer = rememberTextMeasurer()
@@ -66,13 +69,15 @@ internal fun TypeArt(
     Canvas(modifier) {
         val (ks, kt) = artScale(size.width, 199.dp)
         val pen = Pen(this, c, measurer, sans, ks, kt, kind.inner, mirrored, compact, focus)
-        if (kind.groove) pen.groove(type) else pen.slope(art(kind, type), kind.double)
+        if (kind.groove) pen.groove(type) else pen.slope(art(kind, type), kind.double, flip)
     }
 }
 
 /**
  * 꺾은선(카드 비율: x = 폭, y = 높이, 왼쪽부터), T1·T2(·T3) 의 점 번호, 라벨 가운데 자리(점에서, 02 카드 폭 비율 — 글 배율을 따른다),
- * 기준 점선 길이(폭 비율, 02 는 TYPE 2 만 짧다), '시작' · '끝' 글 자리(그 끝에서, 라벨과 같은 단위. 보통은 끝 위)
+ * 기준 점선 길이(폭 비율, 02 는 TYPE 2 만 짧다), '시작' · '끝' 글 자리(그 끝에서, 라벨과 같은 단위. 보통은 끝 위),
+ * 뒤집기(flip)의 바이트 날끝 자리(카드 비율, 외경 꼴) — 시작 끝(꺾은선 왼쪽 끝) 곁 공기 쪽, T · 시작 글과 겹치지 않게 그림마다 잰 값.
+ * 내경은 그 x 에 보링바 날끝을 두고 자루는 그 오른쪽 꺾은선 밑으로 지난다
  */
 private class Art(
     val pts: List<Offset>,
@@ -80,6 +85,7 @@ private class Art(
     val labels: List<Offset>,
     val ref: Float = .33f,
     val ends: List<Offset> = listOf(o(0f, -.06f), o(0f, -.06f)),
+    val flipTool: Offset = o(.20f, .20f),
 )
 
 private fun o(x: Float, y: Float) = Offset(x, y)
@@ -92,45 +98,48 @@ private fun art(kind: TaperKind, type: Int): Art = if (!kind.double) {
     when (type) {
         1 -> Art(
             listOf(o(.185f, .265f), o(.449f, .265f), o(.683f, .517f), o(.683f, .80f)), listOf(2, 1), listOf(o(.081f, .012f), o(0f, -.069f)),
-            ends = listOf(o(.08f, 0f), o(0f, -.06f)),
+            ends = listOf(o(.08f, 0f), o(0f, -.06f)), flipTool = o(.25f, .19f),
         )
         // 끝 다리는 회전축(.94)에 닿지 않게 .86 까지
         2 -> Art(
             listOf(o(.38f, .08f), o(.38f, .365f), o(.616f, .616f), o(.616f, .86f)), listOf(2, 1), listOf(o(.081f, -.02f), o(.081f, -.045f)), .255f,
-            ends = listOf(o(.08f, 0f), o(.055f, .03f)),
+            ends = listOf(o(.08f, 0f), o(.055f, .03f)), flipTool = o(.53f, .22f),
         )
-        3 -> Art(listOf(o(.11f, .39f), o(.374f, .39f), o(.608f, .636f), o(.872f, .636f)), listOf(2, 1), listOf(o(.083f, -.069f), o(0f, -.069f)))
+        3 -> Art(
+            listOf(o(.11f, .39f), o(.374f, .39f), o(.608f, .636f), o(.872f, .636f)), listOf(2, 1), listOf(o(.083f, -.069f), o(0f, -.069f)),
+            flipTool = o(.19f, .31f),
+        )
         4 -> Art(
             listOf(o(.21f, .175f), o(.21f, .477f), o(.48f, .765f), o(.76f, .765f)), listOf(2, 1), listOf(o(.081f, -.069f), o(.083f, -.045f)),
-            ends = listOf(o(0f, -.06f), o(.055f, 0f)),
+            ends = listOf(o(0f, -.06f), o(.055f, 0f)), flipTool = o(.35f, .27f),
         )
         else -> Art(
             listOf(o(.11f, .64f), o(.37f, .64f), o(.60f, .39f), o(.86f, .39f)), listOf(2, 1), listOf(o(.081f, -.069f), o(-.10f, -.06f)),
-            ends = listOf(o(0f, .06f), o(0f, -.06f)),
+            ends = listOf(o(0f, .06f), o(0f, -.06f)), flipTool = o(.15f, .50f),
         )
     }
 } else {
     when (type) {
         1 -> Art(
             listOf(o(.08f, .28f), o(.27f, .28f), o(.43f, .43f), o(.58f, .68f), o(.84f, .68f)), listOf(3, 2, 1),
-            listOf(o(.08f, -.069f), o(.05f, -.075f), o(0f, -.069f)), .22f,
+            listOf(o(.08f, -.069f), o(.05f, -.075f), o(0f, -.069f)), .22f, flipTool = o(.11f, .19f),
         )
         2 -> Art(
             listOf(o(.06f, .66f), o(.22f, .66f), o(.44f, .36f), o(.66f, .66f), o(.88f, .66f)), listOf(3, 2, 1),
             listOf(o(.07f, -.069f), o(0f, -.072f), o(-.07f, -.069f)), .22f,
-            ends = listOf(o(0f, -.06f), o(0f, .06f)),
+            ends = listOf(o(0f, -.06f), o(0f, .06f)), flipTool = o(.06f, .53f),
         )
         3 -> Art(
             listOf(o(.06f, .36f), o(.22f, .36f), o(.44f, .66f), o(.66f, .36f), o(.88f, .36f)), listOf(3, 2, 1),
             listOf(o(.04f, -.069f), o(0f, .075f), o(-.07f, -.069f)), .22f,
-            ends = listOf(o(0f, .06f), o(0f, .06f)),
+            ends = listOf(o(0f, .06f), o(0f, .06f)), flipTool = o(.06f, .21f),
         )
         // 형상 4: 아래 두 경사를 T1 쪽으로 줄여 T3 가 칩과 떨어지게 하고(각도는 그대로), T2 글은 왼쪽 점선 위가 아닌
         // 아래(이송 화살 밑)에, T3 글은 각2 글과 떨어지게 다리 위 왼쪽에 둔다
         else -> Art(
             listOf(o(.05f, .70f), o(.28f, .70f), o(.47f, .55f), o(.60f, .36f), o(.84f, .36f)), listOf(3, 2, 1),
             listOf(o(.08f, -.069f), o(.04f, .08f), o(-.13f, -.06f)), .22f,
-            ends = listOf(o(0f, .06f), o(0f, .05f)),
+            ends = listOf(o(0f, .06f), o(0f, .05f)), flipTool = o(.07f, .57f),
         )
     }
 }
@@ -184,18 +193,25 @@ private class Pen(
     /** 점에서 라벨까지(02 카드 폭 비율) → 화면 거리 */
     fun shift(v: Offset) = Offset(if (flipX) -v.x else v.x, if (flipY) -v.y else v.y) * unit
 
-    fun slope(a: Art, double: Boolean) {
+    /** flip = 가공 방향 뒤집기: T 이름 · 라벨 자리 · 이송 화살 · 시작/끝을 반대 끝부터. 기준 점선 · 각도 호는 그림 순서(오른쪽 점에서) 그대로 */
+    fun slope(a: Art, double: Boolean, flip: Boolean = false) {
         val pts = a.pts.map(::at)
-        val t = a.t.map { pts[it] }
+        // 그림 순서(오른쪽 점부터)와 칸 순서(T1 = 먼저 깎는 점). 라벨 자리는 점 자리를 따라간다
+        val order = if (flip) a.t.indices.reversed() else a.t.indices
+        val tp = a.t.map { pts[it] }
+        val tIdx = order.map { a.t[it] }
+        val t = tIdx.map { pts[it] }
+        val labels = order.map { a.labels[it] }
+        val endShift = if (flip) a.ends.reversed() else a.ends
         val left = Offset(if (flipX) 1f else -1f, 0f)
         val refLen = a.ref * w
         val arcR = maxOf((if (double) .10f else .135f) * w, dp(22f))
         // 맨 밑에 소재 면(빗금)과 회전축(1점 쇄선, 외경·내경 모두 아래). 기준 점선도 꺾은선 밑에 깐다
         fillStock(stock(a.pts))
         d.centerLine(Offset(0f, .94f * h), Offset(w, .94f * h), c.drawRef, ks)
-        for (i in 0 until t.size - 1) {
+        for (i in 0 until tp.size - 1) {
             d.drawLine(
-                c.drawRef, t[i], t[i] + left * refLen, dp(1.1f),
+                c.drawRef, tp[i], tp[i] + left * refLen, dp(1.1f),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(dp(4f), dp(3f))),
             )
         }
@@ -210,14 +226,22 @@ private class Pen(
         // 내경 역방향(뒤보링)이고 +Z 쪽(화면 오른쪽 = 꺾은선 왼쪽 끝)이 가로로 열려 있으면 바는 구멍을 지나 +Z 로 나간다.
         // 자루가 그림을 가로지르므로 점 · 이름보다 먼저 그린다(이름이 바 위에 보이게)
         val back = flipY && flipX && a.pts[0].y == a.pts[1].y
-        if (back) boringBar(barTop(a, back = true), back = true)
-        for (i in 0 until t.size - 1) {
-            val label = if (double) "각${i + 1}" else "각도"
-            angle(t[i], left, t[i + 1] - t[i], arcR, label, if (double) 11f else 11.5f, hot = focus == "ang")
+        // 바이트 날끝: 보통은 오른쪽(시작 끝), 뒤집으면 시작 끝(꺾은선 왼쪽 끝) 곁 — 그림마다 잰 자리(Art.flipTool)
+        val toolX = if (flip) a.flipTool.x else null
+        if (back) {
+            boringBar(barTop(a, back = true, x = toolX), back = true, x = toolX ?: .80f)
+        } else if (flipY && toolX != null) {
+            // 뒤집은 내경도 자루가 시작 끝 곁에서 오른쪽 끝까지 꺾은선 밑을 가로지른다 — 뒤보링처럼 이름보다 먼저
+            boringBar(barTop(a, back = false, x = toolX), back = false, x = toolX)
+        }
+        for (i in 0 until tp.size - 1) {
+            // 2중의 각 이름은 칸 순서(결과 카드의 각1 = T1–T2): 뒤집으면 그림 오른쪽 경사가 각2
+            val label = if (double) "각${if (flip) tp.size - 1 - i else i + 1}" else "각도"
+            angle(tp[i], left, tp[i + 1] - tp[i], arcR, label, if (double) 11f else 11.5f, hot = focus == "ang")
         }
         feed(t[0], t[1], left)
         // 시작 · 끝: T1 · 마지막 T 와 이웃한 자유 끝(배열 순서가 아니라 이웃으로 — 어느 쪽이 첫 점이어도 맞다)
-        val startLast = a.t.first() == a.pts.lastIndex - 1
+        val startLast = tIdx.first() == a.pts.lastIndex - 1
         val ends = if (startLast) listOf(pts.last(), pts.first()) else listOf(pts.first(), pts.last())
         // 입력 중인 끝의 테는 '시작' · '끝' 글보다 먼저(테가 글 위에 그려져 '시' 를 덮었다)
         val hotEnd = when (focus) {
@@ -230,7 +254,7 @@ private class Pen(
             ends.forEachIndexed { i, p ->
                 d.drawCircle(c.subtle, dp(3.6f), p)
                 d.drawCircle(c.textMuted, dp(2.4f), p)
-                text(if (i == 0) "시작" else "끝", p + shift(a.ends[i]) + clearRing(shift(a.ends[i]), i == hotEnd), c.textMuted, 10.5f, FontWeight.Medium)
+                text(if (i == 0) "시작" else "끝", p + shift(endShift[i]) + clearRing(shift(endShift[i]), i == hotEnd), c.textMuted, 10.5f, FontWeight.Medium)
             }
         }
         // 입력 중인 점 칸(x1 · z2 · r3): 그 T 점에 테, T 글 바깥 곁에 칸 이름(X1 · Z2 · R3)
@@ -242,11 +266,11 @@ private class Pen(
             d.drawCircle(c.subtle, dot + dp(1.6f), p)
             d.drawCircle(pointColor(c, i), dot, p)
         }
-        val boxes = t.mapIndexed { i, p -> text("T${i + 1}", p + shift(a.labels[i]) + clearRing(shift(a.labels[i]), i == hot), pointColor(c, i), 15f, FontWeight.SemiBold) }
-        if (!flipY) outerTool() else if (!back) boringBar(barTop(a, back = false), back = false)
+        val boxes = t.mapIndexed { i, p -> text("T${i + 1}", p + shift(labels[i]) + clearRing(shift(labels[i]), i == hot), pointColor(c, i), 15f, FontWeight.SemiBold) }
+        if (!flipY) outerTool(if (flip) a.flipTool else o(.80f, .30f)) else if (!back && toolX == null) boringBar(barTop(a, back = false), back = false)
         if (hot != null) {
             taken += Rect(t[hot], dp(9f))
-            beside(boxes[hot], shift(a.labels[hot]), focus.uppercase())
+            beside(boxes[hot], shift(labels[hot]), focus.uppercase())
         }
     }
 
@@ -433,9 +457,9 @@ private class Pen(
         (body + insert).let { q -> taken += Rect(q.minOf { it.x }, q.minOf { it.y }, q.maxOf { it.x }, q.maxOf { it.y }) }
     }
 
-    /** 외경 바이트: 날끝이 카드 (.80, .30). 폭 16dp 자루가 카드 위 끝 너머까지 서고, 인서트 밑은 45° 로 깎였다 */
-    private fun outerTool() {
-        val n = at(o(.80f, .30f))
+    /** 외경 바이트: 날끝이 카드 tip(보통 (.80, .30)). 폭 16dp 자루가 카드 위 끝 너머까지 서고, 인서트 밑은 45° 로 깎였다 */
+    private fun outerTool(tip: Offset) {
+        val n = at(tip)
         val top = -n.y / dp(1f) - 2f
         val a = insertA
         tool(n, listOf(o(6f, top), o(22f, top), o(22f, a.y - (22f - a.x)), a, o(6f, -3f)))
@@ -446,9 +470,9 @@ private class Pen(
      * back = 뒤보링(역방향, +Z 쪽이 열린 구멍): 인서트만 뒤집혀(날이 +Z) 날끝 왼쪽에 서고, 자루는 그대로 화면 오른쪽(+Z, 구멍 입구)
      * 카드 끝까지 — 척 쪽에서 들어오지 않게. 헤드는 인서트 밑(15dp, 아래 모서리 45°). +Z 쪽이 막힌 역방향(홑 2 · 4)은 통째로 뒤집는다
      */
-    private fun boringBar(top: Float, back: Boolean) {
-        // top = 자루 윗변(화면 높이 비율). 날끝은 그보다 6dp 위
-        val n = at(o(.80f, 1 - top)) - Offset(0f, dp(6f))
+    private fun boringBar(top: Float, back: Boolean, x: Float = .80f) {
+        // top = 자루 윗변(화면 높이 비율). 날끝은 그보다 6dp 위, 카드 x(보통 .80, 뒤집으면 시작 끝 곁)
+        val n = at(o(x, 1 - top)) - Offset(0f, dp(6f))
         if (back) {
             // tool() 이 x 를 뒤집으므로 음수 x 가 화면 오른쪽
             val edge = (w - n.x) / dp(1f) + 2f
@@ -462,11 +486,18 @@ private class Pen(
 
     /**
      * 보링바 윗변: 자루가 지나는 꺾은선보다 아래 — 정방향은 오른쪽(x ≥ 0.7), 0.62~0.70.
-     * 뒤보링은 날끝(x 0.8)에서 꺾은선 왼쪽 끝(뒤집혀 화면 오른쪽)까지 지나므로 x ≤ 0.8 모두, 0.62~0.80
+     * 뒤보링은 날끝(x 0.8)에서 꺾은선 왼쪽 끝(뒤집혀 화면 오른쪽)까지 지나므로 x ≤ 0.8 모두, 0.62~0.80.
+     * 뒤집기(날끝 x 가 시작 끝 곁)는 날끝에서 자루 쪽 꺾은선 전부(그 x 에서 꺾은선이 지나는 높이도), 0.62~0.80
      */
-    private fun barTop(a: Art, back: Boolean): Float {
-        val low = a.pts.filter { if (back) it.x <= .8f else it.x >= .7f }.maxOfOrNull { 1 - it.y } ?: 0f
-        return (low + .06f).coerceIn(.62f, if (back) .80f else .70f)
+    private fun barTop(a: Art, back: Boolean, x: Float? = null): Float {
+        if (x == null) {
+            val low = a.pts.filter { if (back) it.x <= .8f else it.x >= .7f }.maxOfOrNull { 1 - it.y } ?: 0f
+            return (low + .06f).coerceIn(.62f, if (back) .80f else .70f)
+        }
+        fun side(p: Offset) = if (back) p.x <= x else p.x >= x
+        val ys = a.pts.filter(::side).map { 1 - it.y } + a.pts.zipWithNext().filter { (p, q) -> (p.x - x) * (q.x - x) < 0 }
+            .map { (p, q) -> 1 - (p.y + (q.y - p.y) * (x - p.x) / (q.x - p.x)) }
+        return ((ys.maxOrNull() ?: 0f) + .06f).coerceIn(.62f, .80f)
     }
 
     /**
