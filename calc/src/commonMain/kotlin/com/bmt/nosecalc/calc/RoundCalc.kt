@@ -131,11 +131,23 @@ data class RoundSolution(
     val program: Contour,
     /** [nc] 줄마다 하나 */
     val ncRefs: List<NcRef>,
+    /**
+     * 기계 보정 프로그램([RoundCalc.machine])의 직각 진입점: G00 [entry] → 여기(보정 시작 블록, 첫 요소 선에 직각) → 첫 점(그 선을 따라).
+     * 띄운 진입이 아니면 null(G00 → 첫 점 한 블록)
+     */
+    val lead: Pt? = null,
 ) {
-    /** element 의 NC 줄 번호(0부터). p = 이 풀이의 프로그램 좌표 점(나눈 원호는 각 비율로 조각을 고름). 줄이 없으면 그 앞 줄 */
+    /**
+     * element 의 NC 줄 번호(0부터). p = 이 풀이의 프로그램 좌표 점(나눈 원호는 각 비율로 조각을 고름). 줄이 없으면 그 앞 줄.
+     * 진입 이동(−1)이 [lead] 를 거쳐 두 줄이면 p 에 가까운 블록의 줄
+     */
     fun lineOf(element: Int, p: Pt): Int {
         val lines = ncRefs.indices.filter { ncRefs[it].element == element }
         if (lines.isEmpty()) return max(0, ncRefs.indexOfLast { it.element < element })
+        if (element == -1 && lead != null && lines.size == 2) {
+            val start = program.segs.first().start
+            return if (distTo(Line(lead, start), p) < distTo(Line(entry, lead), p)) lines[1] else lines[0]
+        }
         val a = program.segs.getOrNull(element) as? Arc
         val pieces = ncRefs[lines.first()].pieces
         if (a == null || pieces == 1) return lines.first()
@@ -161,7 +173,26 @@ object RoundCalc {
     /** [againstTool] 의 사분면 경계 여유(내적·rad, 각으로 0.06~0.08°) */
     private const val QUADRANT_TOL = 1e-3
 
-    fun calc(i: RoundInput): RoundResult = guarded {
+    fun calc(i: RoundInput): RoundResult = type(i, null)
+
+    /**
+     * 기계 보정(G41/G42) 프로그램 — 도면(접점) 좌표 풀이. 윤곽 · 노드 · 원호 · NC 형상은 노즈R 0 으로 푼 것(`calc(i.copy(noseR = 0.0))`)과 같고,
+     * G00 자리만 [i] 의 노즈R · 팁에 맞게 띄운다(사용자 결정 2026-10-28, 테이퍼의 lift 규칙과 같은 원칙 — 설계 문서 "라운드R 계산 · 기계 보정 진입").
+     * G40 상태의 G00 점에서는 인선이 그 점에 있어 노즈 = 점 − 팁 벡터다. 첫 요소의 시작 선(직선 · 원호 시작 접선)에서 공구 쪽 법선 n 으로
+     * lift = max(0, r + n·팁 벡터) 만큼 노즈가 모자라면: 시작 선을 따라 들어가는 진입(내경 입구 · 3점호 접선 진입)은 그 선 위 [RoundSolution.lead]
+     * (직접 보정 진입점의 발에서 r 더 바깥)에서 공구 쪽으로 c + lift 띄운 G00 → lead 로 직각(보정 시작 블록) → 첫 점, 그 밖(외경 끝 면 · 돔 끝 ·
+     * 3점호 Z 진입)은 G00 점을 공구 쪽으로 lift 더. c = max(Z 여유, r) — 직접 보정 진입과 같다(보정 시작 이동 ≥ r).
+     * 표준 팁이 제 쪽 요소를 따라가면 lift = 0 이라 Z 여유 ≥ r 이면 노즈R 0 풀이와 같은 글이다. 계산을 멈추는 경고는 [calc] 와 같다 — 직접 보정이
+     * 멈추면(노즈가 닿지 못함 · 축을 넘음 등) 그 결과를 그대로 낸다: 같은 노즈라 기계 보정도 제어기가 파거나 알람이다(10-28 검증 — 홈보다 큰 노즈에
+     * 글을 내 시작 블록 노즈가 맞은편 벽을 0.28 mm 팠다)
+     */
+    fun machine(i: RoundInput): RoundResult = calc(i).let { if (it.solution == null) it else type(i, i.noseR) }
+
+    /** 3점호의 기계 보정 프로그램([machine] 과 같은 규칙) */
+    fun machine(i: Arc3Input): RoundResult = arc3(i).let { if (it.solution == null) it else arc(i, i.noseR) }
+
+    /** [machineR] = 기계 보정 프로그램의 노즈R(도면 좌표로 풀고 G00 만 띄움), null = 직접 보정 풀이 */
+    private fun type(i: RoundInput, machineR: Double?): RoundResult = guarded {
         require(i.type in 1..6) { "TYPE 은 1~6: ${i.type}" }
         require(!(i.inner && i.type == 1)) { "내경은 TYPE 2~6" }
         require(!i.through || (i.inner && i.type in 5..6)) { "관통은 내경 TYPE 5·6 만" }
@@ -179,7 +210,7 @@ object RoundCalc {
         val drawing = Contour(if (i.inner) innerOf(segs, i.type, i.through) else segs)
         // Z 여유 0 이어도 진입점은 노즈R 만큼 띄운다(테이퍼와 같다)
         val tip = i.tip ?: NoseComp.standardTip(i.inner, false)
-        finish(drawing, i.noseR, if (i.inner) Side.G41 else Side.G42, tip, Pt(max(i.zClear, i.noseR), 0.0), s.filled, i.inner)
+        finish(drawing, if (machineR == null) i.noseR else 0.0, if (i.inner) Side.G41 else Side.G42, tip, Pt(max(i.zClear, i.noseR), 0.0), s.filled, i.inner, machineR)
     }
 
     /**
@@ -201,7 +232,9 @@ object RoundCalc {
         return if (through) out.dropLast(1) else out
     }
 
-    fun arc3(i: Arc3Input): RoundResult = guarded {
+    fun arc3(i: Arc3Input): RoundResult = arc(i, null)
+
+    private fun arc(i: Arc3Input, machineR: Double?): RoundResult = guarded {
         val v = listOf(i.x1, i.z1, i.x2, i.z2, i.x3, i.z3)
         if (v.any { it == null }) stop(RoundWarning.MISSING_INPUT)
         if (v.any { !it!!.isFinite() } || listOf(i.x1!!, i.x2!!, i.x3!!).any { it < 0 } || tooBig(*v.toTypedArray())) {
@@ -221,7 +254,9 @@ object RoundCalc {
         val arc = Arc(p1, p3, c, cw = ((p2 - p1) cross (p3 - p2)) < 0)
         val side = Side.of(i.inner, reverse)
         // 원호 하나뿐이라 오목 R < r 이면 남는 요소가 없다
-        if ((side == Side.G41) != arc.cw && arc.radius < i.noseR - EPS) stop(RoundWarning.NOSE_UNREACHABLE)
+        // (기계 보정 프로그램은 도면 좌표라 노즈R 0 으로 푼다)
+        val rg = if (machineR == null) i.noseR else 0.0
+        if ((side == Side.G41) != arc.cw && arc.radius < rg - EPS) stop(RoundWarning.NOSE_UNREACHABLE)
         val tip = i.tip ?: NoseComp.standardTip(i.inner, reverse)
         // 진입: 첫 보정점에서 Z 로 zClear 바깥. 그쪽이 공구 쪽 법선과 반대면(시작 접선이 재료로 가파르게 내려가는 오목 홈 등)
         // Z 로 물러난 노즈 원이 시작점 옆 재료를 판다 → 그때는 시작 접선을 거꾸로 따라 zClear 만큼(노즈R 보다 작으면 노즈R)
@@ -231,7 +266,7 @@ object RoundCalc {
         val toTool = if ((side == Side.G41) == arc.cw) radial else radial * -1.0
         val back = radial.left() * (if (arc.cw) 1.0 else -1.0)
         val entryShift = if ((away dot toTool) >= 0) away * clear else back * clear
-        finish(Contour(listOf(arc)), i.noseR, side, tip, entryShift, null, i.inner)
+        finish(Contour(listOf(arc)), rg, side, tip, entryShift, null, i.inner, machineR)
     }
 
     /** 이론 윤곽(꼭짓점 그대로) + 꼭짓점마다 모서리 R(0 = 그대로). corners[k] = segs[k] 와 segs[k+1] 사이 */
@@ -453,8 +488,12 @@ object RoundCalc {
         )
     }
 
-    /** 보정·노드 표·NC. [NoseComp] 의 일반 해법 그대로 */
-    private fun finish(drawing: Contour, r: Double, side: Side, tip: Int, entryShift: Pt, filled: RoundInput?, inner: Boolean): RoundResult {
+    /**
+     * 보정·노드 표·NC. [NoseComp] 의 일반 해법 그대로. [machineR] 가 있으면 [r] = 0 인 도면 좌표 풀이의 G00 을 그 노즈R · 팁에 맞게 띄운다([machine])
+     */
+    private fun finish(
+        drawing: Contour, r: Double, side: Side, tip: Int, entryShift: Pt, filled: RoundInput?, inner: Boolean, machineR: Double? = null,
+    ): RoundResult {
         val center = try {
             NoseComp.centerPath(drawing, r, side)
         } catch (e: IllegalArgumentException) {
@@ -479,11 +518,13 @@ object RoundCalc {
         val arcs = drawing.segs.withIndex().mapNotNull { (k, s) ->
             (s as? Arc)?.let { RoundArc(k, it.cw, it.center, it.radius, if (k in gone) null else (program.segs[k] as? Arc)?.radius) }
         }
-        val entry = prog[0] + entryShift
+        var lead: Pt? = null
+        val entry = if (machineR == null) prog[0] + entryShift else machineEntry(drawing, side, tip, machineR, entryShift) { lead = it }
         val nc = NcLines().apply {
             element = -2
             move("G00", entry)
             element = -1
+            lead?.let { move("G01", it) }
             move("G01", prog[0])
             for ((k, s) in program.segs.withIndex()) {
                 element = k
@@ -502,10 +543,39 @@ object RoundCalc {
                 drawing = drawing,
                 center = center.path,
                 program = program,
-                ncRefs = nc.refs,
+                ncRefs = nc.refs.mapIndexed { k, f ->
+                    // 띄운 진입은 진입 이동이 두 줄(G00 → lead 직각 · lead → 첫 점)
+                    if (lead != null && f.element == -1) NcRef(-1, nc.refs.subList(0, k).count { it.element == -1 }, 2) else f
+                },
+                lead = lead,
             ),
             warnings,
         )
+    }
+
+    /**
+     * 기계 보정 프로그램의 G00 점([machine]). 첫 요소 시작 s0 · 시작 접선 t0 · 공구 쪽 법선 n, 팁 벡터 tv(노즈R [r]), c = |[shift]| (= max(Z 여유, r)),
+     * lift = max(0, r + n·tv). lift = 0 이면 노즈R 0 풀이와 같은 s0 + shift. 진입이 시작 선을 거꾸로 따라가면(shift ∥ −t0) lead = s0 − t0·(c + r)
+     * (직접 보정 진입점 − tv 의 발에서 r 더 바깥 — 직각 진입 끝에서 노즈가 교점 규칙대로 선을 따라 r 앞, 곧 직접 보정 진입 노즈에 선다)이고
+     * G00 = lead + n·(c + lift). 아니면 G00 = s0 + shift + n·lift — 노즈가 시작 선에서 직접 보정 진입 노즈만큼(공구 쪽으로 c·(shift 방향·n) + r) 떨어진다
+     */
+    private fun machineEntry(drawing: Contour, side: Side, tip: Int, r: Double, shift: Pt, setLead: (Pt) -> Unit): Pt {
+        val first = drawing.segs.first()
+        val s0 = first.start
+        val t0 = when (first) {
+            is Line -> (first.end - first.start).unit()
+            is Arc -> (first.start - first.center).unit().left() * (if (first.cw) -1.0 else 1.0)
+        }
+        val n = t0.left() * (if (side == Side.G41) 1.0 else -1.0)
+        val tv = NoseComp.tipVector(tip, r)
+        val lift = max(0.0, r + (n dot tv))
+        if (lift <= EPS) return s0 + shift
+        val c = shift.length
+        val d = shift * (1 / c)
+        if (abs(d cross t0) > 1e-9 || (d dot t0) >= 0) return s0 + shift + n * lift
+        val lead = s0 - t0 * (c + r)
+        setLead(lead)
+        return lead + n * (c + lift)
     }
 
     /** 요소의 가장 낮은 x. 원호는 맨 아래(−X 쪽)를 지나면 중심 − R */

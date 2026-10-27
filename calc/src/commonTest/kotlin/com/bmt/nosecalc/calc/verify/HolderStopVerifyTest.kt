@@ -36,7 +36,7 @@ class HolderStopVerifyTest {
         repeat(200) {
             val r = rs[rnd.nextInt(rs.size)]
             val inp = g.randomRound(rnd.nextInt(2, 7), rnd, inner = true).input.copy(noseR = r)
-            run(rep, "$inp", RoundCalc.calc(inp), RoundCalc.calc(inp.copy(noseR = 0.0)), true, randomBar(rnd, r), r)
+            run(rep, "$inp", RoundCalc.calc(inp), RoundCalc.machine(inp), true, randomBar(rnd, r), r)
         }
         println("${rep.name}: ${started.elapsedNow()} · 제어기 모형으로 못 본 기계 보정 ${StopChecker.skippedMachine}")
         rep.finish()
@@ -50,7 +50,7 @@ class HolderStopVerifyTest {
         for (reverse in listOf(false, true)) repeat(150) {
             val r = rs[rnd.nextInt(rs.size)]
             val a = randomArc(rnd, reverse, r)
-            run(rep, "$a", RoundCalc.arc3(a), RoundCalc.arc3(a.copy(noseR = 0.0)), false, randomBar(rnd, r), r)
+            run(rep, "$a", RoundCalc.arc3(a), RoundCalc.machine(a), false, randomBar(rnd, r), r)
         }
         println("${rep.name}: ${started.elapsedNow()}")
         rep.finish()

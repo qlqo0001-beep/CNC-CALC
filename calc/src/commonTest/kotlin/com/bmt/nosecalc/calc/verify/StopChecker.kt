@@ -56,7 +56,28 @@ internal class StopChecker(
         sol.program.segs.withIndex().map { it.index to it.value }).filter { len(it.second) > 1e-9 }
     private val cum = DoubleArray(path.size + 1).also { c -> for (i in path.indices) c[i + 1] = c[i] + len(path[i].second) }
 
-    fun sigma(nose: Pt, need: Need = cut): Double = job.clear(listOf(nose)).slack(need)
+    /**
+     * 노즈 자세의 여유 — 깎는 면 예외(구현의 [StopJob.clear] 와 같은 요소 규칙)는 그 자세가 놓인 경로 요소로: [k] 를 주지 않으면 노즈 중심이
+     * 가장 가까운 노즈 경로 요소(진입 이동이면 −1 — 예외 없음)
+     */
+    fun sigma(nose: Pt, need: Need = cut, k: Int = elementNear(nose)): Double = job.clear(listOf(nose), k).slack(need)
+
+    /** 노즈 중심에서 가장 가까운 노즈 경로 요소(경로 위 자세면 그 요소, 둘이 같으면 뒤 요소 — 경로 길이 순 마지막) */
+    fun elementNear(nose: Pt): Int {
+        var best = Double.POSITIVE_INFINITY
+        var k = -1
+        for ((e, s) in path) {
+            val d = dist(s.moved(tv * -1.0), nose)
+            if (d <= best + 1e-12) {
+                best = min(best, d)
+                k = e
+            }
+        }
+        return k
+    }
+
+    /** 경로 길이 s 의 요소 */
+    fun elementAt(s: Double): Int = path[(0 until path.size).firstOrNull { s <= cum[it + 1] } ?: (path.size - 1)].first
 
     /** 요소 k 비율 t 의 경로 길이(−2 = 0) */
     fun pos(k: Int, t: Double): Double {
@@ -79,6 +100,9 @@ internal class StopChecker(
         fun bad(m: String) {
             fails += m
         }
+        // 깎는 면 사슬(앞 요소 면)은 계획의 형상 끝점 요소까지 — 끝내 깎지 않는 면은 예외가 아니다(10-28 검증). 아래 '0.001 mm 더 간 곳도 안전' 이
+        // 그 끝점이 이 기준의 첫 위반인지 본다
+        job.faceLimit = listOfNotNull(plan.end, plan.machineEnd).firstOrNull { it.element >= 0 }?.element ?: Int.MAX_VALUE
         checkMachineProgram(plan, step, ::bad)
         val tight = listOfNotNull(plan.direct, plan.machine).any { it.retractClear < safe - TEXT }
         if (tight != (StopWarning.RETRACT_TIGHT in plan.warnings)) bad("RETRACT_TIGHT ${plan.warnings} 인데 후퇴 여유 ${plan.direct?.retractClear} · ${plan.machine?.retractClear}")
@@ -86,12 +110,12 @@ internal class StopChecker(
         val firstHit = plan.result.hits.minOfOrNull { pos(it.element, it.fromT) }
         if (end == null) {
             if (StopWarning.UNSAFE_AT_ENTRY in plan.warnings) {
-                if (sigma(sol.entry - tv) >= 0) bad("진입점이 안전한데 UNSAFE_AT_ENTRY")
+                if (sigma(sol.entry - tv, k = -2) >= 0) bad("진입점이 안전한데 UNSAFE_AT_ENTRY")
                 return
             }
             // 경로 전체가 안전해야
             val n = ceil(total / step).toInt()
-            for (q in 0..n) if (sigma(noseAt(total * q / n)) < -1e-9) return bad("끝점이 없는데 ${total * q / n} mm 에서 안전 기준이 모자람")
+            for (q in 0..n) if (sigma(noseAt(total * q / n), k = elementAt(total * q / n)) < -1e-9) return bad("끝점이 없는데 ${total * q / n} mm 에서 안전 기준이 모자람")
             if (firstHit != null) bad("닿는 곳이 있는데 끝점 없음")
             return
         }
@@ -100,18 +124,19 @@ internal class StopChecker(
         val n = max(1, ceil(sEnd / step).toInt())
         for (q in 0..n) {
             val s = sEnd * q / n
-            if (sigma(noseAt(s)) < -1e-9) return bad("끝점 앞 ${s} mm(끝 $sEnd)에서 안전 기준이 모자람 ${sigma(noseAt(s))}")
+            if (sigma(noseAt(s), k = elementAt(s)) < -1e-9) return bad("끝점 앞 ${s} mm(끝 $sEnd)에서 안전 기준이 모자람 ${sigma(noseAt(s), k = elementAt(s))}")
         }
-        if (sigma(sol.entry - tv) < -1e-9) bad("진입점 자세가 안전하지 않은데 끝점이 있음")
+        if (sigma(sol.entry - tv, k = -2) < -1e-9) bad("진입점 자세가 안전하지 않은데 끝점이 있음")
         if ((noseAt(sEnd) - end.pose.nose).length > 1e-9) bad("끝점 자세 ${end.pose.nose} ≠ 경로 ${noseAt(sEnd)}")
         val thr = if (end.part == HolderPart.INSERT && !end.opposite) 0.0 else safe
-        val here = job.clear(listOf(end.pose.nose)).margin(end.part, end.opposite)
+        val here = job.clear(listOf(end.pose.nose), end.element).margin(end.part, end.opposite)
         if (abs(here - end.margin) > 1e-12) bad("끝점 여유 ${end.margin} ≠ 다시 잰 $here")
         if (abs(here - thr) > 1e-5) {
-            val next = job.clear(listOf(noseAt(min(total, sEnd + 2e-7)))).margin(end.part, end.opposite)
+            val sn = min(total, sEnd + 2e-7)
+            val next = job.clear(listOf(noseAt(sn)), elementAt(sn)).margin(end.part, end.opposite)
             if (next >= thr) bad("끝점 ${end.part}${if (end.opposite) "(맞은편)" else ""} 여유 $here ≠ 기준 $thr 이고 바로 뒤도 $next")
         }
-        if (sEnd + 1e-3 <= total && sigma(noseAt(sEnd + 1e-3)) >= 0) bad("끝점에서 0.001 mm 더 간 곳도 안전 ${sigma(noseAt(sEnd + 1e-3))}")
+        if (sEnd + 1e-3 <= total && sigma(noseAt(sEnd + 1e-3), k = elementAt(sEnd + 1e-3)) >= 0) bad("끝점에서 0.001 mm 더 간 곳도 안전 ${sigma(noseAt(sEnd + 1e-3), k = elementAt(sEnd + 1e-3))}")
         if (firstHit != null && firstHit < sEnd) bad("첫 닿음 $firstHit 이 끝점 $sEnd 보다 앞")
         // 끝점의 기계 보정 좌표: 그 블록을 거기서 끝내면 끝 블록 법선 보정으로 노즈가 끝점 자세여야 한다(못 끝내면 null — 노즈가 닿는 도면 점으로 대신하지 않는다)
         val cmd = end.at.machine
@@ -138,8 +163,9 @@ internal class StopChecker(
     }
 
     /**
-     * 기계 보정 프로그램: 이 파일의 제어기 모형으로 진입을 따로 본다 — G00 점(G40 상태)의 노즈 = 도면 G00 점 − 팁 벡터, 보정 시작 블록 동안
-     * 노즈는 첫 블록 보정선의 시작으로 곧게. 진입이 안전하면 끝점은 형상(직접 보정과 같은 노즈 경로)의 첫 위반, 아니면 진입 위의 그 자리
+     * 기계 보정 프로그램: 이 파일의 제어기 모형으로 진입을 따로 본다 — G00 점(G40 상태)의 노즈 = 도면 G00 점 − 팁 벡터, 보정 시작 블록(G00 다음 줄)
+     * 동안 노즈는 다음 블록 보정선의 시작으로 곧게. 띄운 진입(진입 이동이 두 줄 — G00 → lead 직각 · lead → 첫 점)이면 둘째 줄 동안 노즈는 그 줄의
+     * 보정선을 따라간다. 진입이 안전하면 끝점은 형상(직접 보정과 같은 노즈 경로)의 첫 위반, 아니면 진입 위의 그 자리
      */
     private fun checkMachineProgram(plan: HolderPlan, step: Double, bad: (String) -> Unit) {
         val dr = drawn
@@ -149,14 +175,29 @@ internal class StopChecker(
             return
         }
         val n0 = dr.entry - tv
-        val first = dr.program.segs.first { len(it) > 1e-9 }
-        val n1 = offset(first).start
-        // 보정 시작 블록 위 비율 u 의 노즈(명령점과 같은 비율)
-        fun nose(u: Double) = n0 + (n1 - n0) * u
-        val l = (n1 - n0).length
-        // 진입 자세: 부분 여유 기준 + 노즈 원이 소재에 들어가지 않음(중심이 소재 안 · 이 파일의 경계 거리). 중심이 경계 위면 거리 쪽이 본다(노즈R 0 은 벽 위가 된다)
+        val bl = readText(dr.nc)
+        val entryLines = dr.ncRefs.indices.filter { dr.ncRefs[it].element == -1 }
+        val firstShape = dr.program.segs.first { len(it) > 1e-9 }
+        // 진입 블록: (줄, 명령 시작 · 끝, 노즈 시작 · 끝)
+        class EB(val line: Int, val a: Pt, val b: Pt, val na: Pt, val nb: Pt) {
+            fun nose(u: Double) = na + (nb - na) * u
+            fun cmd(u: Double) = a + (b - a) * u
+            val l = (nb - na).length
+        }
+        // 명령점은 풀이의 정확한 점(글은 0.001 로 반올림됐다 — 그 차이는 아래 잘린 NC 검사가 쓴 글로 본다)
+        val start = dr.program.segs.first().start
+        val lead = dr.lead
+        if (entryLines.size > 1 && (lead == null || (bl[entryLines[0]].seg!!.end - lead).length > 1e-3)) bad("기계 보정 진입이 두 줄인데 lead $lead 가 첫 줄 끝이 아님")
+        val blocks = if (entryLines.size > 1 && lead != null) {
+            val along = offset(Line(lead, start))
+            listOf(EB(entryLines[0], dr.entry, lead, n0, along.start), EB(entryLines[1], lead, start, along.start, along.end))
+        } else {
+            listOf(EB(entryLines.firstOrNull() ?: 1, dr.entry, start, n0, offset(firstShape).start))
+        }
+        // 진입 자세: 부분 여유 기준(진입이라 깎는 면 예외 없음) + 노즈 원이 소재에 들어가지 않음(중심이 소재 안 · 이 파일의 경계 거리).
+        // 중심이 경계 위면 거리 쪽이 본다(노즈R 0 은 벽 위가 된다)
         val entryBore = Bore(sol.drawing, face)
-        fun ok(c: Pt) = sigma(c) >= -1e-9 && abs(c.x) <= entryBore.rho(c.z) + 1e-9 && noseGap(c) >= -1e-6
+        fun ok(c: Pt) = sigma(c, k = -1) >= -1e-9 && abs(c.x) <= entryBore.rho(c.z) + 1e-9 && noseGap(c) >= -1e-6
         val claimed = me != null && me.element < 0
         if (claimed != (StopWarning.MACHINE_ENTRY in plan.warnings)) bad("MACHINE_ENTRY ${plan.warnings} 인데 기계 보정 끝점 요소 ${me?.element}")
         if (me != null && me.element == -2) {
@@ -164,18 +205,22 @@ internal class StopChecker(
             if ((me.pose.nose - n0).length > 1e-9 || (me.at.machine!! - dr.entry).length > 1e-9) bad("기계 보정 G00 끝점 자세 ${me.pose.nose} · ${me.at.machine} ≠ $n0 · ${dr.entry}")
         } else {
             if (!ok(n0)) bad("기계 보정 G00 점 자세가 안전하지 않은데 끝점 ${me?.element}")
-            val uEnd = if (me != null && me.element == -1) me.t else 1.0
-            val n = max(1, ceil(l * uEnd / step).toInt())
-            for (q in 0..n) {
-                val u = uEnd * q / n
-                if (!ok(nose(u))) return bad("기계 보정 시작 블록 $u 에서 안전 기준이 모자람(끝점 ${me?.element} ${me?.t})")
+            for (b in blocks) {
+                val here = me != null && me.element == -1 && me.at.machineLine == b.line
+                val uEnd = if (here) me!!.t else 1.0
+                val n = max(1, ceil(b.l * uEnd / step).toInt())
+                for (q in 0..n) {
+                    val u = uEnd * q / n
+                    if (!ok(b.nose(u))) return bad("기계 보정 진입 ${b.line + 1}줄 $u 에서 안전 기준이 모자람(끝점 ${me?.element} ${me?.t} ${me?.at?.machineLine})")
+                }
+                if (here) {
+                    if ((me!!.pose.nose - b.nose(me.t)).length > 1e-9) bad("기계 보정 진입 끝점 노즈 ${me.pose.nose} ≠ ${b.nose(me.t)}")
+                    if ((me.at.machine!! - b.cmd(me.t)).length > 1e-9) bad("기계 보정 진입 끝점 명령점 ${me.at.machine} ≠ ${b.cmd(me.t)}")
+                    if (b.l > 0 && me.t + 1e-3 / b.l <= 1 && ok(b.nose(me.t + 1e-3 / b.l))) bad("기계 보정 진입 끝점에서 0.001 mm 더 간 곳도 안전")
+                    break
+                }
             }
-            if (me != null && me.element == -1) {
-                if ((me.pose.nose - nose(me.t)).length > 1e-9) bad("기계 보정 시작 블록 끝점 노즈 ${me.pose.nose} ≠ ${nose(me.t)}")
-                val cmd = dr.entry + (dr.program.segs.first().start - dr.entry) * me.t
-                if ((me.at.machine!! - cmd).length > 1e-9) bad("기계 보정 시작 블록 끝점 명령점 ${me.at.machine} ≠ $cmd")
-                if (l > 0 && me.t + 1e-3 / l <= 1 && ok(nose(me.t + 1e-3 / l))) bad("기계 보정 시작 블록 끝점에서 0.001 mm 더 간 곳도 안전")
-            }
+            if (me != null && me.element == -1 && blocks.none { it.line == me.at.machineLine }) bad("기계 보정 진입 끝점 줄 ${me.at.machineLine} 이 진입 블록이 아님")
         }
         if (claimed) {
             if (plan.machine != null) bad("기계 보정 진입에서 멈췄는데 잘린 NC 가 있음")
@@ -189,7 +234,7 @@ internal class StopChecker(
             val nn = ceil((total - s0) / step).toInt()
             for (q in 0..nn) {
                 val s = s0 + (total - s0) * q / max(1, nn)
-                if (sigma(noseAt(s)) < -1e-9) return bad("기계 보정 끝점이 없는데 형상 $s mm 에서 안전 기준이 모자람")
+                if (sigma(noseAt(s), k = elementAt(s)) < -1e-9) return bad("기계 보정 끝점이 없는데 형상 $s mm 에서 안전 기준이 모자람")
             }
             if (plan.machine != null) bad("기계 보정 끝점이 없는데 잘린 NC 가 있음")
             return
@@ -199,8 +244,11 @@ internal class StopChecker(
             // 직접 보정은 진입에서 멈췄다: 형상 끝점을 따로 — 형상 처음부터 끝점까지 안전, 0.001 mm 더 가면 모자람
             val s0 = pos(0, 0.0)
             val nn = max(1, ceil((sM - s0) / step).toInt())
-            for (q in 0..nn) if (sigma(noseAt(s0 + (sM - s0) * q / nn)) < -1e-9) return bad("기계 보정 형상 끝점 앞 ${s0 + (sM - s0) * q / nn} mm 에서 모자람")
-            if (sM + 1e-3 <= total && sigma(noseAt(sM + 1e-3)) >= 0) bad("기계 보정 형상 끝점에서 0.001 mm 더 간 곳도 안전")
+            for (q in 0..nn) {
+                val s = s0 + (sM - s0) * q / nn
+                if (sigma(noseAt(s), k = elementAt(s)) < -1e-9) return bad("기계 보정 형상 끝점 앞 $s mm 에서 모자람")
+            }
+            if (sM + 1e-3 <= total && sigma(noseAt(sM + 1e-3), k = elementAt(sM + 1e-3)) >= 0) bad("기계 보정 형상 끝점에서 0.001 mm 더 간 곳도 안전")
         }
         val m = plan.machine ?: return
         checkMachine(m, sM, step, bad)
@@ -287,16 +335,18 @@ internal class StopChecker(
                     if (gap < want) return bad("$name 줄 $i 후퇴 노즈 $nose: 소재까지 $gap < $want (간 길이 ${travel + len(m.s) * q / n}) · ${c.nc}")
                 }
                 if (q % max(1, (step / 0.002).toInt()) != 0 && q != n) continue
+                // 깎는 면 예외는 그 자세의 경로 요소(빼기 후퇴는 멈춘 요소 — 구현과 같다)
+                val kk = if (retract && c.retract == RetractKind.LIFT) c.element else elementNear(nose)
                 if (!retract) {
-                    val sl = SHIFTS.maxOf { job.clear(listOf(nose + it)).slack(text) }
+                    val sl = SHIFTS.maxOf { job.clear(listOf(nose + it), kk).slack(text) }
                     if (sl < -1e-9) return bad("$name 줄 $i: 깎는 자세 $nose 가 안전 여유 − 1e-4 아래 $sl · ${c.nc}")
                     continue
                 }
                 val exemptCut = c.retract == RetractKind.REVERSE || (firstRetract && q == 0) || (firstRetract && c.nc[i].contains("X") && !c.nc[i].startsWith("G00") && !c.nc[i].startsWith("G40 G00"))
                 val need = if (c.retract == RetractKind.REVERSE) text else Need(-TEXT, if (exemptCut) Double.NEGATIVE_INFINITY else -TEXT)
-                val sl = SHIFTS.maxOf { job.clear(listOf(nose + it)).slack(need) }
+                val sl = SHIFTS.maxOf { job.clear(listOf(nose + it), kk).slack(need) }
                 if (sl < -1e-9) return bad("$name 줄 $i 후퇴 자세 $nose 가 겹침 $sl · ${c.nc}")
-                low = min(low, SHIFTS.maxOf { job.clear(listOf(nose + it)).least(!exemptCut) })
+                low = min(low, SHIFTS.maxOf { job.clear(listOf(nose + it), kk).least(false) })
             }
             if (retract) travel += len(m.s)
         }
@@ -460,6 +510,22 @@ internal fun at(s: Seg, t: Double): Pt = when (s) {
     is Arc -> {
         val a = ang(s.start - s.center) + (if (s.cw) -1 else 1) * sweep(s) * t
         s.center + Pt(cos(a), sin(a)) * (s.start - s.center).length
+    }
+}
+
+/** 점 p 에서 요소까지 거리(이 파일 따로) */
+internal fun dist(s: Seg, p: Pt): Double = when (s) {
+    is Line -> {
+        val d = s.end - s.start
+        val l2 = d.z * d.z + d.x * d.x
+        val t = if (l2 == 0.0) 0.0 else ((((p - s.start).z * d.z) + (p - s.start).x * d.x) / l2).coerceIn(0.0, 1.0)
+        (p - (s.start + d * t)).length
+    }
+    is Arc -> {
+        val sw = sweep(s)
+        var a = (if (s.cw) -1 else 1) * (ang(p - s.center) - ang(s.start - s.center))
+        a = ((a % (2 * PI)) + 2 * PI) % (2 * PI)
+        if (a <= sw) abs((p - s.center).length - (s.start - s.center).length) else min((p - s.start).length, (p - s.end).length)
     }
 }
 

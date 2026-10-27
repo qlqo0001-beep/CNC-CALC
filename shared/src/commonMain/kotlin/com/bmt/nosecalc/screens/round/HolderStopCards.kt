@@ -137,8 +137,8 @@ internal fun HolderHitsCard(rows: List<HitRow>, comp: Boolean, picked: HitRow?, 
 
 /**
  * 가공 가능 끝점 카드: 끊고 빠지면 초록 깃발 + '여기까지 깎고 빠집니다' + 좌표(크게, 지금 NC 기준) + 끊은 줄 · (기계 보정이 덜 깎으면 그 양) ·
- * 가장 가까운 부분 · 반경 여유 · 바와 소재 직선 거리 · 후퇴 방식. 끝까지 안전하면 초록 체크 + 가장 좁은 곳, 깎을 수 없으면(진입점부터 · 깎기 전에 멈춤 ·
- * 기계 보정 잘린 NC 없음) 노랑 경고. 후퇴 여유가 좁거나 직선 거리가 안전 여유보다 짧으면 노랑 한 줄씩
+ * 가장 가까운 부분 · 여유(직선 거리) · (깎는 면 예외가 쓰였으면 작은 글 한 줄) · 후퇴 방식. 끝까지 안전하면 초록 체크 + 가장 좁은 곳, 깎을 수 없으면
+ * (진입점부터 · 깎기 전에 멈춤 · 기계 보정 잘린 NC 없음) 노랑 경고. 후퇴 여유가 안전 여유보다 좁으면 노랑 한 줄
  */
 @Composable
 internal fun SafeEndCard(v: StopView, comp: Boolean, safe: Double) {
@@ -160,12 +160,14 @@ internal fun SafeEndCard(v: StopView, comp: Boolean, safe: Double) {
             Spacer(Modifier.height(8.dp))
             CoordPair(Fmt.fixed3(at.xDia), Fmt.fixed3(at.z), if (comp) c.valueComp else c.textValue)
         }
-        val lines = listOfNotNull(v.where, v.lack, v.near, v.real, v.retract, v.note)
         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            lines.forEach { Text(keepWords(it), color = c.textBody, fontSize = 13.sp, lineHeight = 19.sp) }
+            listOfNotNull(v.where, v.lack, v.near).forEach { Text(keepWords(it), color = c.textBody, fontSize = 13.sp, lineHeight = 19.sp) }
+            // 깎는 면 예외(바 앞면이 지금 깎는 면에 안전 여유보다 가까이 붙음)는 가장 가까운 곳 바로 아래 작은 글
+            v.face?.let { Text(keepWords(it), style = AppType.caption, color = c.textMuted) }
+            listOfNotNull(v.retract, v.note).forEach { Text(keepWords(it), color = c.textBody, fontSize = 13.sp, lineHeight = 19.sp) }
         }
-        // 노랑 한 줄: 후퇴 여유가 좁음 · 바와 소재 직선 거리가 안전 여유보다 짧음(여유는 반경 방향)
-        listOfNotNull(v.tight, v.realWarn).forEach {
+        // 노랑 한 줄: 후퇴 여유가 안전 여유보다 좁음
+        v.tight?.let {
             Row(Modifier.padding(top = 8.dp)) {
                 Icon(AppIcons.Alert, null, Modifier.padding(top = 2.dp).size(16.dp), tint = c.warn.label)
                 Spacer(Modifier.width(6.dp))

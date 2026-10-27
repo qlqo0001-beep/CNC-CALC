@@ -86,7 +86,7 @@ import kotlinx.coroutines.launch
 
 /**
  * TYPE 1~6 입력·결과: 요약 → (계산이 멈추면 그 까닭) → 도면 치수(큰 그림 + 칸)·공구 → (내경) 보링바 → 보정 방식 스위치 → 경고 → 노드 표 → 형상 → NC.
- * 값이 바뀌면 바로 다시 푼다. 기계 보정의 NC 는 같은 윤곽을 노즈R 0 으로 푼 것(= 도면 좌표 프로그램)이다.
+ * 값이 바뀌면 바로 다시 푼다. 기계 보정의 NC 는 같은 윤곽의 도면 좌표 프로그램(RoundCalc.machine — 노즈R 0 으로 푼 것에서 G00 만 노즈R · 팁에 맞게 띄움)이다.
  * 치수 · 공구 · 보링바 칸은 한 묶음이라 키패드의 "다음" 으로 이어 넣고, 키패드에는 그 치수 하나만 짚은 그림과 결과 한 줄이 뜬다.
  * 내경(고르기 화면 스위치)은 같은 치수의 구멍 — 형상 5 · 6 은 막힘 / 관통, 보링바 칸을 채우면 공구가 소재에 닿는지 본다
  */
@@ -99,8 +99,8 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
     val standard = NoseComp.standardTip(inner, false)
     val tip = s.tip ?: standard
     val result = remember(input) { RoundCalc.calc(input) }
-    // 노즈R 0 으로 푼 것 = 도면 좌표 프로그램(기계 보정의 NC · 뷰어 경로)
-    val drawn = remember(input) { RoundCalc.calc(input.copy(noseR = 0.0)).solution }
+    // 기계 보정 프로그램 = 도면 좌표(기계 보정의 NC · 뷰어 경로) — G00 만 노즈R · 팁에 맞게 띄운다(사용자 결정 2026-10-28)
+    val drawn = remember(input) { RoundCalc.machine(input).solution }
     val sol = result.solution
     val holder = holderOf(s, sol, drawn, input.noseR, inner, faceAtStart = true)
     val blanks = blankable(type)
@@ -250,7 +250,7 @@ internal fun ManualScreen(s: RoundState) {
     val comp = LocalAppState.current.compMode == CompMode.DIRECT
     val input = s.arc3()
     val result = remember(input) { RoundCalc.arc3(input) }
-    val drawn = remember(input) { RoundCalc.arc3(input.copy(noseR = 0.0)).solution }
+    val drawn = remember(input) { RoundCalc.machine(input).solution }
     val sol = result.solution
     val warnings = shownWarnings(result, input)
     val standard = s.manualStandardTip()
@@ -371,8 +371,8 @@ private class Holder(val bar: BoringBar?, val plan: HolderPlan?, val faceAtStart
 }
 
 /**
- * 내경이면 보링바 칸을 읽어 검사하고 안전 끝점에서 끊은 NC 를 만든다(외경은 null — 보링바 칸 · 카드가 없다). drawn = 노즈R 0 으로 푼 도면 좌표 풀이
- * (기계 보정 잘린 NC), r = 노즈 R. 값이 바뀔 때만 다시 센다(JVM 에서 10~60 ms)
+ * 내경이면 보링바 칸을 읽어 검사하고 안전 끝점에서 끊은 NC 를 만든다(외경은 null — 보링바 칸 · 카드가 없다). drawn = 기계 보정 프로그램의 도면 좌표 풀이
+ * (RoundCalc.machine — 기계 보정 잘린 NC · 그 진입 검사), r = 노즈 R. 값이 바뀔 때만 다시 센다(JVM 에서 10~60 ms)
  */
 @Composable
 private fun holderOf(s: RoundState, sol: RoundSolution?, drawn: RoundSolution?, r: Double, inner: Boolean, faceAtStart: Boolean): Holder? {
@@ -480,7 +480,7 @@ private fun ToolInputs(
 /**
  * 보정 방식 스위치(테이퍼와 같은 자리 · 같은 값) → 원호(3점호) → 숫자와 함께 나온 경고 → 보링바(내경: 간섭 목록 · 가공 가능 끝점, 값이 없으면 파란 안내) →
  * 노드 표(anchor — 결과 띠가 가리킨다) → 형상 → NC(comp = 직접 보정이면 보정 좌표, 아니면 도면 좌표). 계산이 멈췄으면 없다(까닭은 요약 아래).
- * drawn = 노즈R 0 으로 푼 것(도면 좌표 프로그램), inner = 소재가 구멍 쪽(내경), holder = 내경의 보링바.
+ * drawn = 기계 보정 프로그램(도면 좌표 — G00 은 노즈R · 팁에 맞게 띄움), inner = 소재가 구멍 쪽(내경), holder = 내경의 보링바.
  * 보링바가 닿거나 안전 여유가 모자라면 NC 는 안전 끝점에서 끊고 빠지는 잘린 NC 가 처음이고, 스위치로 전체(확인용 · 간섭 포함)를 본다
  * (사용자 요청 2026-10-27 — 예전 결정 D5 '숫자 · NC 는 그대로' 를 바꿈). 간섭 목록의 줄을 누르면 형상 확인이 그 자리로 가고 NC 는 전체로 바뀌어 그 줄을 짚는다
  */
@@ -555,7 +555,9 @@ private fun directNote(sol: RoundSolution, legNote: String) =
 
 private fun machineNote(sol: RoundSolution, r: String, legNote: String) =
     "도면(접점) 좌표 프로그램입니다. 기계의 노즈R 보정(${sol.side} · 공구 보정 R$r · T${sol.tip})과 함께 쓰고, " +
-        "보정 시작 · 취소(${sol.side}/G40) 블록은 기계에 맞게 넣으세요. 이 좌표를 보정 없이 깎으면 노즈R 만큼 형상이 틀립니다. 이송 F 는 넣지 않았습니다.$legNote"
+        "보정 시작 · 취소(${sol.side}/G40) 블록은 기계에 맞게 넣으세요. G00 진입점만은 보정 전(G40) 자리에서 노즈가 소재에 박히지 않게 노즈R · 팁에 맞게 띄웠습니다" +
+        "(첫 면을 따라 들어가면 그 면에 직각으로 들어가는 G01 이 한 줄 더 있을 수 있음). " +
+        "이 좌표를 보정 없이 깎으면 노즈R 만큼 형상이 틀립니다. 이송 F 는 넣지 않았습니다.$legNote"
 
 private fun directFacts() = listOf(NcFact("G41/G42 걸지 말 것 (이중 보정)", WarnLevel.Error), NcFact("원호 = 합성 R"), NcFact("이송 F 없음"))
 

@@ -22,6 +22,7 @@ import com.bmt.nosecalc.screens.round.NcTone
 import com.bmt.nosecalc.screens.round.hitRows
 import com.bmt.nosecalc.screens.round.stopView
 import com.bmt.nosecalc.screens.round.roundExample
+import com.bmt.nosecalc.screens.round.roundInnerBlindC
 import com.bmt.nosecalc.screens.round.roundInnerDomeA
 import com.bmt.nosecalc.screens.round.roundInnerExample
 import com.bmt.nosecalc.screens.round.roundInnerSocketF
@@ -101,7 +102,7 @@ class RoundShotsTest {
 
     /**
      * 내경: 고르기(형상 2~6 · 언더컷 표), 손 계산 돔(바 없음 — 파란 안내), 프리셋 A16R-SCLCR 09 로 닿음(기계 보정 — DMIN 20 이라 깎기 전에 멈춤) ·
-     * 관통 단차는 안 닿음(직접 보정 — 끝까지 안전), 3점호 입구 R
+     * 관통 단차는 안 닿음(직접 보정 — 끝까지 안전), 3점호 입구 R, 돔 팁 0(기계 보정 G00 을 띄워 입구 벽에 직각으로 들어감 — 형상 확인의 진입 경로 두 토막)
      */
     @Test
     fun inner() {
@@ -110,11 +111,13 @@ class RoundShotsTest {
         shot("round-inner-b3-holder", 5000) { roundInnerExample(3).withA16() }
         shot("round-inner-b5-through-holder-clear", 4700, comp = CompMode.DIRECT) { roundInnerStep().withA16() }
         shot("round-manual-inner-holder", 4700) { roundManualInnerMouth().withA16() }
+        shot("round-inner-b3-tip0", 3700) { roundInnerExample(3).apply { tip = 0 } }
     }
 
     /**
      * 안전 끝점(사용자 요청 2026-10-27): calc-design 보링바 예 A(돔 + 바 A, 기계 보정 — 구 원호 중간에서 끊고 온 길을 거꾸로) ·
-     * F(소켓 + Ø8 바, 직접 보정 — 아래 인서트 조각이 맞은편 벽) · 뒤보링(DMIN 22, 기계 보정 — 헤드가 Ø20 쪽에서 모자람, X 빼고 Z 로).
+     * F(소켓 + Ø8 바, 직접 보정 — 아래 인서트 조각이 맞은편 벽) · 뒤보링(DMIN 22, 기계 보정 — 헤드가 Ø20 쪽에서 모자람, X 빼고 Z 로) ·
+     * C(막힌 단차 + 바 A, 기계 보정 — 바닥 면에서 바 맞은편이 안전 여유, 바 앞면은 깎는 면 예외라 끝점 카드에 작은 글).
      * 간섭 없음은 [inner] 의 관통 단차
      */
     @Test
@@ -122,6 +125,7 @@ class RoundShotsTest {
         shot("round-inner-a-stop", 4900) { roundInnerDomeA() }
         shot("round-inner-f-stop", 4900, comp = CompMode.DIRECT) { roundInnerSocketF() }
         shot("round-manual-back-stop", 4600) { roundManualBackBoring() }
+        shot("round-inner-c-stop", 4900) { roundInnerBlindC() }
         // 간섭 목록의 첫 줄(바 · 맞은편 벽)을 누른 뒤: 초점색 띠, 형상 확인이 그 처음 점으로 3배, 그 자세의 보링바, NC 가 전체로 바뀌어 5줄을 짚음
         Shots.both(
             "round-inner-a-stop-tap", 4900,
@@ -137,7 +141,7 @@ class RoundShotsTest {
                 val s = remember { roundInnerDomeA() }
                 val input = s.input(3)
                 val sol = remember { RoundCalc.calc(input).solution!! }
-                val drawn = remember { RoundCalc.calc(input.copy(noseR = 0.0)).solution!! }
+                val drawn = remember { RoundCalc.machine(input).solution!! }
                 val bar = s.holderBar()!!
                 val rows: List<HitRow> = remember { hitRows(HolderStop.plan(sol, drawn, input.noseR, true, bar), false, bar, false) }
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Space.gutter)) {
@@ -172,7 +176,7 @@ class RoundShotsTest {
                 val s = remember { roundInnerDomeA() }
                 val input = s.input(3)
                 val sol = remember { RoundCalc.calc(input).solution!! }
-                val drawn = remember { RoundCalc.calc(input.copy(noseR = 0.0)).solution!! }
+                val drawn = remember { RoundCalc.machine(input).solution!! }
                 val bar = s.holderBar()!!
                 val plan = remember { HolderStop.plan(sol, drawn, input.noseR, true, bar, s.holderSafe()) }
                 Column(Modifier.fillMaxSize().padding(Space.gutter)) {

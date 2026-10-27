@@ -50,6 +50,10 @@ import kotlin.time.TimeSource
  * | V4 | 깊이 > 0.05 인 구현 닿음이 있는 요소에는 표본 닿음도, 그 거꾸로도. 처음 닿는 곳은 같은 G40 요소 위 0.01 mm 간격으로 찾아 0.1 mm 안 |
  * | V5 | 바 자루 구간의 최솟점에서 단면 여유 = 원기둥 표면 표본(φ 1°, ρ = √((x_c + a cos φ)² + (a sin φ)²)) ±0.003 (요소마다 한 번) |
  * | V6 | 닿음마다 lineOf(첫 인선점)이 가리키는 NC 블록(parseNc)이 그 점을 1e-3 안에 지난다 |
+ * | V7 | (10-28 직선 거리) 겹치지 않는 부분의 여유 = 독립 참조([EuclidRef] — 공구 단면 · 소재 경계 · 거리 식 · 깎는 면 예외를 따로 짬)의 직선 거리 ±1e-6.
+ *        네 자세에 하나, 그 자세가 놓인 G40 요소의 깎는 면을 뺀다 |
+ *
+ * V2~V6 은 반경 여유([HolderCheck.radialMargins] — 겹침 깊이 · 닿음은 반경 그대로)를, V7 은 안전 여유의 직선 거리를 본다
  */
 class HolderVerifyTest {
     private val stats = Stats()
@@ -134,13 +138,18 @@ class HolderVerifyTest {
         val tool = BarShape(bar, r, vb.reverse)
         val tv = tipV(sol.tip, r)
         val nc = parseNc(sol.nc)
+        // V7: 독립 참조
+        val eref = EuclidRef(bar, r, vb.reverse)
+        val (eCut, eOpp) = EuclidRef.material(sol.drawing.segs, faceAtStart)
+        val left = sol.side == com.bmt.nosecalc.calc.Side.G41
+        var v7 = 0
         val entry = nc.firstOrNull()?.a ?: V(sol.entry.z, sol.entry.x)
         // 요소마다 NC 블록(줄 0 = G00 진입점, 줄 i ≥ 1 = parseNc 의 i − 1 번)
         val paths = sol.ncRefs.indices.drop(1).groupBy({ sol.ncRefs[it].element }, { nc[it - 1] })
         val elements = listOf(-2) + (listOf(-1) + sol.program.segs.indices).filter { it in paths || res.hits.any { h -> h.element == it } }
 
         fun gaps(tip: V): DoubleArray = vGaps(vt, vb, tip - tv, bar)
-        fun impl(tip: V) = HolderCheck.margins(bore, tool, Pt(tip.z - tv.z, tip.x - tv.x))
+        fun impl(tip: V) = HolderCheck.radialMargins(bore, tool, Pt(tip.z - tv.z, tip.x - tv.x))
 
         // 구현과 같은 G40 경로의 요소(−1 = 진입 이동) — 처음 닿는 곳은 이 위에서 비교한다. NC 글은 0.001 로 반올림돼
         // 가파른 벽(|ρ′| ~ 35, 돔 바닥 근처)에서 여유가 0.02 쯤 달라져 스치듯 닿기 시작하는 곳이 0.2 mm 움직일 수 있다
@@ -170,12 +179,25 @@ class HolderVerifyTest {
             val vgs = mutableListOf<DoubleArray>()
             var cylinderDone = false
             if (e == -2 || segs.isNotEmpty()) {
+                val skip = EuclidRef.faceLines(sol.drawing.segs, e, left, eref.n1, eref.n2)
+                val flags = bore.faceFlags(sol.drawing, sol.side, tool, e)
                 for (s in ss) {
                     val tip = at(s)
                     val vg = gaps(tip)
                     vgs += vg
                     val ig = impl(tip)
                     val c = tip - tv
+                    if (v7++ % 4 == 0) {
+                        val ie = HolderCheck.margins(bore, tool, Pt(c.z, c.x), flags)
+                        val g = eref.gaps(c, eCut, eOpp, skip)
+                        val pairs = listOf(HolderPart.INSERT to min(g[0], g[1]), HolderPart.BAR to min(g[2], g[3]), HolderPart.MIN_BORE to g[4])
+                        for ((p, ref) in pairs) {
+                            val mi = ie[p].m
+                            if (mi < 0 || !(mi.isFinite() || ref.isFinite())) continue
+                            stats.straight++
+                            if (abs(mi - ref) > 1e-6) rep.bad(id, "V7", "요소 $e ${p.name} 인선 $tip: 구현 직선 ${fmt(mi)} ≠ 참조 ${fmt(ref)}")
+                        }
+                    }
                     for (p in PARTS) {
                         val mi = ig[p].m
                         val mv = vg[p.ordinal]
@@ -642,11 +664,12 @@ private class Stats {
     var qualified = 0
     var hits = 0
     var cylinder = 0
+    var straight = 0
 
-    fun line() = "노즈 밖 최솟점 자세 · 부분 $poses (V3 대상 $qualified), 닿음 $hits, 원기둥 대조 $cylinder"
+    fun line() = "노즈 밖 최솟점 자세 · 부분 $poses (V3 대상 $qualified), 닿음 $hits, 원기둥 대조 $cylinder, 직선 거리 대조(V7) $straight"
 
     fun require(rep: Report) {
         if (qualified < 0.7 * poses) rep.bad("전체", "V3", "V3 대상이 ${qualified * 100 / max(1, poses)} % — 70 % 아래")
-        if (hits == 0 || cylinder == 0) rep.bad("전체", "범위", "닿음 $hits · 원기둥 대조 $cylinder — 검사가 비었다")
+        if (hits == 0 || cylinder == 0 || straight == 0) rep.bad("전체", "범위", "닿음 $hits · 원기둥 대조 $cylinder · 직선 거리 대조 $straight — 검사가 비었다")
     }
 }

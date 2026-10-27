@@ -18,6 +18,7 @@ import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RetractKind
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundWarning
+import com.bmt.nosecalc.calc.Seg
 import com.bmt.nosecalc.calc.Side
 import com.bmt.nosecalc.screens.taper.directNc
 import com.bmt.nosecalc.ui.DockStatus
@@ -272,7 +273,7 @@ class RoundStateTest {
         val s = roundInnerDomeA().apply { setHolder("safe", safe) }
         val input = s.input(3)
         val sol = RoundCalc.calc(input).solution!!
-        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
+        val drawn = RoundCalc.machine(input).solution!!
         val bar = s.holderBar()!!
         val plan = HolderStop.plan(sol, drawn, 0.4, true, bar, s.holderSafe())
     }
@@ -310,7 +311,7 @@ class RoundStateTest {
         val s = roundInnerExample(3).withA16()
         val input = s.input(3)
         val sol = RoundCalc.calc(input).solution!!
-        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
+        val drawn = RoundCalc.machine(input).solution!!
         val bar = s.holderBar()!!
         val rows = hitRows(HolderStop.plan(sol, drawn, 0.4, true, bar, s.holderSafe()), comp = false, bar, reverse = false)
         assertEquals(5, rows.size, "${rows.map { it.hit.part }}")
@@ -335,7 +336,7 @@ class RoundStateTest {
         val bar = BoringBar(40.0, 25.0, InsertShape.C, 9.0, 95.0)
         val input = roundManualInnerRev().arc3()
         val sol = RoundCalc.arc3(input).solution!!
-        val drawn = RoundCalc.arc3(input.copy(noseR = 0.0)).solution!!
+        val drawn = RoundCalc.machine(input).solution!!
         val plan = HolderStop.plan(sol, drawn, 0.4, false, bar)
         val res = plan.result
         assertTrue(res.hits.isNotEmpty() && res.hits.all { it.part == HolderPart.BAR } && res.hits.any { it.behind > 1 }, "${res.hits.map { it.part to it.behind }}")
@@ -343,13 +344,16 @@ class RoundStateTest {
         // 기계 보정 목록 = 그 프로그램 자기 진입(G00 점 · 보정 시작 블록)에서 닿는 곳 + 형상 요소에서 닿는 곳(직접 보정과 같은 노즈 경로)
         assertEquals(plan.machineEntry!!.size + res.hits.count { it.element >= 0 }, rows.size)
         for (row in rows) assertTrue(row.text.endsWith("mm ${if (row.hit.behind > 0) "앞" else "뒤"})"), "${row.hit.behind} ${row.text}")
-        // 기계 보정의 진입(−2 G00 점 · −1 보정 시작 블록) 좌표는 그 프로그램 자기 진입의 명령점 — 뒤보링 진입점은 이미 구멍 안이라
-        // 도면 첫 점(Z−10)이 아니라 제 G00 블록 Z−11 에서 닿고, 시작 블록에서는 블록 위 비율의 명령점
+        // 기계 보정의 진입(−2 G00 점 · −1 진입 블록) 좌표는 그 프로그램 자기 진입의 명령점 — 뒤보링 진입점은 이미 구멍 안이라
+        // 도면 첫 점(Z−10)이 아니라 제 G00 블록에서 닿고, 진입 블록에서는 그 블록(보정 시작 · 띄운 진입이면 직각 진입 뒤) 위 명령점
         assertEquals(-2, rows.first().hit.element)
-        assertTrue(rows.first().text.startsWith("1줄 바 · 깎는 쪽 벽: X50.000 Z-11.000 → "), rows.first().text)
+        assertTrue(rows.first().text.startsWith("1줄 바 · 깎는 쪽 벽: ${xz(drawn.entry)} → "), rows.first().text)
+        val blocks = entryMoves(drawn)
         for (row in rows.filter { it.hit.element == -1 }) {
-            val p = drawn.entry + (drawn.program.segs.first().start - drawn.entry) * row.hit.fromT
-            assertTrue((row.from - p).length < 1e-9, "${row.from} $p")
+            assertTrue(blocks.any { b -> distTo(b, row.from) < 1e-9 && distTo(b, row.to) < 1e-9 }, "${row.from} ${row.to} $blocks")
+            // 빨간 경로 구간은 그 두 명령점 사이(✕ 와 같은 곳)
+            val band = contactBand(drawn, row.hit, comp = false)!!.segs.single()
+            assertTrue((band.start - row.from).length < 1e-9 && (band.end - row.to).length < 1e-9, "$band")
         }
         // 진입점부터 닿으니 깎을 수 없다 — 잘린 NC 없음
         assertEquals(StopKind.UNSAFE, stopView(plan, false, sol, drawn, 0.4, bar).kind)
@@ -373,8 +377,10 @@ class RoundStateTest {
         assertEquals(directNc(a.sol.nc, 0.4, 2).take(5), d.nc.take(5))
         assertEquals("X18.014 Z-11.404", xz(d.at!!))
         assertEquals("6줄 중간에서 끊음", d.where)
-        assertTrue(d.near!!.startsWith("가장 가까운 곳: 바 · 맞은편 벽 — 반경 여유 0.000 mm (기준: 안전 여유 0 mm)"), d.near)
-        assertTrue(d.retract!!.startsWith("후퇴: 그 자리에서 Z 로 (노즈가 벽에서 바로 떨어짐): G00 Z0.6 · 후퇴 중 가장 좁은 반경 여유 "), d.retract)
+        assertTrue(d.near!!.startsWith("가장 가까운 곳: 바 · 맞은편 벽 — 여유(직선 거리) 0.000 mm (기준: 안전 여유 0 mm)"), d.near)
+        assertTrue(d.retract!!.startsWith("후퇴: 그 자리에서 Z 로 (노즈가 벽에서 바로 떨어짐): G00 Z0.6 · 후퇴 중 가장 좁은 여유(직선 거리) "), d.retract)
+        // 돔(구 원호)은 깎는 면 예외가 없다
+        assertNull(d.face)
         val m = stopView(a.plan, comp = false, a.sol, a.drawn, 0.4, a.bar)
         assertEquals(StopKind.CUT, m.kind)
         assertEquals(4, m.endLine)
@@ -409,7 +415,7 @@ class RoundStateTest {
     }
 
     /**
-     * 끝까지 안전(관통 단차 + A16 — 가장 좁은 곳 2.970) · 깎기 전에 멈춤(돔 + A16 의 DMIN 20 = 구멍 Ø20, 안전 여유 0.5) · 안전 여유 칸
+     * 끝까지 안전(관통 단차 + A16 — 가장 좁은 곳 직선 거리 1.911) · 깎기 전에 멈춤(돔 + A16 의 DMIN 20 = 구멍 Ø20, 안전 여유 0.5) · 안전 여유 칸
      * (처음 0.5, 비우면 0.5, 0 은 됨, 음수는 칸이 빨갛고 검사 안 함, Saver 로 남음)
      */
     @Test
@@ -417,20 +423,21 @@ class RoundStateTest {
         val step = roundInnerStep().withA16()
         val input = step.input(5)
         val sol = RoundCalc.calc(input).solution!!
-        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
+        val drawn = RoundCalc.machine(input).solution!!
         val bar = step.holderBar()!!
         val plan = HolderStop.plan(sol, drawn, 0.4, true, bar, step.holderSafe())
         assertTrue(plan.result.hits.isEmpty() && plan.end == null)
         val n = drawn.lineOf(plan.result.barClearElement!!, plan.result.barClearAt!!.drawn) + 1
         val clear = stopView(plan, comp = false, sol, drawn, 0.4, bar)
         assertEquals(StopKind.CLEAR, clear.kind)
-        assertEquals("끝까지 안전합니다\n안전 여유 0.5 mm 를 지키며 경로 끝까지 깎습니다. 바와 구멍 벽 사이 가장 좁은 반경 여유 2.970 mm (${n}줄).", clear.text)
+        // 가장 좁은 곳은 직선 거리(10-28 — calc-design 보링바 표의 C 관통 1.911, 반경 여유로는 2.970 이었다)
+        assertEquals("끝까지 안전합니다\n안전 여유 0.5 mm 를 지키며 경로 끝까지 깎습니다. 바와 소재 사이 가장 좁은 여유(직선 거리) 1.911 mm (${n}줄).", clear.text)
         assertNull(clear.nc)
 
         val dome = roundInnerExample(3).withA16()
         val di = dome.input(3)
         val dsol = RoundCalc.calc(di).solution!!
-        val ddrawn = RoundCalc.calc(di.copy(noseR = 0.0)).solution!!
+        val ddrawn = RoundCalc.machine(di).solution!!
         val dplan = HolderStop.plan(dsol, ddrawn, 0.4, true, dome.holderBar()!!, dome.holderSafe())
         for (comp in listOf(false, true)) {
             val v = stopView(dplan, comp, dsol, ddrawn, 0.4, dome.holderBar()!!)
@@ -468,10 +475,10 @@ class RoundStateTest {
         for ((st, t) in states) {
             val (sol, drawn, face) = if (t == MANUAL) {
                 val a = st.arc3()
-                Triple(RoundCalc.arc3(a).solution!!, RoundCalc.arc3(a.copy(noseR = 0.0)).solution, false)
+                Triple(RoundCalc.arc3(a).solution!!, RoundCalc.machine(a).solution, false)
             } else {
                 val i = st.input(t)
-                Triple(RoundCalc.calc(i).solution!!, RoundCalc.calc(i.copy(noseR = 0.0)).solution, true)
+                Triple(RoundCalc.calc(i).solution!!, RoundCalc.machine(i).solution, true)
             }
             for (p in HOLDER_PRESETS) for (safe in listOf(0.0, 0.5)) {
                 val plan = HolderStop.plan(sol, drawn, 0.4, face, p.bar, safe)
@@ -493,13 +500,78 @@ class RoundStateTest {
         assertTrue(cuts > 20, "잘린 NC 가 나온 경우 $cuts")
     }
 
+    /**
+     * 깎는 면 예외(사용자 결정 2026-10-28) — calc-design 보링바 예 C(막힌 단차 + 바 A, 안전 여유 0.5): 바닥 면(요소 3)을 깎다 바 맞은편이 안전 여유에 닿는
+     * X9 에서 멈춘다(인선 반경 f + D/2 − D1/2 + 안전 여유 = 11 + 8 − 15 + 0.5). 그때 바 앞면은 지금 깎는 바닥 면에서 0.226(= (T1 ~ 면) 0.0015 + 앞면 끝까지
+     * 2.575 × sin 5°)이라 끝점 카드에 작은 글로 알린다 — 여유 줄은 기준(직선 거리, 깎는 면 뺌) 그대로. 안전 여유 0 이면 0.226 은 모자라지 않아 알리지 않는다.
+     * 예 A(구 원호)와 F(구멍 벽)는 예외가 없다
+     */
+    @Test
+    fun stopFaceNote() {
+        for (comp in listOf(false, true)) {
+            val s = roundInnerBlindC()
+            val input = s.input(5)
+            val sol = RoundCalc.calc(input).solution!!
+            val drawn = RoundCalc.machine(input).solution!!
+            val bar = s.holderBar()!!
+            val plan = HolderStop.plan(sol, drawn, 0.4, true, bar, s.holderSafe())
+            val v = stopView(plan, comp, sol, drawn, 0.4, bar)
+            assertEquals(StopKind.CUT, v.kind, v.text)
+            assertEquals(3, plan.end!!.element)
+            assertEquals("가장 가까운 곳: 바 · 맞은편 벽 — 여유(직선 거리) 0.500 mm (기준: 안전 여유 0.5 mm)", v.near)
+            val face = v.face
+            assertNotNull(face, v.text)
+            assertTrue(face.startsWith("깎는 면 예외: 바 앞면이 지금 깎는 면(") && face.contains(")에서 0.226 mm — "), face)
+            // 바 앞면에 가장 가까운 점은 바닥 면(Z−16) 위
+            assertEquals(-16.0, plan.end!!.gapAt.z, 1e-6)
+            assertNull(stopView(HolderStop.plan(sol, drawn, 0.4, true, bar, 0.0), comp, sol, drawn, 0.4, bar).face)
+        }
+        val a = DomeA()
+        assertNull(stopView(a.plan, false, a.sol, a.drawn, 0.4, a.bar).face)
+        val f = roundInnerSocketF()
+        val fi = f.input(4)
+        val fsol = RoundCalc.calc(fi).solution!!
+        val fdrawn = RoundCalc.machine(fi).solution!!
+        assertNull(stopView(HolderStop.plan(fsol, fdrawn, 0.4, true, f.holderBar()!!, f.holderSafe()), true, fsol, fdrawn, 0.4, f.holderBar()!!).face)
+    }
+
+    /**
+     * 기계 보정 G00 을 팁에 맞게 띄움(사용자 결정 2026-10-28): 내경 돔 팁 0(노즈 중심 프로그램 — 팁 벡터 0)은 G00 점의 노즈가 입구 벽 선 위라
+     * 벽을 따라 들어가는 진입이 직각 진입점(lead)을 거친다 — 화면 NC 는 G00 → G01 lead → G01 첫 점, 형상 확인의 진입 경로도 그 두 토막.
+     * 표준 팁(2)은 노즈R 0 풀이와 같은 글(Z 여유 1 ≥ r)
+     */
+    @Test
+    fun machineEntryLifted() {
+        val std = roundInnerExample(3).input(3)
+        assertEquals(RoundCalc.calc(std.copy(noseR = 0.0)).solution!!.nc, RoundCalc.machine(std).solution!!.nc)
+        assertNull(RoundCalc.machine(std).solution!!.lead)
+        val i = roundInnerExample(3).apply { tip = 0 }.input(3)
+        assertEquals(0, i.tip)
+        val m = RoundCalc.machine(i).solution!!
+        val lead = m.lead
+        assertNotNull(lead)
+        val first = m.program.segs.first().start
+        val moves = entryMoves(m)
+        assertEquals(2, moves.size)
+        assertEquals(m.entry, moves[0].start)
+        assertEquals(lead, moves[0].end)
+        assertEquals(first, moves[1].end)
+        // NC 줄도 그대로: G00 진입점 → G01 직각 진입점 → G01 첫 점
+        assertEquals(listOf(-2, -1, -1), m.ncRefs.take(3).map { it.element })
+        assertTrue(m.nc[0].startsWith("G00 ") && m.nc[1].startsWith("G01 ") && m.nc[2].startsWith("G01 "), "${m.nc.take(3)}")
+        // 직각 진입: G00 점 → lead 는 첫 요소(입구 벽, Z 로 가는 직선)에 직각 — Z 가 같다
+        assertEquals(lead.z, m.entry.z, 1e-9)
+        // 노즈R 0 풀이(예전 화면)는 진입이 한 줄
+        assertEquals(1, entryMoves(RoundCalc.calc(i.copy(noseR = 0.0)).solution!!).size)
+    }
+
     /** 형상 확인의 빨간 경로 구간: 직접 보정은 가상 인선, 기계 보정은 도면 좌표 경로에서 노즈가 닿는 도면 점 사이(✕ 표와 같은 곳) */
     @Test
     fun contactBandFollowsShownPath() {
         val s = roundInnerExample(3).withA16()
         val input = s.input(3)
         val sol = RoundCalc.calc(input).solution!!
-        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
+        val drawn = RoundCalc.machine(input).solution!!
         val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, true, s.holderBar()!!)
         for (h in res.hits.filter { it.element >= 0 }) {
             val comp = contactBand(sol, h, comp = true)!!.segs.single()
@@ -538,5 +610,12 @@ class RoundStateTest {
         back.tip = null
         assertNull(back.tip)
         assertTrue(abs(back.input(2).noseR - 0.4) < 1e-12)
+    }
+
+    /** 점에서 직선 토막까지 거리 */
+    private fun distTo(s: Seg, p: Pt): Double {
+        val d = s.end - s.start
+        val t = (((p - s.start) dot d) / (d dot d)).coerceIn(0.0, 1.0)
+        return (s.start + d * t - p).length
     }
 }

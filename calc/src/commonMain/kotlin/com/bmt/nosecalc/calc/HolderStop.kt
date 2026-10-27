@@ -22,14 +22,15 @@ data class HitAt(val hit: HolderHit, val first: ProgAt, val last: ProgAt)
 
 /**
  * 안전 끝점: 진입부터 경로를 따라 여유가 처음으로 안전 기준 아래로 떨어지기 바로 앞(1e-6 mm 안).
- * [element] −2 = G00 점에 선 자세(기계 보정 진입만 — 직접 보정은 [StopWarning.UNSAFE_AT_ENTRY]), −1 = 진입 이동(기계 보정은 보정 시작 블록),
- * k = program.segs[k], [t] = 요소(기계 보정 진입은 보정 시작 블록) 길이 비율, [pose] = 그 자세(기계 보정 진입은 drawn = 그 명령점).
- * [part] · [opposite] = 바로 다음에 기준을 넘는 부분과 벽(맞은편 벽이면 true), [margin] = 이 자세에서 그 부분의 여유(mm, 반경 — 공구대는 Z) —
- * 기준(안전 여유, 인서트의 깎는 쪽 벽은 0)과 같다. 부분이 면을 넘어 여유가 뛰는 곳이면 기준보다 크다.
+ * [element] −2 = G00 점에 선 자세(기계 보정 진입만 — 직접 보정은 [StopWarning.UNSAFE_AT_ENTRY]), −1 = 진입 이동(기계 보정은 진입 블록 —
+ * 보정 시작 블록, 띄운 진입이면 lead → 첫 점 블록도. 어느 블록인지는 [at] 의 machineLine), k = program.segs[k],
+ * [t] = 요소(기계 보정 진입은 그 블록) 길이 비율, [pose] = 그 자세(기계 보정 진입은 drawn = 그 명령점).
+ * [part] · [opposite] = 바로 다음에 기준을 넘는 부분과 벽(맞은편 벽이면 true), [margin] = 이 자세에서 그 부분의 여유(mm, 직선 거리 — 깎는 면은 뺀다,
+ * 공구대는 Z, 겹치면 반경 겹침) — 기준(안전 여유, 인서트의 깎는 쪽 벽은 0)과 같다. 겹침으로 넘어가는 곳이면 기준보다 클 수 있다.
  * [at] = 두 프로그램 좌표 · 줄: 기계 보정은 그 블록을 여기서 끝내면 제어기가 법선으로 보정해 노즈가 이 자세에 서는 도면 명령점
  * (그 자세에서 블록을 끝낼 수 없으면 null), 기계 보정 진입이면 그 명령점이고 direct 는 그 자세의 실제 인선 자리.
- * [gap] = 이 자세에서 바와 소재 사이 직선(유클리드) 거리(mm), [gapAt] = 그 소재 쪽 가장 가까운 점(맞은편 벽이면 x < 0) —
- * 여유는 반경 방향이라 바 앞면이 비스듬히 지나는 모서리 · 면에서는 직선 거리가 훨씬 짧을 수 있다(보이기만, 기준은 아니다)
+ * [gap] = 이 자세에서 바와 소재 사이 직선(유클리드) 거리(mm), [gapAt] = 그 소재 쪽 가장 가까운 점(맞은편 벽이면 x < 0) — 깎는 면도 넣은 그대로
+ * (예: 막힌 바닥을 깎는 바 앞면 0.226). 기준은 [margin](깎는 면을 뺀 것)
  */
 data class SafeEnd(
     val element: Int,
@@ -99,12 +100,14 @@ data class HolderPlan(
 /**
  * 보링바 안전 끝점과 잘린 NC. 간섭이 나는 곳까지 가지 않고 그 직전 안전한 자세에서 멈춘 뒤 빠진다(나머지는 다른 공구로).
  *
- * 안전 기준(사용자 결정 2026-10-27): 바 · 공구대 · 최소 가공경 · 인서트의 맞은편 벽 쪽은 여유 ≥ 안전 여유([SAFE_DEFAULT] 0.5 mm),
- * 인서트의 깎는 쪽 벽은 겹치지 않음(여유 ≥ −[CUT_TOL]) — 날은 노즈 접점 옆에서 원래 벽에 붙어 있어(직선 벽에서 r(1 − cos κr′)) 안전 여유를 둘 수 없다.
- * 여유는 [HolderCheck] 의 식(반경 방향, 공구대는 Z) 그대로다 — 직선 거리는 [SafeEnd.gap] 으로 보이기만 한다.
+ * 안전 기준(사용자 결정 2026-10-27 · 10-28): 바 · 공구대 · 최소 가공경 · 인서트의 맞은편 벽 쪽은 공구 단면과 소재 사이 직선(유클리드) 거리 ≥ 안전 여유
+ * ([SAFE_DEFAULT] 0.5 mm, [clearOf]), 인서트의 깎는 쪽 벽은 겹치지 않음(≥ −[CUT_TOL]) — 날은 노즈 접점 옆에서 원래 벽에 붙어 있어(직선 벽에서 r(1 − cos κr′))
+ * 안전 여유를 둘 수 없다. 예외: 지금 깎는(또는 오목 이음을 지나 곧 깎을) 주절삭날 쪽 직선 면과 그 연장(축 너머 반쪽)에는 공구가 겹치지 않음만 본다
+ * ([Bore.faceFlags] — 막힌 바닥을 깎는 바 앞면은 주절삭날 연장선이라 면에서 공구 모양만큼만 떨어진다). 겹침 깊이 · 닿음은 반경 겹침이다.
  *
  * 두 프로그램의 진입은 다르다: 직접 보정은 G00 점의 인선에서 첫 보정점으로 곧게, 기계 보정은 도면 G00 점(G40 상태 — 노즈 = 점 − 팁 벡터)에서
- * 보정 시작 블록 동안 노즈가 첫 블록 보정선의 시작으로 곧게 간다(제어기 시작 형식 A). 그래서 진입은 프로그램마다 따로 보고, 형상은 같은 노즈 경로다.
+ * 보정 시작 블록 동안 노즈가 다음 블록 보정선의 시작으로 곧게 간다(제어기 시작 형식 A — 띄운 진입이면 다음 블록이 lead → 첫 점, 그 동안 보정선을 따라).
+ * 그래서 진입은 프로그램마다 따로 보고, 형상은 같은 노즈 경로다.
  *
  * 움직임의 여유: 볼록 조각을 직선으로 옮긴 자리 전체 = 처음 · 끝 자리의 볼록 껍질이라, 껍질의 여유가 그 움직임 동안의 정확한 최솟값이다.
  * 원호 구간은 두 끝과 두 끝 접선의 교점으로 덮은 껍질(조금 작게 = 안전 쪽)을 쓴다. 그래서 표본 사이에서 잠깐 기준을 넘는 곳도 놓치지 않는다
@@ -151,37 +154,6 @@ object HolderStop {
     }
 }
 
-/** 안전 기준: [part] = 바 · 공구대 · 최소 가공경 · 인서트 맞은편 쪽, [insCut] = 인서트 깎는 쪽(−∞ 면 보지 않음) */
-internal class Need(val part: Double, val insCut: Double)
-
-/** 한 자세(또는 한 움직임 전체)의 부분별 여유 — 바 · 인서트는 깎는 쪽 벽과 맞은편 벽을 따로 */
-internal class Clear(val barCut: Gap, val barOpp: Gap, val insCut: Gap, val insOpp: Gap, val turret: Gap, val minBore: Gap) {
-    /** 기준까지 남은 양의 최솟값. 0 이상이면 안전 */
-    fun slack(n: Need): Double = minOf(barCut.m - n.part, barOpp.m - n.part, insOpp.m - n.part, turret.m - n.part, minBore.m - n.part, insCut.m - n.insCut)
-
-    /** 기준까지 남은 양이 가장 작은 (부분, 맞은편 벽) */
-    fun worst(n: Need): Pair<HolderPart, Boolean> = listOf(
-        Triple(HolderPart.BAR, false, barCut.m - n.part),
-        Triple(HolderPart.BAR, true, barOpp.m - n.part),
-        Triple(HolderPart.INSERT, false, insCut.m - n.insCut),
-        Triple(HolderPart.INSERT, true, insOpp.m - n.part),
-        Triple(HolderPart.TURRET, false, turret.m - n.part),
-        Triple(HolderPart.MIN_BORE, false, minBore.m - n.part),
-    ).minBy { it.third }.let { it.first to it.second }
-
-    /** 그 부분 · 벽의 여유 */
-    fun margin(part: HolderPart, opposite: Boolean): Double = when (part) {
-        HolderPart.BAR -> if (opposite) barOpp.m else barCut.m
-        HolderPart.INSERT -> if (opposite) insOpp.m else insCut.m
-        HolderPart.TURRET -> turret.m
-        HolderPart.MIN_BORE -> minBore.m
-    }
-
-    /** 가장 좁은 여유. [withInsCut] = 인서트 깎는 쪽도 */
-    fun least(withInsCut: Boolean): Double =
-        minOf(barCut.m, barOpp.m, insOpp.m, turret.m, minBore.m, if (withInsCut) insCut.m else Double.POSITIVE_INFINITY)
-}
-
 /** 마지막 블록까지 쓴 글([kept] = 원래 nc 그대로인 앞 줄 수)과 그 글을 다시 읽은 움직임 */
 private class Written(val nc: NcLines, val kept: Int, val read: List<Seg?>)
 
@@ -203,7 +175,7 @@ internal class StopJob(
     /**
      * 쓴 글을 다시 읽은 자세의 기준: 바 · 공구대 · 최소 가공경 · 인서트 맞은편은 안전 여유 − [HolderStop.TEXT_TOL](모형 차이 1e-5 를 남긴다).
      * 인서트의 깎는 쪽은 보지 않는다 — 날은 원래 벽에 붙어 있어 쓴 글의 반올림(0.0007 mm)만큼 들어갈 수 있고(NC 전체가 그렇다),
-     * 면 바로 옆에서는 Z 반올림 0.0005 에 반경 여유가 크게 뛴다. 정확한 경로에서는 겹치지 않음을 이미 봤다
+     * 면 바로 옆에서는 Z 반올림 0.0005 에 반경 겹침이 크게 뛴다. 정확한 경로에서는 겹치지 않음을 이미 봤다
      */
     private val text = Need(safe - HolderStop.TEXT_TOL + 1e-5, Double.NEGATIVE_INFINITY)
 
@@ -227,12 +199,19 @@ internal class StopJob(
                 HitAt(h, of(h.first, m?.first), of(h.last, m?.last))
             }
         }
-        val shape = firstEnd(shape = true)
+        var shape = firstEnd(shape = true)
+        // 깎는 면 사슬은 끝내 깎을 면까지만: 끝점 요소 뒤 면의 예외를 빼고 다시 찾는다. 예외를 빼면 여유가 줄기만 해 끝점은 앞으로만 간다 — 요소가 그대로면 끝
+        while (shape != null && shape.first.element < faceLimit) {
+            val before = faces
+            faceLimit = shape.first.element
+            if (faces.indices.all { faces[it] contentEquals before[it] }) break
+            shape = firstEnd(shape = true)
+        }
         val warnings = mutableListOf<StopWarning>()
         // 직접 보정: G00 점의 자세 → 진입 이동 → 형상
         var end: SafeEnd? = null
         var direct: HolderCut? = null
-        if (clear(listOf(sol.entry - tv)).slack(cut) < -HolderStop.OK_TOL) {
+        if (clear(listOf(sol.entry - tv), -2).slack(cut) < -HolderStop.OK_TOL) {
             warnings += StopWarning.UNSAFE_AT_ENTRY
         } else {
             val e = firstEnd(shape = false) ?: shape
@@ -259,47 +238,56 @@ internal class StopJob(
             val (k, s) = mv
             if ((k >= 0) != shape) continue
             val ns = noseOf(s)
-            val (a, b) = firstShort(ns, cut) ?: continue
+            val (a, b) = firstShort(ns, cut, k) ?: continue
             val n = pointOn(ns, a)
-            val (part, opp) = clear(span(ns, a, b)).worst(cut)
+            val (part, opp) = clear(span(ns, a, b), k).worst(cut)
             val p = poseAt(k, n)
             val at = if (k < 0) ProgAt(p.tip, sol.lineOf(k, p.tip), null, null) else safeAt(k, n)
             val (g, gp) = barGap(n)
-            return SafeEnd(k, a, p, part, opp, clear(listOf(n)).margin(part, opp), at, g, gp) to (cum[i] + a * lengthOf(s))
+            return SafeEnd(k, a, p, part, opp, clear(listOf(n), k).margin(part, opp), at, g, gp) to (cum[i] + a * lengthOf(s))
         }
         return null
     }
 
     // ------------------------------------------------------------------ 기계 보정의 진입
 
+    /**
+     * 기계 보정 프로그램의 진입 블록 하나(둘 다 요소 −1): [line] = 그 풀이 nc 의 줄, 명령점 [cmdFrom] → [cmdTo], 그동안 노즈 [noseFrom] → [noseTo]
+     * (명령점과 같은 비율로 곧게). 첫 블록은 보정 시작 블록(G00 점의 노즈 → 다음 블록 보정선의 시작 — 제어기 시작 형식 A),
+     * 띄운 진입([RoundSolution.lead])이면 둘째 블록이 lead → 첫 점(시작 선을 따라 — 노즈는 그 보정선 위)
+     */
+    private class MBlock(val line: Int, val cmdFrom: Pt, val cmdTo: Pt, val noseFrom: Pt, val noseTo: Pt) {
+        val nose = Line(noseFrom, noseTo)
+        fun cmd(u: Double) = cmdFrom + (cmdTo - cmdFrom) * u
+        fun noseAt(u: Double) = if (u <= 0 || lengthOf(nose) <= EPS) noseFrom else pointOn(nose, u)
+    }
+
     /** 기계 보정 프로그램의 G00 점(G40 상태)에 선 노즈 — 인선이 도면 G00 점에 있다 */
     private val mNose0: Pt? = drawn?.let { it.entry - tv }
 
-    /** 보정 시작 블록 끝의 노즈: 첫 형상 블록 보정선의 시작(제어기 시작 형식 A — 다음 블록 시작의 법선) */
-    private val mNose1: Pt? = drawn?.program?.segs?.firstOrNull { lengthOf(it) > EPS }?.let { offsetOf(it).start }
-
-    /** 보정 시작 블록 비율 u 의 명령점(도면 G00 점 → 도면 첫 점) */
-    private fun mCmd(u: Double): Pt {
-        val d = drawn!!
-        val a = d.entry
-        return a + (d.program.segs.first().start - a) * u
+    /** 기계 보정 진입 블록들(G00 점 다음, 첫 형상 블록 앞). 도면 좌표 풀이가 없으면 빈 목록 */
+    private val mBlocks: List<MBlock> = run {
+        val d = drawn ?: return@run emptyList()
+        val n0 = mNose0!!
+        val first = d.program.segs.firstOrNull { lengthOf(it) > EPS } ?: return@run emptyList()
+        val start = d.program.segs.first().start
+        val lines = d.ncRefs.indices.filter { d.ncRefs[it].element == -1 }
+        val lead = d.lead
+        if (lead == null || lines.size < 2) {
+            listOf(MBlock(lines.firstOrNull() ?: 1, d.entry, start, n0, offsetOf(first).start))
+        } else {
+            val along = offsetOf(Line(lead, start))
+            listOf(MBlock(lines[0], d.entry, lead, n0, along.start), MBlock(lines[1], lead, start, along.start, along.end))
+        }
     }
 
-    /** 보정 시작 블록 동안 노즈 움직임(G00 점의 노즈 → 첫 보정선 시작). 명령점과 같은 비율로 곧게 간다 */
-    private fun mMove(): Line? {
-        val a = mNose0 ?: return null
-        val b = mNose1 ?: return null
-        return Line(a, b)
-    }
+    /** 기계 보정 진입 블록 [b] 비율 u 의 자세: tip = 실제 인선 자리, drawn = 명령점 */
+    private fun mPose(b: MBlock, u: Double): HolderPose = b.noseAt(u).let { HolderPose(it + tv, it, b.cmd(u)) }
 
-    /** 기계 보정 진입 비율 u 의 자세: tip = 실제 인선 자리, drawn = 명령점 */
-    private fun mPose(u: Double): HolderPose {
-        val mv = mMove()!!
-        val n = if (u <= 0 || lengthOf(mv) <= EPS) mv.start else pointOn(mv, u)
-        return HolderPose(n + tv, n, mCmd(u))
-    }
+    /** G00 점의 자세 */
+    private fun mPose0(): HolderPose = HolderPose(mNose0!! + tv, mNose0, drawn!!.entry)
 
-    private fun mProg(k: Int, p: HolderPose) = ProgAt(p.tip, sol.lineOf(k, p.tip), p.drawn, drawn!!.lineOf(k, p.drawn))
+    private fun mProg(k: Int, p: HolderPose, line: Int) = ProgAt(p.tip, sol.lineOf(k, p.tip), p.drawn, line)
 
     /**
      * 기계 보정 진입 자세의 부분별 여유: [HolderCheck.margins] 에 노즈 원을 더한다 — 인서트 조각의 노즈는 현 T1–T2 라(형상에서는 보정으로 벽에서 r)
@@ -312,16 +300,18 @@ internal class StopJob(
     }
 
     /**
-     * 기계 보정 프로그램 자기 진입에서 닿는 곳(여유 < −[HolderCheck.CONTACT_TOL]): G00 점에 선 자세(−2) · 보정 시작 블록(−1). 고르기는
-     * [HolderCheck.check] 와 같다 — [HolderCheck.STEP] 간격, 처음 · 마지막은 이분법 40번, 가장 깊은 곳은 표본, 비율은 보정 시작 블록 위.
+     * 기계 보정 프로그램 자기 진입에서 닿는 곳(여유 < −[HolderCheck.CONTACT_TOL]): G00 점에 선 자세(−2) · 진입 블록마다(−1, 띄운 진입이면 둘).
+     * 고르기는 [HolderCheck.check] 와 같다 — [HolderCheck.STEP] 간격, 처음 · 마지막은 이분법 40번, 가장 깊은 곳은 표본, 비율은 그 블록 위.
      * 인서트에는 노즈 원도 든다([entryMargins])
      */
     private fun machineEntry(): List<HitAt> {
-        val mv = mMove() ?: return emptyList()
-        val out = mutableListOf<HolderHit>()
-        fun scan(k: Int, n: Int) {
+        if (mBlocks.isEmpty()) return emptyList()
+        val out = mutableListOf<HitAt>()
+        fun scan(k: Int, n: Int, b: MBlock?) {
+            val line = b?.line ?: 0
+            fun pose(u: Double) = if (b == null) mPose0() else mPose(b, u)
             val ts = DoubleArray(n + 1) { if (n == 0) 0.0 else it.toDouble() / n }
-            val poses = ts.map(::mPose)
+            val poses = ts.map(::pose)
             val ms = poses.map { entryMargins(it.nose) }
             val found = mutableListOf<HolderHit>()
             for (part in HolderPart.entries) {
@@ -331,73 +321,78 @@ internal class StopJob(
                 val jl = ms.indexOfLast(::touch)
                 fun edge(off: Double, on: Double): Double {
                     var a = off
-                    var b = on
+                    var c = on
                     repeat(40) {
-                        val mid = (a + b) / 2
-                        if (touch(entryMargins(mPose(mid).nose))) b = mid else a = mid
+                        val mid = (a + c) / 2
+                        if (touch(entryMargins(pose(mid).nose))) c = mid else a = mid
                     }
-                    return b
+                    return c
                 }
                 val from = if (jf == 0) 0.0 else edge(ts[jf - 1], ts[jf])
                 val to = if (jl == n) ts[n] else edge(ts[jl + 1], ts[jl])
                 val jw = ms.indices.minBy { ms[it][part].m }
                 val g = ms[jw][part]
                 val w = poses[jw]
-                found += HolderHit(k, part, mPose(from), mPose(to), w, from, to, -g.m, g.x < 0, g.z - (w.nose + tool.ref).z)
+                found += HolderHit(k, part, pose(from), pose(to), w, from, to, -g.m, g.x < 0, g.z - (w.nose + tool.ref).z)
             }
-            out += found.sortedBy { it.fromT }
+            out += found.sortedBy { it.fromT }.map { HitAt(it, mProg(k, it.first, line), mProg(k, it.last, line)) }
         }
-        scan(-2, 0)
-        val len = lengthOf(mv)
-        if (len > EPS) scan(-1, max(1, ceil(len / HolderCheck.STEP).toInt()))
-        return out.map { HitAt(it, mProg(it.element, it.first), mProg(it.element, it.last)) }
+        scan(-2, 0, null)
+        for (b in mBlocks) {
+            val len = lengthOf(b.nose)
+            if (len > EPS) scan(-1, max(1, ceil(len / HolderCheck.STEP).toInt()), b)
+        }
+        return out
     }
 
     /**
-     * 기계 보정 프로그램 자기 진입에서 기준이 처음 깨지는 곳: G00 점의 자세(−2) · 보정 시작 블록(−1). 진입이 되면 null.
-     * 기준은 형상과 같고, 노즈 원도 소재에 들어가지 않아야 한다(인서트 깎는 쪽과 같은 '겹치지 않음' — 그 끝점은 인서트 · 깎는 쪽, 여유 = 노즈 원 거리)
+     * 기계 보정 프로그램 자기 진입에서 기준이 처음 깨지는 곳: G00 점의 자세(−2) · 진입 블록(−1, t = 그 블록 위 비율 · 줄은 at.machineLine). 진입이 되면 null.
+     * 기준은 형상과 같고(진입이라 깎는 면 예외는 없다), 노즈 원도 소재에 들어가지 않아야 한다(인서트 깎는 쪽과 같은 '겹치지 않음' — 그 끝점은 인서트 ·
+     * 깎는 쪽, 여유 = 노즈 원 거리)
      */
     private fun machineEntryEnd(): SafeEnd? {
-        val mv = mMove() ?: return null
-        fun end(k: Int, u: Double, c: Clear, noseBad: Boolean): SafeEnd {
-            val p = mPose(u)
+        if (mBlocks.isEmpty()) return null
+        fun end(k: Int, p: HolderPose, u: Double, line: Int, c: Clear, noseBad: Boolean): SafeEnd {
             val (part, opp) = if (noseBad) HolderPart.INSERT to false else c.worst(cut)
-            val margin = if (noseBad) noseSweep(p.nose, p.nose) else clear(listOf(p.nose)).margin(part, opp)
+            val margin = if (noseBad) noseSweep(p.nose, p.nose) else clear(listOf(p.nose), k).margin(part, opp)
             val (g, gp) = barGap(p.nose)
-            return SafeEnd(k, u, p, part, opp, margin, mProg(k, p), g, gp)
+            return SafeEnd(k, u, p, part, opp, margin, mProg(k, p, line), g, gp)
         }
-        val c0 = clear(listOf(mv.start))
-        val nose0 = noseSweep(mv.start, mv.start) < -HolderStop.CUT_TOL
-        if (nose0 || c0.slack(cut) < -HolderStop.OK_TOL) return end(-2, 0.0, c0, nose0 && c0.slack(cut) >= -HolderStop.OK_TOL)
-        if (lengthOf(mv) <= EPS) return null
-        val (a, b) = firstShort(mv, cut, nose = true) ?: return null
-        val c = clear(span(mv, a, b))
-        return end(-1, a, c, c.slack(cut) >= -HolderStop.OK_TOL)
+        val n0 = mNose0!!
+        val c0 = clear(listOf(n0), -2)
+        val nose0 = noseSweep(n0, n0) < -HolderStop.CUT_TOL
+        if (nose0 || c0.slack(cut) < -HolderStop.OK_TOL) return end(-2, mPose0(), 0.0, 0, c0, nose0 && c0.slack(cut) >= -HolderStop.OK_TOL)
+        for (b in mBlocks) {
+            if (lengthOf(b.nose) <= EPS) continue
+            val (a, e) = firstShort(b.nose, cut, -1, nose = true) ?: continue
+            val c = clear(span(b.nose, a, e), -1)
+            return end(-1, mPose(b, a), a, b.line, c, c.slack(cut) >= -HolderStop.OK_TOL)
+        }
+        return null
     }
 
     // ------------------------------------------------------------------ 여유
 
-    /** 노즈 중심을 [noses] 에 차례로 둔 움직임 전체(볼록 껍질)의 부분별 여유. 하나면 그 자세 */
-    fun clear(noses: List<Pt>): Clear {
-        val origin = Pt(0.0, 0.0)
-        fun sides(p: Piece): Pair<Gap, Gap> =
-            if (noses.size == 1) bore.sides(p, noses[0]) else bore.sides(Piece(hull(noses.flatMap { n -> p.pts.map { it + n } })), origin)
-        var ic = Gap.CLEAR
-        var io = Gap.CLEAR
-        for (p in tool.inserts) {
-            val (c, o) = sides(p)
-            if (c.m < ic.m) ic = c
-            if (o.m < io.m) io = o
+    /**
+     * 깎는 면 사슬(앞 요소 면)이 닿을 수 있는 마지막 요소. [plan] 이 안전 끝점 요소로 좁힌다 — 끝점이 그 면 앞이면 그 면은 끝내 깎지 않으니
+     * 예외가 아니다(사용자 결정 2026-10-28 '그 밖은 예외 없음', 10-28 검증). 검사기는 계획의 끝점 요소를 넣어 같은 기준으로 본다
+     */
+    internal var faceLimit = Int.MAX_VALUE
+        set(v) {
+            field = v
+            faces = facesUpTo(v)
         }
-        val (bc, bo) = sides(tool.body)
-        val zs = noses.map { it.z + tool.ref.z }
-        val turret = tool.bar.overhang?.let { o -> bore.face?.let { f -> Gap(zs.min() + o - f, f, 0.0) } } ?: Gap.CLEAR
-        val minBore = tool.bar.dMin?.let { d ->
-            val back = if (tool.reverse) tool.insZ else 0.0
-            bore.narrowest(zs.min() - back, zs.max() - back + tool.insZ).let { Gap(it.m - d / 2, it.z, it.x) }
-        } ?: Gap.CLEAR
-        return Clear(bc, bo, ic, io, turret, minBore)
-    }
+
+    private fun facesUpTo(limit: Int): List<BooleanArray?> = sol.drawing.segs.indices.map { bore.faceFlags(sol.drawing, sol.side, tool, it, limit) }
+
+    /** 경로 요소 k 의 깎는 면 깃발([Bore.faceFlags], 사슬은 [faceLimit] 까지) — 요소마다 한 번 */
+    private var faces: List<BooleanArray?> = facesUpTo(Int.MAX_VALUE)
+
+    /**
+     * 노즈 중심을 [noses] 에 차례로 둔 움직임 전체(볼록 껍질)의 부분별 여유([clearOf]). 하나면 그 자세. [k] = 그 움직임의 경로 요소 —
+     * 형상 요소(≥ 0)면 그 깎는 면을 바 · 최소 가공경 구간의 직선 거리에서 뺀다(진입 −2 · −1 은 예외 없음)
+     */
+    fun clear(noses: List<Pt>, k: Int): Clear = clearOf(bore, tool, noses, faces.getOrNull(k))
 
     /**
      * 쓴 글 검사는 Z 를 반 칸(0.0005 mm) 앞뒤로 옮긴 자세 가운데 좋은 쪽으로 본다: Z 반올림은 반경 여유로 재면 면 · 가파른 벽에서 크게 뛴다
@@ -407,20 +402,20 @@ internal class StopJob(
     private val textShifts = listOf(Pt(0.0, 0.0), Pt(HolderStop.GRID / 2, 0.0), Pt(-HolderStop.GRID / 2, 0.0))
 
     /** 쓴 글 자세(또는 움직임)의 여유: [textShifts] 가운데 [need] 에 가장 좋은 것 */
-    private fun textClear(noses: List<Pt>, need: Need): Clear = textShifts.map { sh -> clear(noses.map { it + sh }) }.maxBy { it.slack(need) }
+    private fun textClear(noses: List<Pt>, need: Need, k: Int): Clear = textShifts.map { sh -> clear(noses.map { it + sh }, k) }.maxBy { it.slack(need) }
 
     /**
      * 노즈 중심 움직임 [s] 를 따라 [need] 가 처음 깨지는 칸 (a, b) — 요소 비율, 폭 [HolderStop.STOP_TOL] mm 이하, a 까지는 안전.
      * 끝까지 안전하면 null. 구간 껍질의 여유가 기준 이상이면 그 구간 전체가 안전하다(직선은 정확, 원호는 안전 쪽) — 아니면 반으로 나눈다.
      * [shifts] 가 여럿이면(쓴 글) 그 가운데 하나로 구간 전체가 되면 된다
      */
-    private fun firstShort(s: Seg, need: Need, shifts: List<Pt> = NO_SHIFT, nose: Boolean = false): Pair<Double, Double>? {
+    private fun firstShort(s: Seg, need: Need, k: Int, shifts: List<Pt> = NO_SHIFT, nose: Boolean = false): Pair<Double, Double>? {
         val len = lengthOf(s)
         fun go(a: Double, b: Double): Pair<Double, Double>? {
             val pts = span(s, a, b)
             // nose = 노즈 원도 소재에 들어가지 않아야(직선 움직임만 — 기계 보정 진입)
             val noseOk = !nose || noseSweep(pointOn(s, a), pointOn(s, b)) >= -HolderStop.CUT_TOL
-            if (noseOk && shifts.any { sh -> clear(pts.map { it + sh }).slack(need) >= -HolderStop.OK_TOL }) return null
+            if (noseOk && shifts.any { sh -> clear(pts.map { it + sh }, k).slack(need) >= -HolderStop.OK_TOL }) return null
             if ((b - a) * len <= HolderStop.STOP_TOL) return a to b
             val m = (a + b) / 2
             return go(a, m) ?: go(m, b)
@@ -432,8 +427,8 @@ internal class StopJob(
     }
 
     /** 쓴 글 움직임 동안 가장 좁은 여유(보고용, [textShifts] 가운데 좋은 쪽): 직선은 정확, 원호는 0.05 mm 조각마다 덮는 껍질(조금 작게 = 안전 쪽) */
-    private fun least(ns: Seg, withInsCut: Boolean): Double {
-        fun of(pts: List<Pt>) = textShifts.maxOf { sh -> clear(pts.map { it + sh }).least(withInsCut) }
+    private fun least(ns: Seg, withInsCut: Boolean, k: Int): Double {
+        fun of(pts: List<Pt>) = textShifts.maxOf { sh -> clear(pts.map { it + sh }, k).least(withInsCut) }
         if (ns is Line) return of(listOf(ns.start, ns.end))
         val n = maxOf(1, ceil(lengthOf(ns) / 0.05).toInt(), ceil(4 * (ns as Arc).sweepRad() / PI).toInt())
         return (0 until n).minOf { of(span(ns, it.toDouble() / n, (it + 1).toDouble() / n)) }
@@ -611,7 +606,7 @@ internal class StopJob(
                 val o = offsetOf(b)
                 val to = if (i == w.read.size - 1) nHat else o.end
                 val m: Seg = if (o is Arc) Arc(from, to, o.center, o.cw) else Line(from, to)
-                if (lengthOf(m) > EPS && firstShort(m, text, textShifts) != null) short = true
+                if (lengthOf(m) > EPS && firstShort(m, text, j, textShifts) != null) short = true
                 from = to
             }
             if (short) {
@@ -650,9 +645,9 @@ internal class StopJob(
         for (i in from until until) {
             val s = read[i] ?: continue
             val ns = noseOf(s)
-            val (a, _) = firstShort(ns, text, textShifts) ?: continue
-            val tip = pointOn(ns, a) + tv
             val e = refs[i].element
+            val (a, _) = firstShort(ns, text, e, textShifts) ?: continue
+            val tip = pointOn(ns, a) + tv
             val seg = if (e < 0) Line(sol.entry, sol.program.segs.first().start) else sol.program.segs[e]
             return pos(e, paramOf(seg, tip))
         }
@@ -665,23 +660,26 @@ internal class StopJob(
     /**
      * 후퇴. [base] = 마지막 블록까지 쓴 글(새로), [stopTip] = 그 끝의 실제 가상 인선, [k] = 그 자리의 요소, [entryZ] = 그 프로그램의
      * 진입점 Z, [cancel] = 기계 보정(첫 후퇴 블록에 G40 — 공구는 블록 끝의 보정 자리에서 그 블록 끝점(G40 의 인선)으로 곧게 간다).
-     * ① X 를 축 쪽으로 빼고 Z 로 진입점 Z 까지: 안전 여유 이상 → ② 온 길을 거꾸로 → ① 여유 ≥ 0. 고른 것은 다시 읽은 글로 확인한다
+     * ① X 를 축 쪽으로 빼고 Z 로 진입점 Z 까지: 안전 여유 이상 → ② 온 길을 거꾸로 → ① 여유 ≥ 0. 고른 것은 다시 읽은 글로 확인한다.
+     * 여유는 깎는 동안과 같은 직선 거리 · 같은 예외(인서트가 깎던 벽은 겹치지 않음, 바 · 최소 가공경 구간은 깎던 면에 겹치지 않음 — 빼기는 그 자리의
+     * 요소 k, 거꾸로 후퇴는 되짚는 요소의 면). 벽에 붙어 끌리지 않는 것은 노즈 원([noseLeaves])이 본다
      */
     private fun retract(base: () -> Written, stopTip: Pt, k: Int, entryZ: Double, cancel: Boolean): Back? =
-        lift(base, stopTip, entryZ, cancel, safe) ?: reverse(base, stopTip, k, cancel) ?: lift(base, stopTip, entryZ, cancel, 0.0)
+        lift(base, stopTip, k, entryZ, cancel, safe) ?: reverse(base, stopTip, k, cancel) ?: lift(base, stopTip, k, entryZ, cancel, 0.0)
 
     /**
-     * ① X 빼기 δ(반경, 축 쪽) → G00 Z. Z 로 빼는 움직임은 X 만 옮기면 깎는 쪽 여유가 +δ, 맞은편이 −δ 라 δ = 0 일 때의 껍질 여유 A · B 로
-     * [level] 을 맞추는 δ 를 고른다: 깎는 쪽(바 · 인서트 날)이 level 이상인 δ ≥ lo = level − A, 맞은편이 level 이상인 δ ≤ hi = B − level.
+     * ① X 빼기 δ(반경, 축 쪽) → G00 Z. δ = 0 일 때 Z 로 빼는 움직임의 껍질 여유 A(바 깎는 쪽) · B(바 · 인서트 맞은편)로 [level] 을 맞추는 δ 를
+     * 고른다: 공구를 축 쪽으로 δ 옮기면 맞은편 직선 거리는 δ 보다 더 줄지 않으므로 δ ≤ hi = B − level 이면 맞은편이 level 이상이고,
+     * 깎는 쪽은 많아야 δ 늘어 δ ≥ lo = level − A 가 필요하다(충분하지는 않다 — 확인은 [liftBy]).
      * 후보는 δ = 0(Z 로만 — 단면 · 바닥 · 가파른 벽처럼 노즈가 +Z 로 바로 떨어질 때)과 max(안전 여유, [HolderStop.LIFT]) 를 [lo, hi] 에 넣은 것
      * (반올림 한 칸 여유). 후보마다 [liftBy] 가 다시 읽은 글로 부분 여유와 노즈 원([noseLeaves] — 벽에 끌리지 않음)을 확인한다.
-     * 빼기는 벽에 붙은 인서트 날에서 시작하므로 그 쪽은 보지 않는다. 기계 보정은 첫 후퇴 블록에 G40(빼지 않으면 G40 G00 Z)
+     * 인서트 깎는 쪽은 깎는 동안처럼 겹치지 않음만 본다(빼기 시작에 날이 벽에 붙어 있다). 기계 보정은 첫 후퇴 블록에 G40(빼지 않으면 G40 G00 Z)
      */
-    private fun lift(base: () -> Written, stopTip: Pt, entryZ: Double, cancel: Boolean, level: Double): Back? {
+    private fun lift(base: () -> Written, stopTip: Pt, k: Int, entryZ: Double, cancel: Boolean, level: Double): Back? {
         val n0 = stopTip - tv
         // 쓴 글 자세라 Z 반 칸 옮긴 것 가운데 좋은 쪽(값마다 따로 — δ 후보만 고르고 확인은 [liftBy] 가 한다)
-        val sweeps = textShifts.map { sh -> clear(listOf(n0 + sh, n0 + sh + Pt(entryZ - stopTip.z, 0.0))) }
-        val a = sweeps.maxOf { min(it.barCut.m, it.insCut.m) }
+        val sweeps = textShifts.map { sh -> clear(listOf(n0 + sh, n0 + sh + Pt(entryZ - stopTip.z, 0.0)), k) }
+        val a = sweeps.maxOf { it.barCut.m }
         val b = sweeps.maxOf { min(it.barOpp.m, it.insOpp.m) }
         if (sweeps.maxOf { min(it.turret.m, it.minBore.m) } < level) return null
         val lo = level - a
@@ -693,11 +691,11 @@ internal class StopJob(
         val l = max(lo, 0.0) + HolderStop.GRID
         val h = hi - HolderStop.GRID
         if (l <= h) tries += max(level, HolderStop.LIFT).coerceIn(l, h)
-        for (delta in tries) liftBy(base, stopTip, entryZ, cancel, level, delta)?.let { return it }
+        for (delta in tries) liftBy(base, stopTip, k, entryZ, cancel, level, delta)?.let { return it }
         return null
     }
 
-    private fun liftBy(base: () -> Written, stopTip: Pt, entryZ: Double, cancel: Boolean, level: Double, delta: Double): Back? {
+    private fun liftBy(base: () -> Written, stopTip: Pt, k: Int, entryZ: Double, cancel: Boolean, level: Double, delta: Double): Back? {
         val n0 = stopTip - tv
         val w = base()
         val nc = w.nc
@@ -712,67 +710,41 @@ internal class StopJob(
         }
         val read = readNc(nc.lines)
         if (read.size == from) return null
-        // 다시 읽은 후퇴: 첫 블록은 실제 인선(기계 보정은 블록 끝의 보정 자리)에서. 빼기는 인서트 깎는 쪽을 보지 않는다
+        // 다시 읽은 후퇴: 첫 블록은 실제 인선(기계 보정은 블록 끝의 보정 자리)에서. 축 쪽 빼기는 깎는 쪽(위) 소재에서 멀어지기만 해
+        // 인서트 깎는 쪽을 보지 않고, Z 로 빼는 움직임은 겹치지 않음만(쓴 글 반올림까지) 본다
         val p1 = read[from]!!.end
-        val firstNeed = Need(level - HolderStop.TEXT_TOL, if (delta > 0) Double.NEGATIVE_INFINITY else level - HolderStop.TEXT_TOL)
-        val first = textClear(listOf(n0, p1 - tv), firstNeed)
+        val firstNeed = Need(level - HolderStop.TEXT_TOL, if (delta > 0) Double.NEGATIVE_INFINITY else -HolderStop.TEXT_TOL)
+        val first = textClear(listOf(n0, p1 - tv), firstNeed, k)
         if (first.slack(firstNeed) < -HolderStop.OK_TOL) return null
-        var low = first.least(delta <= 0)
+        var low = first.least(false)
         // 노즈 원: 벽에 붙은 채 끌리거나 다른 소재에 닿지 않게
         var travel = 0.0
         if (!noseLeaves(n0, p1 - tv, travel, level)) return null
         travel += (p1 - tv - n0).length
         for (i in from + 1 until read.size) {
             val s = read[i] ?: continue
-            val zNeed = Need(level - HolderStop.TEXT_TOL, level - HolderStop.TEXT_TOL)
-            val c = textClear(listOf(s.start - tv, s.end - tv), zNeed)
+            val zNeed = Need(level - HolderStop.TEXT_TOL, -HolderStop.TEXT_TOL)
+            val c = textClear(listOf(s.start - tv, s.end - tv), zNeed, k)
             if (c.slack(zNeed) < -HolderStop.OK_TOL) return null
             if (!noseLeaves(s.start - tv, s.end - tv, travel, level)) return null
             travel += lengthOf(s)
-            low = min(low, c.least(true))
+            low = min(low, c.least(false))
         }
         return Back(nc.lines.toList(), from, RetractKind.LIFT, low)
     }
 
     // ------------------------------------------------------------------ 후퇴의 노즈 원
 
-    /** 소재 경계: 늘인 윤곽 + 입구 면(입구 점에서 위로) — 축 너머 맞은편은 [noseGap] 이 뒤집어 본다 */
-    private val boundary: List<Seg> = bore.ext.let { e ->
-        val a = e.first().start
-        val b = e.last().end
-        val mouth = if (a.z >= b.z) a else b
-        e + Line(mouth, Pt(mouth.z, mouth.x + 1e5))
-    }
-
-    /** 소재 경계 전체: 깎는 쪽 [boundary] 와 축 너머 맞은편(뒤집은 것) */
-    private val walls: List<Seg> = boundary + boundary.map { s ->
-        fun m(p: Pt) = Pt(p.z, -p.x)
-        when (s) {
-            is Line -> Line(m(s.start), m(s.end))
-            is Arc -> Arc(m(s.start), m(s.end), m(s.center), !s.cw)
-        }
-    }
-
     /**
      * 노즈 중심 [nose] 자세에서 바(볼록 다각형 — 앞은 주절삭날 연장선, 뒤는 공구대 면)와 소재 경계 사이 직선(유클리드) 거리와 소재 쪽 가장
-     * 가까운 점. 바 변 · 소재 요소 쌍마다 정확한 최솟값(만나면 0): 두 끝에서 상대까지, 원호는 중심에서 변의 법선 방향 ± R 점까지
+     * 가까운 점 — 깎는 면도 넣은 그대로의 거리(예 C 의 바 앞면 ~ 바닥 면 0.226). 기준은 [Clear] 의 바 여유(깎는 면을 뺀 것)다
      */
     fun barGap(nose: Pt): Pair<Double, Pt> {
         val poly = tool.body.pts.map { it + nose }
-        var best = Double.POSITIVE_INFINITY
-        var at = poly.first()
-        for (i in poly.indices) {
-            val e = Line(poly[i], poly[(i + 1) % poly.size])
-            if (lengthOf(e) <= EPS) continue
-            for (w in walls) {
-                val (d, p) = segGap(e, w)
-                if (d < best) {
-                    best = d
-                    at = p
-                }
-            }
-        }
-        return best to at
+        val c = clearance(poly, bore.walls, false, null)
+        val o = clearance(poly, bore.walls, true, null)
+        val g = if (o.m < c.m) o else c
+        return g.m to Pt(g.z, g.x)
     }
 
     /**
@@ -783,16 +755,15 @@ internal class StopJob(
         if (abs(a.x) >= bore.rho(a.z) || abs(b.x) >= bore.rho(b.z)) return -r
         val e = Line(a, b)
         var d = Double.POSITIVE_INFINITY
-        for (w in walls) d = min(d, if (lengthOf(e) <= EPS) distTo(w, a) else segGap(e, w).first)
+        for (w in bore.walls) d = min(d, if (lengthOf(e) <= EPS) distTo(w.seg, a) else segGap(e, w.seg).first)
         return d - r
     }
 
     /** 노즈 원과 소재 사이 거리(mm): 노즈 중심에서 소재 경계(맞은편 벽 포함)까지 − r. 중심이 소재 안이면 음수 */
     private fun noseGap(c: Pt): Double {
         if (abs(c.x) >= bore.rho(c.z)) return -r
-        val m = Pt(c.z, -c.x)
         var d = Double.POSITIVE_INFINITY
-        for (s in boundary) d = min(d, min(distTo(s, c), distTo(s, m)))
+        for (w in bore.walls) d = min(d, distTo(w.seg, c))
         return d - r
     }
 
@@ -817,22 +788,41 @@ internal class StopJob(
         }
     }
 
-    /** ② 온 길(가상 인선 경로)을 거꾸로 진입점까지. 기계 보정은 먼저 G40 으로 지금 인선 자리에 선다(공구는 거의 움직이지 않는다) */
+    /**
+     * ② 온 길(가상 인선 경로)을 거꾸로 진입점까지. 기계 보정은 먼저 G40 으로 지금 인선 자리에 선다(공구는 거의 움직이지 않는다).
+     * 그 G40 점의 0.001 반올림이 위험한 쪽이면(경로를 따라 끝점 너머 — 10-28 검증: 바 맞은편 1.26989 로 안전 여유 1.27 에 모자라 거꾸로 후퇴를
+     * 못 고르고 X 빼기로 좁게 빠졌다) 직접 보정 끝점처럼 한 칸씩 뒤로 물린 점([behind])으로도 본다
+     */
     private fun reverse(base: () -> Written, stopTip: Pt, k: Int, cancel: Boolean): Back? {
+        val targets = if (cancel) listOf(stopTip, behind(sol.program.segs[k], stopTip)).distinct() else listOf(stopTip)
+        for (at in targets) reverseFrom(base, stopTip, at, k, cancel)?.let { return it }
+        return null
+    }
+
+    /**
+     * [reverse] 하나: 기계 보정이면 G40 G01 [at](공구는 블록 끝의 보정 자리 [stopTip] 에서 그 점으로 곧게) 뒤 거꾸로.
+     * 줄마다 되짚는 요소의 깎는 면 예외를 쓴다(G40 줄은 멈춘 요소, 마지막 진입점으로 가는 줄은 진입 이동 — 예외 없음)
+     */
+    private fun reverseFrom(base: () -> Written, stopTip: Pt, at: Pt, k: Int, cancel: Boolean): Back? {
         val w = base()
         val nc = w.nc
         val from = nc.lines.size
         nc.element = RETRACT
+        val els = mutableListOf<Int>()
+        fun mark(e: Int) {
+            while (els.size < nc.lines.size - from) els += e
+        }
         if (cancel) {
             val n = nc.lines.size
-            nc.move("G40 G01", stopTip)
+            nc.move("G40 G01", at)
             // 노즈R 0 이면 보정 자리 = 명령점이라 움직임이 없어 줄이 빠진다 — G40 만 쓴다
             if (nc.lines.size == n) {
                 nc.lines += "G40"
                 nc.refs += NcRef(RETRACT, 0, 1)
             }
+            mark(k)
         }
-        var cur = stopTip
+        var cur = at
         for (j in k downTo 0) {
             val s = sol.program.segs[j]
             if (lengthOf(s) <= EPS) continue
@@ -840,20 +830,40 @@ internal class StopJob(
                 is Line -> nc.move("G01", s.start)
                 is Arc -> if ((cur - s.start).length > EPS) nc.arc(Arc(cur, s.start, s.center, !s.cw))
             }
+            mark(j)
             cur = s.start
         }
         nc.move("G01", sol.entry)
+        mark(-1)
         val read = readNc(nc.lines)
         var low = Double.POSITIVE_INFINITY
         for (i in from until read.size) {
             val s = read[i] ?: continue
+            val e = els[i - from]
             // G40 블록: 공구는 블록 끝의 보정 자리(실제 인선)에서 그 블록 끝점으로
             val m = if (nc.lines[i].startsWith("G40")) Line(stopTip, s.end) else s
             val ns = noseOf(m)
-            if (firstShort(ns, text, textShifts) != null) return null
-            low = min(low, least(ns, false))
+            if (firstShort(ns, text, e, textShifts) != null) return null
+            low = min(low, least(ns, false, e))
         }
         return Back(nc.lines.toList(), from, RetractKind.REVERSE, low)
+    }
+
+    /**
+     * 요소 [seg](가상 인선 경로) 위 점 [p] 를 0.001 로 쓴 점이 경로를 따라 p 를 넘지 않게: p 그대로, 아니면 p 에서 한 칸(0.001 mm)씩 뒤로 간 경로 위 점
+     * ([directCut] 의 반올림 되돌리기와 같은 규칙). 요소 시작까지 없으면 p
+     */
+    private fun behind(seg: Seg, p: Pt): Pt {
+        val t0 = paramOf(seg, p)
+        if (paramOf(seg, rounded(p)) <= t0 + 1e-12) return p
+        val len = lengthOf(seg)
+        var tt = min(t0, 1.0) - HolderStop.GRID / len
+        while (tt > 1e-12) {
+            val q = pointOn(seg, tt)
+            if (paramOf(seg, rounded(q)) <= t0 + 1e-12) return q
+            tt -= HolderStop.GRID / len
+        }
+        return p
     }
 
     private companion object {
@@ -872,78 +882,17 @@ internal class StopJob(
     }
 }
 
-/** 점 p 에서 요소까지 거리 */
-private fun distTo(s: Seg, p: Pt): Double = when (s) {
-    is Line -> {
-        val d = s.end - s.start
-        val l2 = d dot d
-        val t = if (l2 <= 0) 0.0 else (((p - s.start) dot d) / l2).coerceIn(0.0, 1.0)
-        (p - (s.start + d * t)).length
-    }
-    is Arc -> {
-        val v = p - s.center
-        val along = wrap2Pi((if (s.cw) -1 else 1) * (angleOf(v) - angleOf(s.start - s.center)))
-        if (v.length > EPS && along <= s.sweepRad()) abs(v.length - s.radius) else min((p - s.start).length, (p - s.end).length)
-    }
-}
-
-/** 점 p 가 원호 위(진행 방향 각이 원호 안)인가 */
-private fun onArc(a: Arc, p: Pt): Boolean =
-    wrap2Pi((if (a.cw) -1 else 1) * (angleOf(p - a.center) - angleOf(a.start - a.center))) <= a.sweepRad() + 1e-12
-
-/** 요소 위에서 점 p 와 가장 가까운 점 */
-private fun nearestOn(s: Seg, p: Pt): Pt = when (s) {
-    is Line -> {
-        val d = s.end - s.start
-        val l2 = d dot d
-        s.start + d * (if (l2 <= 0) 0.0 else (((p - s.start) dot d) / l2).coerceIn(0.0, 1.0))
-    }
-    is Arc -> {
-        val v = p - s.center
-        if (v.length > EPS && onArc(s, p)) s.center + v.unit() * s.radius else if ((p - s.start).length <= (p - s.end).length) s.start else s.end
-    }
-}
-
-/** 선분 [e] 와 요소 [w] 의 교점(없으면 null) */
-private fun crossing(e: Line, w: Seg): Pt? {
-    val d = e.end - e.start
-    fun onE(p: Pt) = ((p - e.start) dot d) / (d dot d) in 0.0..1.0
-    return when (w) {
-        is Line -> {
-            val f = w.end - w.start
-            val den = d cross f
-            if (abs(den) <= 1e-18) return null
-            val t = ((w.start - e.start) cross f) / den
-            val u = ((w.start - e.start) cross d) / den
-            if (t in 0.0..1.0 && u in 0.0..1.0) e.start + d * t else null
-        }
-        is Arc -> Intersect.lineCircle(e.start, d, w.center, w.radius).firstOrNull { onE(it) && onArc(w, it) }
-    }
-}
-
-/** 선분 [e] 와 요소 [w] 사이 가장 짧은 거리와 [w] 쪽 그 점(만나면 0) */
-private fun segGap(e: Line, w: Seg): Pair<Double, Pt> {
-    crossing(e, w)?.let { return 0.0 to it }
-    val cands = mutableListOf<Pair<Double, Pt>>()
-    for (p in listOf(e.start, e.end)) nearestOn(w, p).let { cands += (p - it).length to it }
-    for (q in listOf(w.start, w.end)) cands += distTo(e, q) to q
-    // 원호 안쪽 점: 이은 선이 변에 수직이고 원호의 반지름 방향인 곳 = 중심 ± R·(변의 법선)
-    if (w is Arc) {
-        val n = (e.end - e.start).unit().left()
-        for (s in listOf(1.0, -1.0)) {
-            val q = w.center + n * (w.radius * s)
-            if (onArc(w, q)) cands += distTo(e, q) to q
-        }
-    }
-    return cands.minBy { it.first }
-}
-
-/** 풀이의 NC 를 요소 [upTo] 앞까지 다시 쓴다 — RoundCalc 가 쓴 것과 같은 순서 · 같은 글(G00 진입 → G01 시작점 → 요소마다) */
+/**
+ * 풀이의 NC 를 요소 [upTo] 앞까지 다시 쓴다 — RoundCalc 가 쓴 것과 같은 순서 · 같은 글(G00 진입 → (띄운 진입이면 G01 lead) → G01 시작점 → 요소마다)
+ */
 private fun replay(sol: RoundSolution, upTo: Int): NcLines = NcLines().apply {
     element = -2
     move("G00", sol.entry)
     element = -1
+    sol.lead?.let { move("G01", it) }
     move("G01", sol.program.segs.first().start)
+    val entryRefs = refs.indices.filter { refs[it].element == -1 }
+    if (entryRefs.size == 2) for ((j, i) in entryRefs.withIndex()) refs[i] = NcRef(-1, j, 2)
     for (k in 0 until upTo) {
         element = k
         val s = sol.program.segs[k]

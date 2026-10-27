@@ -22,6 +22,7 @@ import com.bmt.nosecalc.screens.round.roundExample
 import com.bmt.nosecalc.screens.round.roundInnerExample
 import com.bmt.nosecalc.screens.round.roundInnerStep
 import com.bmt.nosecalc.screens.round.roundManualInnerMouth
+import com.bmt.nosecalc.screens.round.roundInnerBlindC
 import com.bmt.nosecalc.screens.round.roundInnerDomeA
 import com.bmt.nosecalc.screens.round.roundInnerSocketF
 import com.bmt.nosecalc.screens.round.roundManualBackBoring
@@ -137,7 +138,8 @@ class UiGoldenTest {
 
     /**
      * 내경 라운드와 보링바 간섭 목록 · 가공 가능 끝점 · 잘린 NC(스크린샷과 같은 상태): 손 계산 돔(바 없음 · 프리셋 A16R-SCLCR 09 — DMIN 20 이라 깎기 전에 멈춤),
-     * 관통 단차(안 닿음), 3점호 입구 R, calc-design 보링바 예 A(돔 + 바 A · 안전 여유 0.5 와 0) · F(소켓) · 뒤보링(DMIN 22)
+     * 관통 단차(안 닿음), 3점호 입구 R, calc-design 보링바 예 A(돔 + 바 A · 안전 여유 0.5 와 0) · C(막힌 단차 — 깎는 면 예외) · F(소켓) · 뒤보링(DMIN 22),
+     * 기계 보정 G00 을 띄운 내경 돔 팁 0(입구 벽을 따라 들어가는 직각 진입 — 사용자 결정 2026-10-28)
      */
     @Test
     fun roundInner() {
@@ -147,7 +149,9 @@ class UiGoldenTest {
         manual("round-manual-inner-holder", roundManualInnerMouth().withA16())
         roundType("round-inner-a-stop", roundInnerDomeA(), 3)
         roundType("round-inner-a-stop-safe0", roundInnerDomeA().apply { setHolder("safe", "0") }, 3)
+        roundType("round-inner-c-stop", roundInnerBlindC(), 5)
         roundType("round-inner-f-stop", roundInnerSocketF(), 4)
+        roundType("round-inner-b3-tip0", roundInnerExample(3).apply { tip = 0 }, 3)
         manual("round-manual-back-stop", roundManualBackBoring())
     }
 
@@ -235,18 +239,18 @@ class UiGoldenTest {
         golden(name, text)
     }
 
-    /** RoundTypeScreen: RoundState.input(type), 도면 좌표 NC = 노즈R 0 */
+    /** RoundTypeScreen: RoundState.input(type), 도면 좌표 NC = 기계 보정 프로그램(RoundCalc.machine — G00 만 노즈R · 팁에 맞게 띄움) */
     private fun roundType(name: String, s: RoundState, type: Int) {
         val input = s.input(type)
-        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution
+        val drawn = RoundCalc.machine(input).solution
         val tip = input.tip ?: NoseComp.standardTip(input.inner, false)
         roundText(name, RoundCalc.calc(input), drawn, input.noseR, if (input.inner) "내경 팁 T$tip" else "팁 T$tip", s.takeIf { input.inner }, faceAtStart = true)
     }
 
-    /** ManualScreen: RoundState.arc3(), 도면 좌표 NC = 노즈R 0 */
+    /** ManualScreen: RoundState.arc3(), 도면 좌표 NC = 기계 보정 프로그램(RoundCalc.machine) */
     private fun manual(name: String, s: RoundState) {
         val input = s.arc3()
-        roundText(name, RoundCalc.arc3(input), RoundCalc.arc3(input.copy(noseR = 0.0)).solution, input.noseR, "표준 팁 T${s.manualStandardTip()}", s.takeIf { input.inner }, faceAtStart = false)
+        roundText(name, RoundCalc.arc3(input), RoundCalc.machine(input).solution, input.noseR, "표준 팁 T${s.manualStandardTip()}", s.takeIf { input.inner }, faceAtStart = false)
     }
 
     /**

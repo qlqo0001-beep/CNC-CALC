@@ -42,6 +42,12 @@ internal fun RoundState.withBar(dia: String, f: String, shape: String, edge: Str
 /** calc-design.md 보링바 예 A: 내경 돔 바닥(Ø20 · 깊이 10, SR12.5, CR1) + 바 Ø16 · f 11 · C 9.67 · κr 95° — 구 원호에서 바가 맞은편 벽 */
 internal fun roundInnerDomeA(): RoundState = roundInnerExample(3).withBar("16", "11", "C", "9.67", "95")
 
+/**
+ * calc-design.md 보링바 예 C: 내경 형상 5 막힘(입구 Ø40 깊이 5 → SR25 → Ø30 깊이 6 → 바닥 면, 모서리 R 없음) + 바 A — 바닥 면을 깎는 동안 바 앞면이
+ * 면에서 0.226(깎는 면 예외 — 겹치지 않음만), 바 맞은편이 안전 여유에 닿는 X9 에서 멈춘다
+ */
+internal fun roundInnerBlindC(): RoundState = roundInnerStep().apply { through = false }.withBar("16", "11", "C", "9.67", "95")
+
 /** 보링바 예 F: 내경 소켓(형상 4, Ø10 · 깊이 5, SR8, CR1) + 바 Ø8 · f 4.5 · D 7.75 · κr 93° — 아래 인서트 조각이 맞은편 벽부터 */
 internal fun roundInnerSocketF(): RoundState = roundInnerExample(4).apply {
     setDim(4, "mainR", "8")

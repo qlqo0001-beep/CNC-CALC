@@ -56,6 +56,7 @@ import com.bmt.nosecalc.calc.Line
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RoundSolution
+import com.bmt.nosecalc.calc.Seg
 import com.bmt.nosecalc.screens.taper.circle
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.Arrow
@@ -289,8 +290,8 @@ internal class HolderShow(val bar: BoringBar, val result: HolderResult, val face
 
 /**
  * 형상 확인. 소재(빗금) 위에 도면(3.5dp), 그 위에 NC 의 프로그램 경로(1.8dp, 진행 화살). 진입점 □ 에서 첫 점까지는 NC 처럼 이송(G01)이라
- * 경로에 넣는다 — 라운드 NC 는 G00 으로 진입점에 온 뒤 끝까지 이송이라 그릴 급송 토막이 없다.
- * 기계 보정(comp = false) = 도면 좌표 프로그램(drawn, 노즈R 0 으로 푼 것) · 접점 ○ 번호. 직접 보정(comp) = 꺾임점의 노즈 원(옅게 칠함)과 가상 인선 꺾쇠 ·
+ * 경로에 넣는다(기계 보정의 띄운 진입이면 직각 진입점을 거쳐 — [entryMoves]) — 라운드 NC 는 G00 으로 진입점에 온 뒤 끝까지 이송이라 그릴 급송 토막이 없다.
+ * 기계 보정(comp = false) = 도면 좌표 프로그램(drawn, RoundCalc.machine — G00 만 노즈R · 팁에 맞게 띄움) · 접점 ○ 번호. 직접 보정(comp) = 꺾임점의 노즈 원(옅게 칠함)과 가상 인선 꺾쇠 ·
  * 노즈 중심(끊은 선) · 가상 인선 프로그램 · 보정점 • 번호. 원호 중심은 + 와 원호 가운데까지 끊은 지시선, 'R10.000 G02'(직접 보정은 합성 R
  * 'R10.000 → 10.400 G02') 알약 — 화면 반지름이 14dp 보다 작으면 뷰어가 뺀다. inner = 소재가 구멍 쪽(내경).
  * holder(내경 보링바)가 있으면 지름 전체 단면(맞은편 벽 · 1dp 뒤집은 도면)에 고른 자리의 바 · 인서트 단면(초록, 입구 끝면 너머는 자름),
@@ -349,7 +350,7 @@ internal fun RoundViewer(
             }
             add(ViewerLine(sol.center, c.viewNose, 1.4.dp, dashed = true))
         }
-        if (path != null) add(ViewerLine(Contour(listOf(Line(path.entry, path.program.segs.first().start)) + path.program.segs), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
+        if (path != null) add(ViewerLine(Contour(entryMoves(path) + path.program.segs), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
         retract?.let { add(ViewerLine(it, backCol, 1.8.dp, dotted = true, arrows = Arrow.Hollow)) }
         if (holder != null && at != null) {
             for (part in HolderCheck.outline(holder.bar, r, at, maxZ, backBoring(sol))) add(ViewerLine(part, c.drawHolder, 1.6.dp, fill = c.drawHolderFill))
@@ -436,20 +437,26 @@ private fun holderPoses(hits: List<HolderHit>, res: HolderResult, sol: RoundSolu
 }
 
 /**
+ * 진입점에서 첫 점까지의 이송: 한 줄, 기계 보정 프로그램이 띄운 진입이면([RoundSolution.lead]) 직각 진입점을 거친 두 줄(NC 그대로)
+ */
+internal fun entryMoves(path: RoundSolution): List<Seg> {
+    val first = path.program.segs.first().start
+    val lead = path.lead ?: return listOf(Line(path.entry, first))
+    return listOf(Line(path.entry, lead), Line(lead, first))
+}
+
+/**
  * 닿는 구간: 보이는 경로(path)의 그 요소에서 처음 · 마지막 닿는 곳 사이 — comp(직접 보정)는 가상 인선 점, 기계 보정은 노즈가 닿는 도면 점
- * (✕ 표와 같은 곳. 도면 좌표 경로의 요소는 보정 경로와 길이가 달라 길이 비율로는 어긋난다). 진입 이동(−1)은 그 프로그램 진입 이동 위 길이 비율로
- * (기계 보정은 그 프로그램 자기 보정 시작 블록에서 잰 비율 — [hitRows] 의 기계 보정 진입), 진입점에 선 자세(−2)는 점이라 없다
+ * (✕ 표와 같은 곳. 도면 좌표 경로의 요소는 보정 경로와 길이가 달라 길이 비율로는 어긋난다). 진입 이동(−1)은 직선 블록 위의 두 명령점 사이 —
+ * 직접 보정은 가상 인선, 기계 보정은 그 프로그램 자기 진입 블록(보정 시작 블록 · 띄운 진입이면 직각 진입 뒤 블록)의 명령점([hitRows] 의 기계 보정 진입).
+ * 진입점에 선 자세(−2)는 점이라 없다
  */
 internal fun contactBand(path: RoundSolution, h: HolderHit, comp: Boolean): Contour? {
-    if (h.element < 0) {
-        if (h.element == -2) return null
-        val a = path.entry
-        val d = path.program.segs.first().start - a
-        return Contour.polyline(a + d * h.fromT, a + d * h.toT)
-    }
-    val s = path.program.segs.getOrNull(h.element) ?: return null
+    if (h.element == -2) return null
     val a = if (comp) h.first.tip else h.first.drawn
     val b = if (comp) h.last.tip else h.last.drawn
+    if (h.element == -1) return Contour.polyline(a, b)
+    val s = path.program.segs.getOrNull(h.element) ?: return null
     return Contour(listOf(if (s is Arc) Arc(a, b, s.center, s.cw) else Line(a, b)))
 }
 

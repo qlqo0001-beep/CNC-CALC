@@ -10,6 +10,7 @@ import com.bmt.nosecalc.calc.HolderPlan
 import com.bmt.nosecalc.calc.HolderStop
 import com.bmt.nosecalc.calc.InsertShape
 import com.bmt.nosecalc.calc.Line
+import com.bmt.nosecalc.calc.RetractKind
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundInput
 import com.bmt.nosecalc.calc.RoundResult
@@ -40,7 +41,8 @@ import kotlin.time.TimeSource
  * - 인서트: 꼭짓점 0 · 날 0°/ε 마름모(T 는 삼각형)를 κr − 180° 돌리고, 두 날에 접하는 노즈 원호(0.25° 꺾은선)까지 포함한 다각형.
  *   바 띠(x_c = r − f, 지름 D) 밖으로 나온 곳만 인서트, 띠는 바. 바 앞 = 주절삭날 연장선(뒤보링은 인서트 끝에서 수직), 뒤 = 공구대 면
  * - 소재 ρ(z): 도면 + 입구 면 · 반직선 · 막힌 바닥을 따로 만들고 0.003 mm 격자 + 꺾임점에서 잰다(면 ±0.001 은 소재가 적은 쪽)
- * - 여유 = 반경 방향(설계 정의) — 깎는 쪽 ρ − x, 맞은편 ρ + x, 공구대 Z, 최소 가공경 = 헤드 구간의 가장 좁은 ρ − DMIN/2
+ * - 여유(10-28 사용자 결정 — 안전 여유는 직선 거리): 겹치면(반경 표본 < 0) 반경 겹침 — 깎는 쪽 ρ − x, 맞은편 ρ + x, 최소 가공경 = 헤드 구간의 가장 좁은
+ *   ρ − DMIN/2 —, 안 겹치면 독립 참조([EuclidRef])의 직선 거리(그 자세의 G40 요소가 깎는 면은 뺀다 — 참조의 따로 짠 예외), 공구대는 Z
  * - NC: 이 파일의 글 읽기. 직접 보정은 인선 − 팁 벡터, 기계 보정은 블록마다 도면을 공구 쪽으로 r 민 보정선을 교점으로 잇고
  *   시작 블록(G41/G42 를 사람이 넣는 둘째 줄) 끝 = 다음 블록 시작 법선, G40 앞 블록 끝 = 그 블록 끝 법선, G40 블록은 그 자리에서 끝점(인선)으로 곧게
  *
@@ -64,10 +66,10 @@ class SafeStopVerifyTest {
         val mouth = Arc3Input(inner = true, noseR = r, x1 = 30.0, z1 = 0.0, x2 = 22.929, z2 = -1.464, x3 = 20.0, z3 = -5.0, zClear = 1.0)
         fun type(name: String, i: RoundInput, bar: BoringBar) {
             val inp = i.copy(inner = true, noseR = r, zClear = 1.0)
-            for (safe in listOf(0.0, 0.2, 0.5, 1.0)) runCase(name, RoundCalc.calc(inp), RoundCalc.calc(inp.copy(noseR = 0.0)), true, bar, r, safe, dump = name == "A" && safe == 0.5)
+            for (safe in listOf(0.0, 0.2, 0.5, 1.0)) runCase(name, RoundCalc.calc(inp), RoundCalc.machine(inp), true, bar, r, safe, dump = name == "A" && safe == 0.5)
         }
         fun arc(name: String, a: Arc3Input, bar: BoringBar) {
-            for (safe in listOf(0.0, 0.2, 0.5, 1.0)) runCase(name, RoundCalc.arc3(a), RoundCalc.arc3(a.copy(noseR = 0.0)), false, bar, a.noseR, safe)
+            for (safe in listOf(0.0, 0.2, 0.5, 1.0)) runCase(name, RoundCalc.arc3(a), RoundCalc.machine(a), false, bar, a.noseR, safe)
         }
         type("A", dome, barA)
         type("B", dome.copy(d1 = 18.0), barA)
@@ -104,7 +106,7 @@ class SafeStopVerifyTest {
             }
             val bar = if (n % 2 == 0) wideBar(rnd, r) else fittedBar(rnd, r, sol)
             val safe2 = if (n % 2 == 0) 0.0 else sr3(rnd.nextDouble(0.05, 1.5))
-            for (safe in listOf(0.5, safe2)) runCase("TYPE ${inp.type} $inp", calc, RoundCalc.calc(inp.copy(noseR = 0.0)), true, bar, r, safe)
+            for (safe in listOf(0.5, safe2)) runCase("TYPE ${inp.type} $inp", calc, RoundCalc.machine(inp), true, bar, r, safe)
         }
         log.finish("무작위 내경 TYPE", started)
     }
@@ -124,7 +126,7 @@ class SafeStopVerifyTest {
             }
             val bar = if (n % 3 == 0) wideBar(rnd, r) else fittedBar(rnd, r, sol)
             val safe2 = if (n % 2 == 0) 0.0 else sr3(rnd.nextDouble(0.05, 1.5))
-            for (safe in listOf(0.5, safe2)) runCase("${if (reverse) "뒤보링" else "3점호"} $a", calc, RoundCalc.arc3(a.copy(noseR = 0.0)), false, bar, r, safe)
+            for (safe in listOf(0.5, safe2)) runCase("${if (reverse) "뒤보링" else "3점호"} $a", calc, RoundCalc.machine(a), false, bar, r, safe)
         }
         log.finish("무작위 3점호 · 뒤보링", started)
     }
@@ -232,13 +234,48 @@ private class SCase(
     val tool = STool(bar, r, mat.reverse)
     val tv = tipVec(sol.tip, r)
 
+    /**
+     * 직선 거리 독립 참조와 요소마다 깎는 면. 앞 요소 면은 계획의 형상 끝점 요소까지(끝내 깎지 않는 면은 예외가 아니다 — 10-28 검증) —
+     * S2 가 그 끝점이 이 기준의 첫 위반인지 본다
+     */
+    private val eref = EuclidRef(bar, r, mat.reverse)
+    private val eMat = EuclidRef.material(sol.drawing.segs, face)
+    private val faceUpTo = listOfNotNull(plan.end, plan.machineEnd).firstOrNull { it.element >= 0 }?.element ?: Int.MAX_VALUE
+    private val skips = sol.drawing.segs.indices.map { EuclidRef.faceLines(sol.drawing.segs, it, sol.side == Side.G41, eref.n1, eref.n2, faceUpTo) }
+
     /** G40 경로(가상 인선): 진입 이동(−1) + 요소(길이 0 은 뺀다) */
     val path: List<Pair<Int, El>> = (listOf(-1 to (Ln(vOfS(sol.entry), vOfS(sol.program.segs.first().start)) as El)) +
         sol.program.segs.withIndex().map { it.index to elOf(it.value) }).filter { it.second.length > 1e-9 }
     val cum = DoubleArray(path.size + 1).also { c -> for (i in path.indices) c[i + 1] = c[i] + path[i].second.length }
     val total = cum[path.size]
 
-    fun gaps(nose: V): SG = sgOf(mat, tool, nose)
+    /**
+     * 노즈 [nose] 자세의 표본 여유: 반경 표본이 겹치면(< −1e-9) 그 반경 겹침, 아니면 직선 거리 — [k] = 그 자세의 G40 요소(깎는 면 예외),
+     * 주지 않으면 노즈 경로에서 가장 가까운 요소(진입 −1 · −2 는 예외 없음)
+     */
+    fun gaps(nose: V, k: Int = elementNear(nose)): SG {
+        val rad = sgOf(mat, tool, nose)
+        val g = eref.gaps(nose, eMat.first, eMat.second, skips.getOrNull(k).orEmpty())
+        fun pick(radial: Double, eu: Double) = if (radial < -1e-9) radial else eu
+        return SG(pick(rad.barCut, g[2]), pick(rad.barOpp, g[3]), pick(rad.insCut, g[0]), pick(rad.insOpp, g[1]), rad.turret, pick(rad.minBore, g[4]))
+    }
+
+    /** 노즈 경로(G40 경로 − 팁 벡터)에서 [c] 와 가장 가까운 요소(같으면 뒤 요소) */
+    fun elementNear(c: V): Int {
+        var best = INFS
+        var k = -1
+        for ((e, el) in path) {
+            val d = el.shift(V(0.0, 0.0) - tv).dist(c)
+            if (d <= best + 1e-12) {
+                best = min(best, d)
+                k = e
+            }
+        }
+        return k
+    }
+
+    /** 경로 길이 s 의 요소 */
+    fun elementAt(s: Double): Int = path[(path.indices).firstOrNull { s <= cum[it + 1] } ?: (path.size - 1)].first
 
     fun pos(k: Int, t: Double): Double {
         val i = path.indexOfFirst { it.first == k }
@@ -280,7 +317,7 @@ private class SCase(
         if (machineEntry) machineEntryClaim()
         if (StopWarning.UNSAFE_AT_ENTRY in plan.warnings) {
             log.count("UNSAFE_AT_ENTRY")
-            val s0 = gaps(vOfS(sol.entry) - tv).slack(safe)
+            val s0 = gaps(vOfS(sol.entry) - tv, -2).slack(safe)
             if (s0 > TOL) log.bad(id, "S1 진입", "UNSAFE_AT_ENTRY 인데 표본 진입 자세 여유가 기준보다 ${sf(s0)} 넉넉")
             if (m != null && drawn != null) {
                 checkCut(m, drawn.nc, "기계 보정")
@@ -294,7 +331,7 @@ private class SCase(
             log.count(if (d != null) "끊음 ${d.retract}/${m?.retract} ${plan.warnings}" else "잘린 NC 없음 ${plan.warnings}")
             if (d != null) {
                 checkCut(d, sol.nc, "직접 보정")
-                followDirect(d.nc, d.retractFrom, "직접 보정")
+                followDirect(d.nc, d.retractFrom, "직접 보정", d)
                 // S5
                 val last = readS(d.nc)[d.retractFrom - 1].end
                 val sw = project(d.element, last)
@@ -332,11 +369,15 @@ private class SCase(
 
     // ------------------------------------------------------------------ 직접 보정: 인선 = 글 그대로
 
-    private fun followDirect(nc: List<String>, retractFrom: Int, name: String) {
+    /** [cut] = 잘린 NC(빼기 후퇴의 깎는 면 예외는 멈춘 요소 — 구현과 같다) */
+    private fun followDirect(nc: List<String>, retractFrom: Int, name: String, cut: HolderCut? = null) {
         val bl = readS(nc)
         val moves = mutableListOf<Mv>()
-        moves += Mv(0, Ln(bl[0].end - tv, bl[0].end - tv), false)
-        for (i in 1 until bl.size) bl[i].el?.let { moves += Mv(i, it.shift(V(0.0, 0.0) - tv), i >= retractFrom, bl[i].rapid) }
+        moves += Mv(0, Ln(bl[0].end - tv, bl[0].end - tv), false, k = -2)
+        for (i in 1 until bl.size) bl[i].el?.let {
+            val back = i >= retractFrom
+            moves += Mv(i, it.shift(V(0.0, 0.0) - tv), back, bl[i].rapid, k = if (back && cut?.retract == RetractKind.LIFT) cut.element else null)
+        }
         sweep(moves, nc, name)
     }
 
@@ -362,7 +403,15 @@ private class SCase(
         val alt = joinS(suOff, offs.first())
         if (alt != null && (alt - start).len > 2e-3) log.count("기계 보정 시작 모서리가 접하지 않음(형식 A 가정)")
         val solFirst = vOfS(sol.program.segs.first().start) - tv
-        if ((start - solFirst).len > 2e-3) log.bad(id, "S1 기계", "$name 시작 블록 끝 노즈 $start ≠ G40 프로그램 첫 노즈 $solFirst")
+        // 띄운 진입(진입이 두 줄)이면 둘째 줄(lead → 첫 점)도 보정 블록 — 첫 형상 블록의 보정선 시작이 G40 프로그램 첫 노즈
+        val shapeAt = d.ncRefs.indexOfFirst { it.element >= 0 } - 2
+        val firstShapeNose = offs.getOrNull(shapeAt)?.a ?: start
+        // 글을 다시 읽은 원호는 제어기처럼 끝점 · R(0.001 반올림)로 중심을 다시 구해 중심이 움직인다 — 그만큼(보정 시작점은 (1 + r/R) 배까지) 더 받는다.
+        // 작은 R 의 3점호(R1.8)에서 0.004 까지 나왔다(10-28 — 띄운 G00 으로 진입에서 멈추지 않게 된 사례)
+        val readFirst = blocks.getOrNull(shapeAt)
+        val exactFirst = elOf(d.program.segs.first())
+        val reread = if (readFirst is Ac && exactFirst is Ac) (readFirst.c - exactFirst.c).len * (1 + r / exactFirst.r) else 0.0
+        if ((firstShapeNose - solFirst).len > 2e-3 + reread) log.bad(id, "S1 기계", "$name 첫 형상 블록 보정선 시작 $firstShapeNose ≠ G40 프로그램 첫 노즈 $solFirst (다시 읽은 원호 중심 차이 몫 ${sf(reread)})")
         for (i in 0 until offs.size - 1) {
             val j = joinS(offs[i], offs[i + 1])
             if (j == null) {
@@ -375,8 +424,8 @@ private class SCase(
         joints += offs.last().b
         val moves = mutableListOf<Mv>()
         val n0 = bl[0].end - tv
-        moves += Mv(0, Ln(n0, n0), false, tag = "G00 점(G40 상태)")
-        moves += Mv(1, Ln(n0, start), false, tag = "G41 시작 블록")
+        moves += Mv(0, Ln(n0, n0), false, tag = "G00 점(G40 상태)", k = -2)
+        moves += Mv(1, Ln(n0, start), false, tag = "G41 시작 블록", k = -1)
         for (i in offs.indices) {
             val o = offs[i]
             val a = joints[i]
@@ -393,13 +442,15 @@ private class SCase(
             } else {
                 Ln(a, b)
             }
-            moves += Mv(2 + i, e, false)
+            // 띄운 진입의 둘째 줄(lead → 첫 점)은 진입 — 깎는 면 예외 없음
+            moves += Mv(2 + i, e, false, k = if (i < shapeAt) -1 else null)
         }
         val jEnd = joints.last()
         if (g40 < bl.size) {
             val p40 = bl[g40].end
-            moves += Mv(g40, Ln(jEnd, p40 - tv), true, bl[g40].rapid, "G40 취소 이동")
-            for (i in g40 + 1 until bl.size) bl[i].el?.let { moves += Mv(i, it.shift(V(0.0, 0.0) - tv), true, bl[i].rapid) }
+            val liftK = if (cut?.retract == RetractKind.LIFT) cut.element else null
+            moves += Mv(g40, Ln(jEnd, p40 - tv), true, bl[g40].rapid, "G40 취소 이동", k = liftK)
+            for (i in g40 + 1 until bl.size) bl[i].el?.let { moves += Mv(i, it.shift(V(0.0, 0.0) - tv), true, bl[i].rapid, k = liftK) }
         }
         if (cut != null) {
             // S5: 마지막 블록 끝 노즈(법선 보정)가 안전 끝점을 넘지 않는다 — 기계 보정 프로그램의 끝점(진입이 다르면 직접 보정과 따로)
@@ -419,8 +470,8 @@ private class SCase(
 
     /**
      * 기계 보정 진입에서 멈춘다는 주장(MACHINE_ENTRY): 이 파일의 모형(원래 도면 NC 를 읽어 G00 점 노즈 = 글의 G00 점 − 팁 벡터, 시작 블록은 그 노즈에서
-     * 첫 블록 보정선 시작으로 곧게)으로 G00 점 · 시작 블록을 0.01 mm 마다 재어, 표본 여유 − 기준의 최솟값이 TOL 안이어야 한다(넉넉한데 멈추면 틀림).
-     * 잘린 기계 보정 NC 는 없어야 한다
+     * 다음 블록 보정선 시작으로 곧게, 띄운 진입이면 둘째 줄(lead → 첫 점)은 그 보정선을 따라)으로 G00 점 · 진입 블록을 0.01 mm 마다 재어,
+     * 표본 여유 − 기준의 최솟값이 TOL 안이어야 한다(넉넉한데 멈추면 틀림). 잘린 기계 보정 NC 는 없어야 한다
      */
     private fun machineEntryClaim() {
         val dr = drawn ?: return log.bad(id, "S1 기계 진입 주장", "도면 좌표 풀이가 없는데 MACHINE_ENTRY")
@@ -432,16 +483,20 @@ private class SCase(
         val noStart = (vOfS(dr.entry) - vOfS(dr.program.segs.first().start)).len < 1e-9
         val firstBlock = bl.getOrNull(if (noStart) 1 else 2)?.el
         val start = firstBlock?.let { offsetS(it, sol.side == Side.G41, r).a } ?: n0
-        val mv = Ln(n0, start)
-        var worst = gaps(n0).slack(safe)
-        val n = max(1, ceil(mv.length / PSTEP).toInt())
-        for (q in 0..n) worst = min(worst, gaps(mv.at(q.toDouble() / n)).slack(safe))
+        val mvs = mutableListOf<El>(Ln(n0, start))
+        // 띄운 진입: 둘째 진입 줄의 보정선
+        if (dr.lead != null && firstBlock != null) mvs += offsetS(firstBlock, sol.side == Side.G41, r)
+        var worst = gaps(n0, -2).slack(safe)
+        for (mv in mvs) {
+            val n = max(1, ceil(mv.length / PSTEP).toInt())
+            for (q in 0..n) worst = min(worst, gaps(mv.at(q.toDouble() / n), -1).slack(safe))
+        }
         log.note("기계 보정 진입 표본 여유 − 기준 최솟값(MACHINE_ENTRY)", worst)
         if (worst > TOL) log.bad(id, "S1 기계 진입 주장", "MACHINE_ENTRY 인데 표본으로 G00 점 · 시작 블록이 기준보다 ${sf(worst)} 넉넉 · ${dr.nc.take(3)}")
     }
 
-    /** 움직임 하나: 노즈 중심 [e], 후퇴인가, G00 인가 */
-    class Mv(val line: Int, val e: El, val retract: Boolean, val rapid: Boolean = false, val tag: String = "")
+    /** 움직임 하나: 노즈 중심 [e], 후퇴인가, G00 인가. [k] = 깎는 면 예외의 G40 요소(null = 표본마다 노즈 경로에서 가장 가까운 요소) */
+    class Mv(val line: Int, val e: El, val retract: Boolean, val rapid: Boolean = false, val tag: String = "", val k: Int? = null)
 
     private fun sweep(moves: List<Mv>, nc: List<String>, name: String) {
         var worstShape = INFS
@@ -454,7 +509,8 @@ private class SCase(
             var dragFrom = -1.0
             for (q in 0..n) {
                 val c = mv.e.at(q.toDouble() / n)
-                val g = gaps(c)
+                val kk = mv.k ?: elementNear(c)
+                val g = gaps(c, kk)
                 if (!mv.retract) {
                     val s = g.slack(safe)
                     if (s < worstShape) worstShape = s
@@ -465,7 +521,7 @@ private class SCase(
                         val cat = if (mv.tag.isNotEmpty()) "S1 형상 · ${mv.tag}" else "S1 형상"
                         // 인서트 깎는 쪽(날이 깎는 벽)만 0.005 안으로 모자라면 쓴 글 반올림 — 원래 NC 도 같다(구현 결정, 문서). 정보로 센다
                         if (s == g.insCut && s >= -0.005) log.info(id, "$cat · 인서트 날 반올림 ≤ 0.005", msg)
-                        else if (zHalf(c) { it.slack(safe) } >= -TOL) log.info(id, "$cat · Z 반 칸(0.0005) 안", msg)
+                        else if (zHalf(c, kk) { it.slack(safe) } >= -TOL) log.info(id, "$cat · Z 반 칸(0.0005) 안", msg)
                         else log.bad(id, cat, msg)
                     }
                 } else {
@@ -475,7 +531,7 @@ private class SCase(
                         badBack = true
                         val msg = "$name ${mv.line + 1}번 줄 노즈 $c: 겹침 ${sf(s)} (${g.worstClear()}) · $nc"
                         if (s == g.insCut && s >= -0.005) log.info(id, "S1 후퇴 · 인서트 날 반올림 ≤ 0.005", msg)
-                        else if (zHalf(c) { it.clear() } >= -TOL) log.info(id, "S1 후퇴 · Z 반 칸(0.0005) 안", msg)
+                        else if (zHalf(c, kk) { it.clear() } >= -TOL) log.info(id, "S1 후퇴 · Z 반 칸(0.0005) 안", msg)
                         else log.bad(id, "S1 후퇴", msg)
                     }
                     // G00 이 깎은 벽을 스치나(인서트 깎는 쪽 여유 < 0.005 가 0.05 mm 넘게 이어짐)
@@ -497,15 +553,16 @@ private class SCase(
     }
 
     /** 쓴 글 Z 반올림 반 칸: Z ±0.0005 옮긴 자세 가운데 좋은 쪽(가파른 바 앞 · 면에서 반경 여유가 크게 뛴다 — 실제 거리는 0.0005 이하) */
-    private fun zHalf(c: V, f: (SG) -> Double): Double = listOf(-5e-4, 5e-4).maxOf { f(gaps(V(c.z + it, c.x))) }
+    private fun zHalf(c: V, k: Int, f: (SG) -> Double): Double = listOf(-5e-4, 5e-4).maxOf { f(gaps(V(c.z + it, c.x), k)) }
 
     // ------------------------------------------------------------------ S2
 
     private fun tooEarly(sEnd: Double) {
-        val here = gaps(noseAt(sEnd)).slack(safe)
+        fun at(s: Double) = gaps(noseAt(s), elementAt(s))
+        val here = at(sEnd).slack(safe)
         log.note("끝점 표본 여유 − 기준", here)
         if (sEnd + PSTEP <= total) {
-            val next = gaps(noseAt(sEnd + PSTEP)).slack(safe)
+            val next = at(sEnd + PSTEP).slack(safe)
             log.ratio("끝점 + 0.01 mm 가 표본 기준 아래", next < 0)
             if (next >= 0) log.info(id, "S2 일찍", "끝점 + 0.01 mm 도 표본 여유가 기준 이상(+${sf(next)}), 끝점에서 ${sf(here)}")
         }
@@ -514,12 +571,12 @@ private class SCase(
         var s = 0.0
         var found: Double? = null
         while (s <= total) {
-            if (gaps(noseAt(s)).slack(safe) < -1e-4) {
+            if (at(s).slack(safe) < -1e-4) {
                 var a = prev
                 var b = s
                 repeat(40) {
                     val mid = (a + b) / 2
-                    if (gaps(noseAt(mid)).slack(safe) < -1e-4) b = mid else a = mid
+                    if (at(mid).slack(safe) < -1e-4) b = mid else a = mid
                 }
                 found = if (s == 0.0) 0.0 else a
                 break
@@ -533,7 +590,7 @@ private class SCase(
         run {
             var q = sEnd
             while (q <= total) {
-                val g = gaps(noseAt(q))
+                val g = at(q)
                 restIns = min(restIns, g.insCut)
                 restSlackNoIns = min(restSlackNoIns, minOf(g.barCut, g.barOpp, g.insOpp, g.turret, g.minBore) - safe)
                 q += PSTEP / 2
@@ -543,11 +600,11 @@ private class SCase(
             id, "S2",
             "표본으로는 경로 끝까지 기준 이상인데 끝점이 ${sf(sEnd)} mm / 전체 ${sf(total)} mm · 남은 경로 표본 인서트 깎는 쪽 최소 ${restIns} · 나머지 부분 여유 − 기준 최소 ${sf(restSlackNoIns)}" +
                 " — 구현: 요소 ${plan.end?.element} ${plan.end?.part} 맞은편 ${plan.end?.opposite} " +
-                "여유 ${plan.end?.margin?.let(::sf)} · 표본(끝점): ${gaps(noseAt(sEnd)).let { "바 ${sf(it.barCut)}/${sf(it.barOpp)} 인서트 ${sf(it.insCut)}/${sf(it.insOpp)} 공구대 ${sf(it.turret)} DMIN ${sf(it.minBore)}" }}" +
-                " · 표본(+0.01): ${gaps(noseAt(min(total, sEnd + PSTEP))).let { "바 ${sf(it.barCut)}/${sf(it.barOpp)} 인서트 ${sf(it.insCut)}/${sf(it.insOpp)} 공구대 ${sf(it.turret)} DMIN ${sf(it.minBore)}" }}",
+                "여유 ${plan.end?.margin?.let(::sf)} · 표본(끝점): ${at(sEnd).let { "바 ${sf(it.barCut)}/${sf(it.barOpp)} 인서트 ${sf(it.insCut)}/${sf(it.insOpp)} 공구대 ${sf(it.turret)} DMIN ${sf(it.minBore)}" }}" +
+                " · 표본(+0.01): ${at(min(total, sEnd + PSTEP)).let { "바 ${sf(it.barCut)}/${sf(it.barOpp)} 인서트 ${sf(it.insCut)}/${sf(it.insOpp)} 공구대 ${sf(it.turret)} DMIN ${sf(it.minBore)}" }}",
         )
         log.note("표본 첫 위반 − 끝점(mm)", f - sEnd)
-        if (f < sEnd - PSTEP) log.bad(id, "S2 늦음", "표본은 ${sf(f)} mm 에서 기준이 깨지는데 끝점은 ${sf(sEnd)} mm (${gaps(noseAt(f + 1e-4)).worst(safe)})")
+        if (f < sEnd - PSTEP) log.bad(id, "S2 늦음", "표본은 ${sf(f)} mm 에서 기준이 깨지는데 끝점은 ${sf(sEnd)} mm (${at(f + 1e-4).worst(safe)})")
     }
 
     // ------------------------------------------------------------------ S3
@@ -611,8 +668,9 @@ private class SCase(
             }
             val sv = tv5 * e.length
             log.note("간섭 처음 표본 − 구현(mm)", sv - implS)
-            // 최소 가공경 구간 끝이 면(바닥 · 단) 위에 있으면 표본은 면 ±0.001 을 소재 없는 쪽으로 봐서 늦게 닿는다(표본 한계) — 정보로
-            val faceEdge = hit.part == HolderPart.MIN_BORE && m(hit.fromT) > 0 && sv > implS && sv - implS < 0.1
+            // 최소 가공경 구간 끝이 면(바닥 · 단) 위에 있으면 표본은 면 ±0.001 을 소재 없는 쪽으로 봐서 늦게 닿는다(표본 한계) — 정보로.
+            // 그 자리 표본이 겹치지 않음(≥ 0 — 10-28 부터 안 겹치면 직선 거리라 면에 붙은 구간은 꼭 0)이면 그렇다
+            val faceEdge = hit.part == HolderPart.MIN_BORE && m(hit.fromT) >= 0 && sv > implS && sv - implS < 0.1
             if (abs(sv - implS) > 0.01) {
                 // 표본 오차인지: 구현 자리에서 표본 여유
                 val msg = "요소 $k ${hit.part}: 처음 닿는 곳 구현 ${sf(implS)} · 표본 ${sf(sv)} mm (구현 자리 표본 여유 ${sf(m(hit.fromT))})"
@@ -639,35 +697,50 @@ private class SCase(
                     if ((back - nose).len > 0.01) log.bad(id, "S3 기계", "요소 $k ${hit.part}: 기계 좌표 $pm 에서 블록을 끝내면 노즈 $back ≠ 닿는 자세 $nose")
                 }
             } else {
-                // 진입 이동(−1): 도면 좌표 프로그램의 시작 블록(G41/G42) 위에서 노즈가 이 자세가 되는 곳
+                // 진입 이동(−1): 도면 좌표 프로그램의 진입 블록 위에서 노즈가 이 자세가 되는 곳. 시작 블록 동안 노즈는 다음 블록 보정선의 시작으로 곧게,
+                // 띄운 진입(lead)이면 둘째 줄(lead → 첫 점) 동안 그 보정선을 따라
                 val d0 = vOfS(drawn.entry)
                 val d1 = vOfS(drawn.program.segs.first().start)
-                val startNose = offsetS(elOf(drawn.program.segs.first()), sol.side == Side.G41, r).a
                 val a = d0 - tv
-                val dir = startNose - a
+                val lead = drawn.lead?.let(::vOfS)
+                // (명령 시작, 명령 끝, 노즈 시작, 노즈 끝)
+                val blocks = if (lead == null) {
+                    listOf(listOf(d0, d1, a, offsetS(elOf(drawn.program.segs.first()), sol.side == Side.G41, r).a))
+                } else {
+                    val along = offsetS(Ln(lead, d1), sol.side == Side.G41, r)
+                    listOf(listOf(d0, lead, a, along.a), listOf(lead, d1, along.a, along.b))
+                }
+                val dir = blocks[0][3] - a
                 val tt = (((nose - a) dot dir) / (dir dot dir)).coerceIn(0.0, 1.0)
                 val onLine = (a + dir * tt - nose).len
-                val mine = d0 + (d1 - d0) * tt
+                val mine = d0 + (blocks[0][1] - d0) * tt
                 log.note("진입 이동 기계 좌표 차이(mm)", (mine - pm).len)
-                // 기계 보정 프로그램 자기 경로(G00 점 → 시작 블록에서 노즈가 보정 자리로 곧게)에서 그 부분이 처음 닿는 명령점(표본)
-                fun mm(u: Double) = gaps(a + dir * u).part(hit.part)
-                val nn = max(1, ceil(dir.len / PSTEP).toInt())
-                var u5: Double? = if (mm(0.0) < -TOUCH) 0.0 else null
-                if (u5 == null) {
-                    for (q in 1..nn) {
-                        if (mm(q.toDouble() / nn) < -TOUCH) {
-                            var lo = (q - 1).toDouble() / nn
-                            var hi = q.toDouble() / nn
-                            repeat(40) {
-                                val mid = (lo + hi) / 2
-                                if (mm(mid) < -TOUCH) hi = mid else lo = mid
+                // 기계 보정 프로그램 자기 경로에서 그 부분이 처음 닿는 명령점(표본)
+                var own: V? = null
+                for (b in blocks) {
+                    val nd = b[3] - b[2]
+                    fun mm(u: Double) = gaps(b[2] + nd * u, -1).part(hit.part)
+                    val nn = max(1, ceil(nd.len / PSTEP).toInt())
+                    var u5: Double? = if (mm(0.0) < -TOUCH) 0.0 else null
+                    if (u5 == null) {
+                        for (q in 1..nn) {
+                            if (mm(q.toDouble() / nn) < -TOUCH) {
+                                var lo = (q - 1).toDouble() / nn
+                                var hi = q.toDouble() / nn
+                                repeat(40) {
+                                    val mid = (lo + hi) / 2
+                                    if (mm(mid) < -TOUCH) hi = mid else lo = mid
+                                }
+                                u5 = hi
+                                break
                             }
-                            u5 = hi
-                            break
                         }
                     }
+                    if (u5 != null) {
+                        own = b[0] + (b[1] - b[0]) * u5
+                        break
+                    }
                 }
-                val own = u5?.let { d0 + (d1 - d0) * it }
                 if (own != null) log.note("진입 이동 기계 좌표 − 기계 프로그램 자기 첫 닿음(mm)", (own - pm).len)
                 if (own == null || (own - pm).len > 0.01) {
                     log.bad(

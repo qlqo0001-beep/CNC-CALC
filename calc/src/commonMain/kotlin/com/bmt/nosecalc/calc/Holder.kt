@@ -61,8 +61,9 @@ data class HolderHit(
 )
 
 /**
- * 검사 결과. [hits] 는 요소 순, 한 요소 안은 처음 닿는 곳 순. [barClear] = 경로 전체에서 바와 구멍 벽 사이 가장 좁은 반경 여유
- * (닿으면 음수, 같으면 앞의 것)와 그 자세 · 요소. 검사를 안 했으면 [skip] 이고 나머지는 비었다
+ * 검사 결과. [hits] 는 요소 순, 한 요소 안은 처음 닿는 곳 순(닿음 · 깊이는 반경 겹침). [barClear] = 경로 전체에서 바와 소재 사이 가장 짧은
+ * 직선 거리(그 요소의 깎는 면은 뺀다 — 안전 기준과 같다. 닿으면 반경 겹침으로 음수, 같으면 앞의 것)와 그 자세 · 요소.
+ * 검사를 안 했으면 [skip] 이고 나머지는 비었다
  */
 data class HolderResult(
     val skip: HolderSkip?,
@@ -74,7 +75,7 @@ data class HolderResult(
 
 /**
  * 보링바 간섭 검사. 축을 지나는 ZX 단면에서 바 · 인서트 단면([BarShape])이 소재 {|x| ≥ ρ(z)}([Bore] — 깎은 벽과 축 너머 맞은편 벽)에
- * 들어가는지 G40 경로를 따라 본다. 둥근 바 자루는 이 단면으로 정확하다: 바 원판에서 축과 가장 먼 점이 y = 0 에 있어 원판이 덮는 반경이
+ * 들어가는지 G40 경로를 따라 본다(겹침은 반경, 떨어진 거리는 직선 — [clearOf]). 둥근 바 자루는 이 단면으로 정확하다: 바 원판에서 축과 가장 먼 점이 y = 0 에 있어 원판이 덮는 반경이
  * 단면과 같다. 인서트 아래쪽 · 헤드 앞 모양 · 인서트 기울기는 단면으로 어림하고 최소 가공경(DMIN)으로만 본다.
  * 진입점까지 오는 길 · 가공 뒤 빠지는 길, 덜 깎은 소재(황삭)는 보지 않는다
  */
@@ -121,6 +122,7 @@ object HolderCheck {
         if (!bore.monotone) return skipped(HolderSkip.NOT_MONOTONE)
         val tool = BarShape(bar, r, bore.reverse)
         val tv = NoseComp.tipVector(tip, r)
+        val side = Side.of(true, bore.reverse)
         val moves = (listOf<Pair<Int, Seg>>(-1 to Line(entry, program.segs.first().start)) + program.segs.withIndex().map { it.index to it.value })
             .filter { lengthOf(it.second) > EPS }
         val h = max(STEP, moves.sumOf { lengthOf(it.second) } / 20000)
@@ -134,8 +136,9 @@ object HolderCheck {
             val n = if (seg == null) 0 else max(1, ceil(lengthOf(seg) / h).toInt())
             val ts = DoubleArray(n + 1) { if (n == 0) 0.0 else it.toDouble() / n }
             fun at(t: Double) = if (seg == null) entry else pointOn(seg, t)
+            val face = bore.faceFlags(drawing, side, tool, k)
             val poses = ts.map { pose(at(it), k) }
-            val ms = poses.map { margins(bore, tool, it.nose) }
+            val ms = poses.map { margins(bore, tool, it.nose, face) }
             for ((j, m) in ms.withIndex()) {
                 if (m.bar.m < clear) {
                     clear = m.bar.m
@@ -195,8 +198,18 @@ object HolderCheck {
         return (t.inserts + t.body).flatMap { bore.overlap(it, nose, maxZ) }
     }
 
-    /** 한 자세(노즈 중심 [nose])의 부분별 여유 — 검사 고리 */
-    internal fun margins(bore: Bore, tool: BarShape, nose: Pt): Margins {
+    /**
+     * 한 자세(노즈 중심 [nose])의 부분별 여유 — 검사 고리. 겹치면 반경 겹침(음수), 아니면 직선 거리([clearOf]).
+     * [face] = 깎는 면 깃발([Bore.faceFlags], 없으면 null) — 바 · 최소 가공경 구간의 직선 거리에서 뺀다
+     */
+    internal fun margins(bore: Bore, tool: BarShape, nose: Pt, face: BooleanArray? = null): Margins {
+        val c = clearOf(bore, tool, listOf(nose), face)
+        fun low(a: Gap, b: Gap) = if (b.m < a.m) b else a
+        return Margins(low(c.insCut, c.insOpp), low(c.barCut, c.barOpp), c.turret, c.minBore)
+    }
+
+    /** 한 자세의 부분별 반경 여유(10-27 까지의 정의 그대로 — 겹침 깊이 · 독립 검증의 반경 표본과 대조용) */
+    internal fun radialMargins(bore: Bore, tool: BarShape, nose: Pt): Margins {
         val ref = nose + tool.ref
         val insert = tool.inserts.map { bore.gap(it, nose) }.minByOrNull { it.m } ?: Gap.CLEAR
         val turret = tool.bar.overhang?.let { o -> bore.face?.let { Gap(ref.z + o - it, it, 0.0) } } ?: Gap.CLEAR
@@ -328,12 +341,18 @@ internal class BarShape(val bar: BoringBar, r: Double, val reverse: Boolean) {
     /** 정방향 헤드 길이: 가상 인선에서 인서트 뒤 끝 · 바 앞 끝까지 Z */
     val head: Double
 
+    /** 노즈 중심에서 주절삭날 접점 T1 · 끝날 접점 T2 방향(단위, 뒤보링은 Z 로 뒤집음) — 깎는 면이 어느 날 쪽인가([Bore.faceFlags]) */
+    val n1: Pt
+    val n2: Pt
+
     init {
         val k = rad(bar.kappaDeg)
         val eps = rad(bar.shape.epsDeg)
         val kp = PI - k - eps
         val e1 = Pt(-cos(k), -sin(k))
         val e2 = Pt(cos(kp), -sin(kp))
+        n1 = Pt(if (reverse) sin(k) else -sin(k), cos(k))
+        n2 = Pt(if (reverse) -sin(kp) else sin(kp), cos(kp))
         val corner = (e1 + e2).unit() * (-r / sin(eps / 2))
         val l = bar.edge
         val fwd = listOf(Pt(-sin(k), cos(k)) * r, corner + e1 * l) +
@@ -382,6 +401,9 @@ internal class Bore(drawing: Contour, faceAtStart: Boolean) {
     private val spans: List<Span>
     private val breaks: DoubleArray
 
+    /** 소재 경계 토막(깎는 쪽 사슬 다음에 거울 사슬) — 직선 거리 · 후퇴의 노즈 원 · 바와 소재 직선 거리 */
+    internal val walls: List<Wall>
+
     init {
         val first = drawing.segs.first()
         val last = drawing.segs.last()
@@ -400,6 +422,42 @@ internal class Bore(drawing: Contour, faceAtStart: Boolean) {
         face = if (faceAtStart || mouth.x <= EPS || mouthRay == null || mouthRay.start.z == mouthRay.end.z) zTop else null
         spans = ext.mapNotNull(::spanOf).sortedBy { it.z0 }
         breaks = (spans.flatMap { listOf(it.z0, it.z1) } + zTop + zMin).sorted().distinct().toDoubleArray()
+        // 소재 경계: 늘인 윤곽 + 입구 면(입구 점에서 위로), 그리고 축 너머 거울(맞은편 벽)
+        val up = ext + Line(mouth, Pt(mouth.z, mouth.x + REACH))
+        walls = up.map { Wall(it, false) } + up.map { Wall(mirrorX(it), true) }
+    }
+
+    /**
+     * 경로 요소 k 의 깎는 면 — 공구(바 · 인서트 · 최소 가공경 구간)는 이 토막들에 겹치지 않음만 본다(사용자 결정 2026-10-28 의 예외, 설계 문서
+     * "안전 기준"). 면 = 도면 요소 k 가 직선이고 주절삭날 쪽인 것: 노즈가 그 직선에 닿는 방향 u(= −공구 쪽 법선)가 끝날 접점 방향
+     * [BarShape.n2] 보다 주절삭날 접점 방향 [BarShape.n1] 에 가깝다(u·n1 > u·n2 — 막힌 바닥 · 단처럼 이송 앞을 막는 면, 구멍 벽은 아님).
+     * 앞으로 깎을 요소 k+1, k+2, … 도 이음이 볼록하지 않은(공구 쪽으로 꺾이거나 접해 이어지는) 동안 같은 조건이면 그 직선도 — 노즈가 그 이음들을 지나
+     * 들어가 깎을 면이라 바 앞면이 다가가는 것은 그 면을 깎을 때와 같은 공구 모양 탓이다(예 C: 구멍 벽 끝에서 바 앞면이 바닥 면 0.226 앞까지 간다,
+     * 모서리 R 과 바닥 사이 짧은 구멍이 끼면 둘 앞). 볼록한 이음에서 멈춘다. 앞 요소는 [upTo] 까지만 — 안전 끝점이 그 면 앞이면 그 면은 끝내 깎지
+     * 않으니 예외가 아니다([StopJob.plan] 이 끝점 요소로 좁힌다, 10-28 검증). 그 직선(들) 위에 놓인 소재 경계 토막(같은 직선의 이웃 · 축 너머 거울 —
+     * 막힌 바닥 단면의 맞은편 반쪽)에 깃발. 원호 요소 · 진입(−2 · −1) · 그 밖은 예외 없음(null)
+     */
+    internal fun faceFlags(drawing: Contour, side: Side, tool: BarShape, k: Int, upTo: Int = Int.MAX_VALUE): BooleanArray? {
+        if (k < 0 || k >= drawing.segs.size) return null
+        val sign = if (side == Side.G41) 1.0 else -1.0
+        fun mainFacing(s: Seg): Line? {
+            if (s !is Line || (s.end - s.start).length <= EPS) return null
+            val u = (s.end - s.start).unit().left() * -sign
+            return s.takeIf { (u dot tool.n1) > (u dot tool.n2) }
+        }
+        val lines = listOfNotNull(mainFacing(drawing.segs[k])).toMutableList()
+        var j = k
+        while (j + 1 < drawing.segs.size && j + 1 <= upTo) {
+            val cur = drawing.segs[j]
+            val next = drawing.segs[j + 1]
+            if (lengthOf(cur) > EPS && lengthOf(next) > EPS && (tangent(cur, cur.end) cross tangent(next, next.start)) * sign < -1e-9) break
+            mainFacing(next)?.let { lines += it }
+            j++
+        }
+        if (lines.isEmpty()) return null
+        fun on(l: Line, p: Pt) = abs((p - l.start) cross (l.end - l.start).unit()) <= 1e-6
+        val flags = BooleanArray(walls.size) { i -> (walls[i].seg as? Line)?.let { w -> lines.any { on(it, w.start) && on(it, w.end) } } == true }
+        return flags.takeIf { f -> f.any { it } }
     }
 
     /** ρ(z), 공기면 +∞ — 검사 고리 */
@@ -635,6 +693,92 @@ internal class Bore(drawing: Contour, faceAtStart: Boolean) {
 }
 
 private fun rad(deg: Double) = deg * PI / 180
+
+/** 축 너머 거울(x → −x). 원호는 방향이 바뀐다 */
+internal fun mirrorX(s: Seg): Seg {
+    fun m(p: Pt) = Pt(p.z, -p.x)
+    return when (s) {
+        is Line -> Line(m(s.start), m(s.end))
+        is Arc -> Arc(m(s.start), m(s.end), m(s.center), !s.cw)
+    }
+}
+
+/**
+ * 노즈 중심을 [noses] 에 차례로 둔 움직임 전체의 부분별 여유(조각마다 그 자리들의 볼록 껍질 — 하나면 그 자세, 직선 움직임이면 정확,
+ * 원호를 덮는 점들이면 안전 쪽). 조각 · 벽마다 반경 여유가 −[HolderStop.OK_TOL] 아래(겹침)면 그 반경 여유(음수 — 겹침 깊이는 반경 그대로),
+ * 아니면 직선 거리([clearance]). [face] 깃발 토막(깎는 면, [Bore.faceFlags])은 직선 거리에서 뺀다 — 그 면에는 겹치지 않음만 보고(반경 여유가 본다),
+ * 면의 끝 모서리는 이웃 토막의 끝이라 그대로 잰다. 공구대는 Z(입구 면과 공구대 면 사이 = 직선 거리)
+ */
+internal fun clearOf(bore: Bore, tool: BarShape, noses: List<Pt>, face: BooleanArray?): Clear {
+    val origin = Pt(0.0, 0.0)
+    fun sides(p: Piece, skip: BooleanArray?): Pair<Gap, Gap> {
+        val poly = if (noses.size == 1) p.pts.map { it + noses[0] } else hull(noses.flatMap { n -> p.pts.map { it + n } })
+        val (rc, ro) = if (noses.size == 1) bore.sides(p, noses[0]) else bore.sides(Piece(poly), origin)
+        val cut = if (rc.m < -HolderStop.OK_TOL) rc else clearance(poly, bore.walls, false, skip)
+        val opp = if (ro.m < -HolderStop.OK_TOL) ro else clearance(poly, bore.walls, true, skip)
+        return cut to opp
+    }
+    var ic = Gap.CLEAR
+    var io = Gap.CLEAR
+    for (p in tool.inserts) {
+        val (c, o) = sides(p, face)
+        if (c.m < ic.m) ic = c
+        if (o.m < io.m) io = o
+    }
+    val (bc, bo) = sides(tool.body, face)
+    val zs = noses.map { it.z + tool.ref.z }
+    val turret = tool.bar.overhang?.let { o -> bore.face?.let { f -> Gap(zs.min() + o - f, f, 0.0) } } ?: Gap.CLEAR
+    // 헤드 구간: 인선에서 인서트 끝까지(뒤보링은 −Z 쪽), 축 둘레 지름 DMIN — 반경 겹침은 가장 좁은 ρ − DMIN/2, 아니면 직사각형과 소재의 직선 거리
+    val minBore = tool.bar.dMin?.let { d ->
+        val back = if (tool.reverse) tool.insZ else 0.0
+        val lo = zs.min() - back
+        val hi = zs.max() - back + tool.insZ
+        val radial = bore.narrowest(lo, hi).let { Gap(it.m - d / 2, it.z, it.x) }
+        if (radial.m < -HolderStop.OK_TOL) {
+            radial
+        } else {
+            clearance(listOf(Pt(lo, -d / 2), Pt(hi, -d / 2), Pt(hi, d / 2), Pt(lo, d / 2)), bore.walls, false, face)
+        }
+    } ?: Gap.CLEAR
+    return Clear(bc, bo, ic, io, turret, minBore)
+}
+
+/** 안전 기준: [part] = 바 · 공구대 · 최소 가공경 · 인서트 맞은편 쪽, [insCut] = 인서트 깎는 쪽(−∞ 면 보지 않음) */
+internal class Need(val part: Double, val insCut: Double)
+
+/**
+ * 한 자세(또는 한 움직임 전체)의 부분별 여유([clearOf]) — 바 · 인서트는 깎는 쪽 벽과 맞은편 벽을 따로.
+ * 겹치면 반경 겹침(음수), 아니면 직선 거리(바 · 최소 가공경 구간은 깎는 면을 뺀 것)
+ */
+internal class Clear(val barCut: Gap, val barOpp: Gap, val insCut: Gap, val insOpp: Gap, val turret: Gap, val minBore: Gap) {
+    /** 기준까지 남은 양의 최솟값. 0 이상이면 안전 */
+    fun slack(n: Need): Double = minOf(barCut.m - n.part, barOpp.m - n.part, insOpp.m - n.part, turret.m - n.part, minBore.m - n.part, insCut.m - n.insCut)
+
+    /** 기준까지 남은 양이 가장 작은 (부분, 맞은편 벽) */
+    fun worst(n: Need): Pair<HolderPart, Boolean> = listOf(
+        Triple(HolderPart.BAR, false, barCut.m - n.part),
+        Triple(HolderPart.BAR, true, barOpp.m - n.part),
+        Triple(HolderPart.INSERT, false, insCut.m - n.insCut),
+        Triple(HolderPart.INSERT, true, insOpp.m - n.part),
+        Triple(HolderPart.TURRET, false, turret.m - n.part),
+        Triple(HolderPart.MIN_BORE, false, minBore.m - n.part),
+    ).minBy { it.third }.let { it.first to it.second }
+
+    /** 그 부분 · 벽의 여유 */
+    fun margin(part: HolderPart, opposite: Boolean): Double = gap(part, opposite).m
+
+    /** 그 부분 · 벽의 여유와 그 소재 쪽 점 */
+    fun gap(part: HolderPart, opposite: Boolean): Gap = when (part) {
+        HolderPart.BAR -> if (opposite) barOpp else barCut
+        HolderPart.INSERT -> if (opposite) insOpp else insCut
+        HolderPart.TURRET -> turret
+        HolderPart.MIN_BORE -> minBore
+    }
+
+    /** 가장 좁은 여유. [withInsCut] = 인서트 깎는 쪽도 */
+    fun least(withInsCut: Boolean): Double =
+        minOf(barCut.m, barOpp.m, insOpp.m, turret.m, minBore.m, if (withInsCut) insCut.m else Double.POSITIVE_INFINITY)
+}
 
 internal fun lengthOf(s: Seg): Double = when (s) {
     is Line -> (s.end - s.start).length

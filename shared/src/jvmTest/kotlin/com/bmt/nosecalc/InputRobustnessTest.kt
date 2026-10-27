@@ -139,7 +139,8 @@ class InputRobustnessTest {
             if (rnd.nextInt(5) == 0) st.tip = rnd.nextInt(10)
             val i = st.input(type)
             check("라운드 $i") {
-                RoundCalc.calc(i.copy(noseR = 0.0)).solution
+                // 기계 보정 프로그램(화면의 도면 좌표 NC — G00 을 띄움)도 같은 칸 값으로
+                RoundCalc.machine(i).solution?.let { m -> show(m.entry); m.lead?.let { show(it) } }
                 val s = RoundCalc.calc(i).solution ?: return@check
                 solved++
                 s.nodes.forEach { show(it.drawn); show(it.prog) }
@@ -152,7 +153,7 @@ class InputRobustnessTest {
                 if (rnd.nextInt(3) == 0) setShared("noseR", nudge(shared("noseR")))
             }.arc3()
             check("3점호 $m") {
-                RoundCalc.arc3(m.copy(noseR = 0.0)).solution
+                RoundCalc.machine(m).solution?.let { d -> show(d.entry); d.lead?.let { show(it) } }
                 val s = RoundCalc.arc3(m).solution ?: return@check
                 solved++
                 s.nodes.forEach { show(it.drawn); show(it.prog) }

@@ -1,10 +1,14 @@
 package com.bmt.nosecalc.calc
 
+import com.bmt.nosecalc.calc.verify.EuclidRef
 import com.bmt.nosecalc.calc.verify.StopChecker
+import com.bmt.nosecalc.calc.verify.V
 import com.bmt.nosecalc.calc.verify.at
 import com.bmt.nosecalc.calc.verify.contactEdge
 import com.bmt.nosecalc.calc.verify.len
 import kotlin.math.abs
+import kotlin.math.min
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -34,10 +38,10 @@ class HolderStopTest {
 
     private fun type(name: String, i: RoundInput, bar: BoringBar): Case {
         val inp = i.copy(inner = true, noseR = r, zClear = 1.0)
-        return Case(name, RoundCalc.calc(inp).solution!!, RoundCalc.calc(inp.copy(noseR = 0.0)).solution!!, true, bar)
+        return Case(name, RoundCalc.calc(inp).solution!!, RoundCalc.machine(inp).solution!!, true, bar)
     }
 
-    private fun arc(name: String, a: Arc3Input, bar: BoringBar) = Case(name, RoundCalc.arc3(a).solution!!, RoundCalc.arc3(a.copy(noseR = 0.0)).solution!!, false, bar)
+    private fun arc(name: String, a: Arc3Input, bar: BoringBar) = Case(name, RoundCalc.arc3(a).solution!!, RoundCalc.machine(a).solution!!, false, bar)
 
     private val cases by lazy {
         listOf(
@@ -118,7 +122,9 @@ class HolderStopTest {
     }
 
     /**
-     * A 돔 바닥: 안전 여유 0 의 끝점 = 바 맞은편 여유 0 이 되는 곳 Z−11.404 X18.014(설계 문서), 0.5 는 따로 이분법으로 찾은 곳(1e-6 mm).
+     * A 돔 바닥: 안전 여유 0 의 끝점 = 바 맞은편 여유 0 이 되는 곳 Z−11.404 X18.014(설계 문서), 0.5 는 바와 소재 사이 직선 거리가 0.5 가 되는 곳을
+     * 독립 참조([EuclidRef] — 구현의 거리 식 · 공구 단면을 쓰지 않음)로 요소 2 위에서 이분법(1e-6 mm). 10-28 직선 거리 기준: 이 자리의 가장 가까운 곳은
+     * 바 아래 변과 맞은편 Ø20 구멍 벽(둘 다 Z 에 나란해 반경 여유 = 직선 거리)이라 끝점은 반경 기준 때와 같다(Z−10.875 X19.000).
      * 잘린 NC: 앞 4 줄 그대로 + 구 원호를 끝점에서 끊은 G03(같은 R) + 거꾸로 후퇴. 기계 보정은 도면 R12.5 를 끊고 G40 으로 인선 자리
      */
     @Test
@@ -128,13 +134,16 @@ class HolderStopTest {
         val e0 = p0.end!!
         near(-11.404, 18.014, e0.pose.tip, "여유 0 끝점")
         assertEquals(0.0, e0.margin, 1e-5)
-        // 0.5: 바 맞은편 여유가 0.5 가 되는 곳을 요소 2 위에서 이분법(경로 계산 따로)
+        // 0.5: 바와 소재 직선 거리가 0.5 가 되는 곳을 요소 2(원호 — 깎는 면 예외 없음) 위에서 이분법(경로 · 거리 계산 따로)
         val p5 = plan(c, 0.5)
         val e5 = p5.end!!
         val seg = c.sol.program.segs[2]
-        val bore = Bore(c.sol.drawing, true)
-        val tool = BarShape(barA, r, false)
-        fun barM(t: Double) = HolderCheck.margins(bore, tool, at(seg, t) - NoseComp.tipVector(2, r)).bar.m
+        val ref = EuclidRef(barA, r, false)
+        val (cutWall, oppWall) = EuclidRef.material(c.sol.drawing.segs, true)
+        fun barM(t: Double): Double {
+            val n = at(seg, t) - NoseComp.tipVector(2, r)
+            return ref.gaps(V(n.z, n.x), cutWall, oppWall).let { min(it[2], it[3]) }
+        }
         var lo = 0.0
         var hi = p5.result.hits.first().fromT
         repeat(80) {
@@ -181,7 +190,12 @@ class HolderStopTest {
         }
     }
 
-    /** E: 헤드(인선 뒤 insZ)가 모서리 R 시작(Z−9.659)에 닿기 직전이 끝점. 안전 여유 0.5 는 Ø20 = DMIN 이라 입구 면에서 */
+    /**
+     * E: 헤드(인선 뒤 insZ)가 모서리 R 시작(Z−9.659)에 닿기 직전이 끝점. 안전 여유 0.5 는 Ø20 = DMIN 이라 들어가기 전에 멈춘다 — 10-28 직선 거리 기준:
+     * DMIN 구간(인선 z ~ 인선 z + insZ, 축 둘레 Ø20) 앞 위 모서리 (인선 z, 10) 과 입구 모서리 (Z0, 10) 의 거리 = 인선 z 라 진입 이동의 인선 Z0.5
+     * (반경 기준에서는 구간 앞이 입구 면을 넘는 Z0 — 면 앞은 공기라 반경 여유가 끝없다가 뛰었다). 기계 보정은 G00 (Z1, X20) 의 노즈 (1.4, 9.6) 에서
+     * 첫 보정점 (0, 9.6) 으로 곧게 가며 구간 앞(노즈 z − r)이 0.5 가 되는 곳 = 비율 0.5/1.4 → 명령점 Z(1 − 0.5/1.4)
+     */
     @Test
     fun caseEStop() {
         val c = cases.single { it.name == "E" }
@@ -191,30 +205,33 @@ class HolderStopTest {
         val p5 = plan(c, 0.5)
         val e5 = p5.end!!
         assertEquals(-1, e5.element)
-        near(0.0, 20.0, e5.pose.tip, "입구 면", 1e-6)
+        near(0.5, 20.0, e5.pose.tip, "진입 이동", 1e-6)
+        assertEquals(0.5, e5.margin, 1e-6)
         assertNull(p5.direct)
         assertNull(p5.machine)
+        val me = p5.machineEnd!!
+        assertEquals(-1, me.element)
+        near(1 - 0.5 / 1.4, 20.0, me.at.machine!!, "기계 보정 시작 블록", 1e-6)
     }
 
-    /** 뒤보링: 헤드(인선 −Z 쪽 insZ)의 가장 좁은 곳 − DMIN/2 = 안전 여유가 되는 곳을 따로 이분법 */
+    /**
+     * 뒤보링 DMIN 22: 헤드 구간(인선 −Z 쪽 insZ, 축 둘레 Ø22)의 +Z 위 모서리 (인선 z, 11) 이 입구 쪽 R5(중심 (−15, 15) — 소재가 원 안인 볼록 모서리)에
+     * 다가간다. 직선 거리 = √((z + 15)² + 4²) − 5 (모서리에서 중심 방향이 원호 안) — 안전 여유가 되는 인선 z = −15 − √((5 + 안전 여유)² − 16).
+     * 0 이면 Z−18.000(반경 기준과 같다 — 닿는 순간은 같다), 0.5 면 Z−18.775 X23.950(반경 기준 Z−18.571 X23.481 보다 앞 — 모서리가 비스듬히 가깝다).
+     * X 는 G40 경로 원호(중심 (−14.6, 15.4), R5.4) 위
+     */
     @Test
     fun backBoringStop() {
         val c = cases.single { it.name == "뒤보링 DMIN" }
-        val seg = c.sol.program.segs[0]
-        val bore = Bore(c.sol.drawing, false)
-        val tool = BarShape(backBar, r, true)
-        fun minM(t: Double) = HolderCheck.margins(bore, tool, at(seg, t) - NoseComp.tipVector(1, r)).minBore.m
         for (safe in listOf(0.0, 0.5)) {
             val e = plan(c, safe).end!!
-            var lo = 0.0
-            var hi = 1.0
-            repeat(80) {
-                val mid = (lo + hi) / 2
-                if (minM(mid) < safe) hi = mid else lo = mid
-            }
-            assertEquals(lo * len(seg), e.t * len(seg), 1e-6, "안전 여유 $safe")
+            val z = -15 - sqrt((5 + safe) * (5 + safe) - 16)
+            val x = 15.4 - sqrt(5.4 * 5.4 - (z + 14.6) * (z + 14.6))
+            near(z, 2 * x, e.pose.tip, "안전 여유 $safe", 1e-6)
+            assertEquals(HolderPart.MIN_BORE, e.part)
             assertEquals(safe, e.margin, 1e-5)
         }
+        near(-18.775, 23.950, plan(c, 0.5).end!!.pose.tip, "표")
     }
 
     /** 닿는 곳 좌표(기존 표 ±0.003)를 두 프로그램으로 · 줄 번호 · 처음 닿는 곳의 정밀도(1e-6 mm 앞은 닿지 않음) */
@@ -247,17 +264,21 @@ class HolderStopTest {
     }
 
     /**
-     * 기계 보정 진입(10-28 검증): 비표준 팁이면 도면 G00 점에 선 노즈(= 점 − 팁 벡터)가 이미 소재에 박힌다 — 기계 보정 프로그램은 그 자리부터 멈추고
-     * (끝점 −2, MACHINE_ENTRY, 잘린 NC 없음) 직접 보정은 따로 본다. 손 계산: TYPE 6 입구 Ø12.756 · 팁 4 (+r, −r) · Z 여유 0.069 → 노즈 (Z−0.731, 반경 7.178),
-     * 입구 벽 반경 6.378 보다 0.8 위
+     * 기계 보정 진입(10-28 검증): 비표준 팁이면 노즈R 0 으로 푼 도면 G00 점에 선 노즈(= 점 − 팁 벡터)가 이미 소재에 박힌다 — 그 프로그램은 그 자리부터
+     * 멈춘다(끝점 −2, MACHINE_ENTRY, 잘린 NC 없음). 손 계산: TYPE 6 입구 Ø12.756 · 팁 4 (+r, −r) · Z 여유 0.069 → 노즈 (Z−0.731, 반경 7.178),
+     * 입구 벽 반경 6.378 보다 0.8 위.
+     * 10-28 `RoundCalc.machine` (테이퍼의 lift 규칙): c = max(0.069, 0.8) = 0.8, 공구 쪽 법선 n = (0, −1), lift = r + n·팁 벡터 = 0.8 + 0.8 = 1.6,
+     * 시작 선(입구 구멍)을 따라 들어가는 진입이라 lead = (Z c + r, 반경 6.378) = Z1.6, G00 = lead + n·(c + lift) = (Z1.6, 반경 3.978) →
+     * `G00 X7.956 Z1.6` `G01 X12.756`(직각 — 보정 시작 블록) `G01 Z0.` — G00 노즈 (Z0.8, 4.778)는 입구 면 앞 공기 속, 벽 선에서 c + r = 1.6 아래.
+     * 진입에서 멈추지 않는다
      */
     @Test
     fun machineEntryNonStandardTip() {
         val inp = RoundInput(type = 6, mainR = 4.326, cornerR1 = 0.0, cornerR2 = 0.0, d1 = 3.41, d2 = 12.756, l1 = 1.322, l2 = 1.585, noseR = 0.8, tip = 4, zClear = 0.069, legLen = 4.89, inner = true)
         val sol = RoundCalc.calc(inp).solution!!
-        val drawn = RoundCalc.calc(inp.copy(noseR = 0.0)).solution!!
+        val old = RoundCalc.calc(inp.copy(noseR = 0.0)).solution!!
         val bar = BoringBar(7.251, 5.113, InsertShape.T, 4.285, 92.496)
-        val p = HolderStop.plan(sol, drawn, 0.8, true, bar, 0.5)
+        val p = HolderStop.plan(sol, old, 0.8, true, bar, 0.5)
         val me = p.machineEnd!!
         assertEquals(-2, me.element)
         assertTrue(StopWarning.MACHINE_ENTRY in p.warnings, "${p.warnings}")
@@ -270,39 +291,71 @@ class HolderStopTest {
         assertTrue(g00.hit.depth > 0.5, "${g00.hit.depth}")
         near(0.069, 12.756, g00.first.machine, "간섭 목록 G00")
         val fails = mutableListOf<String>()
-        StopChecker(sol, drawn, 0.8, true, bar, 0.5).check(p, 0.01, fails)
+        StopChecker(sol, old, 0.8, true, bar, 0.5).check(p, 0.01, fails)
         assertTrue(fails.isEmpty(), "$fails")
+        // 띄운 G00
+        val drawn = RoundCalc.machine(inp).solution!!
+        assertEquals(listOf("G00 X7.956 Z1.6", "G01 X12.756", "G01 Z0."), drawn.nc.take(3))
+        assertEquals(old.nc.drop(2), drawn.nc.drop(3))
+        assertEquals(Pt(1.6, 12.756 / 2), drawn.lead)
+        assertEquals(listOf(NcRef(-2, 0, 1), NcRef(-1, 0, 2), NcRef(-1, 1, 2)), drawn.ncRefs.take(3))
+        val nose0 = drawn.entry - NoseComp.tipVector(4, 0.8)
+        assertEquals(12.756 / 2 - 1.6, nose0.x, 1e-9)
+        assertEquals(0.8, nose0.z, 1e-9)
+        val q = HolderStop.plan(sol, drawn, 0.8, true, bar, 0.5)
+        assertTrue(StopWarning.MACHINE_ENTRY !in q.warnings, "${q.warnings} ${q.machineEnd}")
+        val f2 = mutableListOf<String>()
+        StopChecker(sol, drawn, 0.8, true, bar, 0.5).check(q, 0.01, f2)
+        assertTrue(f2.isEmpty(), "$f2")
     }
 
     /**
-     * 표준 팁 뒤보링 3점호: 진입은 시작 접선을 거꾸로 따라간다. 직접 보정은 노즈 원이 그 접선에 접한 채 들어와 끝까지 안전한데, 기계 보정 G00 점(접선 위의
-     * 도면 점)에 선 노즈는 팁 1 이라 접선에서 공구 쪽으로 |n · 팁 벡터| 만 떨어져 늘인 접선(소재)을 판다 — 따로 잰 노즈 중심 ~ 접선 거리 < r
+     * 표준 팁 뒤보링 3점호: 진입은 시작 접선을 거꾸로 따라간다. 직접 보정은 노즈 원이 그 접선에 접한 채 들어와 끝까지 안전한데, 노즈R 0 풀이의 G00 점
+     * (접선 위의 도면 점)에 선 노즈는 팁 1 이라 접선에서 공구 쪽으로 |n · 팁 벡터| 만 떨어져 늘인 접선(소재)을 판다 — 따로 잰 노즈 중심 ~ 접선 거리 < r.
+     * 10-28 `RoundCalc.machine`: 같은 접선 위 lead(직접 보정 진입 노즈의 발에서 r 더 바깥)에서 공구 쪽으로 c + lift 띄운 G00 → lead 로 직각 → 첫 점.
+     * G00 노즈가 접선에서 공구 쪽으로 c + r 떨어진다(따로 잼). 진입에서 멈추지 않는다
      */
     @Test
     fun machineEntryReversedTangent() {
         val a = Arc3Input(inner = true, noseR = 0.4, x1 = 39.601, z1 = -35.029, x2 = 47.115, z2 = -29.633, x3 = 48.379, z3 = -28.385, zClear = 0.287)
         val sol = RoundCalc.arc3(a).solution!!
-        val drawn = RoundCalc.arc3(a.copy(noseR = 0.0)).solution!!
+        val old = RoundCalc.arc3(a.copy(noseR = 0.0)).solution!!
         val bar = BoringBar(30.058, 18.958, InsertShape.V, 5.913, 98.556)
-        val p = HolderStop.plan(sol, drawn, 0.4, false, bar, 0.0)
+        val p = HolderStop.plan(sol, old, 0.4, false, bar, 0.0)
         assertNull(p.end, "직접 보정은 끝까지 안전")
-        val arc = drawn.drawing.segs.first() as Arc
+        val arc = old.drawing.segs.first() as Arc
         val t0 = (arc.start - arc.center).unit().left() * (if (arc.cw) -1.0 else 1.0)
-        val nose = drawn.entry - NoseComp.tipVector(sol.tip, 0.4)
-        val off = abs((nose - arc.start) cross t0)
+        val tv = NoseComp.tipVector(sol.tip, 0.4)
+        val off = abs(((old.entry - tv) - arc.start) cross t0)
         assertTrue(off < 0.4 - 0.3, "노즈 중심 ~ 시작 접선 $off")
         assertEquals(-2, p.machineEnd!!.element)
         assertEquals(listOf(StopWarning.MACHINE_ENTRY), p.warnings)
         assertNull(p.machine)
+        // 띄운 G00: 공구 쪽 법선 n(G42 = 진행 오른쪽), c = max(Z 여유, r) = 0.4
+        val drawn = RoundCalc.machine(a).solution!!
+        val n = t0.left() * -1.0
+        val lead = drawn.lead!!
+        assertTrue(abs((lead - arc.start) cross t0) < 1e-9 && ((lead - arc.start) dot t0) < 0, "lead $lead 가 시작 접선을 거꾸로 늘인 위가 아님")
+        val nose0 = drawn.entry - tv
+        assertEquals(0.4 + 0.4, (nose0 - arc.start) dot n, 1e-9)
+        assertEquals(0.0, (drawn.entry - lead) cross n, 1e-9)
+        val q = HolderStop.plan(sol, drawn, 0.4, false, bar, 0.0)
+        assertTrue(q.warnings.isEmpty() && q.machineEnd == null, "${q.warnings} ${q.machineEnd}")
+        val f = mutableListOf<String>()
+        StopChecker(sol, drawn, 0.4, false, bar, 0.0).check(q, 0.01, f)
+        assertTrue(f.isEmpty(), "$f")
     }
 
     /**
      * 진입 이동에서 닿는 곳의 기계 보정 좌표 = 기계 보정 프로그램 자기 경로(G00 점 노즈 → 첫 보정선 시작으로 곧게, 명령점과 같은 비율)에서 처음 닿는 명령점.
-     * 뒤보링 f 11: 직접 보정 비율을 옮긴 예전 값 Z−21.000 이 아니라 Z−20.9875(검증 단계 표본) — 여기서는 따로 이분법
+     * 뒤보링 f 11: 직접 보정 비율을 옮긴 예전 값 Z−21.000 이 아니라 Z−20.9875(검증 단계 표본) — 여기서는 따로 이분법.
+     * (표준 팁 · 시작 선이 Z 에 직각이라 lift = 0 — `RoundCalc.machine` 의 G00 은 노즈R 0 풀이와 같다)
      */
     @Test
     fun machineEntryHitCoordinates() {
         val c = cases.single { it.name == "뒤보링 f 11" }
+        assertNull(c.drawn.lead)
+        assertEquals(RoundCalc.arc3(back.copy(noseR = 0.0)).solution!!.nc, c.drawn.nc)
         val p = plan(c, 0.0)
         val h = p.hits.single { it.hit.element == -1 && it.hit.part == HolderPart.BAR }
         val tool = BarShape(c.bar, r, true)
@@ -331,9 +384,11 @@ class HolderStopTest {
     }
 
     /**
-     * 바와 소재 직선 거리(반경 여유와 다름 — 10-28 검증 예 B · C). B: 끝점 자세에서 바 앞면(N 을 지나는 주절삭날 연장선)과 맞은편 입구 모서리 (Z0, −9)의
-     * 수선 길이(반경 여유 0.5 인데 0.04 대). C(안전 여유 0.5): 바 위 앞 끝 E(top) 과 바닥 면 Z−16 의 거리 r + E.z = 0.226(바닥 단면을 깎는 내내 —
-     * 바 아래는 맞은편 Ø30 벽에서 0.5). 안전 여유 0 이면 바 아래가 맞은편 벽에 붙어 0
+     * 안전 여유는 직선 거리(사용자 결정 10-28). B(Ø18): 바 앞면(N 을 지나는 주절삭날 연장선)이 맞은편 입구 모서리 (Z0, −9) 에 다가간다 — 반경 여유
+     * 0.5(예전 끝점 Z−1.495)에서는 직선 0.043 이었다. 이제 끝점은 그 직선 거리 = 0.5 인 곳: 노즈 x = 9 − r 위에서 모서리와 앞면 직선의 수선 길이가 0.5
+     * (따로 이분법 — 그 발이 앞면 토막 안이라 직선 거리 = 토막 거리), 전보다 앞(Z−1.036). 그 자세에서 바와 소재 직선 거리(gap) = 여유 = 0.5.
+     * C(안전 여유 0.5): 바 위 앞 끝 E(top) 과 바닥 면 Z−16 의 거리 r + E.z = 0.226 — 막힌 바닥 단면은 깎는 면이라 예외(겹치지 않음만)이고
+     * 기준은 바 아래와 맞은편 Ø30 벽 0.5. 안전 여유 0 이면 바 아래가 맞은편 벽에 붙어 0
      */
     @Test
     fun straightGapAtEnd() {
@@ -342,19 +397,96 @@ class HolderStopTest {
         val eps = 80.0 * kotlin.math.PI / 180
         val e2 = Pt(kotlin.math.cos(kotlin.math.PI - k - eps), -kotlin.math.sin(kotlin.math.PI - k - eps))
         val nVirt = (e1 + e2).unit() * (-r / kotlin.math.sin(eps / 2))
-        val eb = plan(cases.single { it.name == "B" }, 0.5).end!!
         val corner = Pt(0.0, -9.0)
-        val v = corner - (eb.pose.nose + nVirt)
-        val expect = abs(e1 cross v)
-        assertEquals(expect, eb.gap, 1e-9)
+        // 노즈 (z, 8.6) 에서 앞면 직선과 모서리의 수선 길이(모서리가 아직 앞면 −Z 쪽이면 앞면이 다가간다)
+        fun perp(z: Double) = abs(e1 cross (corner - (Pt(z, 8.6) + nVirt)))
+        var lo = -1.13
+        var hi = 1.0
+        repeat(80) {
+            val mid = (lo + hi) / 2
+            if (perp(mid) < 0.5) lo = mid else hi = mid
+        }
+        val eb = plan(cases.single { it.name == "B" }, 0.5).end!!
+        assertEquals(0, eb.element)
+        assertEquals(HolderPart.BAR, eb.part)
+        assertTrue(eb.opposite)
+        near(hi - r, 18.0, eb.pose.tip, "B 끝점", 1e-6)
+        near(-1.036, 18.0, eb.pose.tip, "B 끝점 표")
+        assertTrue(eb.pose.tip.z > -1.495, "예전 반경 기준 끝점 Z−1.495 보다 앞")
+        // 발이 앞면 토막(E(bottom) ~ E(top)) 안
+        val foot = eb.pose.nose + nVirt + e1 * ((corner - (eb.pose.nose + nVirt)) dot e1)
+        assertTrue(foot.x > eb.pose.nose.x + r - 11.0 - 8.0 && foot.x < eb.pose.nose.x + r - 11.0 + 8.0, "$foot")
+        assertEquals(0.5, eb.margin, 1e-6)
+        assertEquals(0.5, eb.gap, 1e-6)
         assertTrue((eb.gapAt - corner).length < 1e-9, "${eb.gapAt}")
-        assertTrue(eb.gap < 0.05 && abs(eb.margin - 0.5) < 1e-5, "직선 ${eb.gap} · 반경 ${eb.margin}")
         val top = r - 11.0 + 8.0
         val eTop = nVirt + e1 * ((nVirt.x - top) / kotlin.math.sin(k))
         val ec = plan(cases.single { it.name == "C" }, 0.5).end!!
         assertEquals(r + eTop.z, ec.gap, 1e-9)
         assertEquals(-16.0, ec.gapAt.z, 1e-9)
+        assertEquals(0.5, ec.margin, 1e-6)
         assertEquals(0.0, plan(cases.single { it.name == "C" }, 0.0).end!!.gap, 1e-6)
+    }
+
+    /**
+     * 깎는 면 사슬은 끝내 깎을 면까지(10-28 검증 — 예외로 다가간 면을 깎지 않고 그 앞에서 멈추는 경로가 그 면에 안전 여유보다 가까이 갔다).
+     * C 에 돌출 길이 16.4: 공구대는 인선 Z ≥ 0.5 − 16.4 = −15.9(바닥 면 0.1 앞)까지 된다. 예전 넓은 사슬은 바닥 면(요소 3)을 구멍 벽(요소 2)에서도 예외로 봐
+     * 공구대로 Z−15.9 에서 멈췄다 — 바 앞면이 깎지도 않을 바닥 면 0.326 앞까지. 이제 끝점이 요소 2 라 바닥 면은 예외가 아니고, 바 위 앞 끝 E(top) ~ 바닥 면 =
+     * (r + E.z) + (인선 Z + 16)(구석 0.226 에서 Z 로 물러난 만큼 는다)이 0.5 인 인선 Z = −16 + 0.5 − (r + E.z) = −15.726 에서 바(깎는 쪽)로 멈춘다.
+     * 돌출 16.2 면 공구대(Z−15.7)가 그보다 앞이라 예전과 같다. C(돌출 없음)는 바닥 면을 깎으니 그대로 바닥 면 위에서 멈춘다(위 [straightGapAtEnd])
+     */
+    @Test
+    fun faceChainOnlyToCutFaces() {
+        val k = 95.0 * kotlin.math.PI / 180
+        val e1 = Pt(-kotlin.math.cos(k), -kotlin.math.sin(k))
+        val eps = 80.0 * kotlin.math.PI / 180
+        val e2 = Pt(kotlin.math.cos(kotlin.math.PI - k - eps), -kotlin.math.sin(kotlin.math.PI - k - eps))
+        val nVirt = (e1 + e2).unit() * (-r / kotlin.math.sin(eps / 2))
+        val eTop = nVirt + e1 * ((nVirt.x - (r - 11.0 + 8.0)) / kotlin.math.sin(k))
+        val d0 = r + eTop.z
+        assertEquals(0.226, d0, 1e-3)
+        val c = cases.single { it.name == "C" }
+        val fails = mutableListOf<String>()
+        for ((ov, part, z) in listOf(Triple(16.4, HolderPart.BAR, -16 + 0.5 - d0), Triple(16.2, HolderPart.TURRET, -15.7))) {
+            val bar = barA.copy(overhang = ov)
+            val p = HolderStop.plan(c.sol, c.drawn, r, true, bar, 0.5)
+            val e = p.end!!
+            assertEquals(2, e.element, "돌출 $ov")
+            assertEquals(part, e.part, "돌출 $ov")
+            assertTrue(!e.opposite, "돌출 $ov")
+            near(z, 30.0, e.pose.tip, "돌출 $ov 끝점", 1e-6)
+            // 바와 소재(깎지 않는 바닥 면 포함) 직선 거리가 안전 여유 이상
+            assertTrue(e.gap >= 0.5 - 1e-6, "돌출 $ov gap ${e.gap}")
+            assertTrue(p.warnings.isEmpty(), "돌출 $ov ${p.warnings}")
+            StopChecker(c.sol, c.drawn, r, true, bar, 0.5).check(p, 0.002, fails)
+        }
+        // 끊은 점은 안전한 쪽으로 반올림(−15.72594 → Z−15.725)
+        near(-15.725, 30.0, HolderStop.plan(c.sol, c.drawn, r, true, barA.copy(overhang = 16.4), 0.5).direct!!.stop, "직접 보정 끊은 점", 1e-9)
+        assertTrue(fails.isEmpty(), fails.joinToString("\n"))
+    }
+
+    /**
+     * 기계 보정 거꾸로 후퇴의 G40 점 반올림(10-28 검증): 3점호 내경(X59.744 Z12.411 / X57.336 Z8.549 / X56.799 Z6.893, 0.4R, Z 여유 2.202),
+     * 바 Ø20.394 · f 46.203 · C 5.916 · κr 91.025, 안전 여유 1.27. 직접 보정은 거꾸로 후퇴(1.2704)인데 기계 보정은 G40 G01 을 지금 인선 X57.55015 Z8.68722
+     * 그대로 반올림한 X57.55 Z8.687(경로를 따라 끝점 너머)에서 바 맞은편이 1.26989 라 거꾸로를 못 고르고 X 빼기(1.0759 · RETRACT_TIGHT)로 빠졌다.
+     * 직접 보정 끝점처럼 한 칸 물린 G40 G01 X57.551 Z8.688 이면 거꾸로 후퇴가 안전 여유를 지킨다
+     */
+    @Test
+    fun machineReverseG40RoundsBack() {
+        val a = Arc3Input(inner = true, noseR = r, x1 = 59.744, z1 = 12.411, x2 = 57.336, z2 = 8.549, x3 = 56.799, z3 = 6.893, zClear = 2.202)
+        val sol = RoundCalc.arc3(a).solution!!
+        val drawn = RoundCalc.machine(a).solution!!
+        val bar = BoringBar(20.394, 46.203, InsertShape.C, 5.916, 91.025)
+        val p = HolderStop.plan(sol, drawn, r, false, bar, 1.27)
+        assertTrue(p.warnings.isEmpty(), "${p.warnings}")
+        assertEquals(RetractKind.REVERSE, p.direct!!.retract)
+        val m = p.machine!!
+        assertEquals(RetractKind.REVERSE, m.retract)
+        assertEquals("G40 G01 X57.551 Z8.688", m.nc[m.retractFrom])
+        assertTrue(m.retractClear >= 1.27 - HolderStop.TEXT_TOL, "${m.retractClear}")
+        val f = mutableListOf<String>()
+        StopChecker(sol, drawn, r, false, bar, 1.27).check(p, 0.002, f)
+        assertTrue(f.isEmpty(), f.joinToString("\n"))
     }
 
     @Test

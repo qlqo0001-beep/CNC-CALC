@@ -92,8 +92,8 @@ internal enum class StopKind { CUT, CLEAR, UNSAFE, NOTHING, NO_MACHINE }
 
 /**
  * 가공 가능 끝점(지금 NC 기준). [head] = 한 줄 머리, [where] = 끊은 줄('6줄 중간에서 끊음'), [lack] = 안전 끝점보다 덜 깎음(기계 보정이 블록을 그 자리에서
- * 끝낼 수 없을 때), [near] = 그곳의 가장 가까운 부분 · 여유(반경 — 공구대는 Z), [real] = 바와 소재 직선 거리, [retract] = 후퇴 방식 한 줄,
- * [note] = 설명, [tight] = 후퇴 여유가 안전 여유보다 좁음(노랑), [realWarn] = 직선 거리가 안전 여유보다 짧음(노랑).
+ * 끝낼 수 없을 때), [near] = 그곳의 가장 가까운 부분 · 여유(직선 거리 — 공구대는 Z), [face] = 깎는 면 예외가 쓰인 곳(작은 글 — 바 앞면이 지금 깎는 면에
+ * 안전 여유보다 가까이 붙음), [retract] = 후퇴 방식 한 줄, [note] = 설명, [tight] = 후퇴 여유가 안전 여유보다 좁음(노랑).
  * [nc] = 카드에 줄 잘린 NC(직접 보정은 첫 줄 주석부터), [endLine] = 끊은 마지막 블록의 카드 줄(0부터), [retractLines] = 후퇴 카드 줄,
  * [at] = 멈추는 좌표(쓴 글 그대로 — 깎기 전에 멈추면 정확한 안전 끝점), [nose] = 그때 노즈 중심(보링바를 그릴 자리), [cut] = 잘린 프로그램
  */
@@ -112,11 +112,10 @@ internal class StopView(
     val nose: Pt? = null,
     val cut: HolderCut? = null,
     val lack: String? = null,
-    val real: String? = null,
-    val realWarn: String? = null,
+    val face: String? = null,
 ) {
-    /** 골든 · 시험용 한 덩어리 글 */
-    val text: String get() = listOfNotNull(head, where, lack, near, real, retract, note, tight, realWarn).joinToString("\n")
+    /** 골든 · 시험용 한 덩어리 글(카드에 보이는 차례) */
+    val text: String get() = listOfNotNull(head, where, lack, near, face, retract, note, tight).joinToString("\n")
 }
 
 /**
@@ -143,10 +142,10 @@ internal fun stopView(plan: HolderPlan, comp: Boolean, sol: RoundSolution, drawn
             StopView(
                 StopKind.NOTHING, "첫 가공점에 닿기 전에 멈춥니다", near = near,
                 note = "진입 이동 ${xz(at)} 에서 안전 여유가 모자라 깎는 것이 없습니다. 다른 보링바를 고르거나 안전 여유를 줄이세요.",
-                at = at, nose = end.pose.nose, real = realText(end), realWarn = realWarn(end, plan.safe, safe),
+                at = at, nose = end.pose.nose,
             )
         } else {
-            noMachine(end, near, plan.safe, safe)
+            noMachine(end, near, plan.safe)
         }
     }
     return cutView(plan, cut, end, comp, sol, drawn, noseR, near, safe)
@@ -159,24 +158,30 @@ private fun machineStop(plan: HolderPlan, sol: RoundSolution, drawn: RoundSoluti
     // 직접 보정은 진입이 달라 깎을 수 있나(잘린 NC 가 있거나 끝까지 안전)
     val direct = plan.direct != null || (plan.end == null && StopWarning.UNSAFE_AT_ENTRY !in plan.warnings)
     val other = if (direct) "직접 보정(G40)은 진입이 달라 깎을 수 있습니다 — 보정 방식을 직접 보정으로 바꾸세요." else "다른 보링바를 고르거나 안전 여유를 줄이세요."
-    val real = realText(end)
-    val warn = realWarn(end, plan.safe, safe)
     if (end.element == -2) {
         return StopView(
-            StopKind.UNSAFE, "진입점부터 안전 여유가 모자랍니다", near = near, real = real, realWarn = warn,
+            StopKind.UNSAFE, "진입점부터 안전 여유가 모자랍니다", near = near,
             note = "기계 보정(${sol.side}) 프로그램의 G00 진입점 ${xz(drawn.entry)} 에 선 자세(보정 전 G40 — 노즈 중심 = 그 점 − 팁 ${sol.tip}번 벡터)부터 " +
                 "보링바가 소재와 $safe 떨어지지 못해 이 프로그램으로는 깎을 수 없습니다. $other",
         )
     }
     if (end.element == -1) {
         val at = end.at.machine ?: end.pose.drawn
+        // 진입 블록: 보정 시작 블록, 띄운 진입(lead)이면 그 뒤 직각 진입점 → 첫 점 블록도(둘 다 요소 −1 — 줄은 at.machineLine)
+        val lines = drawn.ncRefs.indices.filter { drawn.ncRefs[it].element == -1 }
+        val line = end.at.machineLine ?: lines.firstOrNull() ?: 1
+        val block = if (drawn.lead != null && line == lines.getOrNull(1)) {
+            "직각 진입 뒤 블록(${line + 1}줄 — 노즈가 보정선을 따라 첫 점으로)"
+        } else {
+            "보정 시작(${sol.side}) 블록(${line + 1}줄 — G00 점에서 ${if (drawn.lead != null) "직각 진입점" else "첫 점"}으로, 노즈가 보정 자리로 곧게 감)"
+        }
         return StopView(
-            StopKind.NOTHING, "첫 가공점에 닿기 전에 멈춥니다", near = near, real = real, realWarn = warn,
-            note = "보정 시작(${sol.side}) 블록(2줄 — G00 점에서 첫 점으로, 노즈가 보정 자리로 곧게 감) 명령점 ${xz(at)} 에서 안전 여유가 모자라 깎는 것이 없습니다. $other",
+            StopKind.NOTHING, "첫 가공점에 닿기 전에 멈춥니다", near = near,
+            note = "$block 명령점 ${xz(at)} 에서 안전 여유가 모자라 깎는 것이 없습니다. $other",
             at = at, nose = end.pose.nose,
         )
     }
-    val cut = plan.machine ?: return noMachine(end, near, plan.safe, safe)
+    val cut = plan.machine ?: return noMachine(end, near, plan.safe)
     return cutView(plan, cut, end, false, sol, drawn, 0.0, near, safe)
 }
 
@@ -184,10 +189,10 @@ private fun machineStop(plan: HolderPlan, sol: RoundSolution, drawn: RoundSoluti
  * 기계 보정 잘린 NC 를 만들 수 없음: 안전 끝점이 첫 가공점 바로 뒤. 깃발 자리는 블록을 거기서 끝낼 명령점, 그런 명령점이 없으면(그 자세에서 블록을 끝낼 수 없음)
  * 노즈가 닿는 도면 점
  */
-private fun noMachine(end: SafeEnd, near: String, safe: Double, safeText: String) = StopView(
+private fun noMachine(end: SafeEnd, near: String, safe: Double) = StopView(
     StopKind.NO_MACHINE, "기계 보정 잘린 NC 를 만들 수 없습니다", near = near,
     note = "안전 끝점이 첫 가공점 바로 뒤라 기계 보정(G41/G42) 프로그램은 끊을 자리가 없습니다. 직접 보정(G40)으로 바꾸면 잘린 NC 가 나옵니다.",
-    at = end.at.machine ?: end.pose.drawn, nose = end.pose.nose, real = realText(end), realWarn = realWarn(end, safe, safeText),
+    at = end.at.machine ?: end.pose.drawn, nose = end.pose.nose, face = faceNote(end, safe),
 )
 
 /** 끊고 빠짐: 잘린 NC · 끊은 줄 · 후퇴 */
@@ -202,7 +207,7 @@ private fun cutView(
     val whole = full?.getOrNull(endLine) == nc[endLine]
     val back = (cut.retractFrom + shift) until nc.size
     val tight = if (StopWarning.RETRACT_TIGHT in plan.warnings && cut.retractClear < plan.safe - HolderStop.TEXT_TOL) {
-        "후퇴 중 가장 좁은 반경 여유 ${Fmt.fixed3(cut.retractClear)} mm 가 안전 여유 $safe 보다 좁습니다(겹치지는 않음). 후퇴 길을 확인하세요."
+        "후퇴 중 가장 좁은 여유(직선 거리) ${Fmt.fixed3(cut.retractClear)} mm 가 안전 여유 $safe 보다 좁습니다(겹치지는 않음). 후퇴 길을 확인하세요."
     } else {
         null
     }
@@ -219,7 +224,7 @@ private fun cutView(
         retract = retractText(cut, nc.slice(back), cancel = !comp),
         tight = tight,
         nc = nc, endLine = endLine, retractLines = back, at = cut.stop, nose = cut.pose.nose, cut = cut,
-        lack = lack, real = realText(end), realWarn = realWarn(end, plan.safe, safe),
+        lack = lack, face = faceNote(end, plan.safe),
     )
 }
 
@@ -227,32 +232,36 @@ private fun cutView(
 private const val LACK_SHOWN = 0.01
 
 /**
- * 안전 끝점에서 기준에 가장 가까운 부분 · 여유. 여유는 반경(X) 방향(공구대는 Z) — 바 앞면이 비스듬히 지나는 곳은 직선 거리가 더 짧다([realText]).
- * 인서트의 깎는 쪽 벽은 기준이 '겹치지 않음'(날은 깎는 벽에 붙어 깎는다).
- * 부분이 면을 넘는 순간 여유가 뛰는 곳(예: 최소 가공경 구간이 입구 끝면을 넘음 — 끝면 앞은 공기라 여유가 끝없다)은 숫자 대신 그렇다고 적는다
+ * 안전 끝점에서 기준에 가장 가까운 부분 · 여유. 여유는 공구 단면과 소재 사이 직선(유클리드) 거리(사용자 결정 2026-10-28 — 공구대는 면끼리라 Z 여유,
+ * 깎는 면 예외는 뺀 값). 인서트의 깎는 쪽 벽은 기준이 '겹치지 않음'(날은 깎는 벽에 붙어 깎는다). 겹친 자세(기계 보정 G00 점부터 모자람)는 겹침 깊이
+ * (반경 겹침 — 노즈 원이면 그 깊이)를 적는다. 부분이 면을 넘는 순간 여유가 뛰는 곳(예: 최소 가공경 구간이 입구 끝면을 넘음 — 끝면 앞은 공기라 여유가 끝없다)은
+ * 숫자 대신 그렇다고 적는다
  */
 private fun nearText(end: SafeEnd, bar: BoringBar, safe: String): String {
     val rule = if (end.part == HolderPart.INSERT && !end.opposite) "겹치지 않음 — 날은 깎는 벽에 붙어도 됨" else "안전 여유 $safe"
-    val axis = if (end.part == HolderPart.TURRET) "Z 여유" else "반경 여유"
-    val gap = if (end.margin.isFinite() && end.margin < 1e4) "$axis ${Fmt.fixed3(end.margin)} mm" else "면을 넘자마자 여유가 모자람"
+    val m = end.margin
+    val gap = when {
+        !m.isFinite() || m >= 1e4 -> "면을 넘자마자 여유가 모자람"
+        // 0.001 자리에서 음수로 찍히는 것만 겹침(인서트 깎는 쪽은 −1e-6 까지 겹치지 않음)
+        m < -0.0005 -> "겹침 ${Fmt.fixed3(-m)} mm"
+        end.part == HolderPart.TURRET -> "Z 여유 ${Fmt.fixed3(m)} mm"
+        else -> "여유(직선 거리) ${Fmt.fixed3(m)} mm"
+    }
     return "가장 가까운 곳: ${partName(end.part, end.opposite, bar)} — $gap (기준: $rule)"
 }
 
-/** 끝점 자세에서 바와 소재 사이 직선(유클리드) 거리와 소재 쪽 가장 가까운 점(맞은편 벽이면 '맞은편') */
-private fun realText(end: SafeEnd): String? {
-    if (!end.gap.isFinite() || end.gap >= 1e4) return null
+/**
+ * 깎는 면 예외(사용자 결정 2026-10-28)가 끝점에서 쓰였으면 그 한 줄(작은 글). 형상 요소(k ≥ 0)에서 바와 소재 직선 거리([SafeEnd.gap] — 깎는 면도 넣은 것)가
+ * 안전 여유보다 짧으면 그 가장 가까운 소재는 깎는 면이다 — 끝점까지는 바의 나머지가 안전 여유를 지켰다. 막힌 바닥 · 단 면을 깎는 바 앞면(주절삭날
+ * 연장선)이 면에서 공구 모양만큼만 떨어지는 것(예 C 0.226). 진입(−2 · −1)에는 예외가 없다
+ */
+private fun faceNote(end: SafeEnd, safe: Double): String? {
+    if (end.element < 0 || !end.gap.isFinite() || end.gap >= safe - HolderStop.TEXT_TOL) return null
     val p = end.gapAt
     val side = if (p.x < 0) "맞은편 " else ""
-    return "바와 소재 직선 거리 ${Fmt.fixed3(end.gap)} mm (소재 쪽 가장 가까운 점: ${side}X${Fmt.fixed3(abs(p.xDia))} Z${Fmt.fixed3(p.z)})"
+    return "깎는 면 예외: 바 앞면이 지금 깎는 면(${side}X${Fmt.fixed3(abs(p.xDia))} Z${Fmt.fixed3(p.z)})에서 ${Fmt.fixed3(end.gap)} mm — " +
+        "바 앞면은 주절삭날 연장선이라 깎는 면에는 겹치지 않음만 봅니다."
 }
-
-/** 직선 거리가 안전 여유보다 짧으면(노랑) — 여유는 반경 방향이라 바 앞면이 비스듬히 지나는 모서리 · 면에서는 0.5 mm 를 뜻하지 않는다 */
-private fun realWarn(end: SafeEnd, safe: Double, safeText: String): String? =
-    if (end.gap.isFinite() && end.gap < safe - HolderStop.TEXT_TOL) {
-        "바와 소재 직선 거리가 안전 여유 $safeText 보다 짧습니다 — 안전 여유는 반경(X) 방향으로 잽니다. 바 앞면이 소재 모서리 · 면을 비스듬히 지나는 자리이니 확인하세요."
-    } else {
-        null
-    }
 
 /**
  * 후퇴 방식 한 줄: X 빼기 → Z(그 줄 글) 또는 온 길을 거꾸로(줄 수), 그리고 후퇴 중 가장 좁은 여유. cancel = 기계 보정 — 첫 후퇴 줄의 G40 은
@@ -264,19 +273,19 @@ private fun retractText(cut: HolderCut, lines: List<String>, cancel: Boolean): S
         lines.size >= 2 -> "X 를 축 쪽으로 빼고 Z 로: ${lines.joinToString(" → ")}"
         else -> "그 자리에서 Z 로 (노즈가 벽에서 바로 떨어짐): ${lines.joinToString(" → ")}"
     }
-    val clear = cut.retractClear.takeIf { it.isFinite() && it < 1e4 }?.let { " · 후퇴 중 가장 좁은 반경 여유 ${Fmt.fixed3(it)} mm" }.orEmpty()
+    val clear = cut.retractClear.takeIf { it.isFinite() && it < 1e4 }?.let { " · 후퇴 중 가장 좁은 여유(직선 거리) ${Fmt.fixed3(it)} mm" }.orEmpty()
     val g40 = if (cancel) " (첫 줄 G40 은 보정을 풀며 지금 인선 자리를 명령 — 더 들어가지 않음)" else ""
     return "후퇴: $how$clear$g40"
 }
 
-/** 끝까지 안전할 때: 안전 여유와 바 · 구멍 벽 사이 가장 좁은 반경 여유(지금 NC 의 줄) */
+/** 끝까지 안전할 때: 안전 여유와 바 · 소재 사이 가장 좁은 여유(직선 거리 — 깎는 면은 뺀 것, 지금 NC 의 줄) */
 private fun clearNote(plan: HolderPlan, comp: Boolean, sol: RoundSolution, drawn: RoundSolution?, safe: String): String {
     val prog = if (comp) sol else drawn
     val at = plan.result.barClearAt
     val e = plan.result.barClearElement
     val narrow = plan.result.barClear
     val where = if (prog != null && at != null && e != null && narrow != null && narrow.isFinite()) {
-        " 바와 구멍 벽 사이 가장 좁은 반경 여유 ${Fmt.fixed3(narrow)} mm (${cardLine(prog, comp, e, at) + 1}줄)."
+        " 바와 소재 사이 가장 좁은 여유(직선 거리) ${Fmt.fixed3(narrow)} mm (${cardLine(prog, comp, e, at) + 1}줄)."
     } else {
         ""
     }

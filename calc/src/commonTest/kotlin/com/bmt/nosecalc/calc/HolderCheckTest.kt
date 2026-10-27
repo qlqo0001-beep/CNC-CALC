@@ -13,6 +13,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.bmt.nosecalc.calc.verify.EuclidRef
+import com.bmt.nosecalc.calc.verify.V
 
 /**
  * 보링바 간섭(HolderCheck). 정방향 보링 A~F 는 설계 때 따로 짠 표본 검사(파이썬)와 손 식에서, 뒤보링은 손 식에서 온 값.
@@ -140,11 +142,43 @@ class HolderCheckTest {
         near(-16.0, 7.99, h.first.tip, "처음")
         assertEquals(3.6, h.depth, 1e-6)
         near(-16.0, 0.8, h.worst.tip, "가장 깊은 곳")
-        assertEquals(2.9698, gaps(s, barA, s.program.segs[1].start).bar.m, 1e-4)
-        // 관통이면 바닥 면이 없어 닿지 않는다. 가장 좁은 곳은 요소 0 · 1 이음점
-        val t = check(inner(step.copy(through = true)), barA)
+        // 요소 0 · 1 이음점의 바 여유: 반경으로는 2.9698(설계 때 표본 검사), 10-28 부터 여유는 직선 거리 — 독립 참조([EuclidRef])로 잰 바와 소재 거리와 같다
+        val joint = s.program.segs[1].start
+        assertEquals(2.9698, HolderCheck.radialMargins(Bore(s.drawing, true), BarShape(barA, r, false), joint - NoseComp.tipVector(s.tip, r)).bar.m, 1e-4)
+        assertEquals(refBar(s, barA, joint, -1), gaps(s, barA, joint).bar.m, 1e-9)
+        // 관통이면 바닥 면이 없어 닿지 않는다. 가장 좁은 곳(직선 거리) = 독립 참조로 경로를 0.002 mm 마다 잰 최솟값(구현은 0.02 mm 표본이라 그 위로 0.001 안)
+        val ts = inner(step.copy(through = true))
+        val t = check(ts, barA)
         assertTrue(t.hits.isEmpty(), "${t.hits}")
-        assertEquals(2.9698, t.barClear!!, 1e-4)
+        val least = refLeast(ts, barA)
+        assertTrue(t.barClear!! >= least - 1e-9 && t.barClear!! <= least + 1e-3, "구현 ${t.barClear} · 참조 $least")
+        assertEquals(1.911, t.barClear!!, 1e-3)
+    }
+
+    /** 독립 참조([EuclidRef])의 바와 소재 직선 거리 — 인선 [tip] 자세, 경로 요소 [k] 의 깎는 면은 뺀다 */
+    private fun refBar(s: RoundSolution, bar: BoringBar, tip: Pt, k: Int, face: Boolean = true): Double {
+        val reverse = s.drawing.segs.last().end.z > s.drawing.segs.first().start.z
+        val ref = EuclidRef(bar, r, reverse)
+        val (cut, opp) = EuclidRef.material(s.drawing.segs, face)
+        val skip = EuclidRef.faceLines(s.drawing.segs, k, s.side == Side.G41, ref.n1, ref.n2)
+        val n = tip - NoseComp.tipVector(s.tip, r)
+        return ref.gaps(V(n.z, n.x), cut, opp, skip).let { kotlin.math.min(it[2], it[3]) }
+    }
+
+    /** 진입 이동과 요소마다 0.002 mm 간격으로 [refBar] 의 최솟값 */
+    private fun refLeast(s: RoundSolution, bar: BoringBar, face: Boolean = true): Double {
+        var least = Double.POSITIVE_INFINITY
+        val moves = listOf<Pair<Int, Seg>>(-1 to Line(s.entry, s.program.segs.first().start)) + s.program.segs.withIndex().map { it.index to it.value }
+        for ((k, seg) in moves) {
+            val l = when (seg) {
+                is Line -> (seg.end - seg.start).length
+                is Arc -> seg.sweepRad() * seg.radius
+            }
+            if (l <= 1e-9) continue
+            val n = kotlin.math.max(1, kotlin.math.ceil(l / 0.002).toInt())
+            for (q in 0..n) least = kotlin.math.min(least, refBar(s, bar, on(seg, q.toDouble() / n), k, face))
+        }
+        return least
     }
 
     /** C38 — 바닥을 중심까지 깎으려면 구멍 Ø ≥ 2f + D: Ø38 이면 끝에서 D1/2 + r − f − D/2 = 0.4 남는다. κr 90° 바 앞이 바닥에 붙어도 닿음이 아니다 */
@@ -251,8 +285,10 @@ class HolderCheckTest {
     }
 
     /**
-     * 3점호 입구 R5(Ø30 면 → Ø20 구멍, CAD 점 셋째 자리): 시작 접선이 반올림으로 조금 기울어도 입구 면은 Z0. 바(A16R-SCLCR 09)는 닿지 않고,
-     * 가장 좁은 곳은 원호 끝에서 바 아래 앞 끝(아직 Ø20 앞, R 위): ρ(z) − 9, z = 끝 노즈 z + E_bot.z
+     * 3점호 입구 R5(Ø30 면 → Ø20 구멍, CAD 점 셋째 자리): 시작 접선이 반올림으로 조금 기울어도 입구 면은 Z0. 바(A16R-SCLCR 09)는 닿지 않는다.
+     * 가장 좁은 곳(10-28 직선 거리): 원호 시작(노즈 ≈ R 중심 c + 5.4·(1, 0), Z+0.4 — 입구 면 앞)에서 바 위 앞 끝 E(top) = 노즈 + (−0.174, −2.6) 과
+     * R(소재가 원 안인 볼록 모서리) 사이 |E(top) − c| − R = √(5.226² + 2.6²) − 5 = 0.837. 반경 여유로는 E(top) 이 입구 면 앞 공기 속이라 보이지 않았고
+     * 원호 끝의 바 아래 앞 끝 ρ(z) − 9 = 1.153 이 가장 좁았다
      */
     @Test
     fun entranceRFromCadPoints() {
@@ -265,12 +301,20 @@ class HolderCheckTest {
         val k = 95 * PI / 180
         val e1 = Pt(-cos(k), -sin(k))
         val n = (e1 + Pt(cos(5 * PI / 180), -sin(5 * PI / 180))).unit() * (-r / sin(40 * PI / 180))
-        val eBot = n + e1 * ((n.x - (r - 11.0 - 8.0)) / sin(k))
-        val z = -5.0 + eBot.z
-        // CAD 점 반올림으로 중심이 5e-4 쯤 흔들린다
-        assertEquals(15 - sqrt(25 - (z + 5) * (z + 5)) - 9.0, res.barClear!!, 2e-3)
-        assertEquals(0, res.barClearElement)
-        near(-5.4, 20.0, res.barClearAt!!.tip, "가장 좁은 곳", 2e-3)
+        val eTop = n + e1 * ((n.x - (r - 11.0 + 8.0)) / sin(k))
+        // R 의 중심 · 반지름은 CAD 점에서 따로(세 점의 외심)
+        val arc = s.drawing.segs.first() as Arc
+        val c = arc.center
+        val rr = arc.radius
+        // 원호 시작의 보정점: 반지름 방향으로 r 바깥(CAD 반올림으로 시작 반지름이 Z 축과 조금 기운다)
+        val nose = c + (arc.start - c) * ((rr + r) / rr)
+        assertEquals((nose + eTop - c).length - rr, res.barClear!!, 1e-6)
+        assertEquals(0.837, res.barClear!!, 1e-3)
+        // 진입 이동 끝 = 원호 시작(같은 자세 — 표본이 어느 쪽에서 먼저 잡히나는 부동소수에 달렸다)
+        assertTrue(res.barClearElement in listOf(-1, 0), "${res.barClearElement}")
+        near(nose.z - r, 2 * (nose.x + r), res.barClearAt!!.tip, "가장 좁은 곳", 1e-3)
+        // 독립 참조로 경로를 0.002 mm 마다 잰 최솟값과 같다
+        assertEquals(refLeast(s, bar, face = false), res.barClear!!, 1e-6)
     }
 
     @Test
