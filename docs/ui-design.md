@@ -24,7 +24,7 @@
 | `ui/NumberInput.kt` | `NumberField`, 숫자 키패드(`NumberPad`), 글 고치기 `NumEdit` |
 | `ui/FieldChain.kt` | 키패드 칸 묶음 `FieldChain` · `rememberFieldChain` · `FieldChainHost`("다음") |
 | `ui/DrawKit.kt` | 그림 한 벌의 선 규칙 `DrawSpec` · `artScale` · `centerLine` · `arrowHead` · `haloText` · `linearDim` · `hatchFill` |
-| `ui/ShapeViewer.kt` | `ShapeViewer(lines, marks, state, stock, fills)` — calc 의 `Contour` 를 그린다. `ViewerLine` · `ViewerMark`(`MarkKind`) · `ViewerStock` · `ViewerFill` · `Arrow` · `ViewerState`(`UserView`) |
+| `ui/ShapeViewer.kt` | `ShapeViewer(lines, marks, state, stock, fills)` — calc 의 `Contour` 를 그린다. `ViewerLine` · `ViewerMark`(`MarkKind`) · `ViewerStock` · `ViewerFill` · `Arrow` · `ViewerState`(`UserView` · `focus(점, 배)`) |
 | `ui/ViewerPanel.kt` | 형상 확인 카드 `ShapeViewerCard`(−/+/맞춤 · 크게 보기 · 범례 `LegendItem` · `LegendGlyph`) |
 | `ui/ResultDock.kt` | 아래 결과 띠 `ResultDock`(`DockStatus` · `DockRow` · `oneLine`) |
 | `ui/Overlays.kt` | `BottomSheet`, `Modal`, `SheetTitle`, 토스트 층 |
@@ -114,13 +114,14 @@
   G02 = 화면에서 시계).
   - 손짓: **한 손가락 끌기와 Ctrl 없는 휠은 페이지 스크롤**(위 가운데에 "두 손가락으로 확대·이동" / "Ctrl + 휠로 확대 · 끌어서 이동" 안내 1.5초),
     두 손가락 확대 · 이동, PC 는 Ctrl + 휠 확대 · 마우스 끌기 이동. 두 번 누르기도 맞춤이지만 늘 보이는 '맞춤' 단추가 같은 일을 한다.
-  - `ViewerState`: 보기 = 맞춤의 배수(0.5~200) + 가운데 점(`UserView`). 폰 회전 · 창 크기가 바뀌어도 같은 곳, 치수를 고쳐도 보이던 곳에 새 그림이 걸치면 그대로.
+  - `ViewerState`: 보기 = 맞춤의 배수(0.5~200) + 가운데 점(`UserView`). `focus(점, 배)` = 그 점을 가운데에 맞춤의 몇 배로(라운드 간섭 목록에서 누른 자리로 가기). 폰 회전 · 창 크기가 바뀌어도 같은 곳, 치수를 고쳐도 보이던 곳에 새 그림이 걸치면 그대로.
   - 그리는 순서: 격자(1·2·5 간격, 다섯째 줄 굵게) → 소재(`ViewerStock`: 외경은 윤곽과 중심선 사이, 내경은 위, `mirror` 면 맞은편 벽까지 — 면 + 45° 빗금,
     "◀ 척 쪽") → 면(`ViewerFill`) → 중심선 X0 · Z0(1점 쇄선) → 윤곽 → 원호 중심 지시선 → 점 → 뷰어 알약(척 쪽 · Z0 · 중심 · 왼쪽 아래 **축척 막대** "2 mm · X 반경")
     → 점 라벨.
   - `ViewerLine(contour, color, width = 2.dp, dashed, dotted, arrows = Arrow.None|Filled|Hollow, fill)` — 끊은 선(노즈 중심) · 점선(급송) · 진행 화살(경로 = 채움,
     급송 = 빈 화살, 40dp 넘는 토막 가운데).
-  - `ViewerMark(pt, color, label, kind = MarkKind.Ring|Dot|Square|Cross, info, arc)` — T 점 · 노드 · 진입/후퇴 · 원호 중심. `arc` 가 있으면 중심에서 원호 가운데까지
+  - `ViewerMark(pt, color, label, kind = MarkKind.Ring|Dot|Square|Flag|Cross, info, arc)` — T 점 · 노드 · 진입/후퇴 · 깃발(보링바 안전 끝점 — 점에서 위로 14dp 깃대 +
+    9dp 삼각 깃발, 범례 `LegendGlyph.Flag` 는 0.75 배) · 원호 중심. `arc` 가 있으면 중심에서 원호 가운데까지
     끊은 지시선, 화면 반지름 14dp 미만이면 뺀다. 라벨은 점 둘레 **알약**: 8곳 × 4겹 자리에 점수(다른 라벨 · 점 · 알약과 겹침, 지나는 선, 거리)를 매겨
     고르고(같은 꼴 점 — 노드 둘 — 이 제 점만큼 가까운 자리는 무겁게, 지시선이 앞 라벨을 지나는 자리도, 진행 화살을 덮는 자리는 알약처럼), 뷰어 4dp 안쪽만, 16dp 넘게 떨어지거나
     제 점보다 같은 꼴 다른 점에 더 가까우면 지시선, 가장 나은 자리도 앞서 둔 라벨과 겹치면 라벨은 빼고 점 표시만. 라벨 글(13sp)은 글꼴 1.1배까지(`artFontCap`).
@@ -227,13 +228,13 @@
 - 찍는 것(테스트 파일마다):
   - `ScreenShotTest`: `01-menu`, `02-taper`, `feature-<기능>`, `help`, `keypad` · `keypad-long`(13자), `modal`;
     **큰 글꼴 · 좁은 폰 묶음** — 장면마다 `-fs130`(글꼴 1.3배) · `-w360`(360dp): `01-menu`, `taper-b`(첫 화면 — 360dp 는 TaperShotsTest 의 `taper-b-w360`), `taper-b-keypad`, `round-b2`, `round-b2-keypad`,
-    `triangle`, `help`, 내경 라운드 `round-pick-inner`(고르기) · `round-inner-b3-holder`(보링바 · 빨간 닿음) · `round-manual-inner-rev-holder`(뒤보링 + 보링바, 보통 판도);
+    `triangle`, `help`, 내경 라운드 `round-pick-inner`(고르기) · `round-inner-b3-holder`(보링바 · 빨간 닿음) · `round-inner-a-stop`(안전 끝점 · 잘린 NC 스위치) · `round-manual-inner-rev-holder`(뒤보링 + 보링바, 보통 판도);
     **깨지기 쉬운 상태** — `taper-b-big`(Z −1500) · `taper-b-max`(한도 끝) · `taper-b-warn-gt` · `taper-b-warn-concave` · `taper-b-against` · `taper-b-inner-double-rev` ·
     `taper-b-longnum` · `taper-groove-many`(80단) · `taper-groove-errors`(빨간 띠 셋) · `round-b2-concave` · `round-manual-error` · `triangle-huge` · `triangle-three`;
     경고 글 모아 보기 `texts-warn-taper` · `texts-warn-round`; PC 창 `pc-wide-a` · `pc-wide-keypad`(1280 × 720dp) · `pc-short-help` · `pc-short-keypad`(412 × 640dp).
   - `FoundationShotsTest`(`foundation-*`: 아이콘 · 경고 띠 · 카드 부품 · 결과 띠 · 그림 도구, -w360), `KeypadShotsTest`(`field-states` · `keypad-*`),
     `ViewerShotsTest`(`viewer-*`), `ShellShotsTest`(헤더 단추 48dp 재기 · 메뉴 · 아이콘 · 도움말 · `taper-b-wide` 1280dp),
-    `TaperArtShotsTest` · `RoundArtShotsTest`(`art-*` 그림만, 폭마다), `TaperShotsTest`(`taper-*`), `RoundShotsTest`(`round-*` — 내경 · 보링바 카드 · 크게 보기 포함),
+    `TaperArtShotsTest` · `RoundArtShotsTest`(`art-*` 그림만, 폭마다), `TaperShotsTest`(`taper-*`), `RoundShotsTest`(`round-*` — 내경 · 보링바 카드 · 크게 보기 · 안전 끝점 `round-inner-a-stop` · `round-inner-f-stop` · `round-manual-back-stop` · NC 전체 보기 `round-inner-nc-full-focus` 포함),
     `TriangleShotsTest`(`triangle-*`). 긴 화면은 heightDp 를 늘려 한 장에 찍는다.
 - 프레임마다 나오는 그림은 바로 닫는다(네이티브 메모리). 안 닫으면 1700dp 넘는 스크린샷이 `Surface.makeRasterN32Premul` 에서 실패했다.
 - 견고성 시험 `InputRobustnessTest`: 화면 처음 값에서 칸을 흔들어(키패드로 칠 수 있는 글 — 빈칸·0·음수·12자리·아주 작은 수)
@@ -334,7 +335,9 @@
 | 파일 | 내용 |
 |---|---|
 | `RoundScreen.kt` | `RoundScreen()` — 고르기(04: 외경/내경 스위치 + "가공 형태 선택" 줄 + 형상 카드 2열 + 수동(3점호) 카드), 도움말 `RoundHelp`. 카드를 누르면 입력 화면, 뒤로 키·Esc 는 입력 → 고르기 |
-| `round/RoundModel.kt` | `RoundState`(화면 상태 + Saver — 내경 · 관통 · 보링바 칸 · 프리셋), `dims(type)`(형상마다 칸 이름·순서 = 그림), `blankable`, `RoundDefaults`(처음 값), 경고 글 `roundWarningText`, 보링바 띠 `holderNote` · `holderHitText` · 칸 오류 `barFieldText` |
+| `round/RoundModel.kt` | `RoundState`(화면 상태 + Saver — 내경 · 관통 · 보링바 칸 · 프리셋), `dims(type)`(형상마다 칸 이름·순서 = 그림), `blankable`, `RoundDefaults`(처음 값), 경고 글 `roundWarningText`, 칸 오류 `barFieldText`, 안전 여유 `holderSafe` |
+| `round/HolderStopModel.kt` | 보링바 안전 끝점의 글(화면 · 골든이 같이 씀): 간섭 목록 `hitRows`(`HitRow`), 가공 가능 끝점 `stopView`(`StopView` · `StopKind`), 후퇴 길 읽기 `ncMoves` |
+| `round/HolderStopCards.kt` | 간섭 목록 카드 `HolderHitsCard`, 가공 가능 끝점 카드 `SafeEndCard`, 내경 NC 카드 `HolderNcCard`(줄 색 `NcTone` · 짚은 줄 · 잘린/전체 `CutSwitch`) |
 | `round/RoundArt.kt` | `RoundTypeArt(type, inner, through)` — 형상 그림 Canvas(외경 측면도 · 내경 구멍 단면), `sampleInput(type, inner, through)`(그림용 견본 치수) |
 | `round/RoundParts.kt` | `ManualArt`(3점호 그림 — 내경 · 역방향을 따라 뒤집힘, focus), `RoundSummary`, `NodeTable`, `RoundViewer`(내경 보링바 단면 · 겹침 · 자리 고르기), `ArcCard` |
 | `round/RoundInputScreen.kt` | `RoundTypeScreen`(형상 1~6 · 내경 2~6) · `ManualScreen`(수동 3점호): 요약 → 치수·공구 → (내경) 보링바 → 보정 방식 스위치 → (원호) → 경고 → (내경) 보링바 띠 → 노드 표 → 형상 확인 → NC |
@@ -381,24 +384,43 @@
   - '프리셋 (선택)' 칸 → 시트(직접 입력 + 제조사별 품번 — Ø · f · Dmin · κr · 인서트). 고르면 D · f · DMIN · κr · 모양 · 날 길이를 채운다
     (돌출 길이 · 노즈 R 은 그대로). 고친 뒤엔 품번 옆 '수정됨', 아래 '출처: <사이트>'.
   - 칸: 바 지름 D · 날 길이 l(안내 '인서트 크기 숫자 (DCMT 07 → 7)') · f(바 중심 ~ 인선, 카탈로그 WF) · 인서트 모양 C 80° · D 55° · V 35° · T 60° ·
-    절입각 κr(카탈로그 KAPR) 과 그 아래 '끝날각 κr′ = …°' · 돌출 길이 · 최소 가공경 Dmin(둘은 비우면 그 검사 안 함). 틀리면 칸 빨간 테두리 +
-    아래 빨간 글(`barFieldText`, 예 'f 는 8.435 이상이어야 합니다 (바 윗면이 노즈보다 낮게)') 이고 띠는 없다.
+    절입각 κr(카탈로그 KAPR) 과 그 아래 '끝날각 κr′ = …°' · 돌출 길이 · 최소 가공경 Dmin(둘은 비우면 그 검사 안 함) · **안전 여유**(처음 0.5, 비우면 0.5,
+    0 도 됨, 그 아래 회색 한 줄 '… 반경(X) 방향으로 이만큼(공구대는 Z) 떨어진 마지막 자리에서 멈추고 빠집니다 (인서트 날은 깎는 벽에 붙어도 됨). 바 앞면이
+    비스듬히 지나는 곳은 직선 거리가 더 짧을 수 있어 끝점 카드에 따로 보입니다.' — 프리셋이 바꾸지 않는다). 틀리면 칸 빨간 테두리 +
+    아래 빨간 글(`barFieldText`, 예 'f 는 8.435 이상이어야 합니다 (바 윗면이 노즈보다 낮게)' · '안전 여유는 0 이상이어야 합니다') 이고 아래 카드는 없다.
   - 값은 앱을 켠 동안만(Saver, 키 `h/*`) — 공구 값을 기억하는 것은 승인되지 않았다(C10).
-- **결과 띠**(`holderNote`, 노드 표 위): 바 값이 없으면 파란 '보링바 값을 넣으면 공구가 소재에 닿는지 봅니다.', 닿으면 노란
-  '보링바가 소재에 닿습니다 — n곳' + 곳마다 '· a~b줄 NC 블록 — 바가 맞은편 벽에 닿음: 처음 X… Z…, 반경 겹침 최대 … mm (인선에서 … mm 뒤)'
-  (인서트 · 공구대 '돌출 길이가 … mm 모자람' · 최소 가공경 'Ø… 보다 좁은 곳에 헤드가 들어감' — 최소 가공경은 입체 어림이라 뒤에), 4 줄 + '외 n곳'.
-  앞 · 뒤는 이송 방향 기준(뒤보링은 +Z 가 앞). 안 닿으면 파란 '… 가장 좁은 곳 2.970 mm (n줄).', 되돌아가는 원호는 '보링바 간섭 검사를 하지 않습니다'.
-  줄 번호 · 좌표는 보정 방식 스위치를 따른다 — 직접 보정은 G40 프로그램의 가상 인선(첫 줄 주석을 센 카드 줄), 기계 보정은 도면 좌표 프로그램의
-  노즈가 닿는 도면 점(진입점 · 진입 이동은 도면 좌표 프로그램의 진입 이동 위 — 뒤보링은 진입점이 이미 구멍 안이라 G00 블록과 같은 Z, `hitPoint`).
-  결과 띠(아래 독)의 노란 수에 하나 더한다.
+- **간섭 좌표 · 안전 끝점 · 잘린 NC**(사용자 요청 2026-10-27 "간섭충돌 나는 이송 실제 좌표를 정확하게 찝어줘 … 간섭이 발생하지 않는 좌표까지 가공시키려고",
+  결정: 첫 간섭 직전 안전 좌표에서 멈추고 빠진다 · 안전 여유 칸 기본 0.5 — 예전 결정 D5 '숫자 · NC 는 그대로' 를 바꿈. 계산은 calc-design.md 의 `HolderStop` 절):
+  화면은 `HolderStop.plan`(값이 바뀔 때만 센다) 하나로 노드 표 위에 두 카드를 낸다. 바 값이 없으면 파란 '보링바 값을 넣으면 …', 되돌아가는 원호는 파란 '… 검사를 하지 않습니다'.
+  **간섭 목록**(`HolderHitsCard`, 예전 노란 띠 자리 — 노랑 경고 아이콘 '보링바 간섭 — n곳')은 닿는 곳마다 한 줄: 부분 · 벽('바 · 맞은편 벽' · '공구대 · 입구 끝면' ·
+  '최소 가공경 Ø20' — 입체 어림이라 뒤에), 빨간 'NC n줄'(전체 NC 줄), 닿기 시작 · 끝 X(직경) · Z 두 줄(고정폭), 깊이(반경 겹침 · 인선에서 앞/뒤 — 이송 방향 기준).
+  좌표 · 줄은 보정 방식 스위치를 따르고 머리 아래 작은 글이 기준을 적는다 — 기계 보정 = 도면 명령 좌표(노즈가 닿는 도면 점. 진입은 그 프로그램 자기 진입 — 도면 G00 점에
+  선 자세 · 보정 시작 블록에서 닿는 명령점이라 목록의 진입 줄이 직접 보정과 다를 수 있다, 10-28),
+  직접 보정 = 가상 인선(첫 줄 주석을 센 줄). 줄을 누르면 그 줄에 초점색 띠, 형상 확인이 그 처음 점을 가운데로 맞춤의 3배(`ViewerState.focus`) · 그 자세의 보링바를 그리고
+  화면이 형상 확인으로 오르며, NC 카드는 전체로 바뀌어 그 줄을 초점색 바탕으로 짚는다.
+  **가공 가능 끝점**(`SafeEndCard`)은 끊으면 초록 깃발 '여기까지 깎고 빠집니다' + 좌표(24sp, 잘린 NC 에 쓴 글 그대로) + 'n줄 중간(끝)에서 끊음' · (기계 보정이 블록을
+  안전 끝점에서 끝낼 수 없어 0.01 mm 넘게 덜 깎으면 '안전 끝점보다 경로로 … mm 앞에서 끊음 — … 직접 보정은 그만큼 더 깎음') · 그곳의 가장 가까운 부분 · **반경 여유**
+  (공구대는 'Z 여유', 인서트의 깎는 쪽 벽은 기준이 '겹치지 않음') · **바와 소재 직선 거리**와 소재 쪽 가장 가까운 점(맞은편이면 '맞은편') · 후퇴 방식 한 줄(X 빼고 Z 로 — 그 줄 글,
+  또는 온 길을 거꾸로 n줄, 후퇴 중 가장 좁은 반경 여유. 기계 보정은 '첫 줄 G40 은 보정을 풀며 지금 인선 자리를 명령 — 더 들어가지 않음'), 후퇴 여유가 안전 여유보다 좁으면
+  노랑 한 줄, 직선 거리가 안전 여유보다 짧으면 노랑 한 줄('… 안전 여유는 반경(X) 방향으로 잽니다. 바 앞면이 소재 모서리 · 면을 비스듬히 지나는 자리이니 확인하세요.' —
+  10-28 검증: 반경 0.5 인데 바 앞면과 맞은편 입구 모서리가 0.043 mm 인 예. 기준을 직선 거리로 바꿀지는 사용자 결정 대기). 끝까지 안전하면 초록 체크 '끝까지 안전합니다' +
+  가장 좁은 반경 여유, 진입점부터 · 첫 가공점 전에 모자라거나 기계 보정만 끊을 자리가 없으면 노랑 경고와 까닭. 기계 보정은 그 프로그램 자기 진입으로 본다 — 도면 G00 점에
+  선 자세(비표준 팁 · 3점호 접선 진입)부터 모자라면 '진입점부터 …'(그 G00 점과 '직접 보정은 진입이 달라 깎을 수 있습니다' 를 적음), 보정 시작 블록에서 모자라면
+  '첫 가공점에 닿기 전에 …'(그 명령점). 결과 띠(아래 독)의 노란 수는 닿거나 끊을 때 하나 더한다.
+  **NC 카드**(내경은 `HolderNcCard` — 테이퍼 화면의 `NcCard` 와 같은 꼴, 그 파일은 다른 작업이 쓰고 있어 따로 둠)는 끊으면 처음이 **잘린 NC**(앞 줄은 원래 글 그대로,
+  끊은 마지막 블록 초록 띠 · 옅은 초록 바탕, 후퇴 줄 파랑 — 아래 색 이름표), 머리 아래 스위치 '안전 끝까지 (잘린 NC) / 전체 (확인용)'(360dp 반 칸에 들게 짧게). 전체는 간섭 줄 빨강 ·
+  빨간 칩 '간섭 포함 — 확인용' · 노랑 테 복사 단추 '복사 · 전체 (간섭 포함) n줄'. 복사는 늘 보이는 글 그대로. 기계 보정 잘린 NC 의 칩은 '보정 시작 G41 만 넣기 · G40 은 있음'.
+  깎을 수 없으면 스위치 없이 전체만(확인용 표시). 닿지 않고 끝까지 안전하면 예전 카드와 같다.
 - **형상 확인**(`RoundViewer` + 보링바): 지름 전체 단면(`ViewerStock(mirror = true)` — 맞은편 벽도 빗금, 1dp 뒤집은 도면), 고른 자리의 바 · 인서트
   단면(초록 `drawHolder` · 면 `drawHolderFill`, 입구 끝면 너머 max(3, 깊이 15 %) 에서 자름), 겹친 곳 빨강 α .5(바와 같은 곳에서 자름), 닿는 경로 구간 빨강 3dp
-  (직접 보정은 가상 인선, 기계 보정은 노즈가 닿는 도면 점 사이 — ✕ 표와 같은 곳), 처음 닿는 곳 ✕ '간섭 n줄'(최소 가공경만이면 'Dmin n줄').
-  카드 아래(크게 보기에서도) '보링바를 그릴 자리' 알약: 첫 간섭 · 가장 깊은 곳 · 가장 좁은 곳 · P1…(처음은 첫 간섭, 없으면 가장 좁은 곳).
-  범례 '보링바 단면' · '간섭'. 색 대비(뷰어 바탕): drawHolder 라이트 4.5 · 다크 10.6.
-- **NC 카드**: 닿는 줄은 줄 번호 왼쪽 3dp 빨간 띠 + 빨간 굵은 번호(`NcCard(flagged)`).
+  (직접 보정은 가상 인선, 기계 보정은 노즈가 닿는 도면 점 사이 — ✕ 표와 같은 곳. 진입 이동은 지금 NC 의 간섭 목록 그대로 — 기계 보정은 보정 시작 블록 위 명령점),
+  처음 닿는 곳 ✕ '간섭 n줄'(간섭 목록과 같은 좌표 · 줄, 최소 가공경만이면 'Dmin n줄'),
+  안전 끝점 초록 깃발 '안전 끝 n줄'(`MarkKind.Flag`, 깎기 전에 멈추면 '안전 끝'), 잘린 NC 의 후퇴 길(그 글을 다시 읽은 것 — 파란 `info.label` 점선 · 빈 화살).
+  카드 아래(크게 보기에서도) '보링바를 그릴 자리' 알약: (목록에서 누른 간섭) · 안전 끝 · 첫 간섭 · 가장 깊은 곳 · 가장 좁은 곳 · P1…(처음은 맨 앞).
+  범례 '보링바 단면' · '간섭' · '안전 끝' · '후퇴 (잘린 NC)'. 색 대비(뷰어 바탕): drawHolder 라이트 4.5 · 다크 10.6.
 - 도움말 `RoundHelp`: '형상 고르기' 에 외경/내경 스위치, '치수 넣기' 에 입구 구멍 깊이 · 막힘/관통 · 입구 R 은 3점호, 새 묶음 '보링바 간섭 (내경)'
-  (칸 · 검사 방법 · 단면의 한계(DMIN 어림 · 진입/빠지는 길 안 봄) · 프리셋은 제조사마다 다름) — 내경 입력 화면은 이 묶음부터 연다. '경고' 에 노란 띠의 보링바 닿음.
+  (칸 · 간섭 목록 · 안전 여유와 가공 가능 끝점 · 잘린 NC · 후퇴 · 단면의 한계(DMIN 어림 · 진입 길 안 봄) · 프리셋은 제조사마다 다름) — 내경 입력 화면은 이 묶음부터 연다.
+  '경고' 에 보링바 간섭은 노란 표가 붙은 목록 카드.
 
 ## 직각삼각형 화면 (`screens/TriangleScreen.kt`, `screens/triangle/`)
 | 파일 | 내용 |

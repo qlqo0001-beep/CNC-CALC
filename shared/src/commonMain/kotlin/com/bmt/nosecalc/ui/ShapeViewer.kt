@@ -101,8 +101,8 @@ data class ViewerLine(
     val fill: Color? = null,
 )
 
-/** 점 모양. 라벨은 이 순서로 자리를 먼저 잡는다 — T 점(Ring) → 노드(Dot) → 진입·후퇴(Square) → 원호 중심(Cross) */
-enum class MarkKind { Ring, Dot, Square, Cross }
+/** 점 모양. 라벨은 이 순서로 자리를 먼저 잡는다 — T 점(Ring) → 노드(Dot) → 진입·후퇴(Square) → 깃발(Flag — 보링바 안전 끝점) → 원호 중심(Cross) */
+enum class MarkKind { Ring, Dot, Square, Flag, Cross }
 
 /**
  * 형상 뷰어의 점(T 점·보정점 등). 라벨은 점 둘레 알약으로([labels]).
@@ -178,6 +178,12 @@ class ViewerState(view: UserView? = null) {
     /** 다시 맞춤 */
     fun fit() {
         userView = null
+    }
+
+    /** 점 center(mm)를 화면 가운데에, 맞춤의 zoom 배로(목록에서 고른 자리로 가기). 그림 상자를 아직 모르면 처음 그릴 때 상자 안으로 당긴다 */
+    fun focus(center: Pt, zoom: Float) {
+        val u = UserView(zoom, center)
+        userView = bounds?.let(u::clampedTo) ?: u
     }
 
     /** 맞춤 곳(area)에 지금 보기를 놓은 변환 */
@@ -602,11 +608,27 @@ private fun tangent(a: Arc, t: Double): Offset {
 }
 
 /**
- * 점 하나. Ring = 반지름 5dp 빈 원(2.5dp) · Dot = 3dp 채운 점(바탕색 1dp 테) · Square = 8dp 빈 네모(1.8dp) · Cross = 팔 6dp 십자(1.5dp).
+ * 점 하나. Ring = 반지름 5dp 빈 원(2.5dp) · Dot = 3dp 채운 점(바탕색 1dp 테) · Square = 8dp 빈 네모(1.8dp) ·
+ * Flag = 점(2.5dp)에서 위로 14dp 깃대(1.6dp) + 오른쪽으로 9dp 채운 삼각 깃발(바탕색 테) · Cross = 팔 6dp 십자(1.5dp).
  * bg 는 빈 모양의 속과 테 색(뷰어는 뷰어 바탕, 범례는 카드)
  */
 internal fun DrawScope.mark(kind: MarkKind, p: Offset, color: Color, bg: Color) {
     when (kind) {
+        MarkKind.Flag -> {
+            val top = p - Offset(0f, 14.dp.toPx())
+            val flag = Path().apply {
+                moveTo(top.x, top.y)
+                lineTo(top.x + 9.dp.toPx(), top.y + 3.5.dp.toPx())
+                lineTo(top.x, top.y + 7.dp.toPx())
+                close()
+            }
+            drawLine(bg, p, top, 3.6.dp.toPx(), StrokeCap.Round)
+            drawPath(flag, bg, style = Stroke(2.dp.toPx(), join = StrokeJoin.Round))
+            drawLine(color, p, top, 1.6.dp.toPx(), StrokeCap.Round)
+            drawPath(flag, color)
+            drawCircle(bg, 3.5.dp.toPx(), p)
+            drawCircle(color, 2.5.dp.toPx(), p)
+        }
         MarkKind.Ring -> {
             drawCircle(bg, 5.dp.toPx(), p)
             drawCircle(color, 5.dp.toPx(), p, style = Stroke(2.5.dp.toPx()))
@@ -677,7 +699,7 @@ private fun DrawScope.inkOf(lines: List<ViewerLine>, v: ViewXf): List<Pair<Offse
  * 지나도 읽힌다), 점에서 그 자리까지(지시선)가 지나는 앞 라벨마다 2.
  * 가까운 곳이 다 막히면 16dp 씩 더 띄운 바깥 세 겹(겹마다 1)까지 보고, 점에서 16dp 넘게 떨어지거나 같은 꼴 다른 점에 더 가까우면 점 색 α .6 의 1dp 지시선을 긋는다.
  * 모두 뷰어를 벗어나면 가장 나은 곳을 뷰어 안으로 당긴다. 가장 나은 곳도 앞서 둔 라벨과 겹치면 라벨은 빼고 점 표시만 남긴다.
- * [MarkKind] 순서(T 점 → 노드 → 진입·후퇴 → 원호 중심)로 자리를 잡는다. 화면 밖 점은 라벨도 없다
+ * [MarkKind] 순서(T 점 → 노드 → 진입·후퇴 → 깃발 → 원호 중심)로 자리를 잡는다. 화면 밖 점은 라벨도 없다
  */
 private fun DrawScope.labels(
     marks: List<ViewerMark>,

@@ -5,7 +5,7 @@ import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.GrooveCalc
 import com.bmt.nosecalc.calc.GrooveInput
 import com.bmt.nosecalc.calc.GrooveRef
-import com.bmt.nosecalc.calc.HolderCheck
+import com.bmt.nosecalc.calc.HolderStop
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RightTriangle
@@ -15,11 +15,16 @@ import com.bmt.nosecalc.calc.RoundSolution
 import com.bmt.nosecalc.calc.Side
 import com.bmt.nosecalc.screens.round.MANUAL
 import com.bmt.nosecalc.screens.round.RoundState
-import com.bmt.nosecalc.screens.round.holderNote
+import com.bmt.nosecalc.screens.round.backBoring
+import com.bmt.nosecalc.screens.round.hitRows
+import com.bmt.nosecalc.screens.round.stopView
 import com.bmt.nosecalc.screens.round.roundExample
 import com.bmt.nosecalc.screens.round.roundInnerExample
 import com.bmt.nosecalc.screens.round.roundInnerStep
 import com.bmt.nosecalc.screens.round.roundManualInnerMouth
+import com.bmt.nosecalc.screens.round.roundInnerDomeA
+import com.bmt.nosecalc.screens.round.roundInnerSocketF
+import com.bmt.nosecalc.screens.round.roundManualBackBoring
 import com.bmt.nosecalc.screens.round.roundManualInnerRev
 import com.bmt.nosecalc.screens.round.withA16
 import com.bmt.nosecalc.screens.taper.SlopeForm
@@ -130,13 +135,20 @@ class UiGoldenTest {
         manual("round-manual-empty", RoundState(type = MANUAL, open = true))
     }
 
-    /** 내경 라운드와 보링바 띠 글 · 빨간 NC 줄(스크린샷과 같은 상태): 손 계산 돔(바 없음 · 프리셋 A16R-SCLCR 09), 관통 단차(안 닿음), 3점호 입구 R */
+    /**
+     * 내경 라운드와 보링바 간섭 목록 · 가공 가능 끝점 · 잘린 NC(스크린샷과 같은 상태): 손 계산 돔(바 없음 · 프리셋 A16R-SCLCR 09 — DMIN 20 이라 깎기 전에 멈춤),
+     * 관통 단차(안 닿음), 3점호 입구 R, calc-design 보링바 예 A(돔 + 바 A · 안전 여유 0.5 와 0) · F(소켓) · 뒤보링(DMIN 22)
+     */
     @Test
     fun roundInner() {
         roundType("round-inner-b3", roundInnerExample(3), 3)
         roundType("round-inner-b3-holder", roundInnerExample(3).withA16(), 3)
         roundType("round-inner-b5-through-holder-clear", roundInnerStep().withA16(), 5)
         manual("round-manual-inner-holder", roundManualInnerMouth().withA16())
+        roundType("round-inner-a-stop", roundInnerDomeA(), 3)
+        roundType("round-inner-a-stop-safe0", roundInnerDomeA().apply { setHolder("safe", "0") }, 3)
+        roundType("round-inner-f-stop", roundInnerSocketF(), 4)
+        manual("round-manual-back-stop", roundManualBackBoring())
     }
 
     @Test
@@ -237,18 +249,32 @@ class UiGoldenTest {
         roundText(name, RoundCalc.arc3(input), RoundCalc.arc3(input.copy(noseR = 0.0)).solution, input.noseR, "표준 팁 T${s.manualStandardTip()}", s.takeIf { input.inner }, faceAtStart = false)
     }
 
-    /** 보링바(내경에서 바 값이 있을 때): 화면의 holderNote 그대로 — 기계 보정 · 직접 보정의 띠 글과 빨간 NC 줄(1부터) */
+    /**
+     * 보링바(내경에서 바 값이 있을 때): 화면의 간섭 목록([hitRows]) · 가공 가능 끝점([stopView]) · 잘린 NC 그대로 — 기계 보정 · 직접 보정마다.
+     * 줄은 NC 카드 그대로(1부터, 직접 보정은 첫 줄 주석까지), 빨간 줄은 전체 NC 에서 간섭이 걸린 줄
+     */
     private fun StringBuilder.holderText(s: RoundState, sol: RoundSolution, drawn: RoundSolution?, noseR: Double, faceAtStart: Boolean) {
         val bar = s.holderBar() ?: return
-        val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, noseR, faceAtStart, bar)
-        line("보링바 $bar")
+        val plan = HolderStop.plan(sol, drawn, noseR, faceAtStart, bar, s.holderSafe())
+        line("보링바 $bar · 안전 여유 ${s.holder("safe")}")
+        if (plan.result.skip != null) {
+            line("검사 안 함 ${plan.result.skip}")
+            return
+        }
+        line("경고 ${plan.warnings}")
         for (comp in listOf(false, true)) {
-            val nc = if (comp) directNc(sol.nc, noseR, sol.tip) else drawn?.nc ?: continue
-            val note = holderNote(res, bar, sol, drawn, comp, nc) ?: continue
-            line(if (comp) "띠 직접 보정" else "띠 기계 보정")
-            line("  ${note.text}")
-            note.lines.forEach { line("  · $it") }
-            line("  빨간 줄 ${note.flagged.sorted().map { it + 1 }}")
+            if (!comp && drawn == null) continue
+            line(if (comp) "[직접 보정]" else "[기계 보정]")
+            val rows = hitRows(plan, comp, bar, backBoring(sol))
+            line("  간섭 ${rows.size}곳")
+            rows.forEach { line("  · ${it.text}") }
+            line("  빨간 줄 ${rows.flatMap { it.line..it.lineTo }.toSortedSet().map { it + 1 }}")
+            val v = stopView(plan, comp, sol, drawn, noseR, bar)
+            line("  끝점 ${v.kind}${v.at?.let { " ${xz(it)}" }.orEmpty()}")
+            v.text.lines().forEach { line("    $it") }
+            val nc = v.nc ?: continue
+            line("  잘린 NC 끝 ${v.endLine!! + 1}줄 · 후퇴 ${v.retractLines!!.first + 1}~${v.retractLines!!.last + 1}줄")
+            nc.forEach { line("    $it") }
         }
     }
 

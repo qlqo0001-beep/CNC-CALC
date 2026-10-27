@@ -11,22 +11,16 @@ import com.bmt.nosecalc.calc.BarField
 import com.bmt.nosecalc.calc.BoringBar
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.HolderCheck
-import com.bmt.nosecalc.calc.HolderHit
-import com.bmt.nosecalc.calc.HolderPart
 import com.bmt.nosecalc.calc.HolderPose
-import com.bmt.nosecalc.calc.HolderResult
-import com.bmt.nosecalc.calc.HolderSkip
+import com.bmt.nosecalc.calc.HolderStop
 import com.bmt.nosecalc.calc.InsertShape
 import com.bmt.nosecalc.calc.L2Ref
 import com.bmt.nosecalc.calc.MAX_MM
 import com.bmt.nosecalc.calc.NoseComp
-import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RoundInput
 import com.bmt.nosecalc.calc.RoundResult
 import com.bmt.nosecalc.calc.RoundSolution
 import com.bmt.nosecalc.calc.RoundWarning
-import kotlin.math.abs
-import kotlin.math.floor
 
 /** 수동(CAD 3점호) 카드의 번호. TYPE 1~6 다음 */
 internal const val MANUAL = 7
@@ -122,9 +116,15 @@ internal class RoundState(
         get() = values["through"] == "true"
         set(v) { values["through"] = v.toString() }
 
-    /** 보링바 칸(dia · f · shape · edge · kr · ovh · dmin): 쓴 그대로, 처음은 빈칸 */
-    fun holder(name: String): String = values["h/$name"] ?: ""
+    /** 보링바 칸(dia · f · shape · edge · kr · ovh · dmin · safe): 쓴 그대로, 처음은 빈칸 — 안전 여유(safe)만 0.5 */
+    fun holder(name: String): String = values["h/$name"] ?: if (name == "safe") Fmt.nc(HolderStop.SAFE_DEFAULT) else ""
     fun setHolder(name: String, v: String) { values["h/$name"] = v }
+
+    /**
+     * 안전 여유(mm, 사용자 결정 2026-10-27: 바 · 인서트 · 공구대 · 최소 가공경이 소재와 이만큼 떨어져야 안전 — 기본 0.5, 0 도 된다).
+     * 비우면 기본값, 숫자가 아니면 NaN(칸이 빨갛고 검사 안 함). 음수도 [HolderStop.safeOk] 가 막는다
+     */
+    fun holderSafe(): Double = holder("safe").let { if (it.isBlank()) HolderStop.SAFE_DEFAULT else it.toDoubleOrNull() ?: Double.NaN }
 
     /** 고른 프리셋. null = 직접 입력 */
     val preset: HolderPreset? get() = HOLDER_PRESETS.firstOrNull { it.code == values["h/preset"] }
@@ -327,43 +327,6 @@ internal fun barFieldText(f: BarField, bar: BoringBar, r: Double): String {
 }
 
 /**
- * 보링바 띠. text = 닿으면 제목(‘… — n곳’), 아니면 안내 한 줄. lines = 닿는 곳마다 한 줄(4 줄까지, 나머지는 ‘외 n곳’).
- * flagged = NC 카드에서 빨갛게 할 줄(0부터, 카드에 주는 목록 기준)
- */
-internal class HolderNote(val text: String, val lines: List<String>, val contact: Boolean, val flagged: Set<Int>)
-
-/**
- * 보링바 검사 → 띠. comp = 직접 보정: [sol] 의 G40 프로그램(카드 목록 nc 는 첫 줄 주석부터) · 가상 인선 좌표.
- * 아니면 기계 보정: [drawn](노즈R 0 으로 푼 도면 좌표 프로그램) · 노즈가 닿는 도면 점. 바 값이 틀리면 null(칸이 빨갛다 — 띠 없음).
- * 줄은 바 · 인서트 · 공구대 닿음을 먼저, 최소 가공경(입체 어림)은 뒤에 — 둘 다 가공 순서
- */
-internal fun holderNote(res: HolderResult?, bar: BoringBar?, sol: RoundSolution, drawn: RoundSolution?, comp: Boolean, nc: List<String>): HolderNote? {
-    if (res == null || bar == null) return HolderNote("보링바 값을 넣으면 공구가 소재에 닿는지 봅니다.", emptyList(), false, emptySet())
-    when (res.skip) {
-        HolderSkip.BAD_INPUT -> return null
-        HolderSkip.NOT_MONOTONE -> return HolderNote("원호가 Z 로 되돌아가는 모양이라 보링바 간섭 검사를 하지 않습니다.", emptyList(), false, emptySet())
-        null -> {}
-    }
-    val prog = if (comp) sol else drawn ?: return null
-    fun line(e: Int, p: HolderPose) = cardLine(prog, comp, e, p)
-    if (res.hits.isEmpty()) {
-        val at = res.barClearAt ?: return null
-        return HolderNote(
-            "보링바가 소재에 닿지 않습니다. 바와 구멍 벽 사이 가장 좁은 곳 ${Fmt.fixed3(res.barClear!!)} mm (${line(res.barClearElement!!, at) + 1}줄).",
-            emptyList(), false, emptySet(),
-        )
-    }
-    val hits = res.hits.sortedBy { it.part == HolderPart.MIN_BORE }
-    val texts = hits.map { h ->
-        val from = line(h.element, h.first)
-        holderHitText(h, from + 1, line(h.element, h.last) + 1, nc[from], comp, bar, backBoring(sol), prog)
-    }
-    val flagged = hits.flatMap { line(it.element, it.first)..line(it.element, it.last) }.toSet()
-    val shown = texts.take(4) + listOfNotNull("외 ${texts.size - 4}곳".takeIf { texts.size > 4 })
-    return HolderNote("보링바가 소재에 닿습니다 — ${hits.size}곳", shown, true, flagged)
-}
-
-/**
  * 보링바 자세가 걸린 NC 카드 줄(0부터). prog = 카드의 프로그램(comp = 직접 보정: G40 풀이 · 가상 인선 좌표 · 첫 줄 주석만큼 밀림,
  * 아니면 도면 좌표 풀이 · 노즈가 닿는 도면 점), e = 요소(−2 진입점 · −1 진입 이동 · k = segs[k])
  */
@@ -371,41 +334,6 @@ internal fun cardLine(prog: RoundSolution, comp: Boolean, e: Int, p: HolderPose)
 
 /** 뒤보링: 도면이 +Z 로 간다(3점호 역방향 내경) — 보링바 검사와 같은 판정 */
 internal fun backBoring(sol: RoundSolution): Boolean = sol.drawing.segs.last().end.z > sol.drawing.segs.first().start.z
-
-/**
- * 닿는 곳의 처음 좌표: comp(직접 보정)면 가상 인선, 아니면 노즈가 닿는 도면 점. 기계 보정의 진입(−2 진입점 · −1 진입 이동)은
- * 도면 좌표 프로그램 [prog] 의 진입 이동 위(진입점에서 fromT 만큼) — 뒤보링은 진입점이 이미 구멍 안이라, 도면 첫 점으로 적으면 제 NC 줄과 Z 가 달랐다
- */
-internal fun hitPoint(hit: HolderHit, prog: RoundSolution?, comp: Boolean): Pt = when {
-    comp -> hit.first.tip
-    hit.element < 0 && prog != null -> prog.entry + (prog.program.segs.first().start - prog.entry) * hit.fromT
-    else -> hit.first.drawn
-}
-
-/**
- * 닿는 곳 한 줄: 'a~b줄 NC 블록 — 무엇이 어디에 닿음: 처음 X… Z…, …'. 줄은 1부터, block = 첫 줄의 NC 글.
- * 좌표는 [hitPoint](prog = 카드의 프로그램). 인서트 · 바는 반경 겹침과 그 점이 인선에서 이송 방향으로 앞 · 뒤 얼마인지 —
- * 정방향은 +Z 가 뒤, 뒤보링(reverse — 이송 +Z)은 +Z 가 앞
- */
-internal fun holderHitText(hit: HolderHit, lineFrom: Int, lineTo: Int, block: String, comp: Boolean, bar: BoringBar, reverse: Boolean, prog: RoundSolution? = null): String {
-    val lines = if (lineFrom == lineTo) "${lineFrom}줄" else "$lineFrom~${lineTo}줄"
-    val p = hitPoint(hit, prog, comp)
-    val at = "처음 X${Fmt.fixed3(p.xDia)} Z${Fmt.fixed3(p.z)}"
-    val what = when (hit.part) {
-        HolderPart.INSERT, HolderPart.BAR -> {
-            val part = if (hit.part == HolderPart.BAR) "바" else "인서트"
-            val wall = if (hit.opposite) "맞은편 벽" else "깎는 쪽 벽"
-            val side = if ((hit.behind < 0) != reverse) "앞" else "뒤"
-            "${part}가 ${wall}에 닿음: $at, 반경 겹침 최대 ${Fmt.fixed3(hit.depth)} mm (인선에서 ${fixed1(abs(hit.behind))} mm $side)"
-        }
-        HolderPart.TURRET -> "공구대가 소재 끝면에 닿음: $at, 돌출 길이가 ${Fmt.fixed3(hit.depth)} mm 모자람"
-        HolderPart.MIN_BORE -> "최소 가공경 Ø${plain(bar.dMin ?: 0.0)} 보다 좁은 곳에 헤드가 들어감: $at"
-    }
-    return "$lines $block — $what"
-}
-
-/** 0.1 까지(5 는 올림): 1.626 → "1.6", 2 → "2.0" */
-private fun fixed1(v: Double) = Fmt.fixed3(floor(v * 10 + 0.5) / 10).dropLast(2)
 
 /** 쓴 그대로의 숫자: 끝 0 · 소수점 없이(20 → "20", 107.5 → "107.5") */
 internal fun plain(v: Double) = Fmt.nc(v).removeSuffix(".")

@@ -10,11 +10,12 @@ import com.bmt.nosecalc.calc.HolderCheck
 import com.bmt.nosecalc.calc.HolderHit
 import com.bmt.nosecalc.calc.HolderPart
 import com.bmt.nosecalc.calc.HolderPose
-import com.bmt.nosecalc.calc.HolderResult
 import com.bmt.nosecalc.calc.HolderSkip
+import com.bmt.nosecalc.calc.HolderStop
 import com.bmt.nosecalc.calc.InsertShape
 import com.bmt.nosecalc.calc.L2Ref
 import com.bmt.nosecalc.calc.Pt
+import com.bmt.nosecalc.calc.RetractKind
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundWarning
 import com.bmt.nosecalc.calc.Side
@@ -266,79 +267,55 @@ class RoundStateTest {
         assertEquals("절입각 κr 은 90° 이상, 100° 보다 작아야 합니다", barFieldText(BarField.KAPPA, bar.copy(kappaDeg = 100.0), 0.4))
     }
 
-    /**
-     * 보링바 띠: 내경 손 계산 돔(바 Ø16 · f 11 · C 9.67 · κr 95°)은 구 원호(요소 2)에서 바 · 인서트가 맞은편 벽에 닿는다.
-     * 줄 번호는 NC 카드 그대로(1부터, 직접 보정은 첫 줄 주석까지), 블록은 그 줄 글, 좌표는 직접 보정 = 인선 · 기계 보정 = 도면 점
-     */
-    @Test
-    fun holderBanner() {
-        val s = roundInnerExample(3)
+    /** 예 A(돔 + 바 A) 풀이 · 계획. safe = 안전 여유 칸 글 */
+    private class DomeA(safe: String = "0.5") {
+        val s = roundInnerDomeA().apply { setHolder("safe", safe) }
         val input = s.input(3)
         val sol = RoundCalc.calc(input).solution!!
         val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
-        val bar = BoringBar(16.0, 11.0, InsertShape.C, 9.67, 95.0)
-        val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, true, bar)
-        val hit = res.hits.first { it.part == HolderPart.BAR }
+        val bar = s.holderBar()!!
+        val plan = HolderStop.plan(sol, drawn, 0.4, true, bar, s.holderSafe())
+    }
+
+    /**
+     * 간섭 목록: 예 A 는 구 원호(요소 2)에서 바 · 인서트가 맞은편 벽에 닿는다(calc-design 표). 줄은 NC 카드 그대로(1부터, 직접 보정은 첫 줄 주석까지),
+     * 좌표는 직접 보정 = 가상 인선 · 기계 보정 = 노즈가 닿는 도면 점(도면 명령 좌표), 닿기 시작 → 끝
+     */
+    @Test
+    fun hitList() {
+        val a = DomeA()
+        val hit = a.plan.result.hits.first { it.part == HolderPart.BAR }
         assertTrue(abs(hit.first.tip.z + 11.409) < 3e-3 && abs(hit.first.tip.xDia - 18.006) < 3e-3, "${hit.first.tip}")
-        val direct = directNc(sol.nc, 0.4, sol.tip)
-        val comp = holderNote(res, bar, sol, drawn, comp = true, direct)!!
-        assertTrue(comp.contact)
-        assertEquals("보링바가 소재에 닿습니다 — 2곳", comp.text)
-        assertEquals(setOf(5), comp.flagged)
-        val p = hit.first.tip
+        val comp = hitRows(a.plan, comp = true, a.bar, reverse = false)
+        assertEquals(listOf(HolderPart.BAR, HolderPart.INSERT), comp.map { it.hit.part })
+        assertEquals(5, comp[0].line)
         assertEquals(
-            "6줄 G03 X0.8 Z-15. R12.1 — 바가 맞은편 벽에 닿음: 처음 X${Fmt.fixed3(p.xDia)} Z${Fmt.fixed3(p.z)}, " +
-                "반경 겹침 최대 ${Fmt.fixed3(hit.depth)} mm (인선에서 1.6 mm 뒤)",
-            comp.lines[0],
+            "6줄 바 · 맞은편 벽: ${xz(hit.first.tip)} → ${xz(hit.last.tip)}, 반경 겹침 최대 ${Fmt.fixed3(hit.depth)} mm (인선에서 1.6 mm 뒤)",
+            comp[0].text,
         )
-        assertTrue(comp.lines[1].startsWith("6줄 G03 X0.8 Z-15. R12.1 — 인서트가 맞은편 벽에 닿음: 처음 X"), comp.lines[1])
-        val machine = holderNote(res, bar, sol, drawn, comp = false, drawn.nc)!!
-        assertEquals(setOf(4), machine.flagged)
-        val q = hit.first.drawn
-        assertTrue(machine.lines[0].startsWith("5줄 G03 X0. Z-15. R12.5 — 바가 맞은편 벽에 닿음: 처음 X${Fmt.fixed3(q.xDia)} Z${Fmt.fixed3(q.z)}, "), machine.lines[0])
+        assertTrue(comp[1].text.startsWith("6줄 인서트 · 맞은편 벽: X"), comp[1].text)
+        val machine = hitRows(a.plan, comp = false, a.bar, reverse = false)
+        assertEquals(4, machine[0].line)
+        assertEquals(hit.first.drawn, machine[0].from)
+        assertEquals(hit.last.drawn, machine[0].to)
+        assertTrue(machine[0].text.startsWith("5줄 바 · 맞은편 벽: ${xz(hit.first.drawn)} → "), machine[0].text)
         // 둘 다 같은 G40 요소 · 같은 NC 블록을 가리킨다
-        assertEquals(4, sol.lineOf(2, p))
-        assertEquals(4, drawn.lineOf(2, q))
+        assertEquals(4, a.sol.lineOf(2, hit.first.tip))
+        assertEquals(4, a.drawn.lineOf(2, hit.first.drawn))
     }
 
-    /** 닿지 않으면 가장 좁은 곳(파란 안내), 바 값이 없으면 넣으라는 안내, 값이 틀리면 띠 없음(칸이 빨갛다), 되돌아가는 원호는 검사 안 함 */
+    /** 목록은 바 · 인서트 · 공구대 닿음을 먼저, 최소 가공경(입체 어림)은 뒤에 — 프리셋 A16R-SCLCR 09(DMIN 20) */
     @Test
-    fun holderNotes() {
-        val input = roundInnerStep().input(5)
-        val sol = RoundCalc.calc(input).solution!!
-        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
-        val bar = BoringBar(16.0, 11.0, InsertShape.C, 9.67, 95.0)
-        val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, true, bar)
-        assertTrue(res.hits.isEmpty())
-        val n = drawn.lineOf(res.barClearElement!!, res.barClearAt!!.drawn) + 1
-        val clear = holderNote(res, bar, sol, drawn, comp = false, drawn.nc)!!
-        assertFalse(clear.contact)
-        assertEquals("보링바가 소재에 닿지 않습니다. 바와 구멍 벽 사이 가장 좁은 곳 2.970 mm (${n}줄).", clear.text)
-        assertTrue(clear.lines.isEmpty() && clear.flagged.isEmpty())
-        assertEquals("보링바 값을 넣으면 공구가 소재에 닿는지 봅니다.", holderNote(null, null, sol, drawn, comp = false, drawn.nc)!!.text)
-        val bad = bar.copy(f = 8.0)
-        assertNull(holderNote(HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, true, bad), bad, sol, drawn, comp = false, drawn.nc))
-        val loop = HolderResult(HolderSkip.NOT_MONOTONE, emptyList(), null, null, null)
-        assertEquals("원호가 Z 로 되돌아가는 모양이라 보링바 간섭 검사를 하지 않습니다.", holderNote(loop, bar, sol, drawn, comp = false, drawn.nc)!!.text)
-    }
-
-    /** 띠는 4 줄까지, 나머지는 '외 n곳'. 최소 가공경은 바 · 인서트 닿음 뒤에 */
-    @Test
-    fun holderBannerOverflow() {
+    fun hitListMinBoreLast() {
         val s = roundInnerExample(3).withA16()
         val input = s.input(3)
         val sol = RoundCalc.calc(input).solution!!
         val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
         val bar = s.holderBar()!!
-        val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, true, bar)
-        assertEquals(5, res.hits.size, "${res.hits.map { it.element to it.part }}")
-        val note = holderNote(res, bar, sol, drawn, comp = false, drawn.nc)!!
-        assertEquals("보링바가 소재에 닿습니다 — 5곳", note.text)
-        assertEquals(5, note.lines.size)
-        assertEquals("외 1곳", note.lines.last())
-        assertTrue(note.lines[0].contains("바가 맞은편 벽") && note.lines[1].contains("인서트가 맞은편 벽"), "${note.lines}")
-        assertTrue(note.lines.subList(2, 4).all { it.contains("최소 가공경 Ø20 보다 좁은 곳에 헤드가 들어감: 처음 X") }, "${note.lines}")
-        assertEquals(setOf(2, 3, 4), note.flagged)
+        val rows = hitRows(HolderStop.plan(sol, drawn, 0.4, true, bar, s.holderSafe()), comp = false, bar, reverse = false)
+        assertEquals(5, rows.size, "${rows.map { it.hit.part }}")
+        assertEquals(listOf(HolderPart.BAR, HolderPart.INSERT), rows.take(2).map { it.hit.part })
+        assertTrue(rows.drop(2).all { it.hit.part == HolderPart.MIN_BORE && it.text.contains("최소 가공경 Ø20: X") && it.detail.startsWith("헤드가 들어가는 구멍이 반경 ") }, "${rows.map { it.text }}")
     }
 
     /**
@@ -351,27 +328,169 @@ class RoundStateTest {
             0, HolderPart.BAR, HolderPose(Pt(-5.0, 10.0), Pt(-4.6, 9.6), Pt(-5.0, 10.0)), HolderPose(Pt(-1.0, 12.0), Pt(-0.6, 11.6), Pt(-1.0, 12.0)),
             HolderPose(Pt(-1.0, 12.0), Pt(-0.6, 11.6), Pt(-1.0, 12.0)), 0.2, 1.0, 0.5, true, 2.04,
         )
-        val bar = BoringBar(40.0, 25.0, InsertShape.C, 9.0, 95.0)
-        assertTrue(holderHitText(hit, 3, 3, "G03 X30. Z0. R10.", comp = true, bar, reverse = false).endsWith("(인선에서 2.0 mm 뒤)"))
-        assertTrue(holderHitText(hit, 3, 3, "G03 X30. Z0. R10.", comp = true, bar, reverse = true).endsWith("(인선에서 2.0 mm 앞)"))
-        assertTrue(holderHitText(hit.copy(behind = -0.3), 3, 3, "G03 X30. Z0. R10.", comp = true, bar, reverse = true).endsWith("(인선에서 0.3 mm 뒤)"))
+        assertTrue(hitDetail(hit, reverse = false).endsWith("(인선에서 2.0 mm 뒤)"))
+        assertTrue(hitDetail(hit, reverse = true).endsWith("(인선에서 2.0 mm 앞)"))
+        assertTrue(hitDetail(hit.copy(behind = -0.3), reverse = true).endsWith("(인선에서 0.3 mm 뒤)"))
 
+        val bar = BoringBar(40.0, 25.0, InsertShape.C, 9.0, 95.0)
         val input = roundManualInnerRev().arc3()
         val sol = RoundCalc.arc3(input).solution!!
         val drawn = RoundCalc.arc3(input.copy(noseR = 0.0)).solution!!
-        val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, 0.4, false, bar)
+        val plan = HolderStop.plan(sol, drawn, 0.4, false, bar)
+        val res = plan.result
         assertTrue(res.hits.isNotEmpty() && res.hits.all { it.part == HolderPart.BAR } && res.hits.any { it.behind > 1 }, "${res.hits.map { it.part to it.behind }}")
-        val note = holderNote(res, bar, sol, drawn, comp = false, drawn.nc)!!
-        assertEquals(res.hits.size, note.lines.size)
-        for ((h, line) in res.hits.zip(note.lines)) assertTrue(line.endsWith("mm ${if (h.behind > 0) "앞" else "뒤"})"), "${h.behind} $line")
-        // 기계 보정의 진입(−2 진입점 · −1 진입 이동) 좌표는 도면 좌표 프로그램의 진입 이동 위 — 뒤보링 진입점은 이미 구멍 안이라
-        // 도면 첫 점(Z−10)이 아니라 제 G00 블록과 같은 Z−11 에서 닿는다
-        assertEquals(-2, res.hits.first().element)
-        assertTrue(note.lines.first().startsWith("1줄 G00 X50. Z-11. — 바가 깎는 쪽 벽에 닿음: 처음 X50.000 Z-11.000,"), note.lines.first())
-        for ((h, line) in res.hits.zip(note.lines).filter { it.first.element < 0 }) {
-            val p = drawn.entry + (drawn.program.segs.first().start - drawn.entry) * h.fromT
-            assertTrue(line.contains("처음 X${Fmt.fixed3(p.xDia)} Z${Fmt.fixed3(p.z)},"), line)
+        val rows = hitRows(plan, comp = false, bar, reverse = backBoring(sol))
+        // 기계 보정 목록 = 그 프로그램 자기 진입(G00 점 · 보정 시작 블록)에서 닿는 곳 + 형상 요소에서 닿는 곳(직접 보정과 같은 노즈 경로)
+        assertEquals(plan.machineEntry!!.size + res.hits.count { it.element >= 0 }, rows.size)
+        for (row in rows) assertTrue(row.text.endsWith("mm ${if (row.hit.behind > 0) "앞" else "뒤"})"), "${row.hit.behind} ${row.text}")
+        // 기계 보정의 진입(−2 G00 점 · −1 보정 시작 블록) 좌표는 그 프로그램 자기 진입의 명령점 — 뒤보링 진입점은 이미 구멍 안이라
+        // 도면 첫 점(Z−10)이 아니라 제 G00 블록 Z−11 에서 닿고, 시작 블록에서는 블록 위 비율의 명령점
+        assertEquals(-2, rows.first().hit.element)
+        assertTrue(rows.first().text.startsWith("1줄 바 · 깎는 쪽 벽: X50.000 Z-11.000 → "), rows.first().text)
+        for (row in rows.filter { it.hit.element == -1 }) {
+            val p = drawn.entry + (drawn.program.segs.first().start - drawn.entry) * row.hit.fromT
+            assertTrue((row.from - p).length < 1e-9, "${row.from} $p")
         }
+        // 진입점부터 닿으니 깎을 수 없다 — 잘린 NC 없음
+        assertEquals(StopKind.UNSAFE, stopView(plan, false, sol, drawn, 0.4, bar).kind)
+    }
+
+    /**
+     * 가공 가능 끝점 · 잘린 NC — 예 A, 안전 여유 0(calc-design 손 계산): 구 원호를 바 맞은편 여유 0 이 되는 Z−11.404 X18.014 에서 끊고, 노즈가 +Z 로 바로
+     * 떨어져 Z 로만 뺀다. 직접 보정 `G03 X18.014 Z-11.404 R12.1` → `G00 Z0.6`(6줄 — 첫 줄 주석), 기계 보정 `G03 X17.785 Z-11.285 R12.5` → `G40 G00 X18.016 Z1.`(5줄 —
+     * G40 은 끝 블록 법선 보정으로 선 노즈의 인선 자리)
+     */
+    @Test
+    fun stopDomeSafe0() {
+        val a = DomeA("0")
+        val d = stopView(a.plan, comp = true, a.sol, a.drawn, 0.4, a.bar)
+        assertEquals(StopKind.CUT, d.kind)
+        assertEquals(5, d.endLine)
+        assertEquals("G03 X18.014 Z-11.404 R12.1", d.nc!![5])
+        assertEquals(listOf("G00 Z0.6"), d.nc.slice(d.retractLines!!))
+        assertEquals("(G40 DIRECT R0.4 T2)", d.nc.first())
+        // 앞 줄은 원래 NC 그대로
+        assertEquals(directNc(a.sol.nc, 0.4, 2).take(5), d.nc.take(5))
+        assertEquals("X18.014 Z-11.404", xz(d.at!!))
+        assertEquals("6줄 중간에서 끊음", d.where)
+        assertTrue(d.near!!.startsWith("가장 가까운 곳: 바 · 맞은편 벽 — 반경 여유 0.000 mm (기준: 안전 여유 0 mm)"), d.near)
+        assertTrue(d.retract!!.startsWith("후퇴: 그 자리에서 Z 로 (노즈가 벽에서 바로 떨어짐): G00 Z0.6 · 후퇴 중 가장 좁은 반경 여유 "), d.retract)
+        val m = stopView(a.plan, comp = false, a.sol, a.drawn, 0.4, a.bar)
+        assertEquals(StopKind.CUT, m.kind)
+        assertEquals(4, m.endLine)
+        assertEquals("G03 X17.785 Z-11.285 R12.5", m.nc!![4])
+        assertEquals(listOf("G40 G00 X18.016 Z1."), m.nc.slice(m.retractLines!!))
+        assertEquals("5줄 중간에서 끊음", m.where)
+        assertEquals("X17.785 Z-11.285", xz(m.at!!))
+    }
+
+    /**
+     * 예 A, 안전 여유 0.5: 축 쪽으로 빼면 바 맞은편이 0.5 아래라 온 길을 거꾸로(같은 중심의 반대 방향 원호). 후퇴 길을 다시 읽으면 진입점으로 돌아가고
+     * 원호는 프로그램 원호와 같은 중심이다(뷰어의 파란 점선)
+     */
+    @Test
+    fun stopDomeReverse() {
+        val a = DomeA()
+        val d = stopView(a.plan, comp = true, a.sol, a.drawn, 0.4, a.bar)
+        assertEquals("G03 X19.001 Z-10.874 R12.1", d.nc!![d.endLine!!])
+        assertEquals(listOf("G02 X19.739 Z-10.432 R12.1", "G02 X20. Z-10.059 R0.6", "G01 Z-0.4", "G01 Z0.6"), d.nc.slice(d.retractLines!!))
+        assertTrue(d.retract!!.startsWith("후퇴: 온 길을 거꾸로 이송으로 진입점까지 (4줄)"), d.retract)
+        val back = ncMoves(d.at!!, d.nc.slice(d.retractLines!!))
+        assertEquals(4, back.size)
+        assertTrue((back.last().end - a.sol.entry).length < 1e-3, "${back.last().end}")
+        val arcs = back.filterIsInstance<Arc>()
+        assertEquals(2, arcs.size)
+        assertTrue(arcs.all { it.cw }, "$arcs")
+        assertTrue((arcs[0].center - (a.sol.program.segs[2] as Arc).center).length < 2e-3, "${arcs[0].center}")
+        assertTrue((arcs[1].center - (a.sol.program.segs[1] as Arc).center).length < 2e-3, "${arcs[1].center}")
+        val m = stopView(a.plan, comp = false, a.sol, a.drawn, 0.4, a.bar)
+        assertEquals("G03 X18.803 Z-10.738 R12.5", m.nc!![m.endLine!!])
+        assertEquals("G40 G01 X19.001 Z-10.875", m.nc[m.retractLines!!.first])
+    }
+
+    /**
+     * 끝까지 안전(관통 단차 + A16 — 가장 좁은 곳 2.970) · 깎기 전에 멈춤(돔 + A16 의 DMIN 20 = 구멍 Ø20, 안전 여유 0.5) · 안전 여유 칸
+     * (처음 0.5, 비우면 0.5, 0 은 됨, 음수는 칸이 빨갛고 검사 안 함, Saver 로 남음)
+     */
+    @Test
+    fun stopKinds() {
+        val step = roundInnerStep().withA16()
+        val input = step.input(5)
+        val sol = RoundCalc.calc(input).solution!!
+        val drawn = RoundCalc.calc(input.copy(noseR = 0.0)).solution!!
+        val bar = step.holderBar()!!
+        val plan = HolderStop.plan(sol, drawn, 0.4, true, bar, step.holderSafe())
+        assertTrue(plan.result.hits.isEmpty() && plan.end == null)
+        val n = drawn.lineOf(plan.result.barClearElement!!, plan.result.barClearAt!!.drawn) + 1
+        val clear = stopView(plan, comp = false, sol, drawn, 0.4, bar)
+        assertEquals(StopKind.CLEAR, clear.kind)
+        assertEquals("끝까지 안전합니다\n안전 여유 0.5 mm 를 지키며 경로 끝까지 깎습니다. 바와 구멍 벽 사이 가장 좁은 반경 여유 2.970 mm (${n}줄).", clear.text)
+        assertNull(clear.nc)
+
+        val dome = roundInnerExample(3).withA16()
+        val di = dome.input(3)
+        val dsol = RoundCalc.calc(di).solution!!
+        val ddrawn = RoundCalc.calc(di.copy(noseR = 0.0)).solution!!
+        val dplan = HolderStop.plan(dsol, ddrawn, 0.4, true, dome.holderBar()!!, dome.holderSafe())
+        for (comp in listOf(false, true)) {
+            val v = stopView(dplan, comp, dsol, ddrawn, 0.4, dome.holderBar()!!)
+            assertEquals(StopKind.NOTHING, v.kind)
+            assertNull(v.nc)
+            assertTrue(v.near!!.startsWith("가장 가까운 곳: 최소 가공경 Ø20 — "), v.near)
+            assertNotNull(v.at)
+        }
+
+        val s = RoundState()
+        assertEquals("0.5", s.holder("safe"))
+        assertEquals(0.5, s.holderSafe())
+        s.setHolder("safe", "")
+        assertEquals(0.5, s.holderSafe())
+        s.setHolder("safe", "0")
+        assertEquals(0.0, s.holderSafe())
+        assertTrue(HolderStop.safeOk(s.holderSafe()))
+        s.setHolder("safe", "-0.3")
+        assertFalse(HolderStop.safeOk(s.holderSafe()))
+        assertEquals(HolderSkip.BAD_INPUT, HolderStop.plan(sol, drawn, 0.4, true, bar, s.holderSafe()).result.skip)
+        s.setHolder("safe", "0.8")
+        // 프리셋은 안전 여유를 바꾸지 않는다
+        s.pickPreset(HOLDER_PRESETS.first())
+        assertEquals("0.8", with(RoundState.Saver) { restore(SaverScope { true }.save(s)!!)!! }.holder("safe"))
+    }
+
+    /**
+     * 안전 끝점 글이 어떤 결과에서도 예외 없이 나온다(Fmt 는 무한대 · NaN 에서 멈춘다 — 면을 넘는 순간의 여유가 끝없는 곳 등):
+     * 내경 예시 형상 2~6 · 3점호 입구 R · 뒤보링 × 프리셋 28 × 안전 여유 0 · 0.5 × 두 보정 방식, 후퇴 길 읽기는 진입점 Z 까지
+     */
+    @Test
+    fun holderStopTextsNeverThrow() {
+        val states = (2..6).map { t -> roundInnerExample(t) to t } + listOf(roundManualInnerMouth() to MANUAL, roundManualBackBoring() to MANUAL)
+        var cuts = 0
+        for ((st, t) in states) {
+            val (sol, drawn, face) = if (t == MANUAL) {
+                val a = st.arc3()
+                Triple(RoundCalc.arc3(a).solution!!, RoundCalc.arc3(a.copy(noseR = 0.0)).solution, false)
+            } else {
+                val i = st.input(t)
+                Triple(RoundCalc.calc(i).solution!!, RoundCalc.calc(i.copy(noseR = 0.0)).solution, true)
+            }
+            for (p in HOLDER_PRESETS) for (safe in listOf(0.0, 0.5)) {
+                val plan = HolderStop.plan(sol, drawn, 0.4, face, p.bar, safe)
+                if (plan.result.skip != null) continue
+                for (comp in listOf(false, true)) {
+                    val rows = hitRows(plan, comp, p.bar, backBoring(sol))
+                    rows.forEach { it.text }
+                    val v = stopView(plan, comp, sol, drawn, 0.4, p.bar)
+                    v.text
+                    val nc = v.nc ?: continue
+                    cuts++
+                    val back = ncMoves(v.at!!, nc.slice(v.retractLines!!))
+                    // 기계 보정의 거꾸로 후퇴는 G40 뒤라 인선 경로(직접 보정 진입점)로, X 빼기 후퇴는 제 진입점 Z 로
+                    val entryZ = if (comp || v.cut!!.retract == RetractKind.REVERSE) sol.entry.z else drawn!!.entry.z
+                    assertTrue(back.isNotEmpty() && abs(back.last().end.z - entryZ) < 1e-3, "${p.code} $t $safe $comp ${nc.slice(v.retractLines!!)}")
+                }
+            }
+        }
+        assertTrue(cuts > 20, "잘린 NC 가 나온 경우 $cuts")
     }
 
     /** 형상 확인의 빨간 경로 구간: 직접 보정은 가상 인선, 기계 보정은 도면 좌표 경로에서 노즈가 닿는 도면 점 사이(✕ 표와 같은 곳) */

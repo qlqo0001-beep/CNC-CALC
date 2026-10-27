@@ -19,6 +19,7 @@ import com.bmt.nosecalc.screens.round.MANUAL
 import com.bmt.nosecalc.screens.round.RoundState
 import com.bmt.nosecalc.screens.round.dims
 import com.bmt.nosecalc.screens.round.roundExample
+import com.bmt.nosecalc.screens.round.roundInnerDomeA
 import com.bmt.nosecalc.screens.round.roundInnerExample
 import com.bmt.nosecalc.screens.round.roundManualInnerRev
 import com.bmt.nosecalc.screens.round.roundWarningText
@@ -100,7 +101,7 @@ class ScreenShotTest {
         }
     }
 
-    /** 뒤보링(내경 역방향 3점호) + 보링바 A16R-SCLCR 09: 인서트를 Z 로 뒤집은 단면 · 띠의 앞/뒤는 이송 방향 기준 */
+    /** 뒤보링(내경 역방향 3점호) + 보링바 A16R-SCLCR 09: 인서트를 Z 로 뒤집은 단면 · 간섭 목록의 앞/뒤는 이송 방향 기준 */
     @Test
     fun backBoringHolder() = with(scenes.single { it.name == "round-manual-inner-rev-holder" }) {
         Shots.both(name, heightDp, frames, setup, content = content)
@@ -269,8 +270,10 @@ private val scenes = listOf(
     Scene("help", setup = { it.helpOpen = true }) { App(it) },
     // 내경 라운드: 고르기(형상 2~6 · 언더컷 표), 돔 + 보링바(빨간 닿음 띠 · 단면 · NC 줄), 뒤보링 + 보링바
     Scene("round-pick-inner", fs130 = 1110, w360 = 990, setup = openRound()) { AppHost(it) { RoundScreen(RoundState().apply { typeInner = true }) } },
-    Scene("round-inner-b3-holder", fs130 = 4640, w360 = 4120, setup = openRound()) { AppHost(it) { RoundScreen(roundInnerExample(3).withA16()) } },
-    Scene("round-manual-inner-rev-holder", 4000, fs130 = 4500, w360 = 4020, setup = openRound()) { AppHost(it) { RoundScreen(roundManualInnerRev().withA16()) } },
+    Scene("round-inner-b3-holder", fs130 = 5900, w360 = 5300, setup = openRound()) { AppHost(it) { RoundScreen(roundInnerExample(3).withA16()) } },
+    // 안전 끝점(보링바 예 A): 간섭 목록 · 가공 가능 끝점 · 잘린 NC 스위치가 큰 글꼴 · 좁은 폰에서 잘리지 않게
+    Scene("round-inner-a-stop", fs130 = 5900, w360 = 5400, setup = openRound()) { AppHost(it) { RoundScreen(roundInnerDomeA()) } },
+    Scene("round-manual-inner-rev-holder", 4700, fs130 = 5400, w360 = 4900, setup = openRound()) { AppHost(it) { RoundScreen(roundManualInnerRev().withA16()) } },
 )
 
 /** 묶음 제목 + 경고 띠 목록 */
