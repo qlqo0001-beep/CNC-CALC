@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.text.AnnotatedString
@@ -104,10 +105,12 @@ internal fun DrawScope.haloText(
         drawRoundRect(halo, tl - Offset(bg, 0f), Size(size.width + 2 * bg, size.height), CornerRadius(bg))
     }
     // 글자마다 색을 따로 준 부분("L2(B)" 의 B)도 테는 바탕색. 테 색 · 획은 그릴 때 넘긴다 —
-    // drawText(measurer, …, style) 는 같은 글이면 먼저 잰 배치를 색째 다시 써서 테가 글자색으로 그려졌다
+    // drawText(measurer, …, style) 는 같은 글이면 먼저 잰 배치를 색째 다시 써서 테가 글자색으로 그려졌다.
+    // 안드로이드는 같은 글·style 이면 잰 배치(와 그 TextPaint)를 같이 써서, 테에서 켠 Stroke 가 글 칠하기까지 남아
+    // 글이 제 색으로 굵게 뭉개졌다(폰 다크, 10-28 — 데스크톱은 멀쩡). 테는 halo 색 style 로 따로 재고, 글은 Fill 을 못 박는다
     val plain = AnnotatedString(text.text, text.spanStyles.map { AnnotatedString.Range(it.item.copy(color = Color.Unspecified), it.start, it.end) })
-    drawText(measurer.measure(plain, style), halo, tl, drawStyle = Stroke(DrawSpec.halo.toPx() * ks, join = StrokeJoin.Round))
-    drawText(layout, topLeft = tl)
+    drawText(measurer.measure(plain, style.copy(color = halo)), halo, tl, drawStyle = Stroke(DrawSpec.halo.toPx() * ks, join = StrokeJoin.Round))
+    drawText(layout, topLeft = tl, drawStyle = Fill)
     return Rect(tl, size)
 }
 
