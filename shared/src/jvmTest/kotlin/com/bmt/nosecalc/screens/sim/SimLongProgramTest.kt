@@ -109,7 +109,7 @@ class SimLongProgramTest {
         val ui = UiQueue()
         val scene = ImageComposeScene((412 * d).roundToInt(), (915 * d).roundToInt(), Density(d), coroutineContext = ui) {
             AppHost(app) {
-                SimulatorPage(sim) {}
+                SimulatorPage(sim, onTools = {}) {}
                 traj.value?.let { TrajectoryWindow(sim, it, onClose = {}, onEditor = {}) }
             }
         }
@@ -183,6 +183,6 @@ class SimLongProgramTest {
                 run = runOf(editor.text, tools)
             }
         }
-        AppHost(state) { SimulatorPage(sim) {} }
+        AppHost(state) { SimulatorPage(sim, onTools = {}) {} }
     }
 }

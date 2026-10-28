@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.screens.sim.SimulatorPage
+import com.bmt.nosecalc.screens.sim.TrajSheet
 import com.bmt.nosecalc.screens.sim.TrajUi
 import com.bmt.nosecalc.screens.sim.TrajectoryWindow
 import com.bmt.nosecalc.screens.sim.rememberSimState
@@ -14,10 +15,18 @@ fun SimulatorScreen() {
     val app = LocalAppState.current
     val sim = rememberSimState(app.store)
     val traj = remember { TrajUi() }
-    SimulatorPage(sim, onTrajectory = {
-        sim.ensureRun()
-        sim.trajOpen = true
-    })
+    SimulatorPage(
+        sim,
+        onTrajectory = {
+            sim.ensureRun()
+            sim.trajOpen = true
+        },
+        onTools = {
+            sim.ensureRun()
+            traj.sheet = TrajSheet.TOOLS
+            sim.trajOpen = true
+        },
+    )
     if (sim.trajOpen) {
         TrajectoryWindow(
             sim, traj,

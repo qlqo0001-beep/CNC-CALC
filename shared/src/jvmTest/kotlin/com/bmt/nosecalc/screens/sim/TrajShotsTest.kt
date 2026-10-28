@@ -22,7 +22,7 @@ class TrajShotsTest {
         val sim = remember { TrajScenes.sim(state.store, s) }
         val ui = remember { TrajScenes.ui(sim, s).apply { this.sheet = sheet } }
         AppHost(state) {
-            SimulatorPage(sim) {}
+            SimulatorPage(sim, onTools = {}) {}
             TrajectoryWindow(sim, ui, onClose = {}, onEditor = {})
         }
     }

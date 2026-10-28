@@ -93,7 +93,7 @@ class SimRobustnessTest {
             (412 * d).roundToInt(), (915 * d).roundToInt(), Density(d), coroutineContext = ui + handler,
         ) {
             AppHost(app) {
-                SimulatorPage(sim) {}
+                SimulatorPage(sim, onTools = {}) {}
                 traj.value?.let { TrajectoryWindow(sim, it, onClose = { traj.value = null }, onEditor = { l -> traj.value = null; sim.goToLine(l) }) }
             }
         }

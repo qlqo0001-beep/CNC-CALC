@@ -16,7 +16,7 @@ class Traj3DShotsTest {
             val sim = remember { TrajScenes.sim(state.store, s) }
             val ui = remember { TrajScenes.ui(sim, s) }
             AppHost(state) {
-                SimulatorPage(sim) {}
+                SimulatorPage(sim, onTools = {}) {}
                 TrajectoryWindow(sim, ui, onClose = {}, onEditor = {})
             }
         }

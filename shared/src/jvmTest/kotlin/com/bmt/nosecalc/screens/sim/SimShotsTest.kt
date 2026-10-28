@@ -24,7 +24,7 @@ class SimShotsTest {
                     run = runOf(editor.text, tools)
                 }
             }
-            AppHost(state) { SimulatorPage(sim) {} }
+            AppHost(state) { SimulatorPage(sim, onTools = {}) {} }
         }
 
     /** 09 꼴: 예제 ①(09 글 + G70) · 키패드 열림 · 커서 8줄 */
