@@ -1,6 +1,7 @@
 package com.bmt.nosecalc
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.geometry.Offset
@@ -65,6 +66,9 @@ object Shots {
         val state = AppState(KeyValueStore(File.createTempFile("bmt-kv", ".properties").apply { delete() }))
         state.setTheme(dark)
         setup(state)
+        // 방금 쓴 상태를 이 스레드에서 알림까지 끝낸다 — 남겨 두면 PC 의 전역 스냅숏 알림(AWT 스레드)이 장면의 첫 구성 도중에 끼어들어
+        // Compose 안에서 NullPointerException(addPendingInvalidationsLocked)이 드물게 났다(4단계 최종 점검, keypad-long · taper-tip)
+        Snapshot.sendApplyNotifications()
         val scene = ImageComposeScene(
             width = (widthDp * DENSITY).roundToInt(),
             height = (heightDp * DENSITY).roundToInt(),

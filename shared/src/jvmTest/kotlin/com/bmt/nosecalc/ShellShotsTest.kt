@@ -87,13 +87,13 @@ class ShellShotsTest {
 
     /**
      * 라운드에서 연 메뉴: 헤더 ← · 메뉴, 화면 테마, 지금 화면 표(라운드), 아래 '준비 중' 묶음.
-     * 준비 중 카드(G코드 시뮬레이터)를 눌러 뜬 토스트까지 — 토스트는 실제 시간 2.5초면 사라지므로 누른 뒤 몇 프레임만
+     * 준비 중 카드(재료·절삭조건 계산)를 눌러 뜬 토스트까지 — 토스트는 실제 시간 2.5초면 사라지므로 누른 뒤 몇 프레임만
      */
     @Test
     fun menuFromRound() = Shots.both(
         "menu-round",
         frames = 14,
-        tapDp = Offset(200f, 574f),
+        tapDp = Offset(200f, 590f),
         setup = {
             it.open(Feature.ROUND)
             it.menuOpen = true
@@ -150,7 +150,7 @@ class ShellShotsTest {
         assertEquals("은", topicJosa(Feature.POLAR.menuTitle))
         assertEquals("은", topicJosa("나사 G76 계산"))
         assertEquals("는", topicJosa("G76"))
-        assertEquals(listOf(Feature.TAPER, Feature.ROUND, Feature.TRIANGLE), Feature.entries.filter { it.ready })
+        assertEquals(listOf(Feature.TAPER, Feature.ROUND, Feature.SIMULATOR, Feature.TRIANGLE), Feature.entries.filter { it.ready })
     }
 
     private companion object {

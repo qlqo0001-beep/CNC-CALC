@@ -15,6 +15,7 @@
 | `screens/TaperScreen.kt`, `screens/taper/` | 테이퍼·홈 화면(아래 절) |
 | `screens/RoundScreen.kt`, `screens/round/` | 라운드 R 화면(아래 절) |
 | `screens/TriangleScreen.kt`, `screens/triangle/` | 직각삼각형 화면(아래 절) |
+| `screens/SimulatorScreen.kt`, `screens/sim/` | G코드 시뮬레이터 — 화면 A 편집기 · CNC 키패드 · 프로그램 저장, 화면 B 궤적 창(2D · 3D · 재생 · 재료 제거 · 설정 창)(아래 절, 설계는 `simulator-design.md` 6 · 7 · 14 · 15 · 16절) |
 | `ui/theme/AppColors.kt` | 색 토큰 라이트·다크(`RoleColors` · `FeatureColors` · `onFill`), KDoc 에 대비표 |
 | `ui/theme/AppTheme.kt` | `AppTheme(dark)`, `AppTheme.colors / sans / mono` (CompositionLocal 하나) |
 | `ui/theme/AppType.kt` | 글자 단계 `AppType`, 여백 `Space`, 모서리 `Radius` |
@@ -139,7 +140,7 @@
   (`if (열림) BottomSheet(...)` 식으로 쓴다). 토스트는 아래(바닥에서 96dp — 결과 띠 위) 2.5초.
 - `PillButton(text, icon, onClick, danger)`(보이는 40dp · 누르는 자리 48dp, danger 는 되돌릴 수 없는 일에만), `CircleIconButton(icon, 설명, onClick, tint, outlined, size = 44.dp)`,
   `AppsButton(open, onClick)`.
-- `ComingSoonPage(feature)` — 준비 중 안내 + 지금 쓸 수 있는 계산 셋으로 바로 가기(56dp), 도움말 `ComingSoonHelp`.
+- `ComingSoonPage(feature)` — 준비 중 안내 + 지금 쓸 수 있는 기능(`ready` — 4단계부터 넷)으로 바로 가기(56dp), 도움말 `ComingSoonHelp`.
 - PC 창(`desktopApp`): 처음 480 × 960dp, 옮기거나 크기를 바꾸면 0.5초 뒤 `win.w · win.h · win.x · win.y` 를 저장해 다음에 그 자리로(최대화 · 최소화 때는 저장 안 함).
 
 ## 테마·색
@@ -235,7 +236,7 @@
   - `FoundationShotsTest`(`foundation-*`: 아이콘 · 경고 띠 · 카드 부품 · 결과 띠 · 그림 도구, -w360), `KeypadShotsTest`(`field-states` · `keypad-*`),
     `ViewerShotsTest`(`viewer-*`), `ShellShotsTest`(헤더 단추 48dp 재기 · 메뉴 · 아이콘 · 도움말 · `taper-b-wide` 1280dp),
     `TaperArtShotsTest` · `RoundArtShotsTest`(`art-*` 그림만, 폭마다), `TaperShotsTest`(`taper-*`), `RoundShotsTest`(`round-*` — 내경 · 보링바 카드 · 크게 보기 · 안전 끝점 `round-inner-a-stop` · `round-inner-f-stop` · `round-manual-back-stop` · NC 전체 보기 `round-inner-nc-full-focus` 포함),
-    `TriangleShotsTest`(`triangle-*`). 긴 화면은 heightDp 를 늘려 한 장에 찍는다.
+    `TriangleShotsTest`(`triangle-*`), `screens/sim/SimShotsTest`(`sim-*` · `pc-wide-sim` · `pc-short-sim` — 아래 '시뮬레이터 편집기'), `screens/sim/TrajShotsTest`(`sim-2d*` · `sim-settings` · `sim-tools` · `sim-legend` · `sim-stop-error` · `pc-wide-traj` · `pc-short-traj` — 궤적 창), `screens/sim/Traj3DShotsTest`(`sim-3d*` · `pc-wide-3d` · `pc-short-3d` — 궤적 창 3D, 백그라운드 그림이라 80 프레임). 긴 화면은 heightDp 를 늘려 한 장에 찍는다.
 - 프레임마다 나오는 그림은 바로 닫는다(네이티브 메모리). 안 닫으면 1700dp 넘는 스크린샷이 `Surface.makeRasterN32Premul` 에서 실패했다.
 - 견고성 시험 `InputRobustnessTest`: 화면 처음 값에서 칸을 흔들어(키패드로 칠 수 있는 글 — 빈칸·0·음수·12자리·아주 작은 수)
   테이퍼·2중 테이퍼 6만, 라운드·3점호 3만, 홈·삼각형 2만 가지를 풀고, 예외가 없고 화면에 찍는 숫자가 모두 유한한지 본다.
@@ -437,3 +438,44 @@
   X 는 직경값(반경 × 2). 값은 크기만 보이고 부호는 가공 방향에 맞게 붙인다고 적는다.
 - 처음 값(사용자 결정 2026-10-17): 다섯 칸 모두 빈칸(자리표시 '0'). 스크린샷 · 골든은 예전 처음 값 밑변 10 · 각도 A 25° 로 찍는다
   (A = 30° 면 X 직경 = 빗변이 되어 헷갈려서 피했다).
+
+## 시뮬레이터 편집기 (`screens/SimulatorScreen.kt`, `screens/sim/`)
+설계 · 정한 것 전부는 `simulator-design.md` 7절(원래 계획)과 14절(만들며 바꾼 것). 계산(파서 · 실행기 · 예제)은 calc `calc.sim`.
+| 파일 | 내용 |
+|---|---|
+| `SimEditorPage.kt` | `SimulatorPage(sim, onTrajectory)` — 프로그램 줄 → 찾기 줄 → 편집기 → 문제 띠 → CNC 키패드(닫으면 [키패드] · [▶ 궤적 확인]). 0.3초 뒤 백그라운드 실행 · 0.5초 뒤 임시 저장, PC 키 `pcKey` |
+| `GEditor.kt` | 편집기 — 줄 번호 칸(문제 표 · 지금 줄 막대) · 구문 색(`syntaxLine` = `GText.tokens`) · 커서 · 고른 글 · 물결 밑줄 · 커서 줄과 멈춘 줄 아래 문제 글 · 스크롤 막대 |
+| `CncKeypad.kt` | 화면 아래에 붙는 7 × 4 키패드(위층 아님 — 연 채 편집기를 누를 수 있게), 머리 ↶ ↷ SHIFT 🔍 ▶ 궤적 ✕ |
+| `EditorState.kt` | 글 모델(대문자 · 되돌리기 200 · 찾기 · 줄), 키 배치 `CncRows` · `pressKey` · `nextShift` |
+| `SimModel.kt` | `SimState`(임시 글 · 저장소 · 키패드 · 찾기 · 공구표 · 실행 결과 · 시트 · 묻는 창, Saver) · `ProgramStore`(`sim/prog/<번호>` · `sim/progs`) |
+| `ProgramSheet.kt` | 목록 시트(저장한 프로그램 · 예제 11개) · ⋯ 시트 · 문제 목록 시트 · 묻는 창(번호 · 덮어쓰기 · 저장 안 한 글 · 지우기) |
+| `SimColors.kt` · `SimIcons.kt` · `SimTexts.kt` | 구문 · 키패드 색(대비표), 선 아이콘, 문제 글 `simIssueText` · 도움말 `SimHelp` |
+
+- 화면 글은 한글, G코드 · 주소 글자 · 단위는 그대로. 번호를 묻는 칸만 숫자 칸(`NumberField` + 칸 묶음, 처음 빈칸) — 나머지 입력은 CNC 키패드.
+- 색: 구문 색(라이트 = 09, 대비가 모자란 X·Z·U·W · P·Q·L 은 짙게), 키 색은 키 종류라 원본 그대로(⌫ 빨강 · , - . 노랑 — 상태 색 아님). 켜진 것 = 청록(찾기), SHIFT 는 09 의 보라.
+- 공구표는 앱을 켠 동안만(C10 대기) — 공구 설정 창이 생기기 전에는 사용자가 쓴 G41/G42 글이 '공구 설정에 넣어 주세요' 로 멈춘다.
+- 테스트: `EditorStateTest` · `SyntaxTest`(09 낱말 색 · 대비) · `SimStateTest`(저장 · 불러오기 · 임시 글 · 공구표 글) · `PcKeyTest` · `SimGoldenTest`(골든 `sim-editor-errors` · `sim-editor-examples` · `sim-issue-texts`) ·
+  `SimShotsTest`: `sim-editor`(09 꼴) · `-closed` · `-shift` · `-shift-lock`(360dp) · `-errors` · `-issues` · `-find` · `-empty` · `sim-programs` · `sim-more` · `sim-ask-delete` · `-number` · `-unsaved`,
+  `-w360` · `-fs130` · `sim-editor-errors-w360` · `sim-editor-closed-fs130-w360`, PC `pc-wide-sim`(1280 × 720) · `pc-short-sim`(412 × 640).
+
+### 궤적 창 (화면 B — `simulator-design.md` 6 · 7.4~7.8 · 15 · 16절)
+| 파일 | 내용 |
+|---|---|
+| `TrajectoryWindow.kt` | `TrajectoryWindow(sim, ui, onClose, onEditor)` — 화면 전체 위층(`Overlay`, 뒤로 · Esc 로 닫힘): 위 띠(2D/3D · ? · ✕) → 멈춤 · 닿음 띠 → 뷰포트(2D 뷰 + 설정 · 공구 · 범례 알약, S/F 카드, 오른쪽 단추 ∠ \|◀ ▶\| ⤢ 📏, 기장여유 알약, 코드 띠 — 3D 면 `Sim3DView` + 설정 · 공구 알약 · 안내 칩, S/F 카드 아래 회전 · 자유, 오른쪽 1/4 \|◀ ▶\| ⤢) → 좌표 카드 → 가공 시간 · 속도 → 단추 줄. 재생 시계(`withFrameNanos`) · 소재 계산(백그라운드 끝까지 한 번 → 재생 시각을 따라) · PC 키. `TrajUi`(고른 고스트 · 측정 · 각도 · 시트 · 코드 목록 · 보기 · 3D 켬 · `Cam3D`) |
+| `Sim3D.kt` | 3D 보기(설계 6 · 16절): `Cam3D`(시점 · 확대 · 이동 · 회전 · 자유 · 1/4 · 끄는 중) · `sceneOf`(맞출 구 · 바닥 · 격자) · `viewOf`/`View3D`(원근 35°, 주점 = 겹친 단추를 뺀 곳의 가운데) · `ZRaster`(CPU z-버퍼 — 뒷면 버림 · 눈 앞 자르기 · 구로 음영 띠) · `Renderer3D`(메시 캐시 · 끄는 중 0.5배 · 그림 셋 돌려 쓰기) · `Sim3DView`(바닥 격자 Canvas + 그림, 백그라운드 그리기 고리 · 재생 중 메시 0.1 초에 한 번 · 손짓) |
+| `Pixels.kt` · `androidMain/…/Pixels.android.kt` · `jvmMain/…/Pixels.jvm.kt` | `argbToImageBitmap`(expect/actual — 안드로이드 `Bitmap.setPixels`, PC Skia `installPixels`, 같은 크기면 다시 씀) |
+| `Sim2DView.kt` | `Sim2DView` — 겹친 Canvas 넷(① 격자 · 척 · 기장여유 띠 · 처음 소재 ② 남은 소재 · 나사 톱니 ③ 경로 · 고스트 · 각도 알약 · ▲ ✕ — `Offscreen` 층, 재생 중 다시 그리지 않음 ④ 지금 공구 · 측정 십자와 좌표 알약 · Z0 (소재면) · 축척)과 손짓(한 손가락 이동 · 두 손가락 확대 · 휠 확대 · 누르기 = 고스트/측정점 고르기). `SimPaths`(실행마다 한 번 만든 모델 좌표 토막 목록: 급송 · 층 · 명령 · 보정 · 원호 · 노즈) → `screenPath`(보이는 토막만 화면 좌표로 잘라 · 픽셀로 같은 토막은 한 번 — 큰 프로그램도 긋는 양이 화면 크기에 묶임) · 급송 점선 + 빈 화살 |
+| `PlayState.kt` | `PlayState`(재생 시각 · M00/M01 · 싱글 블록 멈춤 · \|◀ ▶\| · 줄로 가기 · 척 멈춤), 속도 미끄럼 로그 변환, `timeText` · `feedText` · `speedText` |
+| `SimSetupModel.kt` | 설정 칸(`StockField` · `MachineField` · `ViewFlags`) · `RunSetup`(백그라운드 실행에 넘길 설정 + 원점 자동 값) · `stockOf`(소재 칸 + 자동 소재) · `machineOf` · `numText` |
+| `SimSettingsSheet.kt` | 시뮬레이션 설정 시트(소재 · 기계 · 프로그램 읽기 · 보기 — 한 칸 묶음, 빈칸 = 자동/가정) · 공구 설정 시트(보정 번호마다 카드: 종류 · 노즈 R · 팁(테이퍼의 `TipSheet`) · 인서트 · κr · 폭 · 나사 각) |
+
+- 색: `SimColors` 의 `layer` · `ghost` · `part2d` · `partEdge` · `chuck` · `valueSf` · `valueTime` · `focusPill`(대비표는 KDoc). 켜진 단추 = 청록, 닫기 · 리셋 · 기장여유 = 중립(원본의 빨강 · 주황 · 노랑 대신).
+  3D 는 `Sim3DColors`(두 테마 같은 색 — 바탕 `viewport3d` 가 어두움): tag 마다 음영 띠(금속 · 단면 한 단계 밝게 · 척 몸통 남색 · 턱), 바닥 격자, 안내 칩(05 — 어두운 바탕 + 초록 테), 어두운 켬/끔 단추 회전 · 자유.
+- 설정 저장: 기계 · 읽기 · 보기는 `sim/machine` · `sim/view`(앱 전체, 다음에 켜도 그대로), 소재 칸 · 공구표 · 속도 · 싱글 블록 · M01 은 화면 Saver(앱을 켠 동안).
+- 테스트: `PlayStateTest`(M00 · M01 · 싱글 블록 · 싱글 블록이 먼저 멈춰도 뒤 M00 남김 · \|◀ ▶\| · 척 멈춤 · 속도 · 글 꼴 · 설정 저장 · Saver · 원점 자동) · `TrajPerfTest`(이동 10만 개 프로그램의 ×200 재생 프레임 — `build/perf/traj-big.txt`) · `TrajGoldenTest`(골든 `sim-trajectory` — 예제마다 자동 소재 · 원점 · 시간 · 닿음 · 나사 · 남은 넓이 · 50 % 의 S/F, `sim-trajectory-scenes` — 스크린샷 장면의 카드 값, 06 의 X34.000 Z-2.186) ·
+  `TrajShotsTest`(장면은 `TrajScenes` — 재생을 멈춘 채 시각 고정): `sim-2d`(06 꼴) · `sim-2d-measure`(10 꼴) · `sim-2d-mid`(G71 층 반쯤) · `sim-2d-angle` · `sim-2d-thread` · `sim-2d-chuck` · `sim-stop-error` · `sim-settings` · `sim-tools` · `sim-legend` · `-w360` · `-fs130` · `-fs130-w360` · `pc-wide-traj` · `pc-short-traj`.
+- 3D 테스트: `Sim3DTest`(z-버퍼 앞면 · 뒷면 · 깊이 · 눈 앞 자르기, 카메라 맞춤 · 처음 시점, 05 꼴 부품 글이 멈춤 · 닿음 없이 돎, 1/4 단면 픽셀 · 재생 중간 ≠ 끝 · 0.5배) · `Traj3DGoldenTest`(골든 `sim-3d` — 예제마다 메시 삼각형 · 부피와 단면 회전 부피, `sim-3d-scenes` — 3D 장면의 메시 · 412 × 500 그림의 tag 별 픽셀) ·
+  `Sim3DPerfTest`(메시 · z-버퍼 한 장 · ×200 재생 프레임 — `build/perf/sim-3d.txt`) · `Traj3DShotsTest`(장면은 `TrajScenes.all3d`, 05 꼴 부품 `PART05`): `sim-3d`(재생 중간 — 바깥 나사를 내는 중) · `sim-3d-end`(05 꼴) · `sim-3d-full`(절개 끔 · 자유 · 돌린 시점) · `sim-3d-mid`(09 글 G71 층 반쯤) · `sim-3d-thread`(G76) · `-w360` · `-fs130` · `pc-wide-3d` · `pc-short-3d`.
+  calc `RevolveMeshTest`(부피 손 계산 · 1/4 = 270° 몫 · 바깥쪽 감김 · 삼각형 한도 · 나사 골 자리 = 2D 톱니 · 척 · 둥근 홈 법선).
+- 4단계 최종 점검 시험: `SimRobustnessTest`(예제 11개를 실제 화면으로 · 무작위 프로그램 2 400개 × 공구표 · 소재 · 기계 칸 — `build/perf/sim-robust.txt`) · `SimLongProgramTest`(글 5 000줄 — 실행 · 편집기 키 하나 · 궤적 창 재생 값 `build/perf/sim-long.txt`, 스크린샷 `sim-editor-long`). 두 시험의 장면은 `UiQueue`(효과를 프레임 사이에 시험 스레드에서 — 앱처럼 한 UI 스레드)로 돌린다. 결과는 `stage4-report.md`.
+
