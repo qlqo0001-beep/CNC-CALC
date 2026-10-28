@@ -65,7 +65,7 @@ import kotlin.math.min
 /**
  * B 화면 — Outer Groove: 그림 요약 → (침범 경고 · 값을 넣으라는 안내) → 홈 치수 → 공구(기준 인선 TYPE 1 왼쪽 팁 3번 / TYPE 2 오른쪽 팁 4번 ·
  * 인서트 폭 · 겹침 · X 여유) → 다단 진입 표 → 형상 → NC.
- * 벽·바닥이 X·Z 축에 평행해 노즈R 보정은 0 이다(calc-design.md 홈 계산). 치수 칸은 한 묶음(키패드 "다음"),
+ * 벽·바닥이 X·Z 축에 평행해 노즈R 보정은 0 이다(calc-design.md 홈 계산). 치수 칸은 한 묶음(키패드 하나 · PC Tab 순서)이고 빈칸에서 시작한다(X 여유 빈칸 = 0),
  * 다단 진입 표가 화면 밖이면 아래 결과 띠에 첫 단 · 끝 단 좌표가 남는다
  */
 @Composable
@@ -141,7 +141,7 @@ internal fun GrooveScreen(s: TaperState) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Field("insert", "인서트 폭 T", Modifier.weight(1f))
                     Field("overlap", "단 겹침", Modifier.weight(1f), placeholder = "0.5")
-                    Field("xClear", "X 여유", Modifier.weight(1f), placeholder = "기본 0", tag = "반경", hint = "반경값 — 한쪽 거리 · 0 이면 외경까지$retract")
+                    Field("xClear", "X 여유", Modifier.weight(1f), placeholder = "비우면 0", tag = "반경", hint = "반경값 — 한쪽 거리 · 0 이면 외경까지$retract")
                 }
             }
             ExpandableHint(

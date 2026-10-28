@@ -79,7 +79,8 @@ import com.bmt.nosecalc.ui.theme.Space
 /**
  * B 화면 — 테이퍼(외경·내경 · 2중 테이퍼): 그림 요약 → (멈춘 까닭 · 값을 넣으라는 안내) → 입력(도면 치수 · 공구) → 보정 방식 스위치 → 경고 → 결과 카드 → 형상 → NC.
  * 결과 카드 · 형상 · NC 는 앱 전체 보정 방식(기계 보정 G41/G42 · 직접 보정 G40)을 따른다.
- * 값이 바뀌면 바로 다시 푼다(계산 버튼 없음). 입력 칸은 한 묶음이라 키패드의 "다음" 으로 이어 넣고, 키패드에는 그 칸만 짚은 그림과 결과 한 줄이 뜬다.
+ * 값이 바뀌면 바로 다시 푼다(계산 버튼 없음). 입력 칸은 한 묶음(키패드 하나 · PC Tab 순서)이고, 키패드에는 그 칸만 짚은 그림과 결과 한 줄이 뜬다.
+ * 도면 치수는 빈칸에서 시작한다 — 모자라는 동안은 파란 안내만(결과 · 형상 · NC 없음, 요약 그림은 개념도 그대로).
  * 결과 카드가 화면 밖이면 아래 결과 띠에 T 점 좌표(멈췄으면 그 까닭)가 남는다
  */
 @Composable
@@ -190,7 +191,7 @@ internal fun SlopeScreen(s: TaperState) {
                             // 점 이름은 줄 앞 표에 있으니 키패드 안내 줄에 적는다
                             NumberField(
                                 "모서리 R", rs[i], { s.setPoint("r${i + 1}", it) }, Modifier.weight(.8f),
-                                placeholder = "기본 0", error = "r${i + 1}" in flagged, hint = "T${i + 1} 모서리 R · 비우면 0 (날카로운 꼭짓점)",
+                                placeholder = "비우면 0", error = "r${i + 1}" in flagged, hint = "T${i + 1} 모서리 R · 비우면 0 (날카로운 꼭짓점)",
                                 id = "r${i + 1}", figure = figure("r${i + 1}"), preview = preview,
                             )
                         }
@@ -255,7 +256,7 @@ internal fun SlopeScreen(s: TaperState) {
                 Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                         NumberField(
-                            "Z 여유 (진입)", zClear, { s.setShared("zClear", it) }, Modifier.weight(1f), unit = "mm", placeholder = "기본 0",
+                            "Z 여유 (진입)", zClear, { s.setShared("zClear", it) }, Modifier.weight(1f), unit = "mm", placeholder = "비우면 0",
                             error = "zClear" in flagged, hint = "진입점까지 Z 거리 (+ 값) · 노즈 R 보다 작으면 노즈 R 만큼", id = "zClear", preview = preview,
                         )
                         TipField(tip, standard, { s.tip = it }, Modifier.weight(1f))

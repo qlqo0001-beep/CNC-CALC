@@ -46,20 +46,29 @@ class RoundStateTest {
         assertNotNull(m.solution, "수동: ${m.warnings}")
     }
 
-    /** 처음 값은 모두 0 — 형상마다 값 부족(파란 안내), 3점호는 세 점이 겹쳐 모양 불일치 대신 값 부족 */
+    /**
+     * 처음 값은 모두 빈칸(사용자 요청 2026-10-28, 예전엔 0) — 형상마다 값 부족(파란 안내), 3점호도 값 부족. 모서리 R · Z 여유 빈칸은 0.
+     * 예전 처음 값 0 을 그대로 둔(되살린) 칸은 예전처럼 안내(3점호는 세 점이 겹쳐 모양 불일치 대신 값 부족)
+     */
     @Test
     fun freshStartIsMissingInput() {
         val s = RoundState()
         for (t in 1..6) {
-            for (d in dims(t)) assertEquals("0", s.dim(t, d.key))
+            for (d in dims(t)) assertEquals("", s.dim(t, d.key))
             assertEquals(listOf(RoundWarning.MISSING_INPUT), shownWarnings(RoundCalc.calc(s.input(t))), "형상 $t")
         }
+        assertEquals(0.0, s.input(5).cornerR1)
         val input = s.arc3()
-        assertEquals(listOf(RoundWarning.SHAPE_MISMATCH), RoundCalc.arc3(input).warnings)
-        assertEquals(listOf(RoundWarning.MISSING_INPUT), shownWarnings(RoundCalc.arc3(input), input))
-        assertEquals("0", s.shared("zClear"))
+        for (p in listOf("x1", "z1", "x2", "z2", "x3", "z3")) assertEquals("", s.point(p))
+        assertEquals(listOf(RoundWarning.MISSING_INPUT), RoundCalc.arc3(input).warnings)
+        assertEquals("", s.shared("zClear"))
         assertEquals(0.0, s.input(3).zClear)
+        assertEquals(0.0, input.zClear)
         assertEquals("0.4", s.shared("noseR"))
+        assertEquals("5.0", s.shared("leg"))
+        val zeros = RoundState().apply { listOf("x1", "z1", "x2", "z2", "x3", "z3").forEach { setPoint(it, "0") } }.arc3()
+        assertEquals(listOf(RoundWarning.SHAPE_MISMATCH), RoundCalc.arc3(zeros).warnings)
+        assertEquals(listOf(RoundWarning.MISSING_INPUT), shownWarnings(RoundCalc.arc3(zeros), zeros))
     }
 
     /** 값 부족 안내는 넣을 칸 이름을 든다: 꼭 넣을 칸 + 비울 수 있는 묶음에서 더 넣을 개수 */

@@ -72,9 +72,9 @@ import kotlin.math.roundToInt
  *   "" 이면 풀지 못한 것 → 칸에 "—", 표는 "자동 · 계산 안 됨"
  * - error = 이 칸 값이 문제: 빨강 2dp 테두리 · 옅은 빨강 바탕 · 라벨 앞 멈춤 아이콘
  * - tag = 라벨 뒤 회색 표("Ø직경" · "반경")
- * - placeholder = 빈칸 자리표시("기본 0" 처럼, 흐리게)
+ * - placeholder = 빈칸 자리표시("비우면 0" 처럼, 흐리게)
  * hint · blankable · figure · preview 는 키패드로 넘긴다(안내 줄 · "비우기 · 자동 계산" 단추 · 작은 그림 · 결과 한 줄).
- * 키패드는 [FieldChainHost] 가 띄운다 — 칸은 묶음에 id 로 들어가("다음"), 열리면 시트 위로 올라온다.
+ * 키패드는 [FieldChainHost] 가 띄운다 — 칸은 묶음에 id 로 들어가(PC Tab 순서), 열리면 시트 위로 올라온다.
  * 묶음 밖의 칸은 모양만 보인다(부품 견본).
  */
 @Composable
@@ -266,13 +266,14 @@ private fun FieldChip(text: String, bg: Color, fg: Color, border: Color = Color.
 
 /**
  * 숫자 키패드(바텀시트). 열면 지금 값이 "통째 선택"된 채 보이고, 처음 누른 숫자 · . · − 가 그 값을 덮어쓴다(⌫ 는 원래 값을 고친다).
- * 확인 단추는 없다 — 누를 때마다 값이 바로 onChange 로 들어간다. "-" 만 남은 동안은 칸에 앞 값을 둔다.
- * 닫기(닫기 키 · 바깥 누름 · 뒤로 · Esc · 손잡이 끌어내림)는 넣은 값을 그대로 두되, 그때 "-" 뿐이면 연 때 값으로 되돌린다.
+ * 값은 누를 때마다 바로 onChange 로 들어간다. "-" 만 남은 동안은 칸에 앞 값을 둔다.
+ * 오른쪽 열 아래 두 칸 높이의 "확인" 은 키패드를 닫기만 한다 — 다음 칸으로 넘어가지 않는다(사용자 요청 2026-10-28 "다음을 확인으로 변경하고 넘어가게 하지마").
+ * 닫기(확인 · 바깥 누름 · 뒤로 · Esc · 손잡이 끌어내림)는 넣은 값을 그대로 두되, 그때 "-" 뿐이면 연 때 값으로 되돌린다.
  * 위 "취소" 는 이 칸을 연 때 값으로 되돌리고 닫는다. 바뀌는 결과가 보이게 뒤 덮개는 옅다.
  * hint = 안내 줄, autoValue = 빈칸일 때 계산값("자동 -7.385"), blankable = "비우기 · 자동 계산" 단추(빈칸으로 하고 닫는다).
  * preview = 제목 위 결과 한 줄(누를 때마다 바뀐다), figure = 제목 아래 작은 그림(시트 자리가 넉넉할 때만).
- * chain = 칸 묶음: 제목 오른쪽 "n / m", 마지막 칸이 아니면 닫기 아래 "다음"(닫을 때처럼 다듬고 다음 칸을 연다 — 시트는 그대로).
- * PC 는 실제 키보드도 받는다(숫자 · . · − · Backspace · Delete = C · Enter · Tab = 다음(마지막 칸 · 묶음 밖은 닫기) ·
+ * chain = 칸 묶음: PC 의 Tab · Shift+Tab 이 닫을 때처럼 다듬고 다음 · 앞 칸을 연다(시트는 그대로). 화면 키는 넘기지 않으므로 제목에 "n / m" 을 적지 않는다.
+ * PC 는 실제 키보드도 받는다(숫자 · . · − · Backspace · Delete = C · Enter = 확인(닫기) · Tab = 다음 칸(마지막 칸 · 묶음 밖은 닫기) ·
  * Shift+Tab = 앞 칸 · Esc = 닫기).
  */
 @Composable
@@ -318,6 +319,7 @@ internal fun NumberPad(
         // 다른 칸으로 막 넘어가 아직 다시 그리기 전에 온 키는 앞 칸에 넣지 않는다
         if (chain != null && chain.active != id) return
         when (k) {
+            NumEdit.DONE -> close()
             NumEdit.NEXT -> if (next != null) go(next) else close()
             NumEdit.PREV -> if (prev != null) go(prev)
             else -> {
@@ -342,8 +344,7 @@ internal fun NumberPad(
                         maxLines = 1, overflow = TextOverflow.Ellipsis, autoSize = FitDown(12.5f, 9f),
                     )
                 }
-                val order = chain?.order.orEmpty()
-                SheetTitle(label, if (id in order) "${order.indexOf(id) + 1} / ${order.size}" else "") {
+                SheetTitle(label) {
                     Box(
                         Modifier.size(48.dp, 44.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = ::cancel),
                         contentAlignment = Alignment.Center,
@@ -397,7 +398,7 @@ internal fun NumberPad(
                             }
                         }
                     }
-                    // C 는 맨 위(닫기 · 다음에서 떨어뜨려 잘못 눌러 지우지 않게). 값은 이미 들어가 있어 닫기는 닫기만 한다
+                    // C 는 맨 위(확인에서 떨어뜨려 잘못 눌러 지우지 않게). 값은 이미 들어가 있어 확인은 닫기만 한다 — 다음 칸으로 넘어가지 않는다
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(gap)) {
                         PadKey(Modifier.fillMaxWidth(), onClick = { press('C') }) {
                             Text("C", color = c.red, fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -405,21 +406,8 @@ internal fun NumberPad(
                         PadKey(Modifier.fillMaxWidth(), onClick = { press('<') }) {
                             Icon(AppIcons.Backspace, "지우기", Modifier.size(26.dp), tint = c.textBody)
                         }
-                        val accent = if (c.dark) c.appsFill else c.teal
-                        if (next != null) {
-                            PadKey(Modifier.fillMaxWidth(), onClick = ::close, outline = c.teal) {
-                                Text("닫기", color = c.tealDeep, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            }
-                            PadKey(Modifier.fillMaxWidth(), onClick = { press(NumEdit.NEXT) }, fill = accent) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("다음", color = c.onAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                    Icon(AppIcons.ChevronRight, null, Modifier.padding(start = 4.dp).size(16.dp), tint = c.onAccent)
-                                }
-                            }
-                        } else {
-                            PadKey(Modifier.fillMaxWidth(), onClick = { press(NumEdit.NEXT) }, height = KEY_H * 2 + gap, fill = accent) {
-                                Text("닫기", color = c.onAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                            }
+                        PadKey(Modifier.fillMaxWidth(), onClick = { press(NumEdit.DONE) }, height = KEY_H * 2 + gap, fill = if (c.dark) c.appsFill else c.teal) {
+                            Text("확인", color = c.onAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -473,7 +461,6 @@ private fun PadKey(
     onClick: () -> Unit,
     strong: Boolean = false,
     fill: Color? = null,
-    outline: Color? = null,
     height: Dp = KEY_H,
     content: @Composable () -> Unit,
 ) {
@@ -484,7 +471,7 @@ private fun PadKey(
             .height(height)
             .clip(shape)
             .background(fill ?: if (strong) c.subtle else c.field)
-            .border(if (outline != null) 1.5.dp else 1.dp, outline ?: if (fill != null) Color.Transparent else c.lineCard, shape)
+            .border(1.dp, if (fill != null) Color.Transparent else c.lineCard, shape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() } }
@@ -492,7 +479,10 @@ private fun PadKey(
 
 /** 키패드 글 고치기(화면과 떼어 시험한다). 키: '0'~'9' '.' '-'(부호 바꾸기) '<'(지우기) 'C'(비우기) */
 internal object NumEdit {
-    /** 다음 칸(마지막 칸 · 묶음 밖은 닫기) · 앞 칸 */
+    /** 확인(닫기 — 다음 칸으로 넘어가지 않는다: 화면 '확인' 키 · PC Enter) */
+    const val DONE = '\n'
+
+    /** 다음 칸(마지막 칸 · 묶음 밖은 닫기) · 앞 칸 — PC 의 Tab · Shift+Tab */
     const val NEXT = '='
     const val PREV = '^'
     private const val MAX_DIGITS = 12
@@ -541,7 +531,7 @@ internal object NumEdit {
             Key.Minus, Key.NumPadSubtract -> '-'
             Key.Backspace -> '<'
             Key.Delete -> 'C'
-            Key.Enter, Key.NumPadEnter -> NEXT
+            Key.Enter, Key.NumPadEnter -> DONE
             Key.Tab -> if (e.isShiftPressed) PREV else NEXT
             else -> null
         }

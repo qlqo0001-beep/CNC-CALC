@@ -6,6 +6,7 @@ import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.GrooveCalc
 import com.bmt.nosecalc.calc.GrooveInput
 import com.bmt.nosecalc.calc.GrooveRef
+import com.bmt.nosecalc.calc.GrooveWarning
 import com.bmt.nosecalc.calc.NoseR
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.Side
@@ -434,50 +435,55 @@ class TaperSolveTest {
         assertEquals(listOf(-13.0, -15.5, -18.0), g.solution!!.steps.map { it.z })
     }
 
-    /** 처음 값: 도면 치수는 0, 각도 · 모서리 R · 시작 · 끝점은 빈칸 → 계산 전이라 멈춤이 아닌 안내(waiting) */
+    /**
+     * 처음 값(사용자 요청 2026-10-28 "0 이 적힌 좌표들을 다 빈칸으로"): 도면 치수(X · Z)와 각도 · 모서리 R · 시작 · 끝점, 홈 치수 · Z 여유 · X 여유가 모두 빈칸 →
+     * 계산 전이라 빨간 멈춤이 아닌 파란 안내(MISSING_INPUT). 공구 값(노즈 R · 인서트 폭 · 겹침)은 그대로
+     */
     @Test
-    fun defaultsWaitForDimensions() {
+    fun defaultsStartBlank() {
         for (kind in TaperKind.entries.filter { !it.groove }) {
             for (type in 1..kind.types) {
                 for (rev in listOf(false, true)) {
                     val s = TaperState(kind, rev, type, open = true)
                     val n = kind.points
-                    for (i in 1..n) assertEquals("0" to "0", s.point("x$i") to s.point("z$i"))
+                    for (i in 1..n) assertEquals("" to "", s.point("x$i") to s.point("z$i"))
                     for (name in listOf("ang", "r1", "start", "end")) assertEquals("", s.point(name))
-                    val f = form(kind, type, rev, List(n) { 0.0 }, List(n) { 0.0 })
-                    assertNull(TaperSolve.solve(f).solution)
-                    assertTrue(f.waiting)
+                    assertEquals("", s.shared("zClear"))
+                    val r = TaperSolve.solve(formOf(s))
+                    assertNull(r.solution)
+                    assertEquals(listOf(TaperWarning.MISSING_INPUT), r.warnings, "${kind.label} 형상 $type 역 $rev")
                 }
             }
         }
         val g = TaperState(TaperKind.GROOVE, type = 1, open = true)
-        val input = GrooveInput(
-            g.shared("zStart").toDouble(), g.shared("width").toDouble(), g.shared("od").toDouble(), g.shared("bottom").toDouble(),
-            g.shared("insert").toDouble(), g.shared("overlap").toDouble(), xClear = g.shared("xClear").toDouble(),
-        )
-        assertNull(GrooveCalc.calc(input).solution)
-        assertTrue(input.waiting)
-        assertEquals("0", g.shared("xClear"))
-        assertEquals("0", g.shared("zClear"))
+        for (name in listOf("zStart", "width", "od", "bottom", "xClear", "zClear")) assertEquals("", g.shared(name), name)
+        assertEquals(listOf("0.4", "3", "0.5"), listOf("noseR", "insert", "overlap").map(g::shared))
+        val r = GrooveCalc.calc(grooveOf(g))
+        assertNull(r.solution)
+        assertEquals(listOf(GrooveWarning.MISSING_INPUT), r.warnings)
     }
 
     /**
-     * 처음 화면에서 키패드로 치수를 넣는 흐름(정방향 형상 1, 홈 왼쪽 인선): 0 에서 시작해 칸 순서대로 넣는 동안은 파란 안내(waiting)이거나 답이고
-     * 빨간 멈춤은 없다 — 테이퍼는 마지막 치수가 들어가는 순간 답이 나온다. 키패드는 누를 때마다 값을 넣으므로 한 자리씩(4 → 40, − 만은 넣지 않는다)
+     * 처음 화면에서 키패드로 치수를 넣는 흐름(정방향 형상 1, 홈 왼쪽 인선): 빈칸에서 시작해 칸 순서대로 넣는 동안은 파란 안내(SlopeScreen 의 waiting)이거나 답이고
+     * 빨간 멈춤은 없다 — 테이퍼는 마지막 치수가 들어가는 순간 답이 나온다(각도는 빈칸 = 자동). Z0 인 점도 0 을 넣는다.
+     * 키패드는 누를 때마다 값을 넣으므로 한 자리씩(4 → 40, − 만은 넣지 않는다)
      */
     @Test
     fun freshStartSolvesAsYouType() {
         fun typed(v: String) = (1..v.length).map { v.take(it) }.filter { it != "-" }
         for (kind in TaperKind.entries.filter { !it.groove }) {
             val s = TaperState(kind, type = 1, open = true)
-            val names = (1..kind.points).flatMap { listOf("x$it", "z$it") }.filter { TaperExample.point(kind, 1, false, it) != "0" }
+            val names = (1..kind.points).flatMap { listOf("x$it", "z$it") }
             for (name in names) {
                 for (t in typed(TaperExample.point(kind, 1, false, name))) {
                     s.setPoint(name, t)
                     val f = formOf(s)
+                    val r = TaperSolve.solve(f)
+                    // SlopeScreen 과 같은 판정: 풀리지 않았으면 값 부족(MISSING_INPUT) · 0 치수(waiting)만 파란 안내
+                    val waiting = r.solution == null && (TaperWarning.MISSING_INPUT in r.warnings || f.waiting)
                     val done = name == names.last() && t == TaperExample.point(kind, 1, false, name)
-                    assertEquals(!done, f.waiting, "${kind.label} $name=$t")
-                    if (done) assertNotNull(TaperSolve.solve(f).solution, kind.label)
+                    assertEquals(!done, waiting, "${kind.label} $name=$t ${r.warnings}")
+                    if (done) assertNotNull(r.solution, kind.label)
                 }
             }
         }
@@ -485,15 +491,19 @@ class TaperSolveTest {
         for ((name, v) in TaperExample.groove) {
             for (t in typed(v)) {
                 g.setShared(name, t)
-                val input = GrooveInput(
-                    g.shared("zStart").toDouble(), g.shared("width").toDouble(), g.shared("od").toDouble(), g.shared("bottom").toDouble(),
-                    g.shared("insert").toDouble(), g.shared("overlap").toDouble(), xClear = g.shared("xClear").toDouble(),
-                )
+                val input = grooveOf(g)
                 val r = GrooveCalc.calc(input)
-                assertTrue(r.solution != null || input.waiting, "홈 $name=$t ${r.warnings}")
+                assertTrue(r.solution != null || GrooveWarning.MISSING_INPUT in r.warnings || input.waiting, "홈 $name=$t ${r.warnings}")
             }
         }
+        assertNotNull(GrooveCalc.calc(grooveOf(g)).solution)
     }
+
+    /** GrooveScreen 의 입력 → GrooveInput 그대로(겹침 빈칸 = 0.5, X 여유 빈칸 = 0) */
+    private fun grooveOf(g: TaperState) = GrooveInput(
+        g.shared("zStart").toDoubleOrNull(), g.shared("width").toDoubleOrNull(), g.shared("od").toDoubleOrNull(), g.shared("bottom").toDoubleOrNull(),
+        g.shared("insert").toDoubleOrNull(), g.shared("overlap").toDoubleOrNull() ?: 0.5, xClear = g.shared("xClear").toDoubleOrNull() ?: 0.0,
+    )
 
     /** SlopeScreen 의 입력 → SlopeForm 그대로. 각도 칸은 Z축 기준 숫자(toggleFlipSwapsFields 의 30°) */
     private fun formOf(s: TaperState): SlopeForm {

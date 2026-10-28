@@ -62,7 +62,7 @@ fun TriangleScreen() = TriangleScreen(TriangleState())
 
 /**
  * 그림 → 경고(그림 바로 아래, 값 부족은 파랑 안내) → 아는 값 다섯 칸 → 결과 → X · Z 연동. 값이 바뀌면 바로 다시 푼다.
- * 다섯 칸은 한 묶음(키패드 "다음" 으로 a → b → c → A → B)이고, 그림의 칸을 눌러도 그 칸의 키패드가 열린다.
+ * 다섯 칸은 한 묶음(키패드 하나 · PC Tab 순서 a → b → c → A → B)이고, 그림의 칸을 눌러도 그 칸의 키패드가 열린다.
  * initial = 시험이 정한 처음 상태, editing = 처음부터 키패드를 열어 둘 칸(스크린샷 시험용)
  */
 @Composable
@@ -117,7 +117,7 @@ private fun Swatch(bg: Color, border: Color) {
     Box(Modifier.size(16.dp, 12.dp).clip(shape).background(bg).border(1.5.dp, border, shape))
 }
 
-/** 다섯 칸(a · b · c / A · B) 가운데 아는 둘. 빈칸은 계산값을 자리표시로(못 풀면 "0"). wrong = 빨강으로 짚을 칸 */
+/** 다섯 칸(a · b · c / A · B) 가운데 아는 둘. 빈칸은 계산값을 "자동" 으로(못 풀면 빈칸 그대로 — 0 을 적지 않는다). wrong = 빨강으로 짚을 칸 */
 @Composable
 private fun InputCard(s: TriangleState, result: TriangleResult, wrong: Set<TriField>) {
     val c = AppTheme.colors
@@ -171,7 +171,6 @@ private fun TriNumberField(s: TriangleState, result: TriangleResult, f: TriField
     NumberField(
         f.label, v, { s.set(f, it) }, modifier,
         unit = f.unit,
-        placeholder = "0",
         autoValue = if (v.isEmpty() && sol != null) Fmt.fixed3(f.of(sol)) else null,
         error = error,
         id = f.key,

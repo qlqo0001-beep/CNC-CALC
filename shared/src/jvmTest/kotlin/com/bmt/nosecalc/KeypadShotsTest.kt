@@ -65,7 +65,7 @@ class KeypadShotsTest {
         }
     }
 
-    /** 칸 묶음(세 칸 중 둘째가 열림): 오른쪽 열 C · ⌫ · 닫기 · "다음", 제목 오른쪽 "2 / 3" */
+    /** 칸 묶음(세 칸 중 둘째가 열림 — 다음 칸이 있어도): 오른쪽 열 C · ⌫ · 두 칸 높이의 "확인"(닫기만, 넘어가지 않음), 제목 옆 "n / m" 없음 */
     @Test
     fun keypadChain() = Shots.both("keypad-chain") { AppHost(it) { ChainFields(rememberFieldChain("z1")) } }
 
@@ -158,7 +158,7 @@ private fun FieldStates() {
                     NumberField("X2", "50.000", {}, Modifier.weight(1f), unit = "mm", tag = "Ø직경")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
-                    NumberField("T1 모서리 R", "", {}, Modifier.weight(1f), unit = "mm", placeholder = "기본 0")
+                    NumberField("T1 모서리 R", "", {}, Modifier.weight(1f), unit = "mm", placeholder = "비우면 0")
                     NumberField("X 여유", "1", {}, Modifier.weight(1f), unit = "mm", tag = "반경")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {

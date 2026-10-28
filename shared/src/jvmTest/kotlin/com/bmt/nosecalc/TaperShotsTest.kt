@@ -47,11 +47,11 @@ class TaperShotsTest {
         Shots.both("taper-a-wide", heightDp = 900, widthDp = 700) { AppHost(it) { TaperScreen(TaperState(TaperKind.OUTER_DOUBLE)) } }
     }
 
-    /** 결과 화면은 [example] 값(2단계 처음 값)으로 — 화면은 이제 도면 치수 · 여유 0 에서 시작한다. 끝점을 비우면 마지막 T 점에서 끝난다 */
+    /** 결과 화면은 [example] 값(2단계 처음 값)으로 — 화면은 이제 도면 치수 · 여유 빈칸에서 시작한다. 끝점을 비우면 마지막 T 점에서 끝난다 */
     @Test
     fun input() {
-        // 처음 화면: 치수 0 → 빨간 멈춤 대신 파란 안내, 그림은 그대로
-        shot("taper-b-empty") { TaperState(type = 1, open = true) }
+        // 처음 화면: 치수 빈칸 → 빨간 멈춤 대신 파란 안내, 그림은 그대로(2중 · 칸 하나만 넣은 상태는 아래 fresh)
+        shot("taper-b-empty", 1300) { TaperState(type = 1, open = true) }
         // 처음 보정 방식(기계 보정): 결과 카드 맨 위 R · T, 도면 좌표, 접힌 '직접 보정 좌표도 보기' · 뷰어는 도면 좌표 경로 · NC 는 G41/G42
         shot("taper-b", 2540) { TaperState(type = 1, open = true).example() }
         // 외경 형상 1: T1 모서리 R1, 시작점 단면 X30 → 직접 보정: 보정 좌표 카드에 R 시작·끝 접점, NC 첫 줄 '(G40 DIRECT R0.4 T3)'
@@ -91,10 +91,22 @@ class TaperShotsTest {
                 setShared("zClear", "0.5")
             }
         }
-        shot("taper-groove-empty") { TaperState(TaperKind.GROOVE, type = 1, open = true) }
+        shot("taper-groove-empty", 1100) { TaperState(TaperKind.GROOVE, type = 1, open = true) }
         shot("taper-groove", 2280) { TaperState(TaperKind.GROOVE, type = 1, open = true).example() }
         // 인서트 폭 9 > 홈 폭 8 → 두 칸에 빨간 테
         shot("taper-groove-error") { TaperState(TaperKind.GROOVE, type = 2, open = true).example().apply { setShared("insert", "9") } }
+    }
+
+    /**
+     * 빈칸 시작(사용자 요청 2026-10-28 "0 이 적힌 좌표들을 다 빈칸으로"): 2중 테이퍼 첫 화면, 홑 · 2중 · 홈에 칸 하나만 넣은 상태(홑 · 홈 첫 화면은
+     * taper-b-empty · taper-groove-empty) — 빨강 없이 파란 안내만, 결과 · 형상 · NC 는 아직 없고 요약 그림은 개념도 그대로, 여유 칸은 흐린 '비우면 0'
+     */
+    @Test
+    fun fresh() {
+        shot("taper-b-one", 1300) { TaperState(type = 1, open = true).apply { setPoint("x1", "40") } }
+        shot("taper-b-double-empty", 1300) { TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true) }
+        shot("taper-b-double-one", 1300) { TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).apply { setPoint("x1", "40") } }
+        shot("taper-groove-one", 1100) { TaperState(TaperKind.GROOVE, type = 1, open = true).apply { setShared("width", "8") } }
     }
 
     /**
@@ -152,7 +164,7 @@ class TaperShotsTest {
     }
 
     /**
-     * 키패드(폰 높이): 그림은 고치는 칸의 점 · 치수만 초점색, 위에 결과 한 줄(기계 보정은 T1 · T2 도면 좌표 / 첫 단 · 끝 단), 제목 옆 "n / m", 오른쪽 아래 "다음".
+     * 키패드(폰 높이): 그림은 고치는 칸의 점 · 치수만 초점색, 위에 결과 한 줄(기계 보정은 T1 · T2 도면 좌표 / 첫 단 · 끝 단), 오른쪽 아래 두 칸 높이 "확인".
      * 칸을 끌어올리는 스크롤이 0.1초 걸음에서는 출렁이므로 폰 프레임(16ms)으로 찍는다
      */
     @Test

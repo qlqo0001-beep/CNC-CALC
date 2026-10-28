@@ -1,2 +1,2 @@
 표준 팁 T3
-경고 [SHAPE_MISMATCH]
+경고 [MISSING_INPUT]
