@@ -112,7 +112,7 @@ class TaperWarningsTest {
         // 그 글대로: 인선 X-0.8 까지 깎고 Z 로 후퇴(두 프로그램 모두)
         val s = TaperSolve.solve(face).solution!!
         assertEquals(listOf("G01 X-0.8", "G00 Z1."), s.ncG40.takeLast(2))
-        assertEquals(listOf("G01 X-0.8", "G40 G00 Z1."), s.ncG41G42.takeLast(2))
+        assertEquals(listOf("G01 X-0.8", "G40 G01 Z1."), s.ncG41G42.takeLast(2))
         assertTrue(taperWarningText(TaperWarning.ENTRY_PAST_AXIS, face.copy(end = 30.0)).endsWith("Z 여유를 줄이세요."))
         // 끝 X30 은 공구 쪽(+Z)으로 빠져 중심을 넘지 않는다
         assertTrue(TaperWarning.ENTRY_PAST_AXIS !in TaperSolve.solve(face.copy(end = 30.0)).warnings)

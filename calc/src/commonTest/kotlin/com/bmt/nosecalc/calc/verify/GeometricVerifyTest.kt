@@ -475,9 +475,9 @@ class GeometricVerifyTest {
     }
 
     /**
-     * G41/G42 프로그램: 첫 줄 주석 (R… T…) = 노즈R·팁, G00 진입 → G4x G01 시작점(길이 ≥ r) → 형상(도면 좌표) → G40 G00 후퇴(길이 ≥ r).
+     * G41/G42 프로그램: 첫 줄 주석 (R… T…) = 노즈R·팁, G00 진입 → G4x G01 시작점(길이 ≥ r) → 형상(도면 좌표) → G40 G01 후퇴(길이 ≥ r — 또는 이동 없는 G40 + G01).
      * 형상 줄은 도면 위에 있고 도면의 꼭짓점을 모두 지난다(시작점을 비웠으면 시작 요소는 빼고). 첫 형상 줄만은 시작 요소의 연장선 위여도 된다
-     * (공구 쪽으로 띄운 G00 점에서 그 선에 직각으로 들어간 뒤 선을 따라가는 줄). 표준 팁이면 진입점·후퇴점(G40 상태의 인선)에서 노즈가 재료 밖이다.
+     * (공구 쪽으로 띄운 G00 점에서 그 선에 직각으로 들어간 뒤 선을 따라가는 줄 — 볼록 첫 꺾임이면 첫 깎는 요소의 연장선). 표준 팁이면 진입점·후퇴점(G40 상태의 인선)에서 노즈가 재료 밖이다.
      * 끝점을 비웠으면(toEnd = false) 끝 요소는 프로그램에 없다. toAxis = 외경 단면을 중심(X0)까지 깎아 끝남 — 그 단면은 중심 너머 r 까지
      * (노즈 중심이 중심선에 닿게, 그 끝 점이 NC 에 있다).
      */
@@ -485,7 +485,10 @@ class GeometricVerifyTest {
         rep: Report, id: String, nc: List<String>, drawing0: List<El>, reg: Region, side: Side, tip: Int, r: Double, standard: Boolean,
         fromStart: Boolean, toEnd: Boolean, toAxis: Boolean = false,
     ) {
-        val drawing = if (!toAxis) drawing0 else drawing0.dropLast(1) + drawing0.last().let { Ln(it.a, it.b + it.tangent(0.0) * r) }
+        // 중심까지 깎는 끝: 공구 쪽 직각 취소(안쪽 모서리 교점)면 단면을 X −2r 까지 써야 노즈 중심이 중심선에 서고, 이동 없는 G40(팁 벡터·u < r —
+        // 끝 법선, 2026-10-28)이면 X0 까지
+        val cancelAlone = nc.size >= 2 && nc[nc.size - 2] == "G40"
+        val drawing = if (!toAxis || cancelAlone) drawing0 else drawing0.dropLast(1) + drawing0.last().let { Ln(it.a, it.b + it.tangent(0.0) * r) }
         val m = Regex("""\(R([\d.]+) T(\d)\)""").matchEntire(nc.firstOrNull() ?: "")
         if (m == null || abs(m.groupValues[1].toDouble() - r) > 0.0005 || m.groupValues[2].toInt() != tip) {
             rep.bad(id, "G41/G42", "첫 줄 주석 ${nc.firstOrNull()} ≠ 노즈R $r 팁 $tip")
@@ -503,21 +506,32 @@ class GeometricVerifyTest {
             val (cl, at) = clearance(pre, tipVec(tip, r), r, reg)
             if (cl < -NC_TOL) rep.bad(id, "G41/G42", "접근 줄에서 노즈 원이 재료로 ${fmt(-cl)} mm 들어감, 노즈 중심 $at  NC=$nc")
         }
-        val body = all.drop(k0 - 1).let { b -> listOf(ncFull(all.take(k0))) + b.drop(1) }
-        if (body.size < 4 || !body[1].startsWith("${side.name} G01 ") || !body.last().startsWith("G40 G00 ")) {
+        // 취소: 마지막 줄 G40 G01(직선 — 2026-10-28 전에는 G40 G00), 또는 이동 없는 G40 한 줄 + 마지막 G01(FF 5.4.4 그림 5.4.4(e) — 끝 법선)
+        val body0 = all.drop(k0 - 1).let { b -> listOf(ncFull(all.take(k0))) + b.drop(1) }
+        val alone = body0.size >= 2 && body0[body0.size - 2] == "G40" && body0.last().startsWith("G01 ")
+        val body = if (alone) body0.filter { it != "G40" } else body0
+        if (body.size < 4 || !body[1].startsWith("${side.name} G01 ") || !(alone || body.last().startsWith("G40 G01 "))) {
             rep.bad(id, "G41/G42", "보정 시작·취소 줄이 약속과 다르다: $nc")
             return
         }
         val els = parseNc(body.map { it.replace(Regex("^G4[012] "), "") })
         if (els.first().length < r - 1e-9) rep.bad(id, "G41/G42", "보정 시작 이동 ${fmt(els.first().length)} < 노즈R $r")
         if (els.last().length < r - 1e-9) rep.bad(id, "G41/G42", "보정 취소 이동 ${fmt(els.last().length)} < 노즈R $r")
-        val shape = els.drop(1).dropLast(1)
+        // 너머가 막힌 끝 · 팁 벡터·u < r(2026-10-29): 취소 앞의 보정 중 직각 후퇴 한 줄(끝 꼭짓점에서 공구 쪽 — 노즈가 끝좌표의 법선을 따라 올라감)은 형상이 아니다
+        val shape = els.drop(1).dropLast(1).let { sh ->
+            val up = sh.lastOrNull()
+            val wallUp = toEnd && sh.size >= 2 && up is Ln && (up.a - drawing.last().b).len <= NC_TOL &&
+                abs((up.b - up.a).unit() dot drawing.last().tangent(1.0)) < 1e-3
+            if (wallUp) sh.dropLast(1) else sh
+        }
         val d0 = drawing.first()
         for ((i, e) in shape.withIndex()) {
             val n = max(20, ceil(e.length / STEP).toInt())
             val dev = (0..n).maxOf { k -> drawing.minOf { it.dist(e.at(k.toDouble() / n)) } }
-            // 시작 요소의 무한 연장선까지의 거리
-            val onLead = i == 0 && e is Ln && d0 is Ln && (0..n).maxOf { k -> abs((d0.b - d0.a).unit() cross (e.at(k.toDouble() / n) - d0.a)) } <= NC_TOL
+            // 시작 요소(또는 볼록 첫 꺾임이면 첫 깎는 요소 — 2026-10-28 바이트 반대쪽 띄운 진입)의 무한 연장선까지의 거리
+            val onLead = i == 0 && e is Ln && listOfNotNull(d0, drawing.getOrNull(1).takeIf { !fromStart }).any { d ->
+                d is Ln && (0..n).maxOf { k -> abs((d.b - d.a).unit() cross (e.at(k.toDouble() / n) - d.a)) } <= NC_TOL
+            }
             if (dev > NC_TOL && !onLead) rep.bad(id, "G41/G42", "형상 줄이 도면에서 ${fmt(dev)} mm 벗어남  NC=$nc")
         }
         val ncPts = listOf(shape.first().a) + shape.map { it.b }

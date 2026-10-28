@@ -39,6 +39,8 @@ internal class GComp(val r: Double, val tip: Int, val side: Side) {
     private val smooth = min(1e-3, 5e-4 / max(r, 1e-9))
 
     sealed interface Res
+
+    /** [outer] = 시작 · 취소가 바깥 모서리이고 형식 A · B 의 노즈가 0.0005 mm 넘게 다름(INFO COMP_TYPE_A) */
     data class Ok(val p: Pt, val outer: Boolean) : Res
     data class Bad(val code: IssueCode) : Res
 
@@ -76,8 +78,11 @@ internal class GComp(val r: Double, val tip: Int, val side: Side) {
             val p = meet(a, b, e, na, nb, guess) ?: return Bad(IssueCode.COMP_INTERFERENCE)
             return Ok(p, false)
         }
-        if (startup) return Ok(e + nb * r, true)
-        if (cancel) return Ok(e + na * r, true)
+        // 시작 · 취소가 바깥 모서리면 형식 A(법선)와 B(교점)의 노즈가 r·tan(θ/2) 만큼 다르다 — 그 차이가 입력 최소 단위의 반(0.0005 mm) 안이면
+        // (계산기 글의 '한 직선' 시작 · 취소가 0.001 반올림으로 아주 조금 꺾인 것) 형식 B 기계도 같은 길이라 알리지 않는다(검증 2026-10-29)
+        val typeAB = r * abs(cr) / (1 + dt) > REVERSE
+        if (startup) return Ok(e + nb * r, typeAB)
+        if (cancel) return Ok(e + na * r, typeAB)
         if (dt < 0) return Bad(IssueCode.COMP_ACUTE_OUTER)
         val p = meet(a, b, e, na, nb, guess) ?: return Bad(IssueCode.COMP_ACUTE_OUTER)
         return Ok(p, false)

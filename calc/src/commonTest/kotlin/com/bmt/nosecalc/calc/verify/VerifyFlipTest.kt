@@ -65,7 +65,7 @@ class VerifyFlipTest {
         assertEquals(Side.G41, s.side)
         assertEquals(3, s.tip)
         assertEquals(listOf("G00 X52. Z1.", "G00 Z-6.234", "G01 X50. Z-5.234", "G01 X39.531 Z0.", "G00 Z1."), s.ncG40)
-        assertEquals(listOf("(R0.4 T3)", "G00 X52. Z1.", "G00 Z-6.", "G41 G01 X50. Z-5.", "G01 X40. Z0.", "G40 G00 X38. Z1."), s.ncG41G42)
+        assertEquals(listOf("(R0.4 T3)", "G00 X52. Z1.", "G00 Z-6.", "G41 G01 X50. Z-5.", "G01 X40. Z0.", "G40 G01 X38. Z1."), s.ncG41G42)
 
         // 제어기 흉내: 시작 이동(면취와 한 직선, 길이 √2 ≥ r) 끝의 노즈 중심 = (−5, 25) + r(1, 1)/√2, 취소 앞 = (0, 20) + r(1, 1)/√2
         val drawing = fillet(listOf(P(0.0, 15.0), P(0.0, 20.0), P(-5.0, 25.0), P(-10.0, 25.0)), listOf(0.0, 0.0))!!
@@ -94,7 +94,7 @@ class VerifyFlipTest {
         val s = TaperCalc.calc(TaperInput(x1 = 50.0, z1 = -5.0, x2 = 40.0, z2 = 0.0, end = 0.0, flip = true)).solution!!
         assertEquals(listOf("G00 X52. Z1.", "G00 Z-6.234", "G01 X50. Z-5.234", "G01 X39.531 Z0.", "G01 X-0.8", "G00 Z1."), s.ncG40)
         assertEquals(
-            listOf("(R0.4 T3)", "G00 X52. Z1.", "G00 Z-6.", "G41 G01 X50. Z-5.", "G01 X40. Z0.", "G01 X-0.8", "G40 G00 Z1."),
+            listOf("(R0.4 T3)", "G00 X52. Z1.", "G00 Z-6.", "G41 G01 X50. Z-5.", "G01 X40. Z0.", "G01 X-0.8", "G40 G01 Z1."),
             s.ncG41G42,
         )
         val tv = tipVec(3, r)
@@ -301,14 +301,18 @@ class VerifyFlipTest {
         val ncG = parse(sol.ncG41G42.drop(1))
         val g4 = ncG.mapNotNull { it.comp }.filter { it != 40 }.distinct()
         if (g4 != listOf(if (expSide == Side.G41) 41 else 42)) rep.bad("$tag G41/G42글", "NC 의 보정 코드 $g4, 진행으로 본 쪽 $expSide: $id")
-        // 보정 시작 줄 앞은 G40 상태 G00 들(접근 줄 + 진입)
+        // 보정 시작 줄 앞은 G40 상태 G00 들(접근 줄 + 진입). 취소는 마지막 줄(G40 직선) 또는 이동 없는 G40 한 줄 + 마지막 직선 이동
         val k0 = ncG.indexOfFirst { it.comp != null }
-        if (k0 < 1 || ncG.size < k0 + 3 || ncG.subList(0, k0).any { it.g != 0 } || ncG[k0].comp == 40 || ncG[k0].g !in 0..1 ||
-            ncG.last().comp != 40 || ncG.last().g !in 0..1 || ncG.subList(k0 + 1, ncG.size - 1).any { it.comp != null }
+        val kc = ncG.indexOfFirst { it.comp == 40 }
+        val alone = kc > 0 && (ncG[kc].p - ncG[kc - 1].p).len < 1e-9
+        if (k0 < 1 || kc < k0 + 2 || ncG.subList(0, k0).any { it.g != 0 } || ncG[k0].comp == 40 || ncG[k0].g !in 0..1 ||
+            (!alone && ncG[kc].g !in 0..1) || ncG.subList(k0 + 1, kc).any { it.comp != null } ||
+            (if (alone) kc != ncG.size - 2 || ncG.last().comp != null || ncG.last().g !in 0..1 else kc != ncG.size - 1)
         ) {
             rep.bad("$tag G41/G42글", "보정 시작·취소 줄 꼴: ${sol.ncG41G42}")
             return
         }
+        if (alone) rep.info("$tag 이동 없는 G40 취소")
         val startLen = (ncG[k0].p - ncG[k0 - 1].p).len
         val cancelLen = (ncG.last().p - ncG[ncG.size - 2].p).len
         if (startLen < r - 1e-6) rep.bad("$tag 시작이동", "보정 시작 이동 ${f4(startLen)} < r $r: ${sol.ncG41G42}")
@@ -327,8 +331,11 @@ class VerifyFlipTest {
                 excl += pic[k] to (r * tan(beta / 2) + 0.01)
             }
         }
-        if (frontGiven) excl += pic.first() to (r + 0.01)
-        if (backGiven) excl += pic.last() to (r + 0.01)
+        // 다만 가공 끝 쪽 요소를 노즈가 인선보다 앞서 깎아 끝나면(팁 벡터 · 진행 ≤ 0 — 뒤집어 부품 앞 끝으로 · 다른 팁) 직접 보정의 노즈는 끝좌표를
+        // 지나고 G41/G42 는 노즈 접점이 끝좌표에 서야 한다(FF 5.4.4 — 공구 쪽 직각 취소의 교점은 거기 못 닿는다, 설계 13.7) — 끝 꼭짓점까지 본다
+        fun trimmed(end: P, nb: P) = !(if (travelLeft) end === pic.first() else end === pic.last()) || (tv dot (end - nb).unit()) > 1e-9
+        if (frontGiven && trimmed(pic.first(), pic[1])) excl += pic.first() to (r + 0.01)
+        if (backGiven && trimmed(pic.last(), pic[pic.size - 2])) excl += pic.last() to (r + 0.01)
         val cut = drawing.indices.filter { (it != 0 || frontGiven) && (it != drawing.lastIndex || backGiven) }
         val samples = cut.flatMap { i -> sampleOf(drawing[i], 0.01) }.filter { q -> excl.none { (q - it.first).len < it.second } }
 
@@ -548,20 +555,24 @@ class VerifyFlipTest {
 
     /**
      * 기계 보정 흉내. 처음 G41/G42 줄 앞은 G40 상태 G00 들(접근 줄 · 진입 — 노즈 중심 = 인선 − 팁 벡터),
-     * 그 다음 b[0] = 진입 G00(G40), b[1] = G41/G42 시작(직선), b[1..m] 보정 블록, b[m+1] = G40 취소(직선).
+     * 그 다음 b[0] = 진입 G00(G40), b[1] = G41/G42 시작(직선), b[1..m] 보정 블록, b[m+1] = G40 취소(직선), 그 뒤 G40 상태 줄들.
+     * 취소가 이동 없는 G40 한 줄이면 앞 블록 끝 법선에 서고 다음 이동에서 벡터를 지운다 — 형식 A·B 같음
+     * (FF 5.4.4 그림 5.4.4(e) 204쪽, F0 14.3.4 228쪽 — 2026-10-28 더함).
      * 오목 원호가 R < r 이면(제어기 알람) null
      */
     private fun simG4x(all: List<Blk>, tv: P, r: Double, typeB: Boolean): G4xSim? {
         val k0 = all.indexOfFirst { it.comp != null }
         val pre = (1 until k0).map { Ln(all[it - 1].p - tv, all[it].p - tv) }
-        val b = all.subList(k0 - 1, all.size)
+        val kc = (k0 + 1 until all.size).first { all[it].comp == 40 }
+        val alone = (all[kc].p - all[kc - 1].p).len < 1e-9
+        val b = all.subList(k0 - 1, if (alone) kc else kc + 1)
         val side = if (b[1].comp == 41) 1.0 else -1.0
         val ents = (1 until b.size).map { k ->
             val a = b[k - 1].p
             val e = b[k].p
             if (b[k].g == 2 || b[k].g == 3) Ent(a, e, arcCenter(a, e, b[k].rr!!, b[k].g == 2), b[k].g == 2) else Ent(a, e, null, false)
         }
-        val m = ents.size - 1 // ents[m] = 취소 블록
+        val m = if (alone) ents.size else ents.size - 1 // ents[m] = 취소 블록(이동 없는 G40 이면 없음)
         fun n(t: P) = t.left() * side
         fun rho(en: Ent): Double {
             val c = en.c!!
@@ -587,7 +598,7 @@ class VerifyFlipTest {
             if (abs(cr) < 1e-9 && dt > 0) return listOf(e + na * r)
             val inner = cr * side > 0
             val startup = ia == 0
-            val cancel = ia + 1 == m
+            val cancel = !alone && ia + 1 == m
             if (inner) {
                 // 취소 블록의 오프셋은 그 직선을 r 민 선
                 return listOf(meet(a, bb, na, nb, e, r, if (cancel) null else bb.c?.let { rho(bb) }, if (startup) null else a.c?.let { rho(a) }))
@@ -607,13 +618,19 @@ class VerifyFlipTest {
         var cur = b[0].p - tv
         out += Ln(cur, cur)
         for (k in 0 until m) {
-            val j = junction(k)
             val en = ents[k]
+            // 이동 없는 G40 앞 블록의 끝 = 그 블록 끝 법선
+            val j = if (alone && k == m - 1) listOf(en.e + n(en.tanE()) * r) else junction(k)
             out += if (k == 0 || en.c == null) Ln(cur, j.first()) else Ac(cur, j.first(), en.c, en.cw)
             for (q in j.zipWithNext()) out += Ln(q.first, q.second)
             cur = j.last()
         }
-        out += Ln(cur, b.last().p - tv)
+        // 취소 블록(이동 없는 G40 이면 그 다음 이동)은 보정 자리에서 끝점(G40 상태)으로 곧게, 그 뒤 G40 상태 줄들
+        for (k in kc + (if (alone) 1 else 0) until all.size) {
+            if (k > kc && (all[k].p - all[k - 1].p).len < 1e-9) continue
+            out += Ln(cur, all[k].p - tv)
+            cur = all[k].p - tv
+        }
         return G4xSim(pre + out, outerStart, outerCancel)
     }
 

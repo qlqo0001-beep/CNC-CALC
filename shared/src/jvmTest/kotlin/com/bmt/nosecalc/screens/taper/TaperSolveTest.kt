@@ -224,7 +224,7 @@ class TaperSolveTest {
         assertEquals(3, sol.tip)
         assertEquals(Side.G41, sol.side)
         // 진입점이 척 쪽이라 앞 끝면 바깥(Z1)에서 X52 를 맞추고 Z 로만 들어가는 접근 줄이 앞에 있다(calc 손 계산과 같다)
-        assertEquals(listOf("(R0.4 T3)", "G00 X52. Z1.", "G00 Z-6.", "G41 G01 X50. Z-5.", "G01 X40. Z0.", "G40 G00 X38. Z1."), sol.ncG41G42)
+        assertEquals(listOf("(R0.4 T3)", "G00 X52. Z1.", "G00 Z-6.", "G41 G01 X50. Z-5.", "G01 X40. Z0.", "G40 G01 X38. Z1."), sol.ncG41G42)
         assertEquals(listOf("G00 X52. Z1.", "G00 Z-6.234", "G01 X50. Z-5.234", "G01 X39.531 Z0.", "G00 Z1."), sol.ncG40)
         assertEquals("T1 위 → T2 아래 · G41", travelText(TaperKind.OUTER, 1, false, true))
         assertEquals("T1 아래 → T2 위 · G42", travelText(TaperKind.OUTER, 1, false, false))
@@ -389,7 +389,7 @@ class TaperSolveTest {
         val ui = TaperSolve.solve(form(TaperKind.OUTER, 1, false, listOf(40.0, 50.0), listOf(0.0, -5.0)))
         assertEquals(listOf("G00 X37.531 Z1.", "G01 X39.531 Z0.", "G01 X50. Z-5.234", "G00 X52."), ui.solution!!.ncG40)
         assertEquals(
-            listOf("(R0.4 T3)", "G00 X38. Z1.", "G42 G01 X40. Z0.", "G01 X50. Z-5.", "G40 G00 X52. Z-6."),
+            listOf("(R0.4 T3)", "G00 X38. Z1.", "G42 G01 X40. Z0.", "G01 X50. Z-5.", "G40 G01 X52. Z-6."),
             ui.solution!!.ncG41G42,
         )
         // 모서리 R·끝점도 그대로 넘긴다
@@ -542,7 +542,8 @@ class TaperSolveTest {
                 val corners = List(kind.points) { if (it == 0) r1 else 0.0 }
                 val f = SlopeForm(kind, type, rev, r, null, x, z, null, zc, corners, if (lead) start else null, flip = flip, angleRef = AngleRef.Z)
                 val what = "${kind.label} 형상 $type ${if (rev) "역" else "정"} 뒤집기 $flip r$r R$r1 시작점 $lead Z 여유 $zc"
-                val s = assertNotNull(TaperSolve.solve(f).solution, what)
+                val res = TaperSolve.solve(f)
+                val s = assertNotNull(res.solution, what)
                 val c = maxOf(zc, r)
                 val dir = if (rev) -1.0 else 1.0
                 val skip = if (s.fromStart) 0 else 1
@@ -570,7 +571,24 @@ class TaperSolveTest {
                     assertTrue(abs(gz - s.drawing.segs[skip].start.z) >= c - 1e-3, "$what G41/G42 ${s.ncG41G42}")
                 } else {
                     assertEquals(s.program.segs[skip].start.z + dir * c, s.entry.z, 1e-9, "$what 직접 보정 ${s.ncG40}")
-                    assertTrue(g00.endsWith(" Z${Fmt.nc(s.drawing.segs[skip].start.z + dir * c)}"), "$what G41/G42 ${s.ncG41G42}")
+                    // 바이트 반대(역테이퍼 · AGAINST_TOOL)의 볼록 첫 꺾임: 연장선 진입의 보정 시작 블록이 도면을 파고들면 경사 연장선 위 lead 에
+                    // 직각으로 들어간다(2026-10-28, calc-design '진입점과 NC') — 그 G00 은 Z 여유가 아니라 첫 깎는 요소 선에서 c 이상 띄운 점
+                    val first = s.drawing.segs[skip]
+                    val start4 = s.ncG41G42.drop(1).first { !it.startsWith("G00") }
+                    // 보정 시작 줄의 끝(빠진 축은 G00 값 그대로)이 첫 깎는 점인가
+                    val w4 = start4.split(" ")
+                    val x4 = w4.firstOrNull { it.startsWith("X") } ?: g00.substringBefore(" ")
+                    val z4 = w4.firstOrNull { it.startsWith("Z") } ?: g00.substringAfter(" ")
+                    val onFirst = "$x4 $z4" == "X${Fmt.nc(first.start.xDia)} Z${Fmt.nc(first.start.z)}"
+                    if (TaperWarning.AGAINST_TOOL in res.warnings && !onFirst) {
+                        val gx = g00.substringAfter("X").substringBefore(" ").toDouble()
+                        val gz = g00.substringAfter(" Z").toDouble()
+                        val u = first.end - first.start
+                        val off = abs(u cross (Pt.ofDia(gz, gx) - first.start)) / u.length
+                        assertTrue(off >= c - 1e-3, "$what G41/G42 띄운 진입 ${s.ncG41G42}")
+                    } else {
+                        assertTrue(g00.endsWith(" Z${Fmt.nc(s.drawing.segs[skip].start.z + dir * c)}"), "$what G41/G42 ${s.ncG41G42}")
+                    }
                 }
                 n++
             }

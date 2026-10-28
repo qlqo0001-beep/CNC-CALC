@@ -83,19 +83,22 @@ internal object RefG4x {
     }
 
     /**
-     * 기계 보정 흉내. all = G40 접근 줄들 · G41/G42 시작(직선) · 보정 블록 · G40 취소(직선) — 노즈 중심 경로(시작 블록부터).
+     * 기계 보정 흉내. all = G40 접근 줄들 · G41/G42 시작(직선) · 보정 블록 · G40 취소(직선) · (G40 상태 줄들) — 노즈 중심 경로(시작 블록부터).
+     * 이동 없는 G40 한 줄이면 앞 블록 끝 법선에 서고 다음 이동에서 벡터를 지운다(FF 5.4.4 그림 5.4.4(e) 204쪽 형식 A·B, F0 14.3.4 228쪽 — 2026-10-28 더함).
      * 오목 원호가 R < r 이면 null
      */
     fun run(all: List<Blk>, tv: P, r: Double): List<Pc>? {
         val k0 = all.indexOfFirst { it.comp != null }
-        val b = all.subList(k0 - 1, all.size)
+        val kc = (k0 + 1 until all.size).first { all[it].comp == 40 }
+        val alone = (all[kc].p - all[kc - 1].p).len < 1e-9
+        val b = all.subList(k0 - 1, if (alone) kc else kc + 1)
         val side = if (b[1].comp == 41) 1.0 else -1.0
         val ents = (1 until b.size).map { k ->
             val a = b[k - 1].p
             val e = b[k].p
             if (b[k].g == 2 || b[k].g == 3) Ent(a, e, arcCenter(a, e, b[k].rr!!, b[k].g == 2), b[k].g == 2) else Ent(a, e, null, false)
         }
-        val m = ents.size - 1 // ents[m] = 취소 블록
+        val m = if (alone) ents.size else ents.size - 1 // ents[m] = 취소 블록(이동 없는 G40 이면 없음)
         fun n(t: P) = t.left() * side
         fun rho(en: Ent): Double {
             val c = en.c!!
@@ -118,7 +121,7 @@ internal object RefG4x {
             if (abs(cr) < minOf(1e-3, 5e-4 / max(r, 1e-9)) && dt > 0) return listOf(e + na * r)
             val inner = cr * side > 0
             val startup = ia == 0
-            val cancel = ia + 1 == m
+            val cancel = !alone && ia + 1 == m
             if (inner) {
                 return listOf(meet(a, bb, na, nb, e, r, if (cancel) null else bb.c?.let { rho(bb) }, if (startup) null else a.c?.let { rho(a) }))
             }
@@ -134,13 +137,19 @@ internal object RefG4x {
         val out = mutableListOf<Pc>()
         var cur = b[0].p - tv
         for (k in 0 until m) {
-            val j = junction(k)
             val en = ents[k]
+            // 이동 없는 G40 앞 블록의 끝 = 그 블록 끝 법선
+            val j = if (alone && k == m - 1) listOf(en.e + n(en.tanE()) * r) else junction(k)
             out += if (k == 0 || en.c == null) Ln(cur, j.first()) else Ac(cur, j.first(), en.c, en.cw)
             for (q in j.zipWithNext()) out += Ln(q.first, q.second)
             cur = j.last()
         }
-        out += Ln(cur, b.last().p - tv)
+        // 취소 블록(이동 없는 G40 이면 그 다음 이동)은 보정 자리에서 끝점(G40 상태)으로 곧게, 그 뒤 G40 상태 줄들
+        for (k in kc + (if (alone) 1 else 0) until all.size) {
+            if (k > kc && (all[k].p - all[k - 1].p).len < 1e-9) continue
+            out += Ln(cur, all[k].p - tv)
+            cur = all[k].p - tv
+        }
         return out
     }
 

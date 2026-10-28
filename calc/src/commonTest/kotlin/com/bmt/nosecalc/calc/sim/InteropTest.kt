@@ -2,11 +2,13 @@ package com.bmt.nosecalc.calc.sim
 
 import com.bmt.nosecalc.calc.DoubleTaperInput
 import com.bmt.nosecalc.calc.Fmt
+import com.bmt.nosecalc.calc.Line
 import com.bmt.nosecalc.calc.TaperCalc
 import com.bmt.nosecalc.calc.TaperInput
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.tan
 import kotlin.test.Test
@@ -16,7 +18,7 @@ import kotlin.test.assertTrue
  * 테이퍼 계산기가 낸 NC 를 시뮬레이터로(`docs/simulator-design.md` 9.3 InteropTest).
  * G41/G42 글(도면 좌표)을 넣으면, 형상 블록 사이 이음점의 실제 인선 = 직접 보정 글(ncG40)의 점이어야 한다.
  * 시작 블록 끝과 마지막 형상 블록 끝은 뺀다 — 시작은 첫 형상과 한 직선이라 같은 보정선 위 다른 점에 서고,
- * 끝은 제어기가 그 요소의 법선으로 보정한다(`calc-design.md` '진입점과 NC' — 두 글의 끝 블록은 일부러 다르다).
+ * 끝은 취소 블록과의 관계로 정해진다(`calc-design.md` '진입점과 NC' 의 '끝 블록' — 그 자리는 SimVerifyTest · TaperCalcTest 가 본다).
  * 같은 사례 묶음은 TaperCalcTest.g41g42ProgramCompensatesToDirectProgram 과 같다. 테이퍼에서 STOP 이 나오면 실패.
  * 글은 0.001 로 반올림돼 있어(도면 · 직접 보정 모두) 허용 0.002.
  */
@@ -93,8 +95,20 @@ class InteropTest {
         val iStart = lines.indexOfFirst { "G41" in it || "G42" in it }
         val iCancel = lines.indexOfFirst { "G40" in it }
         var n = 0
-        for (i in iStart + 1 until iCancel - 1) {
+        val cmds = run.steps.filterIsInstance<MoveStep>().associate { it.line to it.cmd }
+        // 너머가 막힌 끝 · 팁 벡터·u < r(2026-10-29): 취소 앞에 끝 꼭짓점에서 공구 쪽 직각으로 가는 보정 중 후퇴 한 줄 — 형상 블록이 아니고
+        // 그 앞 끝 블록 끝(교점 — 노즈 끝이 끝좌표에서 멈춤)도 직접 보정의 점이 아니다
+        val up = cmds[pre.size + iCancel]?.let { s.toEnd && (it.start - s.drawing.segs.last().end).length < 2e-3 } == true
+        val lastShape = if (up) iCancel - 2 else iCancel - 1
+        for (i in iStart + 1 until lastShape) {
             val line = pre.size + i + 1
+            // 볼록 첫 꺾임의 띄운 진입(2026-10-28): 시작 블록 뒤 첫 요소 연장선을 따르는 줄은 첫 요소와 한 직선이라 그 끝(접해서 이어짐 — 끝 법선)은
+            // 직접 보정 글의 점이 아니다(노즈 접점 = 첫 깎는 점)
+            val a = cmds[line]
+            val b = cmds[line + 1]
+            // (그 줄은 노즈R 길이라 0.001 반올림으로 방향이 0.003 rad 쯤 흔들린다)
+            if (i == iStart + 1 && a is Line && b is Line && abs((a.end - a.start).unit() cross (b.end - b.start).unit()) < 1e-2) continue
+
             val tip = run.ghosts.last { it.line == line }.tip
             val d = pts.minOf { (it - tip).length }
             worst = max(worst, d)
