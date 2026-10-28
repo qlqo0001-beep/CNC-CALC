@@ -1,0 +1,11 @@
+메이커 Sandvik · 시리즈 CoroDrill 870 (<6xD) · 군 P · 행 Low alloy steel: Hardened and tempered P2.5.Z.HT / 저합금강: 경화처리 및 뜨임처리 [Ø10-20.99 vc; GC4334/GC3334; fn -PM, -KM, -GP] · 직경 '25'
+남은 것 []
+경고 [OUTSIDE_ROW] · 다른 행 [5]
+  직경 Ø25: 이 행의 직경 범위(Ø10 ~ 20.99) 밖입니다 — 표에 없는 직경이라 숫자를 내지 않습니다. 같은 재질의 다른 직경 행이 있습니다.
+표 절삭 속도 Vc (m/min) — | — | —
+표 회전수 n (rpm) — | — | —
+표 이송 f (mm/rev) — | — | —
+표 분당 이송 vf (mm/min) — | — | —
+구간 null
+출처 Sandvik Coromant Rotating tools 2020 (주문 카탈로그 C-2900:28, ENG) - DRILLING Cutting data J49-J66 · 2020판 C-2900:28 (PDF 수정 2023-11-30, 게시일 2024-12-28, 현재 게시본) · 쪽 J50(vc)+J51(fn), PDF 234/235
+키패드 null

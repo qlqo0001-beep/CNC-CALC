@@ -1,0 +1,11 @@
+메이커 Sandvik · 시리즈 CoroDrill 860-GM · 군 P · 행 Low alloy steel: Hardened and tempered P2.5.Z.HT.1 / 저합금강: 경화처리 및 뜨임처리 · 직경 '20'
+남은 것 []
+경고 [OUTSIDE_SERIES] · 다른 행 []
+  직경 Ø20: 이 시리즈의 카탈로그 주문 범위(Ø3 ~ 16) 밖입니다 — 절삭 조건표에는 그 열이 있어 값은 냈지만, 그 직경의 공구가 있는지 카탈로그에서 확인하세요.
+표 절삭 속도 Vc (m/min) 80 | 100 | 120
+표 회전수 n (rpm) 1273 | 1592 | 1910
+표 이송 f (mm/rev) 0.23 | 0.30 | 0.37
+표 분당 이송 vf (mm/min) 293 | 477 | 707
+구간 FeedBand(dMin=20.0, dMax=20.0, fMin=0.23, fRec=0.3, fMax=0.37, rpm=null)
+출처 Sandvik Coromant Solid round tools 2020 (주문 카탈로그 C-2900:25, ENG) - DRILLING Cutting data B70-B75 · 2020판 C-2900:25 (공식 다운로드 페이지 게시일 2024-12-27, 현재 게시본) · 쪽 B70(vc)+B71(fn), PDF 270/271
+키패드 Vc 100 · n 1592 · f 0.30 · vf 477

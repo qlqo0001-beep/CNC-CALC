@@ -1,0 +1,10 @@
+메이커 Sandvik · 시리즈 CoroDrill 860-GM · 군 P · 행 Unalloyed steel: C = 0.05-0.10% P1.1.Z.AN | C = 0.1-0.25% P1.1.Z.AN / 비합금강: C = 0.05-0.10% | C = 0.1-0.25% · 직경 '10'
+남은 것 []
+경고 [] · 다른 행 []
+표 절삭 속도 Vc (m/min) 120 | 145 | 170
+표 회전수 n (rpm) 3820 | 4615 | 5411
+표 이송 f (mm/rev) 0.20 | 0.25 | 0.30
+표 분당 이송 vf (mm/min) 764 | 1154 | 1623
+구간 FeedBand(dMin=10.0, dMax=10.0, fMin=0.2, fRec=0.25, fMax=0.3, rpm=null)
+출처 Sandvik Coromant Solid round tools 2020 (주문 카탈로그 C-2900:25, ENG) - DRILLING Cutting data B70-B75 · 2020판 C-2900:25 (공식 다운로드 페이지 게시일 2024-12-27, 현재 게시본) · 쪽 B70(vc)+B71(fn), PDF 270/271
+키패드 Vc 145 · n 4615 · f 0.25 · vf 1154

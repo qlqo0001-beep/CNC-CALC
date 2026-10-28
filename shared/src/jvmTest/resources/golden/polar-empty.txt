@@ -1,0 +1,3 @@
+외측 · HEXAGON · X 직경 · od= w= rc= rot= tool= clear= depth= feed=
+경고 [MISSING_INPUT]
+  값을 넣으면 바로 계산합니다 — 남은 것: 외경 · W · 공구경 · 깊이 Z · 이송 F.

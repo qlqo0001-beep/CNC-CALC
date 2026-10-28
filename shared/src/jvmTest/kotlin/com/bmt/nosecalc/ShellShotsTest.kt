@@ -38,6 +38,8 @@ import com.bmt.nosecalc.screens.taper.TaperState
 import com.bmt.nosecalc.screens.taper.example
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.AppIcons
+import com.bmt.nosecalc.ui.ComingSoonHelp
+import com.bmt.nosecalc.ui.ComingSoonPage
 import com.bmt.nosecalc.ui.FeatureIcon
 import com.bmt.nosecalc.ui.FeatureScaffold
 import com.bmt.nosecalc.ui.HelpSection
@@ -116,10 +118,14 @@ class ShellShotsTest {
     @Test
     fun icons() = Shots.both("shell-icons", heightDp = 300) { AppHost(it) { IconGallery() } }
 
-    /** 준비 중 화면을 좁은 폰 · 큰 글꼴로: 이름 뒤 줄바꿈이 어절을 쪼개지 않는지 */
+    /**
+     * 준비 중 화면을 좁은 폰 · 큰 글꼴로: 이름 뒤 줄바꿈이 어절을 쪼개지 않는지. 극좌표는 다 만든 기능이 됐지만(10-28) 이름이 가장 길어
+     * 준비 중 화면을 그 이름으로 직접 그려 본다
+     */
     @Test
-    fun comingSoonNarrow() =
-        Shots.both("feature-polar-w360", widthDp = 360, fontScale = 1.3f, setup = { it.open(Feature.POLAR) }) { App(it) }
+    fun comingSoonNarrow() = Shots.both("feature-polar-w360", widthDp = 360, fontScale = 1.3f, setup = { it.open(Feature.POLAR) }) {
+        AppHost(it) { FeatureScaffold(Feature.POLAR, ComingSoonHelp) { ComingSoonPage(Feature.POLAR) } }
+    }
 
     /** 도움말 시트: 머리의 닫기 · 묶음 제목 · 끝에 늘 붙는 장갑 묶음(준비 중 화면은 짧아 한눈에 보인다) */
     @Test
@@ -129,7 +135,7 @@ class ShellShotsTest {
             it.open(Feature.POLAR)
             it.helpOpen = true
         },
-    ) { App(it) }
+    ) { AppHost(it) { FeatureScaffold(Feature.POLAR, ComingSoonHelp) { ComingSoonPage(Feature.POLAR) } } }
 
     /** 묶음 제목 · 그림 먼저 · helpStart: 둘째 묶음(그림 + 문단)부터 열린다. 첫 묶음 제목은 위로 밀려 안 보여야 한다 */
     @Test
@@ -150,7 +156,7 @@ class ShellShotsTest {
         assertEquals("은", topicJosa(Feature.POLAR.menuTitle))
         assertEquals("은", topicJosa("나사 G76 계산"))
         assertEquals("는", topicJosa("G76"))
-        assertEquals(listOf(Feature.TAPER, Feature.ROUND, Feature.TRIANGLE), Feature.entries.filter { it.ready })
+        assertEquals(listOf(Feature.TAPER, Feature.CUTTING, Feature.ROUND, Feature.TRIANGLE, Feature.POLAR, Feature.THREAD), Feature.entries.filter { it.ready })
     }
 
     private companion object {
