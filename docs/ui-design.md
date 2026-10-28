@@ -22,7 +22,7 @@
 | `ui/Header.kt` | `FeatureHeader`, `CircleIconButton`, `AppsButton`, `PillButton` |
 | `ui/Components.kt` | `AppCard`, `TypeCard`, `CardHeader`, `CoordPair`, `LabeledValue`, `ExpandableHint`, `Segmented`, `OutlineTabs`, `WarningBanner`(`WarnLevel`) |
 | `ui/NumberInput.kt` | `NumberField`, 숫자 키패드(`NumberPad`), 글 고치기 `NumEdit` |
-| `ui/FieldChain.kt` | 키패드 칸 묶음 `FieldChain` · `rememberFieldChain` · `FieldChainHost`("다음") |
+| `ui/FieldChain.kt` | 키패드 칸 묶음 `FieldChain` · `rememberFieldChain` · `FieldChainHost`(키패드 하나 · PC Tab 순서) |
 | `ui/DrawKit.kt` | 그림 한 벌의 선 규칙 `DrawSpec` · `artScale` · `centerLine` · `arrowHead` · `haloText` · `linearDim` · `hatchFill` |
 | `ui/ShapeViewer.kt` | `ShapeViewer(lines, marks, state, stock, fills)` — calc 의 `Contour` 를 그린다. `ViewerLine` · `ViewerMark`(`MarkKind`) · `ViewerStock` · `ViewerFill` · `Arrow` · `ViewerState`(`UserView` · `focus(점, 배)`) |
 | `ui/ViewerPanel.kt` | 형상 확인 카드 `ShapeViewerCard`(−/+/맞춤 · 크게 보기 · 범례 `LegendItem` · `LegendGlyph`) |
@@ -68,16 +68,19 @@
   - 값은 **쓴 그대로의 글**("5.0", "-25", "" = 빈칸). 계산에는 `value.toDoubleOrNull()` — calc 입력의 `Double?`(빈칸 = 풀 값)과 바로 맞는다.
   - 칸 모양(색 + 표 + 굵기 — 색만으로 가르지 않는다): 넣은 값 = 진한 굵은 글 · `autoValue` = 빈칸일 때 계산값(청록 옅은 바탕 · 테두리 + `valueComp` 글 +
     라벨 줄 "자동" 표), `autoValue = ""` = 못 풂("—" + "자동 · 계산 안 됨") · `error` = 빨강 2dp 테두리 · 옅은 빨강 바탕 · 라벨 앞 멈춤 아이콘 ·
-    `tag` = 라벨 뒤 회색 표("Ø직경" · "반경") · `placeholder` = 빈칸 자리표시("0", 흐리게).
+    `tag` = 라벨 뒤 회색 표("Ø직경" · "반경") · `placeholder` = 빈칸 자리표시(흐리게 — 빈칸이 0 인 여유 · 모서리 R 칸은 "비우면 0", 도면 치수는 없음).
   - `hint` · `blankable` · `figure` · `preview` 는 키패드로 간다(안내 줄 · "비우기 · 자동 계산" 단추 · 작은 그림 · 결과 한 줄).
 - `FieldChainHost(rememberFieldChain(처음 열 칸 id)) { 칸들 }` — 안의 `NumberField` 가 `id` 로 스스로 들어오고, 순서는 화면 자리(위 → 아래, 같은 줄은 왼 → 오른).
-  키패드는 묶음이 하나만 띄운다: 오른쪽 열 C · ⌫ · 닫기 · **"다음"**, 제목 오른쪽 "n / m". 연 칸은 시트 위로 올라오고(`chain.sheetOpen` 이면 화면 끝에
-  440dp 빈자리), 다음 · 앞 칸으로 가도 시트는 그대로다. 모든 화면의 칸이 묶음 안에 있다 — 묶음 밖 `NumberField` 는 모양만 보이는 견본(누를 수 없음).
-- 키패드(`NumberPad`): 열면 지금 값이 통째 선택돼 처음 누른 숫자 · . · − 가 새 값이 된다(− 로 새 음수, ⌫ 는 원래 값을 고친다). **확인 단추는 없다** — 누를 때마다
-  칸 · 결과 · 그림 · NC 에 바로 들어간다. 닫기(닫기 키 · 바깥 누름 · 뒤로 · Esc · 손잡이 끌어내림)는 넣은 값을 그대로 두고, "-" 뿐이면 연 때 값으로. 제목 오른쪽
+  키패드는 묶음이 하나만 띄운다: 오른쪽 열 C · ⌫ · 두 칸 높이의 채운 **"확인"**(닫기만 — 다음 칸으로 넘어가지 않는다, 사용자 요청 2026-10-28
+  "다음 을 확인으로 변경하고 넘어가게 하지마". 예전의 테두리 '닫기' + 채운 '다음 ›' 과 제목 옆 "n / m" 은 없앴다 — 화면 키로는 넘기지 않으니 순번이 뜻이 없다).
+  연 칸은 시트 위로 올라오고(`chain.sheetOpen` 이면 화면 끝에 440dp 빈자리), PC Tab 으로 다음 · 앞 칸으로 가도 시트는 그대로다.
+  모든 화면의 칸이 묶음 안에 있다 — 묶음 밖 `NumberField` 는 모양만 보이는 견본(누를 수 없음).
+- 키패드(`NumberPad`): 열면 지금 값이 통째 선택돼 처음 누른 숫자 · . · − 가 새 값이 된다(− 로 새 음수, ⌫ 는 원래 값을 고친다). 누를 때마다
+  칸 · 결과 · 그림 · NC 에 바로 들어가고, '확인'은 닫기와 같다. 닫기(확인 · 바깥 누름 · 뒤로 · Esc · 손잡이 끌어내림)는 넣은 값을 그대로 두고, "-" 뿐이면 연 때 값으로. 제목 오른쪽
   "취소" 는 연 때 값으로 되돌리고 닫는다. 위에 결과 한 줄(`preview` — 넘치면 9sp 까지 줄여 끝 점 좌표가 잘리지 않게), 시트 자리가 넉넉하면(780dp 이상) 제목 아래 작은 그림(`figure`
   — 둥근 `subtle` 바탕은 figure 가 받은 Modifier 에: 테이퍼 비율 그림은 제 폭만이라 소재 면이 칸 끝까지, 라운드 형상 그림 · 삼각형 · 3점호는 시트 폭 바탕).
-  PC 는 실제 키보드: 숫자 · . · − · Backspace · Delete = C · Enter · Tab = 다음(마지막 칸은 닫기) · Shift+Tab = 앞 칸 · Esc = 닫기.
+  PC 는 실제 키보드: 숫자 · . · − · Backspace · Delete = C · **Enter = 확인(닫기)** · Tab = 다음 칸(마지막 칸은 닫기) · Shift+Tab = 앞 칸 · Esc = 닫기.
+  시험 `NumEditTest.confirmClosesWithoutNext`(다음 칸이 있어도 확인 = 닫기 · '다음' · '닫기' · "n / m" 글 없음) · `chainPcKeys`(Enter 닫기 · Tab 넘기기).
 
 ### 카드 · 글
 - `AppCard(modifier, padding = 16.dp)` — 흰 카드(라이트 1dp 테두리 + 옅은 그림자, 다크는 테두리만).
@@ -232,6 +235,8 @@
     **깨지기 쉬운 상태** — `taper-b-big`(Z −1500) · `taper-b-max`(한도 끝) · `taper-b-warn-gt` · `taper-b-warn-concave` · `taper-b-against` · `taper-b-inner-double-rev` ·
     `taper-b-longnum` · `taper-groove-many`(80단) · `taper-groove-errors`(빨간 띠 셋) · `round-b2-concave` · `round-manual-error` · `triangle-huge` · `triangle-three`;
     경고 글 모아 보기 `texts-warn-taper` · `texts-warn-round`; PC 창 `pc-wide-a` · `pc-wide-keypad`(1280 × 720dp) · `pc-short-help` · `pc-short-keypad`(412 × 640dp).
+  - **빈칸 시작**(10-28): 첫 화면 `taper-b-empty` · `taper-b-double-empty` · `taper-groove-empty` · `round-b3-empty` · `round-inner-b3-empty` · `round-manual-empty` · `triangle-empty`,
+    칸 하나만 넣은 상태 `taper-b-one` · `taper-b-double-one` · `taper-groove-one` · `round-b3-one` · `round-inner-b3-one` · `triangle-one`.
   - `FoundationShotsTest`(`foundation-*`: 아이콘 · 경고 띠 · 카드 부품 · 결과 띠 · 그림 도구, -w360), `KeypadShotsTest`(`field-states` · `keypad-*`),
     `ViewerShotsTest`(`viewer-*`), `ShellShotsTest`(헤더 단추 48dp 재기 · 메뉴 · 아이콘 · 도움말 · `taper-b-wide` 1280dp),
     `TaperArtShotsTest` · `RoundArtShotsTest`(`art-*` 그림만, 폭마다), `TaperShotsTest`(`taper-*`), `RoundShotsTest`(`round-*` — 내경 · 보링바 카드 · 크게 보기 · 안전 끝점 `round-inner-a-stop` · `round-inner-f-stop` · `round-manual-back-stop` · 깎는 면 예외 `round-inner-c-stop` · 기계 보정 G00 을 띄운 직각 진입 `round-inner-b3-tip0` · NC 전체 보기 `round-inner-nc-full-focus` 포함),
@@ -266,17 +271,20 @@
 - 홈은 방향이 없다(방향 칸 대신 11 모양 안내 띠). TYPE 1 = 왼쪽 인선(팁 3번, 기본·첫 칸), TYPE 2 = 오른쪽 인선(팁 4번) — B 화면의 세그먼트와 같은 값.
 - 입력값: 점 칸(X·Z·각도·점마다 모서리 R `r1`~`r3`·시작점 `start`·끝점 `end`)은 (종류·형상·방향)마다 따로(방향을 바꾸면 Z 순서가 바뀌고
   형상마다 X 오르내림과 시작·끝점의 뜻이 달라서 — 뒤집기도 같은 열쇠 묶음), 노즈R·Z 여유·홈 치수는 함께. 보정 방식은 화면 상태가 아니라 앱 전체(`AppState.compMode`)다.
-  처음 값(사용자 결정 2026-10-17): 도면 치수(점 X·Z, 홈 시작 Z·폭·외경·바닥)와 Z 여유·X 여유는 0 — 예시 값이 도면 값처럼 남지 않게.
-  공구 값(노즈 R 0.4·인서트 폭 3·겹침 0.5)은 그대로, 모서리 R·시작·끝점·각도는 비워 둔다. 치수가 아직 0·빈칸이면 빨간 멈춤 대신 파란 안내
-  ("값을 넣으면 바로 계산합니다 …"). 스크린샷·골든은 2단계 처음 값(외경 X40 Z0 / X50 Z-5, 역방향은 Z -30·-25 쪽, 홈은 calc-design.md 의 예,
-  여유 1.0)을 넣어 찍는다(jvmTest `TaperExample`).
+  처음 값(사용자 요청 2026-10-28 "0 이 적힌 좌표들을 다 빈칸으로 설정해" · "0 인 칸은 전부" — 예전 2026-10-17 결정 '0 에서 시작' 을 바꿈):
+  도면 치수(점 X·Z, 홈 시작 Z·폭·외경·바닥)와 Z 여유·X 여유는 **빈칸**. 도면 치수의 빈칸은 아직 안 넣은 값(단일 테이퍼는 다섯 값 가운데 하나를 자동 계산 —
+  예전 규칙 그대로, Z0 인 점도 0 을 넣는다), Z 여유 · X 여유 · 모서리 R 의 빈칸은 0 이고 칸에 흐린 '비우면 0'. 공구 값(노즈 R 0.4·인서트 폭 3·겹침 0.5)은 그대로,
+  각도·시작·끝점도 빈칸. 값이 모자라면(계산기 MISSING_INPUT, 또는 예전 처음 값 0 을 그대로 둔 · 되살린 치수 — `SlopeForm.waiting` · `GrooveInput.waiting`)
+  빨간 멈춤 대신 파란 안내("값을 넣으면 바로 계산합니다 …")만 — 결과 · 형상 · NC · 결과 띠는 아직 없고 요약 그림은 개념도 그대로. 칸 하나씩 넣는 동안도 그렇다
+  (`TaperSolveTest.freshStartSolvesAsYouType`). 넣은 값은 화면 상태(Saver)로 되살아나 이미 0 을 넣은 칸은 0 그대로다(KeyValueStore 는 칸 값을 저장하지 않는다).
+  스크린샷·골든은 2단계 처음 값(외경 X40 Z0 / X50 Z-5, 역방향은 Z -30·-25 쪽, 홈은 calc-design.md 의 예, 여유 1.0)을 넣어 찍는다(jvmTest `TaperExample`).
   빈칸인 X·Z·각도·끝점은 계산된 값을 `autoValue` 로 보인다 — 끝점은 깎기가 끝나는 마지막 T 점(모서리 R 이면 그 끝). **시작점은 빈칸이면 "안 깎음"** —
   그 요소는 깎지 않고 연장선에서 들어가므로 그림의 5 mm 값을 "자동" 으로 보이면 그 좌표부터 깎는 것처럼 읽혔다(2단계 점검).
   모서리 R·Z 여유·X 여유는 비우면 0, 겹침은 비우면 기본값.
 - 입력 카드(사용자 결정 2026-10-17, E19 '두 묶음으로 정리'): **'도면 치수'** — 머리 오른쪽에 '단위 mm · X 는 직경' 을 한 번 적고 칸 안의 mm 는 뺐다.
   머리 아래 'T1 ⇄ T2 바꾸기' 스위치 한 줄(아래 '가공 방향 뒤집기') → 점마다 한 줄 [T 표 38dp][X][Z][모서리 R(폭 0.8)](옛 따로 줄 'T1 모서리 R' 은 없앴다 — 칸 이름 '모서리 R', 점 이름은 키패드 안내 줄에),
   단일 테이퍼는 [각도][각도 기준 스위치](아래 '각도 기준'), 시작 · 끝 → 구분선(1dp, 위아래 14dp) → **'공구'** — 노즈 R 칩 → [Z 여유 (mm)][팁 번호](라운드의 공구 칸과 같은 순서).
-  칸 묶음 '다음' 은 X1 → Z1 → 모서리 R → X2 … 시작 → 끝 → Z 여유. 노즈 R 은 요약 카드 정보 줄에도 있다.
+  칸 묶음 순서(PC Tab)는 X1 → Z1 → 모서리 R → X2 … 시작 → 끝 → Z 여유. 노즈 R 은 요약 카드 정보 줄에도 있다.
   홈은 **'홈 치수'** [시작 Z][홈 폭 W] / [외경 ØD][바닥 Ød] → **'공구'** 기준 인선 → [인서트 폭 T][단 겹침][X 여유](한 줄 셋).
 - 시작·끝점 칸: 그 요소가 단면이면 "시작점 X (T1 앞)", 수평이면 "시작점 Z (T1 앞)" 처럼 라벨이 형상·종류에 따라 바뀐다(`legsVertical`:
   형상 1·2 는 앞이 단면, 2·4 는 뒤가 단면, 2중 테이퍼는 둘 다 수평). 옛 "앞뒤 요소 길이" 칸은 없앴다.
@@ -384,10 +392,12 @@
   `G00 X17.2 Z1.4` `G01 X20.` `G01 Z0.` — 골든 `round-inner-b3-tip0`).
   직접 보정 = 합성 R 보정점 · `center` · `program` · `progR` · `nc`(G40, 가상 인선, 첫 줄 `(G40 DIRECT R0.4 T3)`). 고르는 곳은 테이퍼와 같은 앱 전체 스위치(아래 '보정 방식').
   노드 표는 점마다 지금 보정 방식의 X · Z 를 크게(numLarge), 다른 쪽 값을 그 아래 작게('도면 …' / '보정 …') 보인다.
-  치수 · 공구 칸은 키패드 묶음("다음", 키패드 그림은 그 치수 하나만 초점색), 노드 표가 화면 밖이면 아래 결과 띠(첫 점 · 끝 점 · 외 n점).
+  치수 · 공구 칸은 키패드 묶음(키패드 하나 · PC Tab 순서, 키패드 그림은 그 치수 하나만 초점색), 노드 표가 화면 밖이면 아래 결과 띠(첫 점 · 끝 점 · 외 n점).
 - 입력값: 치수 칸은 형상마다 따로, 노즈R·Z 여유·끝 요소 길이는 함께, 팁은 외경 · 내경 따로(표준이 3 · 2 라 외경에서 고른 팁이 보링으로 넘어가지 않게 —
-  테이퍼도 가공 종류마다 따로), 수동 칸은 따로. 처음 값은 그림 모양대로 풀리는 값(형상 3 은 calc-design.md 의 손 계산,
-  비울 수 있는 칸 하나는 비워 계산값이 자리표시로 보인다). 형상 1~6 은 외경 정방향(팁 3, G42), 내경 2~6 은 정방향 보링(팁 2, G41),
+  테이퍼도 가공 종류마다 따로), 수동 칸은 따로. 처음 값(사용자 요청 2026-10-28, 예전엔 0): 치수 · 3점호 세 점 · Z 여유는 **빈칸** —
+  치수 · 세 점의 빈칸은 아직 안 넣은 값(비울 수 있는 묶음은 하나를 자동 계산), 모서리 R · Z 여유의 빈칸은 0(칸에 흐린 '비우면 0'), 끝 직선 길이는 5.0 그대로.
+  값이 모자라는 동안은 파란 안내만(그림은 이름표만). 빈 모서리 R 은 그림에도 이름만 적는다(예전엔 "모서리 R 0"). 스크린샷 · 골든은 예시 치수(jvmTest `roundExample` — 그림 모양대로 풀리는 값,
+  형상 3 은 calc-design.md 의 손 계산)로 찍는다. 형상 1~6 은 외경 정방향(팁 3, G42), 내경 2~6 은 정방향 보링(팁 2, G41),
   수동은 외경/내경 + 끝 Z 로 방향을 정한다.
 
 ### 내경 라운드 · 보링바 간섭 (3단계, 사용자 요청 2026-10-20)
@@ -472,5 +482,5 @@
 - 그림 모양은 각도 A 를 따르되 22°~58° 로 눌러 그리고, 그 밖이면 왼쪽 위에 '그림 비율 아님 (실제 A …°)'. 그림 높이는 290dp 고정(각을 바꿔도 아래 칸이 들썩이지 않게).
 - X · Z 연동: 좌표가 아니라 바뀐 양 — 'ΔX 지름 변화 (직경)' · 'ΔZ Z 이동' 두 칸(24sp), 세그먼트 '밑변 Z · 높이 X(반경)' / '밑변 X(반경) · 높이 Z'(`baseIsZ`).
   X 는 직경값(반경 × 2). 값은 크기만 보이고 부호는 가공 방향에 맞게 붙인다고 적는다.
-- 처음 값(사용자 결정 2026-10-17): 다섯 칸 모두 빈칸(자리표시 '0'). 스크린샷 · 골든은 예전 처음 값 밑변 10 · 각도 A 25° 로 찍는다
+- 처음 값(사용자 결정 2026-10-17): 다섯 칸 모두 빈칸 — 자리표시 '0' 도 없앴다(사용자 요청 2026-10-28 "0 이 적힌 칸은 전부 빈칸"). 스크린샷 · 골든은 예전 처음 값 밑변 10 · 각도 A 25° 로 찍는다
   (A = 30° 면 X 직경 = 빗변이 되어 헷갈려서 피했다).

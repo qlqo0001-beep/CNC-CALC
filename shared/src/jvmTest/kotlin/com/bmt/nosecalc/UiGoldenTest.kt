@@ -69,7 +69,7 @@ class UiGoldenTest {
         assertEquals(f.readText().replace("\r\n", "\n"), text, "$name: 화면 숫자·NC 가 골든과 다르다")
     }
 
-    /** 화면은 도면 치수 0 에서 시작하므로 [example] 값(2단계 처음 값)을 넣은 상태 — 스크린샷과 같다 */
+    /** 화면은 도면 치수 빈칸에서 시작하므로 [example] 값(2단계 처음 값)을 넣은 상태 — 스크린샷과 같다 */
     @Test
     fun taper() {
         slope("taper-b", TaperState(type = 1, open = true).example())
@@ -141,7 +141,7 @@ class UiGoldenTest {
 
     @Test
     fun round() {
-        // 화면은 0 에서 시작한다 — 스크린샷과 같은 예시 치수로
+        // 화면은 빈칸에서 시작한다 — 스크린샷과 같은 예시 치수로
         for (t in 1..6) roundType("round-b$t", roundExample(t, open = true), t)
         roundType("round-b3-contact", roundExample(3, open = true), 3)
         roundType("round-b2-error", roundExample(2, open = true).apply { setDim(2, "l2", "30") }, 2)

@@ -71,15 +71,21 @@ class RoundShotsTest {
         shot("round-manual-inner-rev", 3780) { roundManualInnerRev() }
     }
 
-    /** 처음 화면: 치수 · 세 점이 모두 0 — 파란 안내만, 빨강 없이 그림이 보인다 */
+    /**
+     * 처음 화면: 치수 · 세 점이 모두 빈칸(사용자 요청 2026-10-28) — 파란 안내만, 빨강 없이 그림이 보인다(이름표만). 모서리 R · Z 여유는 흐린 '비우면 0'.
+     * 외경 · 내경 형상 3 은 칸 하나(주 R)만 넣은 상태도 — 아직 모자라 안내 그대로, 그림에 그 값만
+     */
     @Test
     fun empty() {
         shot("round-b3-empty", 1500) { RoundState(type = 3, open = true) }
         shot("round-manual-empty", 1500) { RoundState(type = MANUAL, open = true) }
+        shot("round-b3-one", 1500) { RoundState(type = 3, open = true).apply { setDim(3, "mainR", "12.5") } }
+        shot("round-inner-b3-empty", 2000) { RoundState(type = 3, open = true).apply { typeInner = true } }
+        shot("round-inner-b3-one", 2000) { RoundState(type = 3, open = true).apply { typeInner = true; setDim(3, "mainR", "12.5") } }
     }
 
     /**
-     * 키패드(폰 높이): 그림은 고치는 치수 · 점 하나만 초점색, 위에 결과 한 줄, 오른쪽 아래 "다음", 고치는 칸은 시트 위로.
+     * 키패드(폰 높이): 그림은 고치는 치수 · 점 하나만 초점색, 위에 결과 한 줄, 오른쪽 아래 두 칸 높이 "확인", 고치는 칸은 시트 위로.
      * 칸을 끌어올리는 스크롤이 0.1초 걸음에서는 출렁이므로 폰 프레임(16ms)으로 찍는다
      */
     @Test

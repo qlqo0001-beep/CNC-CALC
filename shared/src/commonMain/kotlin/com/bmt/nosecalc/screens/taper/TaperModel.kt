@@ -121,7 +121,8 @@ internal class TaperState(
 
     private val dir get() = if (reverse) "r" else "f"
 
-    fun point(name: String): String = values[pointKey(name)] ?: TaperDefaults.point(name)
+    /** 점 칸(x1·z1·x2·z2·x3·z3·ang·r1·r2·r3(모서리 R)·start·end) — 처음은 모두 빈칸([TaperDefaults]) */
+    fun point(name: String): String = values[pointKey(name)] ?: ""
     fun setPoint(name: String, v: String) {
         // 비어 있던(자동) 다섯 값 칸에 값이 들어오면 기억한다 — 다섯 값이 어긋나면 그 칸을 다시 비우자고 권한다
         if (name in FIVE && point(name).isEmpty() && v.isNotEmpty()) values[lastAutoKey] = name
@@ -204,18 +205,15 @@ internal class TaperState(
 }
 
 /**
- * 처음 값. 도면 치수(점 X · Z, 홈 시작 Z · 폭 · 외경 · 바닥)와 여유(Z 여유 · X 여유)는 0 에서 시작한다 — 예시 값이 도면 값처럼
- * 남지 않게. 공구 값(노즈 R · 인서트 폭 · 겹침)은 흔한 값, 각도 · 모서리 R · 시작 · 끝점은 비워 둔다
+ * 처음 값. 도면 치수(점 X · Z, 홈 시작 Z · 폭 · 외경 · 바닥)와 여유(Z 여유 · X 여유)는 빈칸에서 시작한다(사용자 요청 2026-10-28
+ * "0 이 적힌 좌표들을 다 빈칸으로" — 예전 2026-10-17 결정은 0). 도면 치수의 빈칸은 아직 안 넣은 값(단일 테이퍼는 다섯 값 가운데 하나를
+ * 자동 계산), 여유의 빈칸은 0 이다. 공구 값(노즈 R · 인서트 폭 · 겹침)은 흔한 값, 각도 · 모서리 R · 시작 · 끝점도 빈칸
  */
 internal object TaperDefaults {
-    /** name = x1·z1·x2·z2·x3·z3·ang·r1·r2·r3(모서리 R)·start·end */
-    fun point(name: String): String = if (name[0] == 'x' || name[0] == 'z') "0" else ""
-
     fun shared(name: String): String = when (name) {
         "noseR" -> "0.4"
         "insert" -> "3"
         "overlap" -> "0.5"
-        "zClear", "zStart", "width", "od", "bottom", "xClear" -> "0"
         else -> ""
     }
 }
@@ -245,8 +243,8 @@ internal data class SlopeForm(
     val zAngle: Double? get() = angle?.let(angleRef::toZ)
 
     /**
-     * 도면 치수를 아직 다 넣지 않았다: X(직경) 0 인 점이 있거나 두 점 이상이 Z 0 에 겹친다(처음 값 그대로).
-     * 이때 계산이 멈춘 것은 빨간 멈춤이 아니라 "값을 넣으면 계산합니다" 안내로 보인다
+     * 도면 치수를 아직 다 넣지 않았다: X(직경) 0 인 점이 있거나 두 점 이상이 Z 0 에 겹친다(예전 처음 값 0 을 그대로 둔 상태 · 0 을 치는 중).
+     * 이때 계산이 멈춘 것은 빨간 멈춤이 아니라 "값을 넣으면 계산합니다" 안내로 보인다. 빈칸(지금 처음 값)은 계산기의 MISSING_INPUT 이 같은 안내를 낸다
      */
     val waiting: Boolean get() = x.any { it == 0.0 } || z.count { it == 0.0 } > 1
 
@@ -518,7 +516,7 @@ internal fun taperWarningFields(w: TaperWarning, f: SlopeForm): Set<String> {
     }
 }
 
-/** 홈 치수를 아직 넣지 않았다(폭 · 외경 0 = 처음 값) — 멈춤 대신 안내 */
+/** 홈 치수를 아직 넣지 않았다(폭 · 외경 0 — 예전 처음 값. 지금 처음 값인 빈칸은 MISSING_INPUT) — 멈춤 대신 안내 */
 internal val GrooveInput.waiting: Boolean get() = width == 0.0 || od == 0.0
 
 /** 홈 경고가 가리키는 칸(키 = TaperState.shared 이름). 모두 계산을 멈춘다 */

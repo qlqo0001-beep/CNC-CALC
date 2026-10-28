@@ -24,8 +24,9 @@ class TriangleShotsTest {
 
     @Test
     fun shots() {
-        // 처음 화면(모두 빈칸 · 파랑 안내)
+        // 처음 화면(모두 빈칸 · 파랑 안내 — 칸에 자리표시 '0' 없음, 사용자 요청 2026-10-28)과 칸 하나(밑변 10)만 넣은 상태
         shot("triangle-empty", Shots.HEIGHT_DP) { TriangleState() }
+        shot("triangle-one", Shots.HEIGHT_DP) { TriangleState(mapOf("a" to "10")) }
         shot("triangle") { TriangleState(mapOf("a" to "10", "angA" to "25")) }
         // 높이 · 빗변을 넣고 높이를 Z 로 — 가파른 모양(67°)
         shot("triangle-swap") {

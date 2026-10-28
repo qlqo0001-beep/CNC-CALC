@@ -87,7 +87,7 @@ import kotlinx.coroutines.launch
 /**
  * TYPE 1~6 입력·결과: 요약 → (계산이 멈추면 그 까닭) → 도면 치수(큰 그림 + 칸)·공구 → (내경) 보링바 → 보정 방식 스위치 → 경고 → 노드 표 → 형상 → NC.
  * 값이 바뀌면 바로 다시 푼다. 기계 보정의 NC 는 같은 윤곽의 도면 좌표 프로그램(RoundCalc.machine — 노즈R 0 으로 푼 것에서 G00 만 노즈R · 팁에 맞게 띄움)이다.
- * 치수 · 공구 · 보링바 칸은 한 묶음이라 키패드의 "다음" 으로 이어 넣고, 키패드에는 그 치수 하나만 짚은 그림과 결과 한 줄이 뜬다.
+ * 치수 · 공구 · 보링바 칸은 한 묶음(키패드 하나 · PC Tab 순서)이고, 키패드에는 그 치수 하나만 짚은 그림과 결과 한 줄이 뜬다.
  * 내경(고르기 화면 스위치)은 같은 치수의 구멍 — 형상 5 · 6 은 막힘 / 관통, 보링바 칸을 채우면 공구가 소재에 닿는지 본다
  */
 @Composable
@@ -110,12 +110,12 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
     // 아직 안 넣은 칸(빈칸 · 0). 비울 수 있는 칸이면 계산이 채운 값을 칸 · 그림에 보인다
     val empty = dims(type).map { it.key }.filter { input.dim(it) == null }.toSet()
     fun auto(key: String) = if (key in blanks && key in empty) sol?.filled?.dim(key) else null
-    // 넣은 값 그대로(모서리 R 빈칸은 0), 비운 칸은 계산이 채운 값. 값이 모자라는 동안 안 넣은 칸은 이름만, 계산이 멈췄으면 '?'
+    // 넣은 값 그대로(모서리 R 빈칸은 칸처럼 이름만 — 0 을 적지 않는다), 비운 칸은 계산이 채운 값. 값이 모자라는 동안 안 넣은 칸은 이름만, 계산이 멈췄으면 '?'
     val labels = dims(type).mapNotNull { f ->
         val a = auto(f.key)
         when {
             a != null -> DimShown(Fmt.fixed3(a), DimKind.Auto)
-            f.key !in empty -> DimShown(s.dim(type, f.key).ifEmpty { "0" })
+            f.key !in empty -> s.dim(type, f.key).takeIf { it.isNotEmpty() }?.let { DimShown(it) }
             missing -> null
             else -> DimShown("", DimKind.Missing)
         }?.let { f.key to it }
@@ -170,7 +170,8 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
                                     { s.setDim(type, f.key, it) },
                                     Modifier.weight(1f),
                                     unit = "mm",
-                                    placeholder = "0",
+                                    // 처음은 빈칸(안 넣음) — 모서리 R 만 빈칸이 0 이라 흐린 글로 알린다
+                                    placeholder = if (f.key.startsWith("cr")) "비우면 0" else "",
                                     autoValue = if (asAuto) auto(f.key)?.let { Fmt.fixed3(it) } ?: "" else null,
                                     error = f.key in flagged,
                                     tag = if (f.key.startsWith("d")) "Ø직경" else null,
@@ -212,7 +213,7 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
                     buildString {
                         // 조사는 마지막 이름의 읽는 소리로: D1(디일) → 은, D(디) · D2(디이) → 는. 붙임 공백(\u00A0)으로 '·' 가 줄 앞에 오지 않게
                         if (dia.isNotEmpty()) append("${dia.joinToString("\u00A0· ") { it.label }} ${if (dia.last().label.last() in "013678") "은" else "는"} 지름(직경)입니다. ")
-                        append("모서리 R 이 없으면 모서리 R 칸은 0 그대로 둡니다(비워도 0).")
+                        append("모서리 R 이 없으면 모서리 R 칸은 비워 둡니다(비우면 0).")
                         if (blanks.isNotEmpty()) {
                             val names = dims(type).associate { it.key to it.label }
                             append(" ${blanks.joinToString("\u00A0· ") { names.getValue(it).replace(' ', '\u00A0') }} 가운데 하나를 비우거나 0 으로 두면 나머지로 계산합니다(주 R 은 중심이 축 위인 구).")
@@ -460,7 +461,7 @@ private fun ToolInputs(
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         NumberField(
             "Z 여유 (진입)", s.shared("zClear"), { s.setShared("zClear", it) }, Modifier.weight(1f),
-            unit = "mm", placeholder = "0", id = "zClear", preview = preview,
+            unit = "mm", placeholder = "비우면 0", id = "zClear", preview = preview,
         )
         if (leg != null) {
             NumberField(

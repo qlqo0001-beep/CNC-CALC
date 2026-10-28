@@ -85,8 +85,8 @@ internal class RoundState(
     var editing by mutableStateOf<String?>(null)
     private val values = mutableStateMapOf<String, String>().apply { putAll(values) }
 
-    /** 도면 치수. 처음 값은 모두 0(예시 치수 없음) */
-    fun dim(type: Int, key: String): String = values["t$type/$key"] ?: "0"
+    /** 도면 치수. 처음 값은 모두 빈칸(예시 치수 없음 — 사용자 요청 2026-10-28, 예전엔 0). 모서리 R 빈칸은 0, 나머지 빈칸은 아직 안 넣은 값 */
+    fun dim(type: Int, key: String): String = values["t$type/$key"] ?: ""
     fun setDim(type: Int, key: String, v: String) { values["t$type/$key"] = v }
 
     /** TYPE 2 의 L2 기준 */
@@ -153,8 +153,8 @@ internal class RoundState(
         get() = values["m/tip"]?.toIntOrNull()
         set(v) { values["m/tip"] = v?.toString() ?: "" }
 
-    /** 수동: x1·z1·x2·z2·x3·z3. 처음 값은 모두 0 */
-    fun point(name: String): String = values["m/$name"] ?: "0"
+    /** 수동: x1·z1·x2·z2·x3·z3. 처음 값은 모두 빈칸(아직 안 넣은 값) */
+    fun point(name: String): String = values["m/$name"] ?: ""
     fun setPoint(name: String, v: String) { values["m/$name"] = v }
 
     var inner: Boolean
@@ -163,7 +163,7 @@ internal class RoundState(
 
     /**
      * TYPE 입력을 계산기 입력으로. 그 TYPE 의 칸만 넣고 나머지는 null. 노즈R 빈칸은 NaN(계산기가 BAD_INPUT).
-     * 모서리 R 빈칸은 0. 길이 · 지름 · 주 R 은 0 보다 커야 하므로 0(처음 값)은 아직 안 넣은 것 — 빈칸처럼 null 로 넘긴다.
+     * 모서리 R 빈칸은 0. 길이 · 지름 · 주 R 은 0 보다 커야 하므로 0(예전 처음 값)은 아직 안 넣은 것 — 빈칸처럼 null 로 넘긴다.
      * 내경은 형상 2~6 만(형상 1 은 고르기 화면에 없다), 관통은 내경 5 · 6 만
      */
     fun input(type: Int): RoundInput {
@@ -223,13 +223,12 @@ internal class RoundState(
 }
 
 /**
- * 공구 칸 처음 값. 노즈R 은 흔한 값, 끝 직선 길이는 그림용 5.0. 도면 치수 · 세 점 · Z 여유는 0 에서 시작한다(예시 치수 없음).
- * Z 여유 0 이어도 계산기가 진입점을 노즈R 만큼 띄운다
+ * 공구 칸 처음 값. 노즈R 은 흔한 값, 끝 직선 길이는 그림용 5.0. 도면 치수 · 세 점 · Z 여유는 빈칸에서 시작한다(예시 치수 없음).
+ * Z 여유 빈칸은 0 — 0 이어도 계산기가 진입점을 노즈R 만큼 띄운다
  */
 internal object RoundDefaults {
     fun shared(name: String): String = when (name) {
         "noseR" -> "0.4"
-        "zClear" -> "0"
         "leg" -> "5.0"
         else -> ""
     }
@@ -248,7 +247,7 @@ internal fun RoundInput.dim(key: String): Double? = when (key) {
 }
 
 /**
- * 화면에 보일 경고(오목 R ≤ 노즈R 을 맨 앞에). 3점호의 세 점 가운데 둘이 같은 자리면(처음 값 0 · 0 그대로 등)
+ * 화면에 보일 경고(오목 R ≤ 노즈R 을 맨 앞에). 3점호의 세 점 가운데 둘이 같은 자리면(예전 처음 값 0 · 0 그대로 등)
  * 계산기의 모양 불일치 대신 값 부족 — 아직 덜 넣은 것이라 빨강이 아닌 안내로 보인다
  */
 internal fun shownWarnings(r: RoundResult, arc3: Arc3Input? = null): List<RoundWarning> {

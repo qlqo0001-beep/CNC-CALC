@@ -13,7 +13,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 
 /**
- * 숫자칸 묶음: 키패드를 닫지 않고 "다음" 으로 다음 칸에 간다(값은 누를 때마다 이미 들어가 있다 · 저절로 넘어가지 않는다).
+ * 숫자칸 묶음: 칸들이 키패드 하나를 같이 쓴다(값은 누를 때마다 이미 들어가 있다). 화면 키패드의 '확인' 은 닫기만 하고 다음 칸으로
+ * 넘어가지 않는다(사용자 요청 2026-10-28) — 다음 · 앞 칸으로 가는 것은 PC 키보드의 Tab · Shift+Tab 뿐이다(키패드를 닫지 않고).
  * [FieldChainHost] 안의 [NumberField] 가 스스로 들어오고, 순서는 화면 자리(위 → 아래, 같은 줄은 왼 → 오른)다.
  * active = 키패드가 열린 칸 id(null = 닫힘). sheetOpen 이면 화면 끝에 440dp 빈자리를 두어 아래 칸도 시트 위로 올라오게 한다.
  */
@@ -83,7 +84,7 @@ internal val LocalFieldChain = staticCompositionLocalOf<FieldChain?> { null }
 @Composable
 fun rememberFieldChain(initialActive: String? = null): FieldChain = remember { FieldChain(initialActive) }
 
-/** 안의 [NumberField] 를 묶고, 열린 칸 하나의 키패드를 그린다. 다음 · 앞 칸으로 가도 시트는 그대로 두고 내용만 바꾼다 */
+/** 안의 [NumberField] 를 묶고, 열린 칸 하나의 키패드를 그린다. PC Tab 으로 다음 · 앞 칸으로 가도 시트는 그대로 두고 내용만 바꾼다 */
 @Composable
 fun FieldChainHost(chain: FieldChain, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalFieldChain provides chain, content = content)

@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -23,6 +24,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.bmt.nosecalc.ui.FieldChain
@@ -151,19 +155,44 @@ class NumEditTest {
         }
     }
 
-    /** PC 키: Enter · Tab = 다음(마지막 칸 · 묶음 밖은 닫기), Shift+Tab = 앞 칸 */
+    /** PC 키: Enter = 확인(닫기 — 다음 칸으로 넘어가지 않는다), Tab = 다음 칸(마지막 칸 · 묶음 밖은 닫기), Shift+Tab = 앞 칸 */
     @OptIn(InternalComposeUiApi::class)
     @Test
-    fun nextKeys() {
-        assertEquals(NumEdit.NEXT, NumEdit.keyOf(KeyEvent(Key.Enter, KeyEventType.KeyDown)))
-        assertEquals(NumEdit.NEXT, NumEdit.keyOf(KeyEvent(Key.NumPadEnter, KeyEventType.KeyDown)))
+    fun pcKeys() {
+        assertEquals(NumEdit.DONE, NumEdit.keyOf(KeyEvent(Key.Enter, KeyEventType.KeyDown)))
+        assertEquals(NumEdit.DONE, NumEdit.keyOf(KeyEvent(Key.NumPadEnter, KeyEventType.KeyDown)))
         assertEquals(NumEdit.NEXT, NumEdit.keyOf(KeyEvent(Key.Tab, KeyEventType.KeyDown)))
         assertEquals(NumEdit.PREV, NumEdit.keyOf(KeyEvent(Key.Tab, KeyEventType.KeyDown, isShiftPressed = true)))
     }
 
     /**
+     * 사용자 요청(2026-10-28) "다음 을 확인으로 변경하고 넘어가게 하지마": 묶음의 첫 칸(다음 칸이 있는 칸)에서도 오른쪽 열은 C · ⌫ · 두 칸 높이의 '확인' 뿐이고
+     * ('다음' · '닫기' 키 · 제목 옆 "n / m" 없음), 확인은 넣은 값을 그대로 두고 키패드를 닫는다 — 다음 칸이 열리지 않는다. 확인 키의 위 · 아래 어디를 눌러도 같다
+     */
+    @Test
+    fun confirmClosesWithoutNext() = Chain().use { ch ->
+        ch.tapField("x1")
+        assertEquals("x1", ch.chain.active)
+        assertEquals(listOf("x1", "z1", "ang"), ch.chain.order) // 다음 칸이 있다
+        val texts = ch.texts()
+        assertTrue("확인" in texts, "$texts")
+        assertTrue(texts.none { it == "다음" || it == "닫기" || " / " in it }, "$texts")
+        ch.tapKey(1, 0) // 8
+        ch.tapKey(3, 3) // 확인(아래 반)
+        assertNull(ch.chain.active)
+        assertFalse(ch.chain.sheetOpen)
+        assertEquals("8", ch.values["x1"])
+        ch.tapField("z1")
+        ch.tapKey(0, 3) // −
+        ch.tapKey(1, 1) // 5
+        ch.tapKey(3, 2) // 확인(위 반)
+        assertNull(ch.chain.active)
+        assertEquals(mapOf("x1" to "8", "z1" to "-5", "ang" to "30"), ch.values.toMap())
+    }
+
+    /**
      * 현장 보고 "누르면 숫자가 지워지지 않음"(예전 빌드: 처음 − 가 부호만 바꿔 Z-5.0 에서 − 1 2 → 5.012 처럼 이어 붙었다).
-     * 화면 키로: 연 뒤 · 다음 뒤 · ⌫/C 뒤 모두 처음 키가 새 값이고, 다음은 시트를 닫지 않는다. 마지막 칸 닫기 · 바깥 누름은 닫기만
+     * 화면 키로: 연 뒤 · ⌫/C 뒤 모두 처음 키가 새 값이고, 확인 · 바깥 누름은 닫기만 — 다음 칸은 그 칸을 눌러 연다
      */
     @Test
     fun chainScreenKeys() = Chain().use { ch ->
@@ -173,7 +202,9 @@ class NumEditTest {
         ch.tapKey(0, 2) // 1
         ch.tapKey(1, 2) // 2
         assertEquals("-12", ch.values["z1"])
-        ch.tapKey(3, 3) // 다음
+        ch.tapKey(3, 3) // 확인
+        assertNull(ch.chain.active)
+        ch.tapField("ang")
         assertEquals("ang", ch.chain.active)
         ch.tapKey(0, 1) // 4
         assertEquals("4", ch.values["ang"]) // "304" 가 아니다
@@ -183,7 +214,7 @@ class NumEditTest {
         ch.tapKey(3, 0) // C
         ch.tapKey(2, 1) // 6
         assertEquals("6", ch.values["ang"])
-        ch.tapKey(3, 3) // 마지막 칸 → 닫기
+        ch.tapKey(3, 2) // 확인
         assertNull(ch.chain.active)
         ch.tapField("x1")
         ch.tapAt(200f, 20f) // 바깥(덮개) — 안 누르고 닫으면 그대로
@@ -191,7 +222,10 @@ class NumEditTest {
         assertEquals(mapOf("x1" to "40", "z1" to "-12", "ang" to "6"), ch.values.toMap())
     }
 
-    /** PC 키로: Tab · Enter = 다음, Shift+Tab = 앞 칸, 돌아온 칸도 처음 키가 덮어쓴다. "-" 뿐이면 넘어갈 때 연 때 값으로 */
+    /**
+     * PC 키로: Tab = 다음, Shift+Tab = 앞 칸, 돌아온 칸도 처음 키가 덮어쓴다. "-" 뿐이면 넘어갈 때 연 때 값으로.
+     * Enter 는 확인(닫기)이라 다음 칸으로 가지 않고, 마지막 칸의 Tab 은 닫는다
+     */
     @Test
     fun chainPcKeys() = Chain().use { ch ->
         ch.tapField("x1")
@@ -208,9 +242,11 @@ class NumEditTest {
         ch.press(Key.Three)
         assertEquals("3", ch.values["x1"]) // "403" 이 아니다
         ch.press(Key.Enter)
-        ch.press(Key.Enter)
+        assertNull(ch.chain.active) // 확인 — z1 로 넘어가지 않는다
+        ch.tapField("z1")
+        ch.press(Key.Tab)
         assertEquals("ang", ch.chain.active)
-        ch.press(Key.Enter)
+        ch.press(Key.Tab) // 마지막 칸의 Tab 은 닫기
         assertNull(ch.chain.active)
         ch.tapField("z1")
         ch.press(Key.Nine)
@@ -219,24 +255,24 @@ class NumEditTest {
         assertEquals(mapOf("x1" to "3", "z1" to "9", "ang" to "30"), ch.values.toMap())
     }
 
-    /** 다음 칸으로 막 넘어가 다시 그리기 전에 온 키는 앞 칸을 바꾸지 않는다 */
+    /** 다음 칸으로 막 넘어가(Tab) 다시 그리기 전에 온 키는 앞 칸을 바꾸지 않는다 */
     @Test
     fun chainKeyRightAfterNext() = Chain().use { ch ->
         ch.tapField("x1")
-        ch.press(Key.Enter, frame = false)
+        ch.press(Key.Tab, frame = false)
         ch.press(Key.Five)
         assertEquals("40", ch.values["x1"])
         assertEquals("z1", ch.chain.active)
     }
 
-    /** 연 칸은 시트 위로 올라온다(아래에 결과 카드가 있는 화면처럼) */
+    /** 연 칸은 시트 위로 올라온다(아래에 결과 카드가 있는 화면처럼) — 누른 칸 · Tab 으로 간 칸 모두 */
     @Test
     fun chainBringsFieldAboveSheet() = Chain(top = 600).use { ch ->
         assertTrue(ch.bounds.getValue("z1").bottom > 400f) // 처음엔 시트가 덮을 자리
         ch.tapField("z1")
         assertTrue(ch.chain.sheetHeight > 0)
         assertTrue(ch.bounds.getValue("z1").bottom <= 800f - ch.chain.sheetHeight, "z1 ${ch.bounds["z1"]} 시트 ${ch.chain.sheetHeight}")
-        ch.press(Key.Enter)
+        ch.press(Key.Tab)
         assertEquals("ang", ch.chain.active)
         assertTrue(ch.bounds.getValue("ang").bottom <= 800f - ch.chain.sheetHeight, "ang ${ch.bounds["ang"]} 시트 ${ch.chain.sheetHeight}")
     }
@@ -295,10 +331,18 @@ class NumEditTest {
         /** 칸(아래 52dp 칸 가운데)을 누른다 */
         fun tapField(id: String) = bounds.getValue(id).let { tapAt(it.center.x, it.bottom - 26f) }
 
-        /** 키패드 키: col 0~2 = 숫자 열, 3 = 오른쪽 열(C · ⌫ · 닫기 · 다음), row 0~3 = 위에서부터 */
+        /** 키패드 키: col 0~2 = 숫자 열, 3 = 오른쪽 열(C · ⌫ · 두 칸 높이의 확인 — row 2 · 3 이 같은 키), row 0~3 = 위에서부터 */
         fun tapKey(col: Int, row: Int) {
             val x = if (col < 3) 16f + col * (254f / 3 + 8f) + 127f / 3 else 16f + 270f + 8f + 45f
             tapAt(x, 800f - 16f - (3 - row) * 66f - 29f)
+        }
+
+        /** 화면에 보이는 글 모두(키 글 · 제목 · 칸) */
+        @OptIn(ExperimentalComposeUiApi::class)
+        fun texts(): List<String> {
+            fun walk(n: SemanticsNode): List<SemanticsNode> = listOf(n) + n.children.flatMap(::walk)
+            return scene.semanticsOwners.flatMap { walk(it.unmergedRootSemanticsNode) }
+                .flatMap { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
         }
 
         @OptIn(InternalComposeUiApi::class)
