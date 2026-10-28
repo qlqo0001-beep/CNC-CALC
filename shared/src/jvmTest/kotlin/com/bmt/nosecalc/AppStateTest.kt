@@ -99,7 +99,7 @@ class AppStateTest {
         }
     }
 
-    /** 메뉴 카드: 준비 중은 토스트만(화면 그대로), 지금 화면은 메뉴만 닫고, 다른 계산은 그리로. 화면 테마 '자동' = 시스템 따라 */
+    /** 메뉴 카드: 7기능을 다 만들어 '준비 중' 묶음이 없다. 지금 화면은 메뉴만 닫고, 다른 계산은 그리로. 화면 테마 '자동' = 시스템 따라 */
     @Test
     fun menuCards() {
         val s = AppState(store())
@@ -114,10 +114,7 @@ class AppStateTest {
         }
         try {
             frames()
-            scene.tap("재료·절삭조건 계산")
-            assertEquals("재료·절삭조건 계산: 준비 중인 기능입니다", s.toast?.text)
-            assertEquals(listOf(Feature.TAPER, Feature.ROUND), s.stack)
-            assertTrue(s.menuOpen)
+            assertTrue(Feature.entries.all { it.ready })
             scene.tap("자동")
             assertNull(s.darkSaved)
             frames()
@@ -128,6 +125,11 @@ class AppStateTest {
             frames()
             scene.tap("직각삼각형 계산")
             assertEquals(listOf(Feature.TAPER, Feature.ROUND, Feature.TRIANGLE), s.stack)
+            assertFalse(s.menuOpen)
+            s.menuOpen = true
+            frames()
+            scene.tap("재료·절삭조건 계산")
+            assertEquals(listOf(Feature.TAPER, Feature.ROUND, Feature.TRIANGLE, Feature.CUTTING), s.stack)
             assertFalse(s.menuOpen)
         } finally {
             scene.close()
