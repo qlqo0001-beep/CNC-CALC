@@ -399,7 +399,8 @@ private fun TipBox(tip: Int?, error: Boolean, modifier: Modifier, onPick: (Int) 
         }
     }
     if (open) {
-        TipSheet(tip ?: -1, STANDARD_TIP, onPick = {
+        // 빈칸은 null 그대로 — -1 을 넘기면 그림의 tipVector(-1) 이 던져 앱이 꺼졌다(10-28 사용자 "팁번호 설정시 팅기는 문제")
+        TipSheet(tip, STANDARD_TIP, onPick = {
             onPick(it ?: STANDARD_TIP)
             open = false
         }) { open = false }

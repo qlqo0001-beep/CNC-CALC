@@ -356,9 +356,9 @@ internal fun TipField(tip: Int, standard: Int, onPick: (Int?) -> Unit, modifier:
     }
 }
 
-/** 팁 번호 고르기 시트. 표준을 고르면 null(표준 따라감) */
+/** 팁 번호 고르기 시트. 표준을 고르면 null(표준 따라감). tip = null 은 아직 안 고름(시뮬레이터 공구표의 빈칸) */
 @Composable
-internal fun TipSheet(tip: Int, standard: Int, onPick: (Int?) -> Unit, onDismiss: () -> Unit) {
+internal fun TipSheet(tip: Int?, standard: Int, onPick: (Int?) -> Unit, onDismiss: () -> Unit) {
     val c = AppTheme.colors
     BottomSheet(onDismiss) {
         SheetTitle("팁 번호 (가상 인선 번호)", "표준 ${standard}번")

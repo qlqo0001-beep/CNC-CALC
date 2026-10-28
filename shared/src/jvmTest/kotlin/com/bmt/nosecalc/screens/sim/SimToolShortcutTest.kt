@@ -61,6 +61,45 @@ class SimToolShortcutTest {
         }
     }
 
+    /**
+     * 팁 번호가 빈칸(—)인 공구 카드에서 '고르기' → 팁 시트가 열리고(예전엔 -1 을 넘겨 그림의 tipVector 가 던져 앱이 꺼졌다 — 사용자 10-28
+     * "팁번호 설정시 팅기는 문제"), 번호를 고르면 공구표에 들어간다. 1~8 · 0 모두.
+     */
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun tipPickFromBlank() {
+        for (pick in listOf("1", "2", "3", "4", "5", "6", "7", "8", "0 · 노즈 중심")) {
+            val state = AppState(store()).apply { open(Feature.SIMULATOR) }
+            val sim = SimState(state.store).apply {
+                editor.replaceAll(NO_TOOL)
+                run = runOf(editor.text, tools)
+            }
+            val scene = ImageComposeScene(412, 915, Density(1f)) {
+                AppHost(state) { ToolSettingsSheet(sim, sim.run) {} }
+            }
+            try {
+                var t = 0L
+                fun frames() = repeat(6) {
+                    scene.render(t).close()
+                    t += 100_000_000L
+                }
+                fun walk(n: SemanticsNode): List<SemanticsNode> = listOf(n) + n.children.flatMap(::walk)
+                fun tap(text: String) = scene.semanticsOwners.flatMap { walk(it.rootSemanticsNode) }.first { n ->
+                    n.config.getOrNull(SemanticsActions.OnClick) != null &&
+                        n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == text }
+                }.config[SemanticsActions.OnClick].action!!.invoke()
+                frames()
+                tap("고르기")
+                frames()
+                tap(pick)
+                frames()
+                assertEquals(pick.substringBefore(' ').toInt(), sim.tools[12]?.tip, pick)
+            } finally {
+                scene.close()
+            }
+        }
+    }
+
     /** 스크린샷 sim-editor-tool-missing(412dp) · -w360(360dp · 글꼴 130%) — 문제 띠에 '공구 설정' 이 '목록' 과 함께 들어가는지 */
     @Test
     fun shots() {
