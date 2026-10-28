@@ -114,8 +114,8 @@ class AppStateTest {
         }
         try {
             frames()
-            scene.tap("G코드 시뮬레이터")
-            assertEquals("G코드 시뮬레이터: 준비 중인 기능입니다", s.toast?.text)
+            scene.tap("재료·절삭조건 계산")
+            assertEquals("재료·절삭조건 계산: 준비 중인 기능입니다", s.toast?.text)
             assertEquals(listOf(Feature.TAPER, Feature.ROUND), s.stack)
             assertTrue(s.menuOpen)
             scene.tap("자동")

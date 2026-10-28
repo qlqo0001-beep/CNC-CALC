@@ -152,15 +152,18 @@ private fun AppMenu(current: Feature, onClose: () -> Unit) {
             // 지금 화면을 다시 열면 쌓인 그대로 메뉴만 닫힌다(AppState.open)
             ready.forEach { f -> MenuCard(f, current = f == current) { state.open(f) } }
         }
-        Text(
-            "준비 중",
-            Modifier.padding(start = 12.dp, top = 16.dp, bottom = 8.dp),
-            color = c.textMuted,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(7.5.dp)) {
-            soon.forEach { f -> MenuCard(f) { state.toast("${f.menuTitle}: 준비 중인 기능입니다") } }
+        // 7기능을 다 만들면 묶음이 비어 '준비 중' 머리만 남지 않게 통째로 뺀다
+        if (soon.isNotEmpty()) {
+            Text(
+                "준비 중",
+                Modifier.padding(start = 12.dp, top = 16.dp, bottom = 8.dp),
+                color = c.textMuted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(7.5.dp)) {
+                soon.forEach { f -> MenuCard(f) { state.toast("${f.menuTitle}: 준비 중인 기능입니다") } }
+            }
         }
         MenuFooter()
     }

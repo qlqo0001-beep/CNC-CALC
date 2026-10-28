@@ -1,0 +1,92 @@
+⛔ BAD_CHAR: '@' 는 읽을 수 없는 글입니다 — 주소 글자(G X Z …) + 숫자, 주석 ( ) 만 씁니다
+⛔ NO_NUMBER: X 뒤에 숫자가 없습니다 — 주소와 숫자는 붙여 씁니다(X44.)
+⛔ NUMBER_TOO_LONG: X1234567890: 숫자가 너무 깁니다(9자리까지 · N 5자리 · O 8자리)
+⛔ NUMBER_TOO_BIG: X1234567890: 값이 너무 큽니다
+⛔ DUP_ADDRESS: X 를 한 블록에 두 번 썼습니다
+⛔ DUP_GROUP: G01 와 G00 은 같은 그룹이라 한 블록에 같이 쓰지 않습니다
+⛔ TWO_M: M 은 한 블록에 하나만 씁니다(M05)
+⛔ COMMENT_OPEN: 주석 괄호 ( 가 닫히지 않았습니다 — 같은 줄에 ) 를 넣으세요
+⛔ COMMENT_NESTED: 주석 안에 ( 를 또 썼습니다 — 괄호는 겹쳐 쓰지 않습니다
+⛔ UNKNOWN_ADDRESS: D 주소는 쓰지 않습니다
+⛔ HAAS_FORMAT: Haas 1줄 형식(D0.1)입니다 — FANUC 2줄 형식(G71 U_ R_ ; G71 P_ Q_ …)으로 써 주세요
+⛔ G01_CORNER_IKR: G01 의 R 모서리(쉼표 없는 I · K · R)는 지원하지 않습니다 — ,C · ,R 로 쓰세요
+⛔ UNSUPPORTED_G: G32 는 지원하지 않습니다
+⛔ INCH: G20(인치)은 지원하지 않습니다 — mm(G21)로 씁니다
+⛔ WORK_OFFSET: G55(좌표계 옮김)는 지원하지 않습니다 — 옮김 값을 모릅니다. G54 만 씁니다
+⛔ G50_COORD: G50 의 X(좌표계 설정)는 지원하지 않습니다 — G50 은 S(최대 회전수)만
+⛔ G80_IN_CYCLE: G90 · G92 · G94 모드 중 G80 은 지원하지 않습니다 — G00 으로 모드를 끝내세요
+⛔ MID_BLOCK_SKIP: / (블록 건너뛰기)는 블록 맨 앞에만 씁니다
+⛔ DECIMAL_NOT_ALLOWED: Q3.: Q 는 소수점 없는 정수입니다 — 사이클의 P · Q 는 순번이나 µm(Q3000 = 3 mm)
+⛔ NO_POINT_FEED: F2: 회전당 이송(G99) · 나사 리드의 F 는 소수점을 씁니다(F0.2) — 소수점 없는 F 는 단위가 기계마다 다릅니다
+▲ NO_POINT_COORD: X44 를 0.044 mm 로 읽었습니다(FANUC 표준 — 소수점 없는 수는 ×0.001). mm 면 X44. 처럼 점을 찍으세요
+⛔ T_FORMAT: T1: T 는 3~4자리(T0101 = 공구 1 · 보정 01)로 씁니다
+⛔ BAD_VALUE: F-1.: 쓸 수 없는 값입니다
+⛔ ABS_INC_BOTH: X 와 U 를 한 블록에 같이 썼습니다 — 절대 · 증분 중 하나만
+⛔ DUP_PROGRAM: O1001 프로그램이 둘입니다
+⛔ WORD_NOT_USED: R1.: 이 블록의 명령은 R 를 쓰지 않습니다
+⛔ WORD_MISSING: Z 가 없습니다 — 이 명령에 꼭 필요합니다
+⛔ G04_MIXED: G04(드웰)는 다른 명령과 한 블록에 쓰지 않습니다(X1.)
+⛔ FEED_MISSING: 이송 F 가 없습니다 — 이 블록이나 앞 블록에 F 를 넣으세요
+⛔ SPINDLE_STOPPED: 주축이 서 있습니다 — 회전당 이송(G99) · 나사는 M03 / M04 를 먼저
+⛔ S_MISSING: S 가 없습니다 — 회전수(G97)나 절삭 속도(G96)를 먼저 넣으세요
+▲ NO_CLAMP_G96: G50 최대 회전수 없이 G96 — 기계 최대 4000 rpm 으로 봤습니다(척을 위해 G50 S 를 넣으세요)
+▲ RPM_OVER_LIMIT: S5000: 최대 회전수 4000 rpm 으로 잘립니다
+▲ THREAD_IN_CSS: 나사는 G97(회전수 일정)로 — G96 이면 회전수가 바뀌어 나사가 어긋납니다
+⛔ T_WITH_FEED: T0202: T(공구 교환)는 이송 블록에 같이 쓰지 않습니다 — G00 블록에
+⛔ ARC_NO_CENTER: 원호에 R 이나 I · K 가 없습니다
+⛔ ARC_R_AND_IK: 원호에 R 과 I · K 를 같이 썼습니다 — 하나만
+⛔ ARC_R_SHORT: R 이 두 점 사이 거리의 반보다 작습니다(0.012 mm 모자람)
+⛔ ARC_END_OFF: 원호 끝점이 원 위에 없습니다(반지름 차 0.012 mm)
+⛔ FULL_CIRCLE: 원호 시작점과 끝점이 같습니다 — 완전한 원은 지원하지 않습니다
+⛔ COMP_START_ARC: 보정 시작(G41 / G42)은 직선 블록에서 — 원호로 시작할 수 없습니다
+⛔ COMP_CANCEL_ARC: 보정 취소(G40)는 직선 블록에서 — 원호로 끝낼 수 없습니다
+⛔ COMP_START_ZERO: 보정 시작 블록에 움직임이 없습니다 — G41 / G42 는 움직이는 블록에
+⛔ COMP_ACUTE_OUTER: 바깥 모서리가 90° 보다 급하게 꺾입니다(11줄과 이음) — 제어기마다 끼우는 길이 달라 지원하지 않습니다
+⛔ COMP_INTERFERENCE: 노즈 R 보정 간섭 — 보정 경로가 거꾸로 갑니다(11줄과 이음). 요소가 노즈 R 보다 짧거나 홈이 좁습니다
+⛔ COMP_ARC_SMALL: 오목 원호 R0.3 이 노즈 R0.4 보다 작아 보정할 수 없습니다
+⛔ COMP_IDLE_BLOCKS: 보정 중 움직임 없는 블록이 둘 넘게 이어집니다 — 보정 경로를 정할 수 없습니다
+⛔ COMP_SWITCH: 보정 중 G41 ↔ G42 를 바로 바꿀 수 없습니다 — G40 으로 끈 뒤 다시
+⛔ COMP_G40_IK: G40 의 I · K(빠지는 방향)는 지원하지 않습니다
+⛔ COMP_TOOL_CHANGE: 보정 중 공구 · 보정 번호를 바꿨습니다(T0202) — G40 으로 먼저 끄세요
+⛔ COMP_IN_CYCLE: 보정(G41 / G42) 중에는 고정 사이클을 부르지 않습니다 — 보정은 P~Q 안에서 켜고 끄세요
+⛔ COMP_AT_G28: 보정 중 G28 은 지원하지 않습니다 — G40 으로 먼저 끄세요
+⛔ COMP_CANCEL_NO_MOVE: 11줄에서 움직임 없이 보정을 끈 뒤 이동 — 그 경로는 확인하지 못해 지원하지 않습니다(G40 은 이동 블록에)
+▲ COMP_NO_OFFSET: G41 / G42 인데 T 보정 번호가 00 이라 보정하지 않습니다
+▲ COMP_NOT_CANCELLED: G40 으로 보정을 끄지 않고 프로그램이 끝납니다
+● COMP_TYPE_A: 보정 시작 · 취소가 바깥 모서리 — 형식 A(법선)로 그렸습니다. 형식 B 기계는 이 블록 경로가 다릅니다
+▲ AGAINST_TOOL: 바이트 반대쪽으로 깎습니다 — 팁 번호를 확인하세요
+⛔ TOOL_DATA_MISSING: T0101 — 보정 01 의 노즈 R · 팁 번호가 없습니다. 공구 설정에 넣어 주세요
+⛔ CORNER_C_ARC: ,C1.: ,C 의 이웃이 원호입니다 — 지원하지 않습니다(직선끼리만)
+⛔ CORNER_TOO_BIG: ,C1.: 모서리가 이웃 블록보다 깁니다
+⛔ CORNER_NO_VERTEX: ,C1.: 꺾이는 곳이 없어(일직선) 모서리를 넣을 수 없습니다
+⛔ CORNER_NO_NEXT: ,C1.: 다음 블록이 G01~G03 이동이 아닙니다 — 모서리는 바로 다음 이동과 잇습니다
+⛔ CORNER_ON_RAPID: ,C1.: G00 블록에는 모서리를 쓰지 않습니다
+⛔ CORNER_BOTH: ,C 와 ,R 을 한 블록에 같이 썼습니다
+⛔ CYCLE_PQ_FORBIDDEN: G04: G71 의 P~Q 안에서 쓸 수 없는 명령입니다
+⛔ CYCLE_COMP_OPEN: P~Q 끝에서 보정(G41 / G42)이 켜진 채입니다 — Q 블록까지 G40 으로 끄세요
+⛔ CYCLE_MOTION_MISSING: G00~G03 이 없습니다 — 고정 사이클 뒤 첫 이동은 G 를 다시 씁니다
+⛔ CYCLE_FIRST_LINE: G71 첫 줄이 없습니다 — 기계 기본값을 몰라 첫 줄 값을 프로그램에 씁니다
+⛔ CYCLE_BLOCK_TM: M08: 사이클 블록에 S · T · M 을 같이 쓰지 않습니다 — 앞 블록에
+⛔ CYCLE_REPEAT_MST: G90 모드에서 축 없이 M08 — 제어기는 사이클을 한 번 더 돕니다(지원 안 함). G00 으로 모드를 먼저 끝내세요
+⛔ CYCLE_ONESHOT: G90 모드 중 G32 — G00 으로 모드를 먼저 끝내세요
+⛔ CYCLE_PQ_NOT_FOUND: N25 블록이 이 프로그램에 없습니다(Q)
+⛔ CYCLE_PQ_DUP: N10 블록이 둘입니다
+⛔ CYCLE_PQ_ORDER: Q 블록이 P 블록보다 앞이거나 P~Q 에 윤곽 이동이 없습니다
+⛔ CYCLE_PQ_BEFORE: G71 의 P~Q 가 사이클 블록보다 앞 — 사이클이 끝없이 되풀이됩니다. P~Q 를 뒤에 두세요
+⛔ G7X_P_BLOCK: G71 의 P 블록은 G00 / G01 로 X(U)만 씁니다
+⛔ G71_TYPE2: G71 형식 II(P 블록에 X · Z 둘 다)는 지원하지 않습니다
+⛔ G72_TYPE2: G72 형식 II(P 블록에 X · Z 둘 다)는 지원하지 않습니다
+⛔ G71_NOT_MONOTONE: 윤곽이 X 방향으로 한쪽으로만 가지 않습니다(형식 I) — 되돌아가는 곳이 있습니다
+⛔ G7X_SIGN: 다듬질 여유 U 의 부호가 깎는 쪽과 반대입니다
+⛔ G7X_RELIEF: R0.1: 바닥 도피(R)는 지원하지 않습니다 — 0 이나 빈칸으로
+⛔ G73_COUNT: R1: G73 패스 수 R 은 2 이상입니다
+⛔ M98_IN_PQ: M98: P~Q 안에서는 M98 / M99 를 쓰지 않습니다
+⛔ SUB_NOT_FOUND: O2000 이 이 글에 없습니다
+⛔ SUB_NEST: 부프로그램은 4단까지 겹칩니다
+⛔ SUB_NO_M99: O2000 부프로그램이 M99 없이 끝납니다
+● M99_MAIN: M99: 처음으로 돌아가 반복 — 시뮬레이션은 한 번만
+▲ MACHINE_M: M23: 기계마다 뜻이 다른 M 코드 — 움직임 없이 건너뜁니다
+● NO_END: M30 / M02 없이 글이 끝납니다
+⛔ EXEC_LIMIT: 실행 블록이 너무 많습니다(200000) — M98 · M99 고리나 너무 작은 절입을 확인하세요
+▲ RAPID_CUT: G00 이 소재를 지납니다
+⛔ CHUCK_HIT: 공구가 척에 닿습니다

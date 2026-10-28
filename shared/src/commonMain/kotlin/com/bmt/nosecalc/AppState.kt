@@ -23,7 +23,7 @@ import com.bmt.nosecalc.ui.OverlayEntry
  * 안드로이드는 MainActivity, PC 는 main() 이 하나 만들어 [App] 에 넘긴다.
  */
 @Stable
-class AppState(private val store: KeyValueStore) {
+class AppState(internal val store: KeyValueStore) {
     /** 화면 쌓임. 맨 아래는 늘 첫 화면(테이퍼) */
     var stack: List<Feature> by mutableStateOf(listOf(Feature.TAPER))
         private set
