@@ -555,15 +555,21 @@ private fun directNote(sol: RoundSolution, legNote: String) =
         "90° 넘는 원호는 나눠 썼습니다. 첫 줄 주석이 그 노즈 R · 팁을 적어 둡니다(기계는 주석을 건너뜁니다). 이송 F 는 넣지 않았습니다.$legNote"
 
 private fun machineNote(sol: RoundSolution, r: String, legNote: String) =
-    "도면(접점) 좌표 프로그램입니다. 기계의 노즈R 보정(${sol.side} · 공구 보정 R$r · T${sol.tip})과 함께 쓰고, " +
-        "보정 시작 · 취소(${sol.side}/G40) 블록은 기계에 맞게 넣으세요. G00 진입점만은 보정 전(G40) 자리에서 노즈가 소재에 박히지 않게 노즈R · 팁에 맞게 띄웠습니다" +
+    "도면(접점) 좌표 프로그램입니다. 기계의 노즈R 보정(${sol.side} · 공구 보정 R$r · T${sol.tip})과 함께 쓰고, 보정 시작 · 취소(${sol.side}/G40) 블록은 직접 넣습니다 — " +
+        "시작은 첫 점보다 노즈R + 0.01 앞(첫 요소 · 원호면 그 시작 접선의 반대쪽) 점에서 공구 쪽으로 Z 여유 + 노즈R × 2 떨어진 G00 → 그 점에 첫 요소와 직각으로 " +
+        "${sol.side} G01 → G01 첫 점 — 노즈 접점이 첫 점에 섭니다(0.01 은 첫 점 줄의 보정 이동이 0 이 되지 않게). 첫 요소와 한 직선으로 들어오거나 G00 을 덜 띄우면 " +
+        "보정 전(G40) 노즈가 첫 요소 안쪽일 수 있어 시작 이동이 첫 점 모서리를 깎고(오목하게 시작하는 3점호 R0.8 이면 0.16 mm), 첫 G01 에 ${sol.side} 를 바로 걸어 " +
+        "다른 방향(예: Z 로 내려와)에서 들어가면 기계가 두 보정선의 교점에 서서 첫 점 둘레에 노즈R 의 0.41 배(R0.4 면 0.17 mm)가 남습니다(FANUC). " +
+        "취소는 움직임 없는 G40 한 줄 뒤 G01 로 마지막 요소의 공구 쪽으로 노즈R 의 2배 넘게 뺍니다 — 노즈 접점이 끝 점에 섭니다(FANUC 형식 A · B — " +
+        "매개변수 No.5003#1(SUV)이 1 인 형식 C 기계는 G40 줄에서 공구가 움직이니 확인). 마지막 요소를 접선으로 늘여 빼면 팁 방향에 따라 끝 점 너머(축 너머)의 면을 깎을 수 있습니다. " +
+        "G00 진입점만은 보정 전(G40) 자리에서 노즈가 소재에 박히지 않게 노즈R · 팁에 맞게 띄웠습니다" +
         "(첫 면을 따라 들어가면 그 면에 직각으로 들어가는 G01 이 한 줄 더 있을 수 있음). " +
         "이 좌표를 보정 없이 깎으면 노즈R 만큼 형상이 틀립니다. 이송 F 는 넣지 않았습니다.$legNote"
 
 private fun directFacts() = listOf(NcFact("G41/G42 걸지 말 것 (이중 보정)", WarnLevel.Error), NcFact("원호 = 합성 R"), NcFact("이송 F 없음"))
 
 private fun machineFacts(sol: RoundSolution, r: String) = listOf(
-    NcFact("보정 시작 · 취소 블록은 직접 넣기", WarnLevel.Warn),
+    NcFact("보정 시작: 첫 점 앞에 직각으로", WarnLevel.Warn),
     NcFact("공구 보정: R $r · T ${sol.tip}", WarnLevel.Warn),
     NcFact("이송 F 없음"),
 )

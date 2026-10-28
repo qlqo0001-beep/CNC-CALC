@@ -95,8 +95,13 @@ enum class IssueCode(val level: IssueLevel) {
     COMP_TOOL_CHANGE(IssueLevel.STOP),
     COMP_IN_CYCLE(IssueLevel.STOP),
     COMP_AT_G28(IssueLevel.STOP),
-    /** 이동 없는 블록에서 보정을 끈(G40 · T□□00) 뒤 이동이 옴 — 그 이동의 경로를 출처로 확인하지 못함 */
+    /**
+     * 이동 없는 블록에서 보정을 끈(G40 · T□□00) 뒤 원호 · 모서리(,C ,R) · 곧바로 다시 보정 시작 · 사이클 · G28 이 옴 — 그 경로를 출처로 확인하지 못함.
+     * 직선(G00/G01)은 그린다(FF 5.4.4 그림 5.4.4(e) — [COMP_CANCEL_ALONE])
+     */
     COMP_CANCEL_NO_MOVE(IssueLevel.STOP),
+    /** 이동 없는 블록에서 보정을 끔 — 앞 블록 끝 법선에 서고 다음 직선 이동에서 벡터를 지움(형식 A·B). 형식 C 기계는 다름 */
+    COMP_CANCEL_ALONE(IssueLevel.INFO),
     /** G41/G42 인데 T 보정 번호가 없어(00) 보정하지 않음(S 3-78: T 보정과 G41/G42 가 둘 다 있어야 보정) */
     COMP_NO_OFFSET(IssueLevel.WARN),
     /** 보정을 G40 으로 끄지 않고 프로그램이 끝남 — 마지막 블록은 끝 법선 자리까지 그림 */

@@ -131,6 +131,12 @@ class UiGoldenTest {
         slope("taper-b-flip-double", TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1"); toggleFlip() })
         // 화면 역방향(그림 좌우 반전 · 역바이트)과 함께 — 네 조합 가운데 하나
         slope("taper-b-flip-reverse", TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example().apply { toggleFlip() })
+        // FANUC 취소 규칙(2026-10-28, simulator-design.md 13.7): 뒤집어 작은 외경을 끝점 Z5(부품 앞 끝)까지 — 노즈가 인선보다 앞이라
+        // 공구 쪽 직각 취소의 교점은 끝 꼭짓점에 못 닿는다 → 끝 블록 뒤 움직임 없는 G40 한 줄 + G01 후퇴(노즈 접점 = 끝좌표)
+        slope("taper-b-flip-outer3-end", TaperState(type = 3, open = true).example().apply { setPoint("start", "5"); toggleFlip() })
+        // 역보링바 팁 1 을 정방향 내경 형상 1 에 직접 고름(바이트 반대): 볼록 첫 꺾임 연장선 진입이면 시작 블록이 끝면 모서리를 자른다 →
+        // 경사 연장선 위 lead 에 직각으로 들어가 선을 따라 T1, 끝(비움)은 움직임 없는 G40
+        slope("taper-b-tip1-inner1", TaperState(TaperKind.INNER, type = 1, open = true).example().apply { tip = 1 })
     }
 
     @Test

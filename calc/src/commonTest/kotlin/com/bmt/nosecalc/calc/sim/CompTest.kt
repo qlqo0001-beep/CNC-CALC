@@ -132,13 +132,40 @@ class CompTest {
         stops(pre + listOf("G42 G01 X40. Z0. F0.1", "T0202"), IssueCode.COMP_TOOL_CHANGE, 5)
         stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G28 U0."), IssueCode.COMP_AT_G28, 5)
         stops(listOf("T0101", "G42", "G28 U0."), IssueCode.COMP_AT_G28, 3)
-        // 이동 없는 G40 뒤의 이동은 경로를 모른다 → 멈춤. 뒤에 이동이 없으면 괜찮다
-        stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G00 X60."), IssueCode.COMP_CANCEL_NO_MOVE, 7)
+        // 이동 없는 G40 뒤 원호 · 모서리 · 곧바로 다시 보정은 경로를 모른다 → 멈춤. 뒤에 이동이 없으면 괜찮다
+        stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G02 X50. Z-15. R5."), IssueCode.COMP_CANCEL_NO_MOVE, 7)
+        stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G01 X50. ,C1.", "G01 Z-20."), IssueCode.COMP_CANCEL_NO_MOVE, 7)
+        stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G42 G01 X50."), IssueCode.COMP_CANCEL_NO_MOVE, 7)
         val tail = ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "M30"))
         assertEquals("X40.000 Z-10.400", xz(tipAt(tail, 5))) // 끝 법선 자리까지
         // 공구 설정 빈칸
         stops(pre + listOf("G42 G01 X40. Z0. F0.1"), IssueCode.TOOL_DATA_MISSING, 4, tools = emptyMap())
         stops(pre + listOf("G42 G01 X40. Z0. F0.1"), IssueCode.TOOL_DATA_MISSING, 4, tools = mapOf(1 to ToolOffset(0.4, null)))
+    }
+
+    /**
+     * 이동 없는 G40(FF 5.4.4 그림 5.4.4(e) 204쪽 형식 A·B · F0 14.3.4 228쪽): 앞 블록 끝에 법선 벡터 — 노즈 접점이 끝점, 인선 X40 Z-10.4 —
+     * 취소 블록에서는 움직이지 않고, 다음 이동이 그 자리에서 끝점(G40 상태: 노즈 = 점 − 팁 벡터)으로 곧게(G00 이면 급송 설정대로). INFO 하나
+     */
+    @Test
+    fun cancelWithoutMove() {
+        val pre = listOf("T0101", "G97 S1000 M03", "G00 X44. Z1.")
+        for (rapid in listOf(RapidPath.LINEAR, RapidPath.DOGLEG)) {
+            val r = ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G00 X60.", "G00 Z5.", "M30"), machine = MachineSetup(rapidPath = rapid))
+            assertEquals("X40.000 Z-10.400", xz(tipAt(r, 5)))
+            assertEquals(listOf(6), r.issues.filter { it.code == IssueCode.COMP_CANCEL_ALONE }.map { it.line })
+            val m7 = moves(r).filter { it.line == 7 }
+            near(Pt.ofDia(-10.0, 40.8), m7.first().nose.start)
+            near(Pt.ofDia(-9.6, 60.8), m7.last().nose.end)
+            assertEquals(if (rapid == RapidPath.LINEAR) 1 else 2, m7.size)
+            // 그 뒤는 보통 G40 상태
+            val m8 = moves(r).single { it.line == 8 }
+            near(Pt.ofDia(5.4, 60.8), m8.nose.end)
+        }
+        // T□□00(보정 번호 0)으로 끈 것도 같다 — 그 뒤 팁 벡터 0
+        val t0 = ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "T0100", "G01 X60.", "M30"))
+        near(Pt.ofDia(-10.0, 40.8), moves(t0).first { it.line == 7 }.nose.start)
+        near(Pt.ofDia(-10.0, 60.0), moves(t0).last { it.line == 7 }.nose.end)
     }
 
     @Test
@@ -234,7 +261,8 @@ class CompTest {
             }
             dir += rnd.nextDouble(-2.5, 2.5)
             val c = Pt(f(p.z + cos(dir) * 3).toDouble(), f((p.x + sin(dir) * 3) * 2).toDouble() / 2)
-            val cancel = "G40 " + put("G01", c)
+            // 셋에 하나는 이동 없는 G40 + 다음 이동(FF 5.4.4 그림 5.4.4(e))
+            val cancel = if (rnd.nextInt(3) == 0) listOf("G40", put("G01", c)) else listOf("G40 " + put("G01", c))
             val prog = listOf("G00 X${f(entry.xDia)} Z${f(entry.z)}", start) + body + cancel
             val sim = SimKit.run(listOf("T0101", "G97 S1000 M03", "G99 F0.2") + prog + "M30", mapOf(1 to ToolOffset(r, tip)))
             val ref = RefG4x.run(RefG4x.parse(prog), NoseComp.tipVector(tip, r).let { RefG4x.P(it.z, it.x) }, r)

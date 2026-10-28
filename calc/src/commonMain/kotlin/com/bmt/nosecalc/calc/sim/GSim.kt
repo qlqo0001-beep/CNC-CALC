@@ -77,6 +77,8 @@ private data class Mv(
     val cmdSeg: Seg? = null,
     /** 급송을 기계 설정과 상관없이 축마다 따로(꺾인 경로) — G70 의 시작점 복귀(FF 4.2.4 주) */
     val dogleg: Boolean = false,
+    /** 이동 없는 G40 뒤 첫 직선 이동: 노즈가 이 자리(끝 법선)에서 끝점 − 팁 벡터로(null = 보통 G40 상태 이동) */
+    val noseFrom: Pt? = null,
     /** 이 이동 뒤에 내보낼 걸음(M · 상태) — 이동을 늦게 내보내도 시간 순을 지킨다. copy 는 같은 목록을 나눠 쓴다 */
     val after: MutableList<() -> Unit> = mutableListOf(),
 )
@@ -121,6 +123,9 @@ private class Runner(val input: SimInput) {
     // ---- 보정 — gc 는 블록을 실행한 때의 보정 세션(시작 블록에서 만들고 취소 블록에서 비움)
     var gc: GComp? = null
     var noMoveCancelLine: Int? = null
+
+    /** 이동 없이 끈 보정의 노즈 자리(마지막 보정 블록 끝 법선) — 다음 직선 이동이 여기서 시작한다(FF 5.4.4 그림 5.4.4(e)) */
+    var noMoveNose: Pt? = null
     var idle = 0
     var noOffsetWarned = false
 
@@ -744,6 +749,7 @@ private class Runner(val input: SimInput) {
         val saveMotion = motion
         val saveG4x = g4x
         val saveNoMove = noMoveCancelLine
+        val saveNoMoveNose = noMoveNose
         val saveIdle = idle
         val out = mutableListOf<GCycles.Piece>()
         val blocks = prog.units[ui].blocks
@@ -763,6 +769,7 @@ private class Runner(val input: SimInput) {
             motion = saveMotion
             g4x = saveG4x
             noMoveCancelLine = saveNoMove
+            noMoveNose = saveNoMoveNose
             idle = saveIdle
         }
         val pLine = blocks[p].line
@@ -985,7 +992,14 @@ private class Runner(val input: SimInput) {
             CornerReq(it.key == ",C", it.value, it)
         }
         if (mot >= 1 && dry == null) checkFeed(line) // 마른 실행(G71~G73 윤곽)은 P~Q 의 F · S 를 쓰지 않는다
-        noMoveCancelLine?.let { fail(IssueCode.COMP_CANCEL_NO_MOVE, line, args = listOf(it.toString())) }
+        // 이동 없이 보정을 끈 뒤 첫 이동: 남은 벡터를 이 이동에서 지운다 — 노즈는 끝 법선 자리에서 이 블록 끝점(G40 상태)으로 곧게
+        // (FF 5.4.4 그림 5.4.4(e) 204쪽 형식 A·B 'The remaining vectors are canceled with the next move command', F0 14.3.4 228쪽).
+        // 직선(G00/G01)만 — 원호 · 모서리 · 곧바로 다시 보정 시작은 그 경로를 출처로 확인하지 못해 멈춘다
+        val fromNose = noMoveCancelLine?.let { at ->
+            if (mot >= 2 || wantOn || cornerW != null) fail(IssueCode.COMP_CANCEL_NO_MOVE, line, args = listOf(at.toString()))
+            noMoveCancelLine = null
+            noMoveNose
+        }
         val cur = gc
         val mode = when {
             cur == null && wantOn -> CompMode.START
@@ -1014,7 +1028,7 @@ private class Runner(val input: SimInput) {
             else -> {}
         }
         val kind = if (mot == 0) MoveKind.RAPID else MoveKind.FEED
-        pushMove(Mv(seg, kind, line, b.unit, StepSrc.BLOCK, ctx(), mode, g, corner))
+        pushMove(Mv(seg, kind, line, b.unit, StepSrc.BLOCK, ctx(), mode, g, corner, noseFrom = fromNose))
         cmd = tgt
         return true
     }
@@ -1089,12 +1103,18 @@ private class Runner(val input: SimInput) {
 
     // ================================================================ 보정 세션
 
-    /** 이동 없는 블록에서 보정을 끔(G40 · T□□00) — 마지막 보정 블록을 끝 법선 자리까지 그리고, 다음 이동은 COMP_CANCEL_NO_MOVE */
+    /**
+     * 이동 없는 블록에서 보정을 끔(G40 · T□□00) — 마지막 보정 블록을 끝 법선 자리까지 그린다(형식 A·B: 'In the block preceding the cancel block,
+     * a vector is created … in the vertical direction. The tool does not operate in the cancel block' — FF 5.4.4 그림 5.4.4(e) 204쪽, F0 14.3.4 228쪽).
+     * 다음 직선 이동이 그 자리에서 벡터를 지운다([move]). 형식 C(SUV = 1, FF 그림 5.4.4(f))는 다르게 움직여 INFO
+     */
     private fun cancelNoMove(line: Int) {
         held?.let { fail(IssueCode.CORNER_NO_NEXT, it.line, it.corner!!.word, listOf(line.toString())) }
+        noMoveNose = pend?.let { it.gc!!.openEnd(it.seg) }
         closeOpen()
         gc = null
         noMoveCancelLine = line
+        issues += SimIssue(IssueCode.COMP_CANCEL_ALONE, line)
     }
 
     /** 보정 중 움직임 없는 블록이 둘 이어지면 멈춘다(H 58 — 한두 블록 앞을 읽는다). M98/M99 블록은 세지 않는다(S 3-77 주 2) */
@@ -1143,7 +1163,7 @@ private class Runner(val input: SimInput) {
         when (mv.mode) {
             CompMode.OFF -> {
                 val tv = mv.ctx.tv
-                emitMove(mv, shift(mv.seg, tv * -1.0), tv)
+                emitMove(mv, mv.noseFrom?.let { Line(it, mv.seg.end - tv) } ?: shift(mv.seg, tv * -1.0), tv)
                 if (mv.ghost) ghost(mv.line, mv.seg.end, mv.seg.end - tv, tv, mv.ctx.r, mv.ctx.tipNo)
                 runAfter(mv)
             }

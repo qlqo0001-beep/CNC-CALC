@@ -306,6 +306,8 @@ internal fun SlopeScreen(s: TaperState) {
                     collapsedText = if (kind.inner) "첫 G00 이 구멍 안 — 접근 줄 안내" else "첫 G00 이 척 쪽 — 접근 줄 안내",
                 )
             }
+            // G41/G42 글이 이동 없는 G40 한 줄로 보정을 끄나(FANUC 형식 A · B 의 끝 법선 — 형식 C 기계는 다르게 움직임)
+            val cancelAlone = sol.ncG41G42.any { it.trim() == "G40" }
             NcCard(
                 if (direct) directNc(sol.ncG40, form.noseR, sol.tip) else sol.ncG41G42,
                 if (direct) {
@@ -315,14 +317,22 @@ internal fun SlopeScreen(s: TaperState) {
                 } else {
                     "도면 좌표에 ${sol.side} ${eulReul("${sol.side}")} 걸어 기계가 노즈R 을 보정합니다. " +
                         "기계 공구 보정 화면에 R$r · T${sol.tip} ${eulReul("${sol.tip}")} 넣으세요(첫 줄 주석). " +
-                        "보정 시작·취소는 직선 이동에서 합니다. 마지막 줄 끝에서는 노즈 접점이 끝좌표에 와서 인선이 직접 보정보다 더 갈 수 있습니다 " +
-                        "(끝 요소가 외경·내경처럼 수평이면 Z 로 노즈R 만큼) — 바로 뒤에 어깨·턱이 있으면 위 스위치에서 직접 보정을 고르세요. 이송 F 는 넣지 않았습니다."
+                        "보정 시작·취소는 직선 이동에서 하고, 취소 이동은 G01 입니다(G00 이면 기계에 따라 X · Z 가 따로 움직여 끝 모서리를 깎을 수 있음). " +
+                        "끝은 기계가 취소 블록과의 관계로 정합니다 — 척 쪽으로 깎아 끝나면 공구 쪽으로 직각으로 빼서 노즈 끝이 끝좌표에서 멈추고, " +
+                        "앞 끝 쪽으로 깎아 끝나면 움직임 없는 G40 한 줄로 노즈 접점이 끝좌표에 섭니다(FANUC 형식 A · B)." +
+                        (if (cancelAlone) " 이 글은 움직임 없는 G40 을 씁니다 — 기계 매개변수 No.5003#1(SUV)이 1 인 형식 C 기계는 G40 줄에서 공구가 움직여 끝을 깎을 수 있으니 확인하세요." else "") +
+                        " 이송 F 는 넣지 않았습니다."
                 },
                 programName = if (direct) "직접 보정(G40) 프로그램" else "기계 보정(G41/G42) 프로그램",
                 facts = if (direct) {
                     listOf(NcFact("G41/G42 걸지 말 것 (이중 보정)", WarnLevel.Error), NcFact("공구 보정 R 안 씀"), NcFact("이송 F 없음"))
                 } else {
-                    listOf(NcFact("공구 보정 화면: R $r · T ${sol.tip} 입력", WarnLevel.Warn), NcFact("끝점에서 노즈R 만큼 더 갈 수 있음"), NcFact("이송 F 없음"))
+                    listOf(
+                        NcFact("공구 보정 화면: R $r · T ${sol.tip} 입력", WarnLevel.Warn),
+                        // 이동 없는 G40 한 줄 + G01 로 끝나는 글은 칩도 그 꼴로(검증 2026-10-29 — 'G40 G01' 칩이 글과 달랐다)
+                        if (cancelAlone) NcFact("취소: G40 한 줄 → G01 · 형식 C 확인", WarnLevel.Warn) else NcFact("보정 취소 G40 G01 (직선)"),
+                        NcFact("이송 F 없음"),
+                    )
                 },
             )
         }

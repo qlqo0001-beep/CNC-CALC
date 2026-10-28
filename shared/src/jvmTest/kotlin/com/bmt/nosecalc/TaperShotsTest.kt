@@ -127,6 +127,11 @@ class TaperShotsTest {
         }
         shot("taper-b-flip-inner1", 2660) { TaperState(TaperKind.INNER, type = 1, open = true).example().apply { setPoint("end", "-20"); toggleFlip() } }
         shot("taper-b-flip-double", 2780) { TaperState(TaperKind.OUTER_DOUBLE, type = 2, open = true).example().apply { setPoint("r2", "1"); toggleFlip() } }
+        // FANUC 취소 규칙(2026-10-28 — 골든 UiGoldenTest.taperFlip): 뒤집어 앞 끝 Z5 까지 → 움직임 없는 G40 + G01. 화면 역방향 · 역바이트 팁 1 · 뒤집기.
+        // 정방향 내경에 역보링바 팁 1(바이트 반대) → 경사 연장선 위 lead 에 직각 진입, 끝은 움직임 없는 G40
+        shot("taper-b-flip-outer3-end", 2760) { TaperState(type = 3, open = true).example().apply { setPoint("start", "5"); toggleFlip() } }
+        shot("taper-b-flip-reverse", 2660) { TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example().apply { toggleFlip() } }
+        shot("taper-b-tip1-inner1", 2660) { TaperState(TaperKind.INNER, type = 1, open = true).example().apply { tip = 1 } }
         // 고르기 화면: 뒤집은 형상 1 카드만 T 이름 · 화살이 반대
         shot("taper-a-flip") { TaperState(type = 1).apply { toggleFlip() } }
         // 키패드 그림도 뒤집은 T1(위 왼쪽 점)을 짚는다
