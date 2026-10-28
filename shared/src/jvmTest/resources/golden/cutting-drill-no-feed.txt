@@ -1,0 +1,11 @@
+메이커 Mitsubishi · 시리즈 TAFL (TAF 인덱서블 드릴) · 군 P · 행 Mild Steel / 연강 [L/D=4 절삭속도 열 Ø16 이상] · 직경 '20'
+남은 것 []
+경고 [NO_FEED_IN_TABLE] · 다른 행 []
+  이 행은 카탈로그 표에 이송 값이 없습니다(각주만) — 이송 · 분당 이송을 비웁니다. 깊이 각주: 4xD (TAFL)
+표 절삭 속도 Vc (m/min) 100 | 140 | 200
+표 회전수 n (rpm) 1592 | 2228 | 3183
+표 이송 f (mm/rev) — | — | —
+표 분당 이송 vf (mm/min) — | — | —
+구간 null
+출처 Mitsubishi Materials TAFS/TAFM/TAFL RECOMMENDED CUTTING CONDITIONS · 판 표기 없음. 서버 Last-Modified 2023-02-08 · 쪽 p.1
+키패드 Vc 140 · n 2228

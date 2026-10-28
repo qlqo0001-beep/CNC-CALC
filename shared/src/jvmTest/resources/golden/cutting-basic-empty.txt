@@ -1,0 +1,5 @@
+입력  · VC · F
+경고 [] · 잘못된 칸 []
+자동 Vc null · n null · f null
+vf null · 시간 null 분 null 초 · Rmax null · Ra null
+키패드 null

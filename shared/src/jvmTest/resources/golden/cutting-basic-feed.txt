@@ -1,0 +1,6 @@
+입력 d=40 vc=120 f=1.8 noseR=0.8 · VC · F
+경고 [FEED_TOO_BIG_FOR_NOSE] · 잘못된 칸 []
+  이송 f 1.800 mm/rev — 노즈 R 의 두 배(1.600) 이상입니다. 노즈 원호만으로 된 이론 단면이 아니어서 거칠기를 내지 않습니다.
+자동 Vc null · n 955 · f null
+vf 1718.9 · 시간 null 분 null 초 · Rmax null · Ra null
+키패드 n 955 rpm · vf 1718.9 mm/min

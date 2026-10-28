@@ -1,0 +1,11 @@
+메이커 ISCAR · 시리즈 SOLIDDRILL SCD-ACP3N·ACP5N·ACP5·ACP8N (쿨런트홀) / SCD-AP3N·AP3·AP5N·AP5 (쿨런트홀 없음) — D3.0-20.0 공용 표 · 군 P · 행 No.4 non-alloy steel ≥0.55% C annealed / 비합금강 C≥0.55% 소둔 (Vc 칸 공란) · 직경 '8'
+남은 것 []
+경고 [NO_VC_IN_TABLE] · 다른 행 []
+  이 행은 카탈로그 표의 Vc 칸이 비어 있습니다 — 이송만 보이고 회전수 · 분당 이송은 비웁니다.
+표 절삭 속도 Vc (m/min) — | — | —
+표 회전수 n (rpm) — | — | —
+표 이송 f (mm/rev) 0.15 | — | 0.28
+표 분당 이송 vf (mm/min) — | — | —
+구간 FeedBand(dMin=5.1, dMax=8.0, fMin=0.15, fRec=null, fMax=0.28, rpm=null)
+출처 ISCAR HOLEMAKING Catalog (Metric, English) — INDEXABLE DRILLS / SOLID CARBIDE DRILLS 단원 · PDF 생성 2025-08-04, 수정 2025-10-24 (서버 Last-Modified 2025-10-24), 660쪽, 201,421,004 바이트 · 쪽 p.224 (PDF p.226)
+키패드 f 0.15~0.28

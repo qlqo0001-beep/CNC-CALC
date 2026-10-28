@@ -73,7 +73,8 @@
 
 ## 공개 API (구현됨 — 바꾸면 이 문서도 같이)
 패키지 `com.bmt.nosecalc.calc`. 파일: `Geom.kt`, `NoseComp.kt`, `Fmt.kt`, `NoseR.kt`(닫힌 식).
-계산기 `TaperCalc.kt`·`GrooveCalc.kt`·`RoundCalc.kt`·`Holder.kt`·`HolderStop.kt`·`RightTriangle.kt` 는 아래 따로 절이 있다.
+계산기 `TaperCalc.kt`·`GrooveCalc.kt`·`RoundCalc.kt`·`Holder.kt`·`HolderStop.kt`·`RightTriangle.kt`·`ThreadSpec.kt`·`G76Calc.kt`·`PolarG12.kt`·
+`Cutting.kt`·`WorkMaterial.kt`·`DrillCatalog.kt` 는 아래 따로 절이 있다.
 ```kotlin
 // Geom.kt
 data class Pt(val z: Double, val x: Double) {               // x = 반경. 점이자 벡터
@@ -903,3 +904,447 @@ data class TriangleSolution(val a: Double, val b: Double, val c: Double, val ang
 data class TriangleResult(val solution: TriangleSolution?, val warnings: List<TriangleWarning>)
 object RightTriangle { fun calc(i: TriangleInput): TriangleResult }
 ```
+
+## 나사 G76 (`G76Calc` · `ThreadTol`, 구현됨)
+원본 08.jpg(`screens.md` 3.7). 규격 나사(미터 M · UN)와 공차 급수를 고르면 공차역 안 목표 위치로 **FANUC G76 두 줄**과 절입 분석표를 낸다.
+곧은 한 줄 나사만 — 관용 테이퍼 나사(PT · NPT, 둘째 줄 R(i))와 여러 줄 나사는 하지 않는다(아래 "안 한 것").
+
+### 규격 자료 (`ThreadSpec.kt`) — 기본 치수는 식, 미터 공차는 표 값(없는 칸만 식)
+- **목록** `ThreadTable`: 사이즈 → 피치만 적었다. ISO 262 보통 나사 M1~M64(34) + 가는 나사 M8~M64(ISO 262 의 것), UNC · UNF #0~1-1/2
+  (#0 은 UNF 80 만). 출처: Wikipedia "ISO metric screw thread" 의 ISO 262 표 · "Unified Thread Standard" 의 UNC/UNF 표(2026-10 확인).
+  번호 사이즈 지름 = 0.060 + 0.013·N 인치. UN 은 mm 로 바꿔 둔다(피치 = 25.4/산수).
+- **기본 형상**(두 규격 같은 60° 형상): H = (√3/2)P = 0.866025P, 기본 피치경 d2 = d − 0.649519P, 기본 안지름(골지름) d1 = d − 1.082532P.
+- **미터 공차(ISO 965-1)** μm, P · d mm. 규격의 공차는 **표 값**이다 — 식 값을 둥근 수로 정했는데 반올림 규칙이 한결같지 않아
+  (Td(6) P4 식 452 ↔ 표 475, 기초 편차 P2 식 37 ↔ 표 38) 식으로 다시 낼 수 없다. 그래서 표 값을 쓰고(`Iso965` 의 표), 표 자료가 없는
+  칸만 식을 쓴다. 이것은 FED-STD-H28/21B(1984, 미국 연방 표준) 5.1.3 의 절차다: 공차는 ANSI/ASME B1.13M 의 표 8(기초 편차) · 10(TD1) ·
+  11(Td) · 12(Td2) · 13(TD2)에서 읽고(예 1 M27×1.5: Td 0.236 · TD2 0.200 · TD1 0.300, 예 3 M29×1.25: Td 0.212), 표에 없는 조합만
+  식(예 3 "Td2(4) = 0.63 × 0.09 P^0.4 d^0.1"), 한계 치수는 0.001 로 반올림.
+  - 기초 편차(g es = −값 · G EI = +값, h · H = 0): ISO 965-1:1998 표 1 그대로(iTeh 미리보기 8쪽 — P0.2 17 … P1.5 32 · P2 38 · P4 60 ·
+    P5 71 · P6 80 · P8 100).
+  - 등급 6 의 Td · TD1(피치별)과 Td2 · TD2(지름 구간 0.99/1.4/2.8/5.6/11.2/22.4/45/90 × 피치): ISO 965-2:1973 표 1~4(iTeh 미리보기,
+    M1~M39 의 6H · 6g, M1~M1.4 는 6h · 5H)와 ASME B1.13M 한계 치수 표(Engineers Edge — M42 이상 · M20×2 · M48×3 · M52×4 같은 가는 나사)의
+    줄에서 공차 = 한계의 차로 읽었다(표 한계가 0.001 반올림이라 정수 μm 공차는 그대로 나옴). ASME 표의 M52×5 줄(Td2 236 · TD2 315)은 같은
+    구간 M48×5(250 · 335)와 다르고 P4 칸과 같아 오기로 봤다. 이 앱 목록의 모든 6g · 6h · 6H · 6G 가 표 값이고 아래만 식이다.
+  - **식을 쓰는 곳**(`ThreadLimits.byFormula` = true): 4h · 8g 전부(등급 4 · 8 표 자료를 못 구함 — 식 Td(6) · Td2(6) 의 0.63 · 1.6 배),
+    M1~M1.4 의 6H · 6G 안지름 · 피치경(ISO 965-2 는 이 크기에 5H 만 적음), M8×0.75 의 피치경(구간 5.6~11.2 의 P0.75 줄이 없음).
+  - 식: 기초 편차 15 + 11P, Td(6) = 180P^(2/3) − 3.15/√P, Td2(6) = 90·P^0.4·d^0.1(d = 든 구간 양 끝 기하평균), 등급 4 = 0.63×, 8 = 1.6×,
+    TD2(6) = 1.32·Td2(6), TD1(6) = 433P − 190P^1.22(P 0.2~0.8) · 230P^0.7(P ≥ 1). 출처: RoyMech "ISO Metric Screw Thread Tolerances — ISO 965"
+    (식과 반올림 안 한 계산 표 — 그 쪽 Td 식 글은 "− 3.15 P" 로 깨졌으나 계산 표 M3 109 · M10 233 μm 가 −3.15/√P 와 맞음).
+  **급수** 숫나사 4h · 6g · 6h · 8g, 암나사 6H · 6G. 기본 6g/6H
+  (FED-STD-H28/21B 5.1.1 "Standard M profile screw threads shall be tolerance class 6g ... and 6H"). ISO 965-1 5.2 는 M1.4 이하의 기본을
+  5H · 6h 로 정하지만 이 앱은 크기와 상관없이 6g/6H 를 기본으로 둔다(5H 는 없음).
+- **UN 공차(ASME B1.1)** 인치, p = 1/산수: 피치경 공차 = C·(0.0015∛D + 0.0015√Le + 0.015∛p²), C = 1A 1.5 · 2A 1.0 · 3A 0.75 ·
+  1B 1.95 · 2B 1.30 · 3B 0.975, Le = D(UNC · UNF 표의 물림 길이). 허용차(es) = 0.3 × (C 1 의 값), 1A · 2A 만.
+  바깥지름 공차 1A 0.090∛p² · 2A 3A 0.060∛p². 암나사 최소 = 기본(피치경 · 안지름 · 바깥지름). 안지름 공차는 표 2.20 의 식과 상 · 하한
+  (1B · 2B: 0.25 인치 미만 0.05∛p² + 0.03p/D − 0.002 를 0.25p − 0.4p² ~ 0.394p 로 자름, 0.25 이상 0.25p − 0.4p² /
+  3B: 0.05∛p² + 0.03p/D − 0.002 를 0.394p 아래, 80~13 산은 0.23p − 1.5p², 12 산 이하는 0.120p 위로).
+  출처: NBS Handbook H28 (1969) Part I(미국 정부 간행물) 5 · 6.1 · 6.2 · 표 2.20 · 7절
+  https://nvlpubs.nist.gov/nistpubs/Legacy/hb/nbshandbook28-1969p1.pdf , ASME B1.1 목차의 표 15 제목에 같은 식. 기본 2A/2B(원본 08.jpg 도 2A).
+- **표와의 차이**: 미터 6g · 6h · 6H · 6G 는 공개 한계 치수 표(ISO 965-2 · ASME B1.13M · amesweb.info, M1.6~M64)와 0.001 반올림 안(±0.0006)으로
+  맞는다. (2026-10-28 전에는 식 값을 반올림 없이 써서 피치경 ≤ 9 μm · 바깥지름 최소 ≤ 24 μm · 안지름 최대 ≤ 14 μm 달랐고, 목표 100% 가 표의
+  최소 실체 한계(NO-GO 게이지 값) 밖으로 최대 8 μm 나갔다 — 독립 검증에서 찾아 표 값으로 바꿈.) UN 은 표와 0.0001 인치 반올림 안
+  (2B 안지름은 0.001 인치). 화면은 `ThreadLimits.byFormula` 가 true 일 때만 "표 자료가 없어 식으로 계산 — 규격 표와 몇 μm 다를 수 있음" 을 적는다
+  (4h · 8g 와 위 몇 곳. 식 공차가 표보다 넓은 칸이면 목표 100% 가 표의 최소 실체 한계를 몇 μm 넘을 수 있다).
+- `ThreadLimits.rootLimit` = 골 쪽 한계: 숫나사 골지름 최대 d1 + es(평평한 골 — ASME B1.1 UN 의 최대 골지름, 미터 표의 "Max. minor diameter
+  (flat form)"), 암나사 바깥지름 최소 D + EI. 숫나사 골지름 최소 · 암나사 바깥지름 최대는 규격이 정하지 않는다(날 끝이 정함).
+
+### G76 두 줄 (FANUC)
+`G76 P(m)(r)(a) Q(Δdmin) R(d);` `G76 X(U) Z(W) R(i) P(k) Q(Δd) F(L);`
+- m 정삭 반복(01~99) · r 면취량(00~99, 0.1L 단위, 원본 '1.0P' = 10) · a 날 끝 각도(80 · 60 · 55 · 30 · 29 · 0 가운데) · Δdmin 최소 절입 · d 정삭 여유 ·
+  X Z 나사 끝점 · i 테이퍼량 · k 나사산 높이 · Δd 첫 절입 · L 리드. 모두 반경값.
+- **단위 · 소수점**(B-64604EN-1/01 4.2.7 의 표): Δdmin · k · Δd 는 소수점 불가 = 최소 지령 단위 정수(미터 IS-B 면 μm — `Q35` = 0.035), d · i 는
+  소수점 가능(`R0.02`). F 리드는 미터 입력 0.0001~500.0000 mm(같은 매뉴얼 표 3.2 (a), 옛 B-61394E 표 4.6 (a) 도 같음)라 0.0001 까지 쓴다
+  (1/2-13 → `F1.9538`). **IS-B(0.001 mm) 기계를 가정** — IS-C(0.0001 mm) 기계는 P · Q 를 10배로 읽으므로 화면에 주의 한 줄.
+- **절입**: n 번째 누적 깊이 Δd·√n, 한 회 절입이 Δdmin 보다 작으면 Δdmin("the cutting depth is clamped at this value"), k − d 에 닿으면 그
+  깊이로 끝(마지막 거친 회는 남은 만큼), 그다음 마지막 정삭(d 를 깎는 회)을 m 번 — 첫 회가 d, 나머지는 같은 깊이(0 절입).
+  "the last finishing cycle ... is repeated", "Specify a value smaller than the height of thread as the finishing allowance (d < k)".
+- 출처: FANUC Series 0+-MODEL F Lathe 조작 설명서 B-64604EN-1/01 4.2.7, FANUC Series 0/00/0-Mate Lathe 조작 설명서 B-61394E/08 13.2.7
+  (예 `G76 P011060 Q100 R200 ;` `G76 X60.64 Z25.0 P3680 Q1800 F6.0 ;` — 외경 68 리드 6, k 3.68 = 0.6134 × 6).
+  교차: Haas ST/TL 프로그래밍 워크북 109~113쪽(한 줄 G76 — K = 산 높이(반경), D = 첫 절입, "D 표" = K/√횟수, 나사 표 외경 K = 0.6134P ·
+  내경 K = 0.5413P, 예 O00113 3/4-16 외경 K0.0383). 원본 첫 줄 `G76 P02 1060 Q35 R0.02` = m 2 · 1.0P · 60° · Δdmin 0.035 · d 0.02.
+- 곧은 나사라 둘째 줄 R(i) 는 쓰지 않는다(매뉴얼 예처럼).
+
+### 목표 위치 · X · k
+- **TARGET %**(원본 '고급 공차 및 인선 설정 · TARGET: 80%' — 뜻이 사진에 없어 이렇게 정함): 공차역 안 목표 위치, **0% = 최대 실체**(숫나사는 큰 쪽,
+  암나사는 작은 쪽), **100% = 최소 실체**. 피치경 · 산봉우리 지름(숫나사 바깥지름 · 암나사 안지름)에 같은 비율. 빈칸 = 80(원본 화면 값).
+  80% 는 최소 실체 쪽인데, 날 끝이 닳으면 덜 들어가 숫나사 피치경은 커지고 암나사는 작아져 최대 실체 쪽으로 움직이므로 마모 여유가 크다.
+- **인선 R**(날 끝 반지름, 원본 '인선 설정'): 피치경 = 홈 폭이 P/2 인 지름이므로, 날 단면(60° V + 끝 R)의 반폭이 P/4 인 높이가 피치선이다.
+  끝 원호와 옆날이 만나는 반폭은 R·cos30°. **R ≤ H/3**(= P/(2√3))이면 P/4 가 옆날 위 — V 꼭짓점은 피치선에서 H/2, R 원의 맨 끝은 꼭짓점에서
+  R 안쪽 → 날 끝 깊이 H/2 − R → **숫나사 X = 피치경 − H + 2R(골 목표), 암나사 X = 피치경 + H − 2R(바깥 쪽 목표)**.
+  **R > H/3** 이면 P/4 가 끝 원호 위 → 깊이 R − √(R² − P²/16), X = 피치경 ∓ 2(R − √(R² − P²/16)) (`G76Calc.tipDepth`, R = H/3 에서 두 식 같음 —
+  2026-10-28 전에는 이 경우에도 H/2 − R 을 써서 R 0.4H 에서 X 가 0.06 mm 틀렸다). 보통 인서트 R(H/6 · H/8 근처)은 앞의 경우다.
+  빈칸 = 규격 기본 깊이와 맞는 R: 숫나사 **H/6**(최대 실체에서 k = 0.613435P = (d − d3)/2, ISO 965-1 의 d3 = d1 − H/6 · FANUC 예 · Haas 0.6134P),
+  암나사 **H/8**(k = 0.541266P = 5H/8 · Haas 0.5413P — 최대 실체에서 골이 꼭 D 에 닿음). 실제 인서트 R 은 제조사 카탈로그 값을 넣는다.
+- **k** = 목표 산봉우리 지름에서 X 까지(숫나사 (바깥지름 − X)/2, 암나사 (X − 안지름)/2). 소재를 목표 바깥지름(구멍은 목표 안지름)으로
+  깎아 둔다고 본다 — 실제 지름이 크면 첫 회가 Δd 보다 깊다. 지령값은 X 를 0.001 로 반올림한 뒤 k 를 μm 로.
+- **시작점**(G00, 사이클 시작 A): 숫나사 X = 바깥지름 최대 + 2 × X 여유, 암나사 X = 안지름 최소 − 2 × X 여유(0 이하면 멈춤), Z = 'Z축 시작점'.
+  X 여유 빈칸 = 1 mm(반경 — 원본에 없어 홈 계산 X 여유 기본과 같게). 매뉴얼 3.2: 서보 지연으로 나사 앞뒤 리드가 틀리므로 Z 시작은 나사보다 앞에.
+- **방향**: 정가공(우) = Z 시작 > 목표, 척 쪽(Z−) — 보통 바이트 · 정회전이면 오른나사. 역가공(좌) = Z 시작 < 목표, Z+ — 왼나사. F 는 부호 없는 리드,
+  방향은 W(끝 Z − 시작 Z)의 부호가 정한다. 순서가 방향과 반대면 `Z_ORDER`.
+- **회전수**: 사용자 입력(빈칸 시작, 소재별 추천은 출처 있는 자료가 없어 안 함). 넣으면 프로그램 첫 줄 `G97 S…`(나사는 회전수 일정) · 분당 이송 = 회전수 × 리드.
+  M03/M04 는 기계 · 공구 방향마다 달라 쓰지 않는다. '가공 소재' 는 계산에 쓰지 않는다.
+- 프로그램: (`G97 S…`) · `G00 X(시작) Z(시작)` · G76 두 줄. 사이클은 끝나면 시작점으로 돌아온다.
+
+### 경고 `G76Warning`
+- 멈춤: `MISSING_INPUT`(규격 · Z 시작 · 목표 · 첫 절입), `BAD_INPUT`(숫자 아님 · 한도 밖 · 목표 0~100 밖 · m 1~99 · r 0~99 · 각도 6가지 밖 ·
+  음수 · 첫 절입 μm 0 · 회전수 1 미만 · 급수가 규격 · 내외경과 다름), `Z_ORDER`, `TIP_TOO_BIG`(인선 R 이 커서 날이 이웃 산봉우리까지 깎음 —
+  날 끝에서 k 높이(목표 산봉우리 지름)의 날 단면 폭 2·`G76Calc.halfWidth(R, k)` > P. R ≤ H/3 에서는 산봉우리 폭이 R 과 상관없이 P/2 − |산봉우리 − 피치경|·tan30° > 0
+  이라 생기지 않고, R 이 0.5~0.6H 를 넘는 입력 실수에서 생긴다. k ≤ 0 은 날 단면으로는 생기지 않는다), `FINISH_GE_HEIGHT`(d ≥ k),
+  `FIRST_CUT_LT_MIN`(Δd < Δdmin — 첫 회를 어떻게 자르는지 매뉴얼에 없어 숫자를 내지 않음), `TOO_MANY_PASSES`(거친 + 정삭 m 회 합이 1000 회 넘음 —
+  합 1000 은 숫자), `CLEARANCE_TOO_BIG`(내경 시작 X ≤ 0).
+- 숫자와 함께: `ROOT_INTERFERES`(인선 R 이 커서 골이 `rootLimit` 을 넘음 — 목표 0% 에서 숫나사 R > H/4, 암나사 R > H/8. 기본 R 은 안 걸림),
+  `ONE_ROUGH_PASS`(Δd ≥ k − d, 거친 절입 한 번).
+- 첫 절입 Δd 는 **기본값이 없다** — 공구 제조사 권장 절입 횟수를 출처로 확인하지 못했다. 분석표의 횟수를 보고 고친다(Haas 표처럼 Δd ≈ (k − d)/√횟수).
+
+### API
+```kotlin
+enum class ThreadKind { METRIC, UN }
+enum class ThreadSeries(val kind: ThreadKind) { M_COARSE, M_FINE, UNC, UNF }
+data class ThreadSpec(val series: ThreadSeries, val size: String /*"M10" "1/4" "#10"*/, val d: Double, val pitch: Double /*mm*/,
+    val tpi: Int? = null) { val kind: ThreadKind; val label: String /*"M10×1.5" "1/4-20 UNC"*/ }
+object ThreadTable { val METRIC: List<ThreadSpec>; val UN: List<ThreadSpec>; fun of(kind): List<ThreadSpec>
+    fun sizes(kind): List<String>; fun pitches(kind, size): List<ThreadSpec> /*보통 · UNC 먼저*/ }
+enum class ThreadClass(val kind: ThreadKind, val internal: Boolean, val label: String) {
+    M4h, M6g, M6h, M8g, M6H, M6G, UN1A, UN2A, UN3A, UN1B, UN2B, UN3B
+    companion object { fun choices(kind, internal): List<ThreadClass>; fun default(kind, internal): ThreadClass /*6g 6H 2A 2B*/ } }
+data class Span(val min: Double, val max: Double) { val width: Double }
+data class ThreadLimits(val spec: ThreadSpec, val cls: ThreadClass, val h: Double, val basicPitch: Double, val basicMinor: Double,
+    val deviation: Double /*es ≤ 0 · EI ≥ 0*/, val pitchDia: Span, val crest: Span /*숫 바깥지름 · 암 안지름*/, val rootLimit: Double,
+    val byFormula: Boolean = false /*표 자료가 없어 식으로 낸 공차가 있음*/)
+object ThreadTol { fun limits(spec: ThreadSpec, cls: ThreadClass): ThreadLimits }   // 종류가 다르면 IllegalArgumentException
+
+enum class ThreadDir { FORWARD /*Z−, 오른나사*/, REVERSE /*Z+, 왼나사*/ }
+enum class G76Warning { MISSING_INPUT, BAD_INPUT, Z_ORDER, TIP_TOO_BIG, FINISH_GE_HEIGHT, FIRST_CUT_LT_MIN, TOO_MANY_PASSES,
+                        CLEARANCE_TOO_BIG, /* ↑ 멈춤 · ↓ 숫자와 함께 */ ROOT_INTERFERES, ONE_ROUGH_PASS }
+data class G76Input(val inner: Boolean = false, val spec: ThreadSpec? = null, val cls: ThreadClass? = null /*null = 기본*/,
+    val dir: ThreadDir = ThreadDir.FORWARD, val zStart: Double? = null, val zEnd: Double? = null, val rpm: Double? = null,
+    val angle: Int? = null /*60*/, val chamfer: Int? = null /*10 = 1.0L*/, val target: Double? = null /*80 %*/,
+    val tipR: Double? = null /*H/6 · H/8*/, val finishCount: Int? = null /*2*/, val minCut: Double? = null /*0.035*/,
+    val finishAllow: Double? = null /*0.02*/, val firstCut: Double? = null /*기본 없음*/, val xClear: Double? = null /*1.0*/)
+data class G76Pass(val n: Int, val depth: Double /*누적, 반경*/, val cut: Double, val xDia: Double, val finish: Boolean)
+data class G76Solution(val limits: ThreadLimits, val target: Double, val tipR: Double, val pitchDia: Double, val crestDia: Double,
+    val x: Double /*반올림 전*/, val height: Double /*k 지령값*/, val lead: Double, val startX: Double,
+    val finishCount: Int, val chamfer: Int, val angle: Int, val minCut: Double, val finishAllow: Double, val firstCut: Double,
+    val passes: List<G76Pass>, val nc: List<String> /*G76 두 줄*/, val program: List<String>, val feedPerMin: Double?)
+data class G76Result(val solution: G76Solution?, val warnings: List<G76Warning>)
+object G76Calc { val ANGLES: List<Int>; const val FINISH_COUNT_DEFAULT = 2; const val CHAMFER_DEFAULT = 10; const val ANGLE_DEFAULT = 60
+    const val MIN_CUT_DEFAULT = 0.035; const val FINISH_ALLOW_DEFAULT = 0.02; const val TARGET_DEFAULT = 80.0; const val X_CLEAR_DEFAULT = 1.0
+    const val MAX_PASSES = 1000; fun calc(i: G76Input): G76Result }
+```
+- 손 계산(원본 화면, `originalScreenHandNumbers`): 외경 1/4-20 UNC 2A · 80% · Z5 → −25 · Δd 0.2 · 1821 rpm →
+  피치경 5.420874 · 바깥지름 6.156101 · `G97 S1821` `G00 X8.322 Z5.` `G76 P021060 Q35 R0.02` `G76 X4.688 Z-25. P734 Q200 F1.27`.
+  M10×1.5 6g 50%(es 32 · Td2 132 · Td 236 μm) → 피치경 8.927721 · `X8.062 … P894`, 6H 50%(TD2 180 · TD1 300) → `X10.09 … P782`(`metricHandNumbers`).
+
+### 테스트 (`ThreadSpecTest` · `G76CalcTest`)
+- 규격: 공개 표와 맞춤(미터 6g/6H 35~36 줄 — 모든 한계 ±0.0006(표 값), 표가 없는 칸의 식 = RoyMech 계산 표 ±1 μm, UN 2A/2B 12 사이즈 ·
+  3A/3B 예 ±0.00015 인치), 급수 관계(6g = 6h 공차 · 6G = 6H 공차 · 기초 편차 표 1 · 4h 8g 식 배수 · byFormula 가 켜지는 곳),
+  H28 표 2.20 의 상 · 하한(#0-80 0.394p, 1-8 3B 0.120p → 0.8797), 모든 규격 · 급수의 놓임, 목록 개수 · 번호 사이즈 지름.
+- G76: FANUC 매뉴얼 예 글 그대로 재현 · 같은 나사(M68×6 6h 0%)를 계산기로(X60.639 P3681 ≈ X60.64 P3680), 원본 첫 줄, 손 계산(위),
+  목표 0% 의 기본 깊이 0.613435P · 0.541266P(모든 규격 · 급수, Haas K0.0383 · .0773), 목표 위치, 인선 R 이 X 를 옮기는 양(R ≤ H/3 의 2ΔR ·
+  R = H/3 경계 · R > H/3 의 원호 식), 산봉우리를 깎는 큰 R 의 멈춤(`TIP_TOO_BIG`), 골 한계 경고,
+  절입표(√n · Δdmin · k − d 자르기 · 정삭 m 회 · 한 번 · 너무 많음), 분석표 X, 방향, 리드 0.0001, 멈추는 입력.
+- 독립 검증(`verify/Stage3VerifyTest`): ISO 965-2 · ASME B1.13M · Optimas 표의 공차역 안(목표 0~100%), ISO 965-1 표 1 기초 편차, H28 표 2.21,
+  날 단면 이분법 X(R ≤ 0.6H), 절입 횟수 한도 경계(합 1000 숫자 · 1001 멈춤) 등.
+- 일부러 틀린 식(Td −3.15P, Le = 9P, 3B 상 · 하한 없음, 암나사 기본 R H/6, 목표 뒤집기, TD2 1.3, Δdmin 무시)을 모두 잡는 것을 확인했다.
+
+### 안 한 것 · 확인 못 한 것
+- 관용 테이퍼 나사(PT · NPT): 둘째 줄 R(i) · 테이퍼 공차가 필요 — 안 함.
+- 미터 e · f 위치(6e · 6f): RoyMech 가 "작은 피치 예외" 가 있다고만 적어 넣지 않음. 4H · 5H · 7H: 암나사 피치경의 등급 배수를 확인 못 해 넣지 않음.
+- 미터 등급 4 · 8 의 공차 표(ISO 965-1 의 Td(4) · Td(8) · Td2(4) · Td2(8))는 무료 공개본을 못 구해 4h · 8g 는 식이다(`byFormula`).
+  Engineers Edge 의 4g6g 줄(예 M36×3 Td2(4) 125 · M48×3 132 · M52×4 150)과 식 값의 차는 1.5 μm 안이었다. 표를 구하면 `Iso965` 에 더한다.
+- M1~M1.4 의 6H · 6G 안지름 · 피치경 공차, M8×0.75 의 피치경 공차: 표 줄이 없어 식.
+- 소재별 추천 회전수 · 첫 절입 · 절입 횟수: 출처 있는 자료가 없어 넣지 않음.
+- 역가공(W > 0): 매뉴얼 표 4.2.7 (a) 의 네 그림은 모두 W < 0 이다 — 기계에서 한 번 확인 필요.
+- 여러 줄 나사(리드 ≠ 피치), 인치 지령(G20), IS-C 기계.
+
+## 턴밀 극좌표 다각가공 G12.1 (`PolarG12`, 구현됨)
+원본 12.jpg · 07.jpg(`screens.md` 3.6). 정다각형(3 · 4 · 5 · 6 · 8각)과 2면폭을 엔드밀 옆날로 한 바퀴 깎는 FANUC G12.1 프로그램 둘
+(기계 보정 G41 · 직접 보정 G40)과 시뮬레이션용 줄별 경로를 낸다. 파일 `PolarG12.kt`, 테스트 `PolarG12Test.kt`.
+
+### FANUC G12.1 규칙 (확인함, 2026-10-28)
+출처 A = FANUC Series 0+-MODEL F Lathe 조작 설명서 B-64604EN-1/01 3.1 "POLAR COORDINATE INTERPOLATION (G12.1, G13.1)"(16~23쪽) ·
+5.3 · 5.4(보정 시작 · 취소 · 모서리) · 4.6 · 표 2 (a)(G 코드 목록), B = FANUC Series 0/00/0-Mate Lathe 조작 설명서 B-61394E/08 4.4
+"POLAR COORDINATE INTERPOLATION (G112, G113)"(48~52쪽). 나사 G76 절과 같은 두 매뉴얼이다.
+- **G12.1 · G13.1 은 혼자 한 줄**(A "Specify G12.1 and G13.1 in Separate Blocks"). 켜면 직선축 X(첫째 축)와 그에 직각인 **가상축 C**(둘째 축)의
+  직교 평면, 원점 = 회전축 중심(A "a local coordinate system ... where the center of the rotary axis is the origin ... must be set").
+  가상축 단위는 직선축과 같은 **mm**(A "The unit for coordinates on the hypothetical axis is the same as the unit for the linear axis").
+- **시작은 C0**: 가상축은 G12.1 바로 뒤 0 이고 그때 공구 자리를 회전각 0 으로 본다(A "The hypothetical axis is at coordinate 0 immediately after
+  G12.1 is specified. Polar interpolation is started assuming the rotation angle of 0 for the position of the tool"). 그래서 G12.1 앞에서
+  `G00 X… C0.`(A · B 의 예 `G00 X120.0 C0 Z_`) — 시작점은 늘 평면의 X 축 위다.
+- **X 가 음수**: 평면이 직교 좌표라 중심 너머의 점은 X < 0 이다(A 의 예 `G01 X-20.0`, B 의 예 `G01 X-40.0`). 제어기가 실제 X(중심에서 거리, 0 이상)와
+  C 각도로 바꾸고, 기계 화면은 그 실제 좌표를 보인다(A "Actual coordinates are displayed. However, the remaining distance ... Cartesian").
+  원본 07.jpg 의 `X (DIA) -36.951 · C (ANG) -40.` 은 이 평면 좌표다(C 는 각도가 아니라 mm — 라벨 'ANG' 은 원본의 잘못).
+- **원호 방향**: X 를 첫째, C 를 둘째 축으로 본 평면(A "I and J in the Xp-Yp plane when the linear axis is the X-axis", R 지령도 됨) → X 오른쪽 ·
+  C 위로 그리면 **G02 = 시계**. A 의 예(바깥 윤곽을 반시계로 · G42 · 볼록 모서리 `G03 X10.0 C20.0 R10.0`)와 원본 07(시계로 · `G02 … R8.`)이 다 맞는다.
+- **모드 안 G**: G01, G02/G03, G04, G40~G42, G65~G67, G90/G91, 분당 · 회전당 이송뿐 — **G00 은 없다**. 그래서 모드 안 이동은 모두 G01/G02/G03.
+- **이송**: F = 평면(직교 좌표)의 접선 속도 mm/min(A "The unit for the feedrate is mm/min") → 앞에 `G98`(G 코드 계통 A 의 분당 이송, 표 2 (a)
+  "G98 G94 G94 … Feed per minute"). 계통 B · C 기계는 G94 — 앱의 다른 프로그램처럼 계통 A 를 가정한다. 끝난 뒤 G99 로 되돌리지 않는다
+  (뒤 프로그램의 회전당 F 가 분당으로 읽히면 느려질 뿐, 반대로 되돌렸다가 분당 F 가 회전당으로 읽히면 위험).
+- **보정**: G41/G42 를 쓸 수 있고 보정한 경로를 극좌표로 바꾼다(A "performed for a path obtained after tool radius compensation").
+  **G12.1 · G13.1 은 G40 상태에서만**(보정을 건 채 바꾸면 PS0037), G40 블록은 평면 축을 움직여야 하고(A "be sure to specify the polar coordinate
+  axis to cancel the offset vector"), 보정 시작 · 취소는 직선(G00/G01)에서만(A 5.3, 원호면 PS0034), 공구 보정은 G12.1 앞에서(A "A tool offset must be
+  specified before the G12.1 mode is set").
+- **X 직경/반경 — 매뉴얼끼리 다르다**: B 의 예는 "X axis is by diameter programming, C axis is by radius programming" 이라 적고 `G42 G01 X40.0` ·
+  `G03 X20.0 C20.0 R10.0`(X 반경 20 → 10, 사분원 R10). A 의 같은 그림 예는 `X20.0` · `G03 X10.0 C20.0 R10.0`(X 가 반경)이고 본문은 "Whether a diameter
+  or radius is specified for the first axis in the plane is the same as for the rotary axis regardless of the specification for the first axis"
+  (회전축은 반경 → X 도 반경으로 읽힌다). 기계 · 매개변수마다 달라 `PolarInput.xDiameter` 로 고른다. **기본은 직경** — 원본 07 의 `X (DIA)`,
+  `X92.376 C0.` = 맞변 80 육각형의 맞모서리 지름(80/cos30°), B 의 예. R · I · J 는 어느 쪽이든 실제 mm(B 의 `R10.0` · `I10.0`). G12.1 앞뒤 선반
+  모드의 X 는 늘 직경. 화면은 첫 가공 전에 싱글 블록으로 확인하라고 알린다.
+- **중심 근처 C 축 속도**: 공구가 중심에 가까우면 C 성분이 커져 자동 감속 · 알람(A 20~22쪽, F < L·R·π/180). R(기계 C 축 최대 이송)을 몰라
+  경고하지 않는다. 외측 경로는 중심에서 a + r 밖이라 걸리지 않고, 내측은 시작 G01 이 중심 가까이를 지날 수 있다.
+- **공구 보정 화면 값**: R = 공구 반경, 가상 인선 T = **0**(공구 중심이 프로그램 점 — Haas ST/TL 워크북 69~70쪽 표의 T0/T9). 다른 팁 번호면
+  팁 벡터만큼 밀린다. G41 프로그램 첫 줄 주석 `(R5 T0)`.
+- **넣지 않는 것(기계마다)**: C 축 모드(Cs 윤곽 제어) M 코드, 회전 공구 회전 M 코드 · 회전수, 공구 번호 T, 주축 정지. 화면이 "프로그램 앞에 붙여
+  쓴다" 고 알린다. 기능이 켜져 있어야 한다(A: 매개변수 8137#5 NPI = 0, 평면 축 5460 · 5461).
+- NC 주석은 ASCII 만(원본은 `(--- 가공 / PROFILE CUTTING ---)` 처럼 한글을 썼지만 한글 주석을 못 읽는 제어기가 있어 쓰지 않는다).
+
+### 도형 (X–C 평면)
+- **정다각형** n = 3 · 4 · 5 · 6 · 8: **W = 2a**, a = 중심에서 변까지 — 짝수 각은 맞변 폭, 홀수 각(3 · 5)은 내접원 지름(원본에 홀수 각 화면이 없어
+  정함; 화면 라벨을 "내접원 지름 (W)" 로). 변 k 의 바깥 법선 = X 에서 C(+) 쪽으로 **90° + 회전 + k·360°/n**. 회전 0 이면 한 변이 C 축에 직각
+  (C = ±W/2 — 육각형이면 꼭짓점이 X 축 위, 원본 12 · 07 과 같다). 회전 + 는 X → C(+) 쪽(원본 그림에서 반시계).
+- **코너 R**: 꼭짓점마다 두 변에 접하는 원. 원 중심 반경 (a − R)/cos(π/n), 접점은 변 가운데에서 (a − R)·tan(π/n). R ≥ a 면 `CORNER_R_TOO_BIG`.
+  원본 07 은 시작 꼭짓점(`X92.376 C0.`)만 R 없이 날카롭게 남겼지만 이 앱은 모든 모서리에 R.
+  **0.000001 mm 미만의 R 은 0(꼭짓점)으로 본다**(`TINY_R` — NC 단위 0.001 의 천분의 일. 키패드로 칠 수 있는 0.00000000001 에서 R 의 방향이 수치 오차에
+  묻혀 보정 원호 끝이 3 μm 흔들렸고, 접선 오차로 원호 이음을 꼭짓점으로 보다 앱이 죽었다 — 3단계 최종 점검 `tinyCornerR`).
+- **2면폭**(외측만): 법선 90° + 회전과 그 반대인 두 평면, 나머지는 소재 원통면. 코너 R 은 쓰지 않는다(화면이 감춘다).
+- **외측** = 외경 소재의 바깥을 깎는다(W < 외경, `W_GE_OD`). **내측** = 기초 구멍(지름 = `od`) 안에서 다각형 구멍을 깎는다(구멍 ≤ W, `HOLE_GT_W`).
+- 결과 숫자: 꼭짓점 지름 2((a − R)/cos(π/n) + R)(짝수 각 = 맞모서리, 2면폭 = 외경), 변 길이 2(a − R)tan(π/n)(2면폭 = 소재 안 현 2√(Rs² − a²)),
+  가장 두꺼운 살(아래 `STOCK_LEFT`).
+
+### 경로 — 한 바퀴, 진입 · 후퇴 원호
+- **방향**: 외측은 시계(원본 07 과 같다), 내측은 반시계 → 공구는 늘 진행 왼쪽 → **G41**. 하향 · 상향 절삭은 C 축 + 방향과 회전 공구 회전 방향이
+  기계마다 달라 정하지 않았다(바꾸는 칸은 없다).
+- **진입점 E = 변 가운데**. 진입 원호는 공구 쪽에 중심(E + ρ·m, m = 진행 왼쪽 단위 법선), 반지름 ρ 의 사분원(G03)으로 E 에서 변에 접하고,
+  후퇴 원호는 같은 중심으로 E 에서 사분원(G03). 닫힌 다각형은 같은 점에서 들어가고 나와 보정 경로가 E′ 에서 꼭 맞는다. 변에 직각으로 들어가
+  나오면(A 의 예처럼) FANUC 의 안쪽 모서리 시작 · 취소가 두 보정선의 교점이라 E 앞뒤로 r 씩 못 깎아 살(최대 거의 r)이 남는다 — 그래서 원호로 했다.
+- **시작 이동**(G41 G01)은 진입 원호의 시작 접선과 한 직선, **취소**(G40 G01)는 후퇴 원호 끝 접선과 한 직선 → 시작 · 취소 끝의 보정 벡터는 원호에
+  직각 r 이라 FANUC Type A · B 가 같고 직접 보정과 같은 점이다.
+- **외측**: ρ = 2r. 시작 원 반지름 ρs = max(Rs + r + 여유, √((a + ρ + Lmin)² + ρ²)), Lmin = max(여유, r) — 시작점 `G00 X(2ρs) C0.`(공구가 소재에서
+  여유만큼 떨어짐), 시작 이동 길이 L = √(ρs² − ρ²) − a − ρ ≥ Lmin, 시작 이동의 첫 점 O = (a + ρ + L)n − ρd(|O| = ρs). G12.1 뒤 G40 상태로
+  원점 둘레 ρs 원호(C 만 돎, 소재 밖)로 O 까지 — 변은 O 가 X 축에서 각도로 가장 가까운 것. 진입 · 후퇴 · 시작 이동은 모두 그 변 직선의 바깥 반평면에
+  있어 볼록 다각형을 파고들지 않는다. 시작 이동은 소재(외경과 다각형 사이 살)를 가르며 들어간다 — 원본도 `G01 X100.` → `X92.376` 으로 같다.
+- **내측**: ρ = min(2r, a/2) — r < ρ ≤ a − r 라 진입 원과 O = −ρd 의 공구가 내접원 안. 조건 a > 2r(`TOOL_TOO_BIG`). 시작점 X = 구멍 반경 − r − 여유
+  (공구가 구멍 안, 벽에서 여유 — 0 이상이어야, `TOOL_GT_HOLE`), 그 점에서 G01 로 O, 시작 이동 길이 a − ρ. 공구 중심이 갈 수 있는 곳(포켓을 r 만큼
+  줄인 것)이 볼록이라 그 안의 점끼리 잇는 직선은 벽을 파지 않는다.
+- **2면폭**: 평면 직선이 소재 + 여유 원과 만나는 ±te(te = √((Rs + 여유)² − a²))에서 들어가 나와 평면 전체를 깎는다. 같은 진입 · 후퇴 원호와 시작 이동
+  (ρs = max(Rs + r + 여유, √((a + ρ + Lmin)² + (te + ρ)²))), 두 평면 사이는 G40 상태 원점 둘레 원호(짧은 쪽). O 가 X 축에서 가까운 평면부터.
+- **Z**: `G00 Z(여유)`(면 = Z0 으로 본다) → `G01 Z(깊이) F`(소재 밖 · 구멍 안이라 공기에서 내려간다; 이송은 절삭 F 그대로 — 출처 없는 급송 값을 만들지
+  않음), 끝은 G13.1 뒤 `G00 Z(여유)`(지나온 길은 이미 깎여 위로 빠진다). 모드 안 첫 이동 줄에 F 를 다시 쓴다(A 의 예처럼). 원본의 접근 F300 처럼
+  다른 이송은 출처가 없어 쓰지 않는다.
+
+### 보정 두 프로그램
+- **기계 보정** `ncG41G42`: 도면 좌표 + G41. 내측 코너 R ≤ r 은 R 원호 대신 날카로운 꼭짓점을 쓴다 — 보정 원호 반지름 R − r ≤ 0 이라 제어기가 간섭
+  알람을 낸다(A 4.6 "If the amount of inner chamfering or corner R is too small as compared with compensation ... alarm PS0041", 5.4.6).
+  꼭짓점이면 제어기는 두 보정선의 교점(A 5.4.3 안쪽 모서리)을 잡아 직접 보정과 같은 점이고 모서리는 r 로 남는다(`INNER_CORNER_LT_TOOL`; R = r 은
+  정확해 경고 없음).
+- **직접 보정** `ncG40`: 공구 중심 = 진행 왼쪽 r 오프셋. 변은 r 평행 이동, 원호는 같은 중심으로 외측 R + r · 내측 R − r · 진입/후퇴 ρ − r.
+  외측 R0 꼭짓점은 꼭짓점 중심 반지름 r 원호(`G02 … R5.`, 공구가 꼭짓점에 붙어 돈다). 제어기(G41)는 그 꼭짓점을 둔각(안쪽 각 ≥ 90°)이면 늘인
+  두 보정선의 교점, 예각(삼각형)이면 r 늘인 꺾은선으로 돈다(A 5.4.3) — 공기 중 경로만 다르고 깎인 모양(날카로운 꼭짓점)은 같다.
+- **NoseComp 를 쓰지 않은 까닭**: 그쪽은 열린 선반 윤곽(양 끝을 접선으로 늘인 재료, 볼록 꼭짓점은 늘인 교점)이 바탕이라 닫힌 다각형 · 진입 원호에
+  맞지 않는다. 오프셋 원리(평행 이동 · R ± r · 안쪽 교점)는 같다.
+- **첫 줄 주석**: `(R5 T0)` · `(G40 DIRECT R5 T0)` — 계산기가 넣는다(블록 목록과 줄을 맞추려고. 테이퍼 · 라운드와 달리 화면이 또 붙이지 않는다).
+- **NC 글**: NcLines 와 같은 규칙(이 계산기 안의 `Builder`) — 줄마다 G, 앞 줄과 같은 X · C 는 뺀다(원본 07 은 그 값을 흐리게 보여 준다 — 화면은
+  블록의 `x` · `c` 로 흐린 값을 보일 수 있다), 움직임이 없는 줄은 버리고 그 길은 앞 줄에 붙인다, 90° 넘는 원호는 같은 각으로 나눈다(R 지령 중심 오차),
+  소수 셋째 자리(`Fmt.nc`). G12.1 뒤 첫 이동 줄은 X · C 를 다 쓴다.
+- 손 계산(`handOuterSquare`): 외측 사각형 W40 · R0 · 외경 50 · D10 · 여유 1 · Z-5 · F100 — ρs = √1325 = 36.4005, O = (X35, C10), Q = (30, 10), E = (20, 0).
+  G41: `(R5 T0)` `G98` `G00 X72.801 C0.` `G00 Z1.` `G01 Z-5. F100.` `G12.1` `G03 X70. C10. R36.401 F100.` `G41 G01 X60.` `G03 X40. C0. R10.`
+  `G01 C-20.` `G01 X-40.` `G01 C20.` `G01 X40.` `G01 C0.` `G03 X60. C-10. R10.` `G40 G01 X70.` `G13.1` `G00 Z1.`
+  직접 보정: … `G01 X60. C5.` `G03 X50. C0. R5.` `G01 C-20.` `G02 X40. C-25. R5.` … `G01 C0.` `G03 X60. C-5. R5.` `G01 X70. C-10.` …
+  원본 07 의 줄(육각형 맞변 80 · R8, `originalHexagonLines`): `G01 X50.807 C-36.` `G02 X36.95 C-40. R8.` `G01 X-36.95` `G02 X-50.807 C-36. R8.`
+  `G01 X-87.757 C-4.` `G02 C4. R8.` `G01 X-50.807 C36.` `G02 X-36.95 C40. R8.` `G01 X36.95` 가 그대로 나온다(모서리 원 중심 32/cos30° = 36.950,
+  접점은 변 가운데에서 32·tan30° = 18.475). 같은 줄은 원본 12 의 입력(외경 80 · 맞변 70 · R3)에 공구경 10 을 넣은 **직접 보정(G40)** 프로그램에서도
+  그대로 나온다(70 + 10 = 80, R3 + 5 = R8 — 화면 골든 `polar.txt`) — 원본 07 은 12 의 공구 중심 출력으로 보인다(접근 줄만 다름). 내측 사각형 W40 · R6 · 구멍 Ø20 · D10, 2면폭 W30 · 외경 48 · D10 의 글도 테스트에 있다.
+
+### 시뮬레이션 결과
+- `PolarProgram.blocks` = 줄마다 `PolarBlock(text, path, x, c, z, polar)`. `path` = 그 줄 동안 공구 중심이 평면에서 지나는 선분 · 원호(G41 프로그램은
+  제어기 보정 흉내 — 시작 · 취소 · 바깥 꼭짓점 처리 포함, 직접 보정은 쓴 그대로). `x` · `c` · `z` = 줄 끝 지령값(원본 07 의 X (DIA) · C · Z (DEP) 칸 —
+  X 는 G12.1 앞이면 직경, 안이면 `xDiameter` 대로). `toolPath` = 이어진 전체 경로(`Contour`).
+- 평면 점은 **`Pt(z = −C, x = X 반경)`**(`PolarG12.pt` · `xOf` · `cOf`): `ShapeViewer`(Z 오른쪽 · X 위)로 그대로 그리면 원본 그림(X 위, C(+) 왼쪽)이고,
+  X–C 평면을 돌린 것이지 뒤집은 것이 아니라 `Arc.cw` = G02 그대로다. `Pt.xDia` = 직경 X.
+- `shape` = 다 깎은 단면(도면 R 그대로, 가공 순서 — 2면폭은 평면 둘 + 소재 원호 둘), `stockR` = 소재(외측) · 구멍(내측) 반경, `toolR`, `leadR`, `startX`.
+
+### 경고 `PolarWarning`
+- 멈춤: `MISSING_INPUT`(외경 · W · 공구경 · 깊이 · F — F 와 공구경은 출처 있는 기본값이 없어 넣어야 한다), `BAD_INPUT`(숫자 아님 · 한도 밖 · 지름 · W ·
+  공구경 · F ≤ 0 · 코너 R · 여유 < 0 · 깊이 ≥ 0 · F > 100 000 · 내측 2면폭), `W_GE_OD`, `HOLE_GT_W`, `CORNER_R_TOO_BIG`, `TOOL_TOO_BIG`, `TOOL_GT_HOLE`.
+- 숫자와 함께: `INNER_CORNER_LT_TOOL`, `STOCK_LEFT`(가장 두꺼운 살 > 공구경 — 한 바퀴의 공구 띠는 윤곽에서 2r 까지. 외측 · 2면폭 Rs − a, 내측은 구멍
+  둘레의 꼭짓점 방향 점에서 둘레까지: 둘레까지 거리는 볼록 도형 안에서 오목 함수라 구멍 밖의 최대는 구멍 둘레에, 그중 꼭짓점 방향에 있다),
+  `CORNERS_OUTSIDE_OD`(외측 다각형의 꼭짓점 지름 > 외경 — 모서리 끝은 소재 원통면으로 남는다. 원본 12 기본값 80 · 70 · R3 은 39.950 < 40 이라 안 걸림).
+- 빈칸 기본: 코너 R 0 · 회전 0 · 여유 1(다른 계산과 같게). F · 공구경은 기본이 없다.
+
+### API
+```kotlin
+enum class PolarShape(val sides: Int) { TRIANGLE(3), SQUARE(4), PENTAGON(5), HEXAGON(6), OCTAGON(8), TWO_FLAT(2) }
+enum class PolarWarning { MISSING_INPUT, BAD_INPUT, W_GE_OD, HOLE_GT_W, CORNER_R_TOO_BIG, TOOL_TOO_BIG, TOOL_GT_HOLE,
+    /* ↑ 멈춤 · ↓ 숫자와 함께 */ INNER_CORNER_LT_TOOL, STOCK_LEFT, CORNERS_OUTSIDE_OD }
+data class PolarInput(val inner: Boolean = false, val shape: PolarShape = PolarShape.HEXAGON,
+    val od: Double? = null /*외측 소재 · 내측 구멍 지름*/, val width: Double? = null /*W*/, val cornerR: Double? = null,
+    val rotationDeg: Double? = null, val toolDia: Double? = null, val depthZ: Double? = null /*< 0*/, val feed: Double? = null /*mm/min*/,
+    val clear: Double? = null /*빈칸 1*/, val xDiameter: Boolean = true /*G12.1 안 X 직경*/)
+data class PolarBlock(val text: String, val path: List<Seg>, val x: Double?, val c: Double?, val z: Double?, val polar: Boolean)
+data class PolarProgram(val blocks: List<PolarBlock>) { val lines: List<String>; val toolPath: Contour }
+data class PolarSolution(val shape: Contour, val stockR: Double, val toolR: Double, val side: Side /*G41*/, val leadR: Double,
+    val startX: Double /*반경, C0*/, val cornerDia: Double, val flatLength: Double, val stockMax: Double,
+    val ncG41G42: PolarProgram, val ncG40: PolarProgram)
+data class PolarResult(val solution: PolarSolution?, val warnings: List<PolarWarning>)
+object PolarG12 { const val CLEAR_DEFAULT = 1.0; const val MAX_FEED = 100_000.0
+    fun pt(x: Double, c: Double): Pt /* = Pt(−c, x) */; fun xOf(p: Pt): Double; fun cOf(p: Pt): Double
+    fun calc(i: PolarInput): PolarResult }
+```
+
+### 테스트 (`PolarG12Test`)
+NC 글을 따로 읽어(구현의 Pt · Intersect · 오프셋을 쓰지 않음) 공구 중심을 만든다 — 직접 보정은 쓴 그대로, G41 은 FANUC 보정 흉내(블록마다 왼쪽 r,
+접한 이음 그대로, 안쪽 꼭짓점 교점, 바깥 둔각 교점 · 예각 꺾은선, 시작 · 취소가 이웃 원호와 0.2° 안에서 한 직선인지). 그리고
+① 다 깎은 단면(외측은 도형 ∩ 소재 원)을 파고들지 않음 — 중심에서 단면까지 ≥ r − 0.003 ② 둘레의 모든 점이 경로에서 r + 0.003 안(내측 R < r 은
+공구가 못 가는 모서리를 뺌) ③ 시작점이 X 축 위 · 외측은 소재 + 여유 밖 · 내측은 구멍 − 여유 안, 외측 G40 이동이 소재 밖.
+`toolCenterIsOffsetByRadius`(5모양 × 외/내 × 공구 2 × 코너 R 4(0 · r/2 · r · 2r) × 회전 3 × X 직경/반경 = 480), `randomShapes`(무작위 400 — 멈춤 까닭 ·
+살 경고를 따로 계산), `rotationRotatesShape`, `xRadiusMode`, `hexagonWidthAndCornerTangents`, `blockRules`(G12.1/G13.1 혼자 · 앞에 X C0 · 모드 안 G00 없음 ·
+G41/G40 은 모드 안 G01 · G13.1 앞 취소 · G98 먼저 · 위치 잡기 줄은 두 프로그램이 같음), 손 계산 셋 · 원본 07 줄, `stops` · `warnings`,
+`tinyCornerR`(아주 작은 R = R0 과 같은 글 · 맞변 절반에 붙은 R 도 유한한 좌표).
+일부러 틀린 식(원호 보정 R ± r 뒤바꿈, 내측 R < r 원호를 G41 에 남김, 시작 이동이 진입 원호와 비뚤어짐)을 모두 잡는 것을 확인했다(각 4~8개 테스트).
+
+### 안 한 것 · 확인 못 한 것
+- X 직경/반경(`xDiameter`)은 기계마다 — 매뉴얼끼리도 다르다. 첫 가공 전에 싱글 블록으로 시작점 · 첫 변을 확인한다.
+- 하향/상향 방향 고르기, 살이 두꺼울 때 X 로 여러 바퀴 나눠 깎기(`STOCK_LEFT` 로 알리기만), Z 여러 단, 원본의 접근 이송(F300) · 회전수.
+- 내측 a ≤ 2r(공구경 ≥ W/2): 진입 원호를 넣을 자리가 없어 멈춘다. 직각 진입 + 2r 겹쳐 깎기로 풀 수 있으나 안쪽 시작의 제어기 동작을 더 확인해야 해서 안 했다.
+- 내측 2면폭, 12각 등 다른 다각형, 비정다각형.
+- C 축 최대 이송을 받아 중심 근처 이송 한도(F < L·R·π/180) 계산.
+- G 코드 계통 B · C(G94), 인치(G20).
+
+## 재료·절삭조건 (`Cutting` · `WorkMaterials` · `DrillCatalog`, 구현됨)
+원본 03.jpg(`screens.md` 3.2). 탭 셋 — **기본계산기**(`Cutting.kt`) · **재료분석**(`WorkMaterial.kt`) · **드릴링**(`DrillCatalog.kt`).
+단위: 지름 · 길이 mm, Vc m/min, n min⁻¹(rpm), f mm/rev, vf mm/min, 거칠기 μm. 표준 치수 · 절삭 수치는 아래 출처에 있는 것만 넣었다.
+
+### 기본계산기 — 식과 출처 (확인함, 2026-10-28)
+| 식 | 출처 |
+|---|---|
+| Vc = π·D·n/1000, n = 1000·Vc/(π·D) | Sandvik Coromant "General turning formulas and definitions"(웹) · KORLOY Cutting Tools_Turning 2025-2026 F10 "Calculation formulas for machining"(PDF 438쪽, `vc = π×D×n/1000`) |
+| vf = f·n (선반 · 드릴) | KORLOY 같은 쪽 `fn = vf/n` · Haas "Mill Speeds and Feeds (Metric)" `FEED DRILLS Vf = fn x n` · Sandvik "Drilling formulas and definitions" 예 `15 × 1000/vf = 15 × 1000/(fn × n)` |
+| f = fz·Z (드릴 날당 이송 × 날 수) | 같은 Haas 쪽 `Vf = fz x Z x n` 과 `Vf = fn x n`. **날 수 빈칸 = 2**: Sandvik 드릴링 쪽의 솔리드 초경 · 교환 날 드릴 그림 "Two edges from the center to the periphery" |
+| 가공 시간 Tc = L/(f·n) 분 | Sandvik turning 쪽 `Tc = lm/(fn · n)` |
+| 이론 거칠기 Rmax = f²/(8r)·1000 μm, 실제 ≈ 강 × 1.5~3 · 주철 × 3~5 | KORLOY Turning 2025-2026 F10 "Theoretical surface roughness" · "Practical surface roughness" (`Cutting.PRACTICAL_STEEL` · `PRACTICAL_CAST_IRON`) |
+| 이론 Ra = f²/(18√3·r)·1000 μm ≈ Rmax/3.9 | 아래 유도(Ra 의 정의 — KS B ISO 4287 산술 평균 편차 — 를 Rmax 식과 같은 단면에 적용) |
+| G96 · G50 S 최대 회전수 | FANUC Series 0/00/0-Mate Lathe B-61394E/08 9.3 "CONSTANT SURFACE SPEED CONTROL (G96, G97)": "G50 S_ ; The maximum spindle speed (rpm) follows S." · 넘는 회전수는 "is clamped at the maximum spindle speed". B-64604EN-1/01 G 코드 표 "G50 (계통 B · C 는 G92) … max spindle speed clamp" |
+
+- **Ra 유도**: Rmax = f²/(8r) 은 노즈 원호를 포물선 z = x²/(2r) 로 본 단면(한 이송 주기 −f/2 ≤ x ≤ f/2)의 최대 높이와 꼭 같다. 같은 단면에서
+  평균선 m = f²/(24r), 평균선과 만나는 곳 x₀ = f/(2√3), Ra = (2/f)·2∫₀^x₀ (m − x²/2r) dx = **f²/(18√3·r)**. 흔히 쓰는 f²/(32r)(= Rmax/4)은
+  이것을 줄인 꼴로 2.6% 작다. 실제 원호 단면과의 차이는 f ≤ r/2 에서 Ra · Rmax 모두 2% 안(테스트). f ≥ 2r 이면 원호 단면이 아니라
+  거칠기를 내지 않는다(`FEED_TOO_BIG_FOR_NOSE`). 이론값이다 — 마모 · 진동 · 구성인선은 넣지 않는다(위 '실제' 배수).
+- **G96**: Vc · G50 S(Smax) 로 막히기 시작하는 지름 dLimit = 1000·Vc/(π·Smax). 지름을 넣으면 G96 이 내려는 회전수, 실제 회전수 min(·, Smax),
+  막혔는지(`RPM_CLAMPED`), 실제 주속 π·D·n/1000. NC 줄은 만들지 않는다(S 의 소수점 · M03/M04 는 기계마다).
+  **주의(화면 만들 때 정할 것)**: `CutResult.n` · `vf` · `timeMin` 은 식의 회전수 1000·Vc/(πD) 로 낸 값이다 — 막혀도 바꾸지 않는다.
+  FANUC 은 막힌 회전수로 돌기 때문에 `RPM_CLAMPED` 이면 기계의 실제 분당 이송 · 시간은 f × `g96.n`(= Smax) 기준이다. 화면은 막혔을 때
+  `g96.n` 으로 다시 낸 값을 보이거나 "막힘 — 실제는 f × Smax" 를 함께 적는다(2026-10-28 독립 검증의 의심 — 계산기는 그대로 둠).
+  **화면이 정한 것(2026-10-28)**: 위 카드의 n · vf · 시간은 식의 회전수 그대로 두고, G96 카드가 막힌 회전수(`g96.n`)로 낸 실제 주속 · 분당 이송(f × Smax)을
+  따로 보이며, 노란 띠가 '기계 회전수는 S… 입니다' 라고 적는다(`ui-design.md` '재료·절삭조건 화면').
+- **빈칸**: 모두 빈칸 시작. 빈칸인 줄은 결과도 비어 있다(0 으로 계산하지 않음) — Vc(또는 n) · 지름이 있어야 n(Vc), f 가 더 있어야 vf, 길이가 더
+  있어야 시간, f · 노즈 R 이면 거칠기, Vc · Smax 면 G96. 날 수만 빈칸 = 2. 회전수 줄은 `SpeedFrom`(Vc 를 넣음 / n 을 넣음), 이송 줄은
+  `FeedFrom`(f / fz × Z)으로 어느 칸을 쓰는지 고른다 — 쓰지 않는 쪽 칸은 검사도 하지 않는다.
+- **경고 `CutWarning`**: `BAD_INPUT`(숫자 아님 · 0 이하 · 길이 > `MAX_MM` · 속도 > `Cutting.MAX_SPEED` 1 000 000 · 날 수 1~100 밖 — 칸은
+  `CutResult.bad`, 그 칸에 기대는 결과만 비고 다른 줄은 계산), `FEED_TOO_BIG_FOR_NOSE`, `RPM_CLAMPED`(숫자와 함께).
+
+```kotlin
+enum class CutField { D, VC, N, F, FZ, Z, LENGTH, NOSE_R, SMAX }
+enum class SpeedFrom { VC, N }; enum class FeedFrom { F, FZ }
+enum class CutWarning { BAD_INPUT, FEED_TOO_BIG_FOR_NOSE, RPM_CLAMPED }
+data class CutInput(val d: Double? = null, val speedFrom: SpeedFrom = SpeedFrom.VC, val vc: Double? = null, val n: Double? = null,
+    val feedFrom: FeedFrom = FeedFrom.F, val f: Double? = null, val fz: Double? = null, val z: Int? = null /*빈칸 2*/,
+    val length: Double? = null, val noseR: Double? = null, val smax: Double? = null)
+data class G96Result(val vc: Double, val smax: Double, val dLimit: Double, val nCommand: Double?, val n: Double?, val clamped: Boolean, val vcActual: Double?)
+data class CutResult(val vc: Double?, val n: Double?, val f: Double?, val z: Int?, val vf: Double?, val timeMin: Double?,
+    val rz: Double? /*Rmax μm*/, val ra: Double?, val g96: G96Result?, val bad: Set<CutField>, val warnings: List<CutWarning>) { val timeSec: Double? }
+object Cutting { const val MAX_SPEED = 1_000_000.0; const val TEETH_DEFAULT = 2; const val MAX_TEETH = 100
+    val PRACTICAL_STEEL = 1.5..3.0; val PRACTICAL_CAST_IRON = 3.0..5.0
+    fun vc(n, d); fun rpm(vc, d); fun feedRate(f, n); fun feedPerRev(fz, z); fun timeMin(length, f, n); fun rz(f, r); fun ra(f, r)
+    fun calc(i: CutInput): CutResult; fun g96(vc: Double, smax: Double, d: Double?): G96Result }
+```
+- 손 계산(`CuttingTest.handNumbers`): Ø50 · Vc150 → n 954.930, f0.2 → vf 190.986, L120 → 0.628 분(37.70 초), r0.8 → Rmax 6.250 · Ra 1.604.
+  G96 Vc200 · S2000 → dLimit 31.831, Ø20 → 3183.1 이 2000 으로(주속 125.66).
+
+### 재료분석 (`WorkMaterials`)
+- ISO 6군 `IsoGroup { P, M, K, N, S, H }` 마다 짧은 이름 · 들어가는 재료 · 가공 특성(Mitsubishi Materials 교육 자료 "Classification" · "Group P~H",
+  mmc-carbide.com/permanent/courses/78 — 요약해 한글로)과 대표 재질.
+- **대표 재질의 규격 대조**(KS · ISO · JIS · 미국 칸): KORLOY Turning 2025-2026 F3~F6 "Workpiece Material Grades"(PDF 431~434쪽)의 칸 글 그대로.
+  쪽 그림과 글자층 좌표로 같은 줄인지 확인했고 줄이 어긋나 보이는 칸(회주철의 ISO 칸은 GC100~350 이 한 칸 등)은 메모로 남겼다. 넣은 줄:
+  P SM20C · SM45C · SCM435(H) · SCM440(H) · SNCM439 · SUM24L / M STS303 · 304 · 304L · 316 · 316L · 430 · 410 / K GC250 · GCD400-15 · GCD600-3 /
+  N A6061S · A7075S · AC4C · ALDC8 / H STD11 · STD61. S 는 대조표에 초내열합금 줄이 없어 KS 없이 드릴 카탈로그 행(Mitsubishi MVE 'Inconel718',
+  ISCAR No.37 · YG-1 VDI37 티타늄 α+β)을 예로 든다.
+- 군 경계는 공구사마다 다르다는 것을 메모로: 페라이트 · 마르텐사이트계 스테인리스(Sandvik 재질 코드 P5, CoroDrill 870 절삭표는 M 칸),
+  H 로 보는 경도(Mitsubishi MVE 40~55 HRC · Sandvik 860 47~60 HRC · ISCAR No.38 55 HRC) — 모두 드릴 카탈로그 자료의 행(테스트가 그 행이 있는지 본다).
+- **절삭속도 숫자는 없다**: 선삭 Vc 를 재질별로 낼 공식 출처를 쓰지 않았다(인서트 재종마다 다르다). 드릴은 드릴링 탭의 카탈로그 값.
+
+```kotlin
+enum class IsoGroup { P, M, K, N, S, H }
+data class MaterialRef(val name: String, val ks: String?, val iso: String?, val jis: String?, val us: String? /*AISI/SAE · UNS · ASTM*/,
+    val note: String? = null, val source: String)
+data class IsoGroupInfo(val group: IsoGroup, val title: String, val covers: String, val machining: String, val examples: List<MaterialRef>, val source: String)
+object WorkMaterials { val groups: List<IsoGroupInfo> /*P M K N S H 순서*/; fun of(g: IsoGroup): IsoGroupInfo }
+```
+
+### 드릴링 — 카탈로그 자료 (`DrillCatalog`)
+- **자료**: `calc/catalog/drill-catalog.json` = `docs/research/drill-catalog.json`(5사 · 35 시리즈 · 519 행 · 이송 구간 3052, 공식 카탈로그와 쪽 대조 끝)을
+  **바이트 그대로 복사**. 빌드(`calc/build.gradle.kts` 의 `generateDrillCatalog`)가 이 파일을 Kotlin 문자열(`DrillCatalogJson`, 60KB 씩 나눔 —
+  클래스 파일 문자열 상수 한도 64KB)로 만들어 commonMain 에 넣는다. 그래서 JVM · 안드로이드가 같은 코드로 읽는다(플랫폼별 리소스 읽기 없음).
+  처음 부를 때 kotlinx.serialization 으로 읽는다(`ignoreUnknownKeys = false` — 모르는 칸이 생기면 실패).
+  자료를 고칠 때는 docs/research 쪽을 고치고 calc/catalog 로 다시 복사한다(둘이 다르면 테스트가 실패).
+- 메이커 5사(JSON 순서 Sandvik · ISCAR · Mitsubishi · YG-1 · KORLOY, `label`) + **직접 입력**(`manual` — Vc · f 를 넣어 n · vf). 원본 03 의 대구텍 ·
+  Gühring · OSG 는 자료가 없어 넣지 않았다.
+- **조회** `lookup(메이커, 시리즈, 행 번호, 직경)`:
+  - **행 범위** = 이송 구간 처음~끝(이송이 없는 행은 시리즈 범위). 밖이면 멈춤(`OUTSIDE_ROW`) — 같은 재질이 직경 구간마다 나뉜 행(Sandvik 870
+    `[Ø10-20.99 vc …]` · `[Ø21-33 vc …]`, Mitsubishi TAF `[Ø12–14.5 …]` · `[Ø15–56, 브레이커 U1~U3]`)이면 `alternatives` 에 맞는 행 번호
+    (같은 ISO 군 · 재질 글의 " [" 앞이 같음).
+  - **f = 그 직경이 든 구간의 값 그대로**(dMin ≤ D ≤ dMax, 1e-9 허용). 보간하지 않는다. 구간 사이(860-GM 은 Ø3 · 4 · 6 · 8 … 열뿐, i-ONE 11.99 와
+    12.09 사이)는 f · vf 를 비우고 `NOT_IN_FEED_TABLE` + 바로 아래 · 위 구간(`below` · `above`)을 돌려준다.
+  - Vc = 행 값(최소 · 권장 · 최대, 없는 칸은 null — **권장이 없으면 만들지 않는다**: 가운데 값을 계산해 넣지 않음). n = 1000·Vc/(π·D) 칸마다.
+  - **회전수 표 행**(Mitsubishi MVE · MVS · MNS — 모든 구간에 `rpm`, Vc 칸 없음): n = 표 회전수(`nFromTable`), Vc = π·D·n/1000 **환산**(`vcConverted`, 권장 칸만).
+    구간 사이 직경이면 n · Vc 도 없다(회전수는 직경마다라서).
+  - vf = f·n — 최소는 최소끼리, 최대는 최대끼리(범위의 양 끝), 권장은 권장끼리. 회전수가 권장 하나뿐(YG-1 DREAM 의 Vc 권장만, 회전수 표)이면 f 범위 × 그 회전수.
+  - 시리즈 주문 범위 밖이지만 절삭표에 그 열이 있으면(860-GM 주문 Ø3~16 · 표 Ø20 열, KORLOY MSD Plus 라인업 Ø2.5~ · 표 첫 칸 Ø1~4) 값과 함께 `OUTSIDE_SERIES`.
+  - 표에 이송이 없는 행(Mitsubishi TAFL — 각주 "L/D=2,3 값의 80%" 만) `NO_FEED_IN_TABLE`, Vc 칸이 빈 행(ISCAR SOLIDDRILL No.4 · No.5) `NO_VC_IN_TABLE`.
+  - 출처: 행의 `sourceId` → 메이커 `sources` 의 제목 · URL · 판, 쪽은 `page`. 깊이별 이송 감소 · 급유 같은 각주는 시리즈의 `depth` · `coolant` 와
+    메이커 `notes` 글 그대로(계산에 넣지 않는다 — 화면이 보여 준다).
+- 경고 `DrillWarning`: 멈춤 `MISSING_DIAMETER` · `MISSING_VC`(직접 입력) · `BAD_INPUT`(숫자 아님 · 0 이하 · > `MAX_MM`, 직접 입력 Vc > `MAX_SPEED`) ·
+  `OUTSIDE_ROW` / 숫자와 함께 `MISSING_FEED`(직접 입력 — n 만) · `OUTSIDE_SERIES` · `NOT_IN_FEED_TABLE` · `NO_FEED_IN_TABLE` · `NO_VC_IN_TABLE`.
+
+```kotlin
+@Serializable data class CatalogSource(val id: String, val title: String, val url: String, val edition: String? = null, val note: String? = null)
+@Serializable data class FeedBand(val dMin: Double, val dMax: Double, val fMin: Double? = null, val fRec: Double? = null, val fMax: Double? = null,
+    val rpm: Int? = null) { operator fun contains(d: Double): Boolean }
+@Serializable data class DrillCondition(val isoGroup: String, val material: String /*"영문 / 한글"*/, val hardness: String? = null,
+    val vcMin: Double? = null, val vcRec: Double? = null, val vcMax: Double? = null, val feeds: List<FeedBand>, val sourceId: String, val page: String) {
+    val iso: IsoGroup; val rpmTable: Boolean }
+@Serializable data class DrillSeries(val series: String, val type: String /*solid-carbide · exchangeable-head · indexable*/,
+    val diameterMin: Double, val diameterMax: Double, val depth: String, val coolant: String, val conditions: List<DrillCondition>)
+@Serializable data class RemovedRow(val series: String, val isoGroup: String, val reason: String)
+@Serializable data class MakerCatalog(val manufacturer: String, val sources: List<CatalogSource>, val drills: List<DrillSeries>,
+    val notFound: List<String>, val notes: String)
+@Serializable data class DrillMaker(val key: String, val catalog: MakerCatalog, val removed: List<RemovedRow>, val corrected: List<String>,
+    val confidence: String) { val label: String; val series: List<DrillSeries>; fun source(id: String): CatalogSource? }
+data class Span3(val min: Double?, val rec: Double?, val max: Double?) { val isEmpty: Boolean }
+enum class DrillWarning { MISSING_DIAMETER, MISSING_VC, MISSING_FEED, BAD_INPUT, OUTSIDE_ROW,
+    /* ↑ 멈춤(MISSING_FEED 빼고) · ↓ 숫자와 함께 */ OUTSIDE_SERIES, NOT_IN_FEED_TABLE, NO_FEED_IN_TABLE, NO_VC_IN_TABLE }
+data class DrillResult(val diameter: Double?, val vc: Span3?, val vcConverted: Boolean, val n: Span3?, val nFromTable: Boolean,
+    val band: FeedBand?, val f: Span3?, val vf: Span3?, val below: FeedBand?, val above: FeedBand?, val alternatives: List<Int>,
+    val source: CatalogSource?, val page: String?, val warnings: List<DrillWarning>)
+object DrillCatalog { val makers: List<DrillMaker>; fun maker(key: String): DrillMaker?
+    fun rowRange(series: DrillSeries, c: DrillCondition): ClosedFloatingPointRange<Double>
+    fun lookup(maker: DrillMaker, series: DrillSeries, condition: Int, diameter: Double?): DrillResult
+    fun manual(diameter: Double?, vc: Double?, f: Double?): DrillResult }
+```
+- 손 계산: Sandvik 860-GM P1.1(125 HB) Ø10 → Vc 120 · 145 · 170, n 3819.7 · 4615.5 · 5411.3, f 0.20 · 0.25 · 0.30, vf 763.9 · 1153.9 · 1623.4 (B70+B71).
+  Mitsubishi MVE 연강 Ø6.3 → 표 4000 rpm, Vc 환산 79.17, vf 520 · 800 · 1040. 직접 입력 Ø10 · Vc100 · f0.2 → n 3183.1 · vf 636.6.
+
+### 테스트 (`CuttingTest` · `WorkMaterialTest` · `DrillCatalogTest` · jvmTest `DrillCatalogJsonTest`)
+- `DrillCatalogJsonTest`(jvmTest — 파일을 읽어야 해서): ① calc/catalog 사본이 원본과 바이트까지 같다 ② 빌드가 만든 문자열이 사본 글 그대로
+  ③ 앱이 읽은 모델을 다시 JSON 으로 바꿔 원본 JSON 트리와 **모든 칸**(null 아닌 값 18 214 개 — 파이썬으로 센 수)을 맞춘다(숫자는 Double, 없는 칸 = null),
+  개수 5 · 35 · 519 · 3052.
+- `DrillCatalogTest`: 모든 행 · 모든 구간의 양 끝 · 가운데 직경(9156 번)에서 f 가 그 구간 값, Vc 가 행 값(회전수 표는 n = 표 회전수 · Vc 환산), vf 칸,
+  구간 사이 · 경계(i-ONE 11.99 / 12.05 / 12.09), 권장값을 만들지 않음, 행 밖 → 다른 행 안내(870 · TAF), 시리즈 밖, 이송 없는 행 · Vc 없는 행, 직접 입력,
+  재료분석 메모가 기대는 행이 자료에 있는지.
+- `CuttingTest`: 손 계산, Vc ↔ n 왕복, fz · 날 수(빈칸 2 · 3날), 빈칸은 비움, Ra 식 = 포물선 단면을 20만 칸으로 직접 적분한 Ra(1e-6) · 원호 단면과 2% 안,
+  f ≥ 2r, G96 막힘 · 경계, 잘못된 칸 13 가지와 다른 줄은 계산되는지.
+
+### 안 한 것 · 확인 못 한 것
+- 선삭 재질별 추천 Vc · f: 출처 있는 자료를 넣지 않았다(인서트 재종 · 브레이커마다 카탈로그가 다르다).
+- 카탈로그 각주의 감소율(깊이별 이송 85% · 70%, 외부 급유 Vc 10% 감소, TAFL 80% 등)은 글로만 보이고 계산하지 않는다 — 고른 깊이 · 급유를 입력받지 않아서.
+- 원본 03 의 제품 카드(사진 · 설명), 대구텍 · Gühring · OSG, 날 수(2날/3날) 고르기 — 카탈로그 행에 날 수 칸이 없다.
+- G96 의 가공 시간(지름이 바뀌며 회전수가 변함 — KORLOY F11 에 식이 있으나 넣지 않음), 동력 · 절삭저항(kc 값은 재질별 표 값이라 쓰지 않음).

@@ -1,0 +1,10 @@
+메이커 Mitsubishi · 시리즈 MVE (WSTAR, 외부 급유) · 군 P · 행 Mild Steel (≤180HB) AISI 1010 etc / 연강 · 직경 '6.3'
+남은 것 []
+경고 [] · 다른 행 []
+표 절삭 속도 Vc (m/min · 환산) — | 79.2 | —
+표 회전수 n (rpm · 표 값) — | 4000 | —
+표 이송 f (mm/rev) 0.13 | 0.20 | 0.26
+표 분당 이송 vf (mm/min) 520 | 800 | 1040
+구간 FeedBand(dMin=6.3, dMax=6.3, fMin=0.13, fRec=0.2, fMax=0.26, rpm=4000)
+출처 Mitsubishi Materials MVE (WSTAR) RECOMMENDED CUTTING CONDITIONS (drilling manual PDF, 영국 영어판) · PDF 안에 판 표기 없음. 서버 Last-Modified 2023-02-07 · 쪽 p.1
+키패드 Vc 79.2 · n 4000 · f 0.20 · vf 800

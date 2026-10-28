@@ -1,0 +1,5 @@
+입력 d=50 n=1000 fz=0.05 z=3 len=30 · N · FZ
+경고 [] · 잘못된 칸 []
+자동 Vc 157.1 · n null · f 0.150
+vf 150.0 · 시간 0.20 분 12.0 초 · Rmax null · Ra null
+키패드 Vc 157.1 m/min · vf 150.0 mm/min · 0.20 분
