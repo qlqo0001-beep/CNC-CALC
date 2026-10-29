@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.Offset
 import com.bmt.nosecalc.calc.HolderStop
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.screens.RoundScreen
+import com.bmt.nosecalc.screens.round.HOLDER_PRESETS
 import com.bmt.nosecalc.screens.round.HolderCard
 import com.bmt.nosecalc.screens.round.HolderShow
 import com.bmt.nosecalc.screens.round.MANUAL
@@ -19,6 +20,7 @@ import com.bmt.nosecalc.screens.round.RoundViewer
 import com.bmt.nosecalc.screens.round.HitRow
 import com.bmt.nosecalc.screens.round.HolderNcCard
 import com.bmt.nosecalc.screens.round.NcTone
+import com.bmt.nosecalc.screens.round.PresetSheet
 import com.bmt.nosecalc.screens.round.hitRows
 import com.bmt.nosecalc.screens.round.stopView
 import com.bmt.nosecalc.screens.round.roundExample
@@ -169,6 +171,38 @@ class RoundShotsTest {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Space.gutter)) { HolderCard(s, 0.4) }
             }
         }
+    }
+
+    /**
+     * 회사 사용 프리셋(10-29): 프리셋 시트(직접 입력 아래 '회사 사용' 묶음 — 품번 옆 제조사, 바 값이 없는 슬리브 · 계열 줄은 까닭),
+     * 고른 카드(출처 두 줄 '회사 사용 · 출처: …'), 바 값이 없는 줄을 고른 카드(여섯 칸 빈칸 + 까닭). 좁은 폰 · 큰 글꼴도
+     */
+    @Test
+    fun companyPresets() {
+        fun sheet(name: String, widthDp: Int = Shots.WIDTH_DP, fontScale: Float = 1f, heightDp: Int = Shots.HEIGHT_DP) =
+            Shots.both(name, heightDp, widthDp = widthDp, fontScale = fontScale, setup = { it.open(Feature.ROUND) }) {
+                AppHost(it) {
+                    val s = remember { roundInnerExample(3).apply { pickPreset(HOLDER_PRESETS.single { p -> p.code == "C16R SCLCR 09" }) } }
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Space.gutter)) { HolderCard(s, 0.4) }
+                    PresetSheet(s.preset, onPick = {}) {}
+                }
+            }
+        sheet("round-preset-sheet")
+        sheet("round-preset-sheet-w360", 360)
+        sheet("round-preset-sheet-fs130-w360", 360, 1.3f)
+        // 회사 사용 23 줄이 다 보이게(시트 높이는 화면의 85 %)
+        sheet("round-preset-sheet-all", heightDp = 2000)
+        fun card(name: String, code: String, heightDp: Int = 1060, widthDp: Int = Shots.WIDTH_DP, fontScale: Float = 1f) =
+            Shots.both(name, heightDp, widthDp = widthDp, fontScale = fontScale, setup = { it.open(Feature.ROUND) }) {
+                AppHost(it) {
+                    val s = remember { roundInnerExample(3).apply { pickPreset(HOLDER_PRESETS.single { p -> p.code == code }) } }
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Space.gutter)) { HolderCard(s, 0.4) }
+                }
+            }
+        card("round-inner-holder-company", "C16R SCLCR 09")
+        card("round-inner-holder-company-fs130-w360", "C16R SCLCR 09", 1400, 360, 1.3f)
+        card("round-inner-holder-blank", "SH0516-100")
+        card("round-inner-holder-blank-fs130-w360", "SH0516-100", 1400, 360, 1.3f)
     }
 
     /**

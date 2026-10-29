@@ -228,6 +228,7 @@ private fun ToggleRow(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
 
 /**
  * 공구 설정(설계 7.8): 프로그램이 쓴 보정 번호마다 카드(머리 'T0101 · 보정 01', 프로그램에 없는 번호는 흐리게 아래).
+ * [홀더 (선택)](회사 사용 홀더 — 고르면 종류 · 인서트 · κr 을 채움, [HolderBox]) →
  * 종류(바이트 · 홈 · 나사 · 둥근) → [노즈 R] [팁 번호](테이퍼의 팁 번호 시트를 그대로 부른다) → 바이트: 인서트 C · D · V · T + [절입각 κr] /
  * 홈: [폭] / 나사: [각도]. G41/G42 를 쓰는 번호인데 노즈 R · 팁이 빈칸이면 빨간 테 + '보정에 필요합니다'(TOOL_DATA_MISSING).
  * 칸 글은 시트를 연 동안 쓴 그대로 두고, 고칠 때마다 숫자로 공구표에 넣는다(공구표는 앱을 켠 동안만 — 14.2-13).
@@ -277,6 +278,13 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                             if (comp) Text("G41/G42", color = c.textMuted, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.height(8.dp))
+                        // 회사 홀더를 고르면 종류 · 인서트 · κr 을 채운다(치던 κr 글은 버린다 — 새 값이 보이게)
+                        val holder = sim.holderOf(n)
+                        HolderBox(holder, holder?.edited(t) == true) { h ->
+                            texts.remove("$n.k")
+                            sim.pickHolder(n, h)
+                        }
+                        Spacer(Modifier.height(10.dp))
                         Segmented(
                             listOf("바이트", "홈", "나사", "둥근"), t.kind.ordinal,
                             { k -> update(n) { it.copy(kind = ToolKind.entries[k]) } },

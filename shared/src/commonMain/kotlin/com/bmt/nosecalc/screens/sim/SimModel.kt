@@ -140,6 +140,21 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
 
     var tools: Map<Int, ToolOffset> by mutableStateOf(tools)
 
+    /** 공구 설정에서 고른 회사 홀더(보정 번호 → [CompanyHolder.id]). 칸 값은 [tools] 에 있고 이것은 이름표뿐 — 공구표와 같이 앱을 켠 동안만 */
+    var toolHolders: Map<Int, String> by mutableStateOf(emptyMap())
+
+    fun holderOf(n: Int): CompanyHolder? = toolHolders[n]?.let { id -> COMPANY_HOLDERS.firstOrNull { it.id == id } }
+
+    /** 홀더를 고르면 그 보정 번호의 종류 · 인서트 · κr 을 채운다([CompanyHolder.fill]). null = 고르지 않음(칸 값은 그대로) */
+    fun pickHolder(n: Int, h: CompanyHolder?) {
+        if (h == null) {
+            toolHolders = toolHolders - n
+            return
+        }
+        toolHolders = toolHolders + (n to h.id)
+        tools = tools + (n to h.fill(tools[n] ?: ToolOffset()))
+    }
+
     // ---- 시뮬레이션 설정(설계 7.8 — 궤적 창). 소재는 앱을 켠 동안만(공구표와 같이 — C10 대기), 기계 · 읽기 · 보기는 앱 전체 하나(`sim/machine` · `sim/view`)
 
     /** 소재 칸 글(빈칸 = 자동) */
@@ -337,6 +352,7 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
             is Pending.Load -> programs.load(p.number)?.let { set(it, Origin.Saved(p.number)) }
             is Pending.Example -> exampleList.getOrNull(p.index)?.let {
                 tools = tools + it.tools
+                toolHolders = toolHolders - it.tools.keys
                 set(it.text, Origin.Example(p.index))
             }
             Pending.New -> set("", Origin.New)
@@ -427,7 +443,7 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
         private const val MACHINE_DECIMAL = "dec"
         private const val MACHINE_SKIP = "skip"
 
-        /** 화면을 떠났다 와도(앱을 켠 동안) 공구표 · 찾기 · SHIFT · 소재 칸 · 재생 속도를 남긴다. 글 · 커서는 임시 저장에서 다시 읽는다 */
+        /** 화면을 떠났다 와도(앱을 켠 동안) 공구표(고른 홀더 이름표 포함) · 찾기 · SHIFT · 소재 칸 · 재생 속도를 남긴다. 글 · 커서는 임시 저장에서 다시 읽는다 */
         fun saver(kv: KeyValueStore): Saver<SimState, Any> = Saver(
             save = { s ->
                 s.saveDraft()
@@ -435,6 +451,7 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
                     encodeTools(s.tools), s.query, if (s.findOpen) "1" else "0", s.shift.name,
                     SetupText.encode(s.stockText.entries.associate { it.key.key to it.value }), s.speed.toString(),
                     if (s.singleBlock) "1" else "0", if (s.optStop) "1" else "0",
+                    s.toolHolders.entries.sortedBy { it.key }.joinToString(";") { (n, id) -> "$n=$id" },
                 )
             },
             restore = { v ->
@@ -451,6 +468,12 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
                         singleBlock = l[6] == "1"
                         optStop = l[7] == "1"
                         run = runOf(editor.text, tools)
+                    }
+                    if (l.size >= 9) {
+                        toolHolders = l[8].split(';').mapNotNull { row ->
+                            val n = row.substringBefore('=').toIntOrNull() ?: return@mapNotNull null
+                            n to row.substringAfter('=')
+                        }.toMap()
                     }
                 }
             },
