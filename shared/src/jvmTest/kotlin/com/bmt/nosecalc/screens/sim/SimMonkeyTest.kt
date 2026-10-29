@@ -1072,6 +1072,7 @@ class SimMonkeyTest {
         extra = listOf(
             "종류 × 인서트 × 팁 · 412" to { p, until -> p.toolMatrix(C412, until) },
             "종류 × 인서트 × 팁 · 360" to { p, until -> p.toolMatrix(C360, until) },
+            "회사 홀더 차례 · 360 글꼴 1.3" to { p, until -> p.holderMatrix(C360, until) },
         ),
     )
 
@@ -1144,7 +1145,7 @@ class SimMonkeyTest {
                 for (ins in inserts) {
                     if (ins != null && !go(tap { it.key.startsWith(ins) && it.key.endsWith("°") })) break@outer
                     for (tip in tips) {
-                        if (!go(tap { it.key.endsWith("고르기") })) break@outer
+                        if (!go(tap { TIP_BOX.matches(it.key) })) break@outer
                         val ok = tap { c ->
                             when (tip) {
                                 "0" -> c.key.startsWith("0 ·")
@@ -1180,8 +1181,83 @@ class SimMonkeyTest {
         }
     }
 
+    /**
+     * 회사 홀더 차례(10-29 '홀더 고르기'): 공구 카드(T1212 · G42, 노즈 R 0.4 · 팁 3)에서 홀더 칸 → 시트의 줄을 [COMPANY_HOLDERS] 차례로 모두 고르고,
+     * 고를 때마다 카드 값(종류 · 인서트 · κr — [CompanyHolder.fill])과 이름표가 맞는지 본다(틀리면 실패로 적음). 다섯 줄마다 시트를 닫고 2D 재생 · 3D 를 그린다.
+     * 끝에 '고르지 않음' 으로 되돌린다
+     */
+    private fun Part.holderMatrix(cfg: Cfg, until: Long) {
+        val s = open(HOLDER_CARD, cfg, emptyList()) ?: return
+        log += "${HOLDER_CARD.name} · $cfg: 회사 홀더 ${COMPANY_HOLDERS.size}줄"
+        try {
+            fun go(r: Res): Boolean = when (r) {
+                Res.Ok -> true
+                // 시트 · 줄을 못 찾으면 새 시트를 누르지 못한 것 — 실패로 적는다
+                Res.Miss -> {
+                    misses++
+                    record(s, Res.Fail(AssertionError("못 찾음: ${s.trail.lastOrNull()} 다음"), "홀더 고르기"))
+                    false
+                }
+                is Res.Fail -> {
+                    record(s, r)
+                    false
+                }
+            }
+            /** 궤적 창 단추는 상태에 따라 없을 수 있다(toolMatrix 처럼 못 찾으면 적기만) */
+            fun soft(r: Res): Boolean = when (r) {
+                Res.Ok -> true
+                Res.Miss -> {
+                    misses++
+                    log += "  못 찾음: ${s.trail.lastOrNull()}"
+                    true
+                }
+                is Res.Fail -> {
+                    record(s, r)
+                    false
+                }
+            }
+            fun tap(pred: (Cand) -> Boolean, k: Int = 0): Res {
+                val t = s.candidates().filter(pred).getOrNull(k) ?: return Res.Miss
+                return s.step(Act.Tap(t.key, t.nth, t.long), t.node.id)
+            }
+            val holderBox = { c: Cand -> c.key.endsWith("/고르기") && !TIP_BOX.matches(c.key) && !c.long }
+            for ((i, h) in COMPANY_HOLDERS.withIndex()) {
+                if (System.currentTimeMillis() > until) break
+                if (!go(tap(holderBox))) break
+                // 바라는 값 = 고르기 전 공구에 홀더가 정하는 칸만 채운 것(나사 홀더는 앞 홀더의 κr 을 그대로 둔다)
+                val want = h.fill(s.sim.tools[12] ?: ToolOffset())
+                // 같은 품번이 제조사로 나뉜 줄은 앞에서 몇 번째인지로
+                val k = COMPANY_HOLDERS.take(i).count { it.code == h.code }
+                if (!go(tap({ c -> c.key.substringAfter('|').startsWith("${h.code}/") && !c.long }, k))) break
+                val got = s.sim.tools[12]
+                if (s.sim.holderOf(12)?.id != h.id || got != want) {
+                    record(s, Res.Fail(AssertionError("홀더 ${h.id}: 이름표 ${s.sim.holderOf(12)?.id} · 공구 $got (바라는 값 $want)"), "홀더 고르기"))
+                    break
+                }
+                if (i % 5 == 4) {
+                    if (!go(s.step(Act.Back))) break
+                    var ok = true
+                    for (key in listOf("재생", "3D", "블록 끝까지", "2D")) {
+                        ok = soft(tap({ it.key == key || it.key.startsWith("$key|") || it.key.endsWith("|$key") }))
+                        if (!ok) break
+                    }
+                    if (!ok || !go(tap({ it.key == "공구 설정" || it.key == "공구" || it.key.startsWith("공구 설정") }))) break
+                }
+            }
+            if (go(tap(holderBox))) go(tap({ it.key.substringAfter('|').startsWith("고르지 않음/") }))
+            if (s.sim.holderOf(12) != null) record(s, Res.Fail(AssertionError("고르지 않음 뒤에도 이름표 ${s.sim.holderOf(12)?.id}"), "홀더 고르기"))
+            val r = s.finish()
+            if (r is Res.Fail) record(s, r)
+        } finally {
+            s.close()
+        }
+    }
+
     internal companion object {
         const val SEED = 20261028L
+
+        /** 공구 카드의 팁 번호 칸('—' · 'n번' + 고르기). 홀더 칸도 '고르기' 로 끝나 둘을 가른다 */
+        val TIP_BOX = Regex("^(—|[0-9]+번)/고르기$")
 
         /** 다시 확인 한 부분에서 이보다 적게 누르면 껍데기 통과 */
         const val MIN_STEPS = 200
@@ -1294,7 +1370,11 @@ class SimMonkeyTest {
 
         /** 시작 상태 이름 → 시작 상태(재현할 때 — 부분의 일 목록 밖에서 만든 것) */
         val TOOL_CARD = Start("공구 카드 차례(빈 공구표)", traj = true, sheet = TrajSheet.TOOLS, prep = { editor.replaceAll(NO_TOOL) })
-        val EXTRA_STARTS = listOf(TOOL_CARD)
+        val HOLDER_CARD = Start("회사 홀더 차례(T1212 노즈 R 0.4 · 팁 3)", traj = true, sheet = TrajSheet.TOOLS, prep = {
+            editor.replaceAll(NO_TOOL)
+            tools = mapOf(12 to ToolOffset(noseR = 0.4, tip = 3))
+        })
+        val EXTRA_STARTS = listOf(TOOL_CARD, HOLDER_CARD)
 
         fun pct(f: Float) = "${(f * 100).roundToInt()}%"
 

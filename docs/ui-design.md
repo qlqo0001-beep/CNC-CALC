@@ -243,8 +243,8 @@
     칸 하나만 넣은 상태 `taper-b-one` · `taper-b-double-one` · `taper-groove-one` · `round-b3-one` · `round-inner-b3-one` · `triangle-one`.
   - `FoundationShotsTest`(`foundation-*`: 아이콘 · 경고 띠 · 카드 부품 · 결과 띠 · 그림 도구, -w360), `KeypadShotsTest`(`field-states` · `keypad-*`),
     `ViewerShotsTest`(`viewer-*`), `ShellShotsTest`(헤더 단추 48dp 재기 · 메뉴 · 아이콘 · 도움말 · `taper-b-wide` 1280dp),
-    `TaperArtShotsTest` · `RoundArtShotsTest`(`art-*` 그림만, 폭마다), `TaperShotsTest`(`taper-*`), `RoundShotsTest`(`round-*` — 내경 · 보링바 카드 · 크게 보기 · 안전 끝점 `round-inner-a-stop` · `round-inner-f-stop` · `round-manual-back-stop` · 깎는 면 예외 `round-inner-c-stop` · 기계 보정 G00 을 띄운 직각 진입 `round-inner-b3-tip0` · NC 전체 보기 `round-inner-nc-full-focus` 포함),
-    `TriangleShotsTest`(`triangle-*`), `screens/sim/SimShotsTest`(`sim-*` · `pc-wide-sim` · `pc-short-sim` — 아래 '시뮬레이터 편집기'), `screens/sim/TrajShotsTest`(`sim-2d*` · `sim-settings` · `sim-tools` · `sim-legend` · `sim-stop-error` · `pc-wide-traj` · `pc-short-traj` — 궤적 창), `screens/sim/Traj3DShotsTest`(`sim-3d*` · `pc-wide-3d` · `pc-short-3d` — 궤적 창 3D, 백그라운드 그림이라 80 프레임). 긴 화면은 heightDp 를 늘려 한 장에 찍는다.
+    `TaperArtShotsTest` · `RoundArtShotsTest`(`art-*` 그림만, 폭마다), `TaperShotsTest`(`taper-*`), `RoundShotsTest`(`round-*` — 내경 · 보링바 카드 · 크게 보기 · 안전 끝점 `round-inner-a-stop` · `round-inner-f-stop` · `round-manual-back-stop` · 깎는 면 예외 `round-inner-c-stop` · 기계 보정 G00 을 띄운 직각 진입 `round-inner-b3-tip0` · NC 전체 보기 `round-inner-nc-full-focus` · 회사 사용 프리셋 `round-preset-sheet`(`-w360` · `-fs130-w360` · 회사 23 줄이 다 보이는 `-all`) · `round-inner-holder-company` · `round-inner-holder-blank`(둘 다 `-fs130-w360`) 포함),
+    `TriangleShotsTest`(`triangle-*`), `screens/sim/SimShotsTest`(`sim-*` · `pc-wide-sim` · `pc-short-sim` — 아래 '시뮬레이터 편집기'), `screens/sim/TrajShotsTest`(`sim-2d*` · `sim-settings` · `sim-tools` · `sim-tools-holder` · `sim-holders` · `sim-legend` · `sim-stop-error` · `pc-wide-traj` · `pc-short-traj` — 궤적 창), `screens/sim/Traj3DShotsTest`(`sim-3d*` · `pc-wide-3d` · `pc-short-3d` — 궤적 창 3D, 백그라운드 그림이라 80 프레임). 긴 화면은 heightDp 를 늘려 한 장에 찍는다.
 - 프레임마다 나오는 그림은 바로 닫는다(네이티브 메모리). 안 닫으면 1700dp 넘는 스크린샷이 `Surface.makeRasterN32Premul` 에서 실패했다.
 - 견고성 시험 `InputRobustnessTest`: 화면 처음 값에서 칸을 흔들어(키패드로 칠 수 있는 글 — 빈칸·0·음수·12자리·아주 작은 수)
   테이퍼·2중 테이퍼 6만, 라운드·3점호 3만, 홈·삼각형 2만 가지를 풀고, 예외가 없고 화면에 찍는 숫자가 모두 유한한지 본다.
@@ -380,7 +380,7 @@
 | `round/RoundParts.kt` | `ManualArt`(3점호 그림 — 내경 · 역방향을 따라 뒤집힘, focus), `RoundSummary`, `NodeTable`, `RoundViewer`(내경 보링바 단면 · 겹침 · 자리 고르기, 진입 경로 `entryMoves` · 닿는 구간 `contactBand`), `ArcCard` |
 | `round/RoundInputScreen.kt` | `RoundTypeScreen`(형상 1~6 · 내경 2~6) · `ManualScreen`(수동 3점호): 요약 → 치수·공구 → (내경) 보링바 → 보정 방식 스위치 → (원호) → 경고 → (내경) 보링바 띠 → 노드 표 → 형상 확인 → NC |
 | `round/HolderCard.kt` | 보링바 카드(단면 스케치 · 프리셋 시트 · 칸 · 칸 아래 오류 글) |
-| `round/HolderPresets.kt` | 출처를 확인한 보링바 프리셋 28 줄(제조사 · 품번 · D · f · DMIN · κr · 인서트 · 날 길이 · URL) |
+| `round/HolderPresets.kt` | 보링바 프리셋 `HOLDER_PRESETS` 51 줄 = 회사 사용 `COMPANY_PRESETS` 23 줄(아래 '회사 사용 프리셋') + 출처를 확인한 카탈로그 28 줄(제조사 · 품번 · D · f · DMIN · κr · 인서트 · 날 길이 · URL, 회사 줄은 출처 글 · 까닭도) |
 
 - 이름: 04 의 영어는 한글로 — "CNC ROUND CALC" → 헤더 "라운드 R 계산", "SELECT MACHINING TYPE" → "가공 형태 선택", "TYPE n" → "형상 n",
   Main R → **주 R**, Corner R → **모서리 R**(Corner R(1)·(2) → 모서리 R(1)·(2)). D · D1 · D2 · L · L1 · L2 · L2(A)/L2(B) 는 그대로. 그림·칸·경고·도움말이 같은 이름을 쓴다.
@@ -425,8 +425,18 @@
 - **보링바 카드**(`HolderCard`, 내경 TYPE · 3점호 내경 화면에서 도면 · 공구 카드 다음 — 칸은 같은 키패드 묶음):
   - 단면 스케치: 구멍(깎는 벽 · 맞은편 벽 빗금)에 넣은 견본 바(계산기 `HolderCheck.outline` 그대로)와 공구대, 치수 D · f · 돌출 길이, 각 κr · κr′.
     3점호 뒤보링(역방향)이면 계산기처럼 인서트를 Z 로 뒤집어(날이 +Z, 팁 1) 그리고 κr 은 +Z 에서 · κr′ 은 −Z 에서 잰다. 벽 이름은 본문색(빗금 위 대비).
-  - '프리셋 (선택)' 칸 → 시트(직접 입력 + 제조사별 품번 — Ø · f · Dmin · κr · 인서트). 고르면 D · f · DMIN · κr · 모양 · 날 길이를 채운다
+  - '프리셋 (선택)' 칸 → 시트(직접 입력 → **'회사 사용'** 묶음 → 제조사별 품번 — Ø · f · Dmin · κr · 인서트). 고르면 D · f · DMIN · κr · 모양 · 날 길이를 채운다
     (돌출 길이 · 노즈 R 은 그대로). 고친 뒤엔 품번 옆 '수정됨', 아래 '출처: <사이트>'.
+  - **회사 사용 프리셋**(사용자 10-29 "회사에서 사용하는 팁홀더도 찾아서 홀더 종류에 추가"): 시트에서 직접 입력 바로 아래 맨 위 묶음. 값 · 출처는
+    `docs/research/company-holders.json`(제조사 공식 카탈로그 · 제품 페이지, 출처를 다시 열어 칸마다 대조한 것)의 `presetCandidates` 20 줄 + 소경 3 줄 그대로다 —
+    카바이드 자루 SCLCR(C08K · C10K · C12M-06 · C12M-09 · C16R) → 강 자루 STFCR(S10K · S12M-09 · S12M-11 · S16R) → 소경(SH0516-100 · SH0616-100 · PICCO).
+    같은 품번도 제조사마다 값이 달라(C08K-SCLCR06 한국야금 f 5 · 대구텍 f 6, STFCR κr 한국야금 90° · 대구텍 91°) **제조사마다 한 줄**이고, 품번은 그 제조사의 표기
+    (한국야금 `C08K-SCLCR-06` · 대구텍 `C08K SCLCR 06` · 미쓰비시 `C10KSCLCR06`), 품번 옆에 제조사 이름. 샌드빅 S12M/S16R-STFCR 11 은 단종 표시라 넣지 않았다.
+    고르면 아래 줄이 '회사 사용 · 출처: <카탈로그 · 판 · 쪽>'(두 줄까지, 예 'TaeguTec Turning 2026 A175'). 슬리브(교세라 SH 0516/0616-100)와 계열 이름(이스카 PICCO)은
+    출처에 바의 D · f · DMIN · κr 이 없어 **여섯 칸을 비우고**(사용자가 넣음 — 지어내지 않음) 시트 줄 · 카드에 까닭 한 줄('보링바 슬리브(구멍 Ø5) — 값은 끼운 바의 카탈로그로 넣으세요').
+    '수정됨' 은 프리셋이 채운 칸을 고쳤을 때만(비운 칸에 넣은 값은 아님). 회사 NC 프로그램의 글 · 파일 이름 · 쓴 횟수는 앱 · 저장소에 넣지 않는다(기밀) — 표는 '회사 사용' 뿐.
+    시험: jvmTest `CompanyHoldersJsonTest`(드릴의 `DrillCatalogJsonTest` 처럼 — 프리셋 20 줄 = `presetCandidates` 칸마다, 줄마다 `holders` 의 그 제조사 값 · 쪽, 빈 줄은 원본도 `missing`,
+    보링바 · 소경이 빠짐없이 다 있음) · `RoundStateTest.companyPresets`(제조사별 값 · 빈 프리셋 · 수정됨 · Saver).
   - 칸: 바 지름 D · 날 길이 l(안내 '인서트 크기 숫자 (DCMT 07 → 7)') · f(바 중심 ~ 인선, 카탈로그 WF) · 인서트 모양 C 80° · D 55° · V 35° · T 60° ·
     절입각 κr(카탈로그 KAPR) 과 그 아래 '끝날각 κr′ = …°' · 돌출 길이 · 최소 가공경 Dmin(둘은 비우면 그 검사 안 함) · **안전 여유**(처음 0.5, 비우면 0.5,
     0 도 됨, 키패드 안내 '… 소재 사이 직선 거리(공구대는 Z) · 비우면 0.5', 그 아래 회색 한 줄 '… 소재와 직선 거리로 이만큼(공구대는 Z) 떨어진 마지막 자리에서 멈추고 빠집니다
@@ -660,13 +670,32 @@
 | `Sim2DView.kt` | `Sim2DView` — 겹친 Canvas 넷(① 격자 · 척 · 기장여유 띠 · 처음 소재 ② 남은 소재 · 나사 톱니 ③ 경로 · 고스트 · 각도 알약 · ▲ ✕ — `Offscreen` 층, 재생 중 다시 그리지 않음 ④ 지금 공구 · 측정 십자와 좌표 알약 · Z0 (소재면) · 축척)과 손짓(한 손가락 이동 · 두 손가락 확대 · 휠 확대 · 누르기 = 고스트/측정점 고르기). `SimPaths`(실행마다 한 번 만든 모델 좌표 토막 목록: 급송 · 층 · 명령 · 보정 · 원호 · 노즈) → `screenPath`(보이는 토막만 화면 좌표로 잘라 · 픽셀로 같은 토막은 한 번 — 큰 프로그램도 긋는 양이 화면 크기에 묶임) · 급송 점선 + 빈 화살 |
 | `PlayState.kt` | `PlayState`(재생 시각 · M00/M01 · 싱글 블록 멈춤 · \|◀ ▶\| · 줄로 가기 · 척 멈춤), 속도 미끄럼 로그 변환, `timeText` · `feedText` · `speedText` |
 | `SimSetupModel.kt` | 설정 칸(`StockField` · `MachineField` · `ViewFlags`) · `RunSetup`(백그라운드 실행에 넘길 설정 + 원점 자동 값) · `stockOf`(소재 칸 + 자동 소재) · `machineOf` · `numText` |
-| `SimSettingsSheet.kt` | 시뮬레이션 설정 시트(소재 · 기계 · 프로그램 읽기 · 보기 — 한 칸 묶음, 빈칸 = 자동/가정) · 공구 설정 시트(보정 번호마다 카드: 종류 · 노즈 R · 팁(테이퍼의 `TipSheet`) · 인서트 · κr · 폭 · 나사 각) |
+| `SimSettingsSheet.kt` | 시뮬레이션 설정 시트(소재 · 기계 · 프로그램 읽기 · 보기 — 한 칸 묶음, 빈칸 = 자동/가정) · 공구 설정 시트(보정 번호마다 카드: 홀더(선택) · 종류 · 노즈 R · 팁(테이퍼의 `TipSheet`) · 인서트 · κr · 폭 · 나사 각) |
+| `CompanyHolders.kt` · `HolderSheet.kt` | 회사 사용 홀더 `COMPANY_HOLDERS`(`CompanyHolder` — 품번 · 묶음 `HolderGroup` · 종류 · 인서트 · κr · 제조사 · 까닭, `fill` · `edited`) · 공구 카드의 홀더 칸 `HolderBox` · 홀더 고르기 시트 `HolderSheet` (아래 '홀더 고르기') |
 
 - 색: `SimColors` 의 `layer` · `ghost` · `part2d` · `partEdge` · `chuck` · `valueSf` · `valueTime` · `focusPill`(대비표는 KDoc). 켜진 단추 = 청록, 닫기 · 리셋 · 기장여유 = 중립(원본의 빨강 · 주황 · 노랑 대신).
   3D 는 `Sim3DColors`(두 테마 같은 색 — 바탕 `viewport3d` 가 어두움): tag 마다 음영 띠(금속 · 단면 한 단계 밝게 · 척 몸통 남색 · 턱), 바닥 격자, 안내 칩(05 — 어두운 바탕 + 초록 테), 어두운 켬/끔 단추 회전 · 자유.
-- 설정 저장: 기계 · 읽기 · 보기는 `sim/machine` · `sim/view`(앱 전체, 다음에 켜도 그대로), 소재 칸 · 공구표 · 속도 · 싱글 블록 · M01 은 화면 Saver(앱을 켠 동안).
+- 설정 저장: 기계 · 읽기 · 보기는 `sim/machine` · `sim/view`(앱 전체, 다음에 켜도 그대로), 소재 칸 · 공구표(고른 홀더 이름표 `toolHolders` — Saver 목록 9번째 `n=id;…`) · 속도 · 싱글 블록 · M01 은 화면 Saver(앱을 켠 동안).
+- **홀더 고르기**(사용자 10-29 "회사에서 사용하는 팁홀더도 찾아서 홀더 종류에 추가"): 공구 카드 머리 아래 '홀더 (선택)' 칸(이름 옆 '수정됨' · 칸에는 품번과 '고르기 ⌄' 만 —
+  360dp · 글꼴 1.3 에서도 품번이 줄지 않게, 아랫줄에 묶음 · 제조사(제조사로 나뉜 줄은 그 제조사 하나)와 까닭) → 시트 '홀더 고르기 · 회사 사용': 고르지 않음 →
+  외경 바이트(DCKNL2525M12 · MVJNR2525M16 · PCLNL2525M12) · 나사(SNR0020L09A · THCER2525M16) · 보링바(SCLCR 다섯 · STFCR 넷, 지름 순) · 소경 보링(SH0516-100 · SH0616-100 · PICCO)
+  — 20 줄 17 품번, 외경 · 나사 묶음 안은 품번 알파벳 순. 줄 = 품번 + 채우는 값(종류 · 인서트 · κr) · 제조사(없으면 '제조사 확인 필요') + 까닭.
+  κr 이 제조사마다 다른 STFCR(한국야금 90° · 대구텍 91°)은 제조사마다 한 줄(품번 옆 제조사).
+  고르면(`SimState.pickHolder` → `CompanyHolder.fill`) **종류**, 바이트면 **인서트 모양**(출처에 없으면 그대로) · **κr**(출처에 없으면 빈칸 = 가정 값)을 채운다 — 사용자가 고칠 수 있고 고치면 '수정됨'.
+  노즈 R(인서트 코너 R) · 팁 번호 · 홈 폭 · **나사 각**(인서트 모양 — 미터 60° · 관용 55°, 홀더 출처에 없음 · 빈칸이면 앱이 60° 가정)은 홀더가 정하지 않아 건드리지 않는다.
+  **팁 번호는 제안하지 않는다**: 홀더 손(L/R)과 외경/내경으로 정할 수 없다 — 같은 손의 홀더가 척 쪽(−Z)으로 깎는지 그 반대로 깎는지는 주축 회전 방향(M03/M04)과
+  홀더를 다는 방식(터렛 앞/뒤 · 인서트 위/아래)에 따라 달라 팁(3 ↔ 4 · 2 ↔ 1)이 갈린다. 시트 안내 글이 '팁 번호(기계 터렛 방향)는 홀더가 정하지 않아 그대로 둡니다' 라고 적는다.
+  **DCKNL 은 κr 을 비운다**(C 95° 가정): 카탈로그 75° 는 K 꼴의 정면(X) 이송 기준(대구텍 A44 · 한국야금 B91 그림)인데 시뮬레이터 κr 은 Z 이송 기준이라, 75 를 넣으면
+  B 꼴 75° 바이트가 되어 정면 깎기에서 끝면을 쐐기로 판다(Ø50 끝면 Z1 → Z0 에서 z −1 반경 3.56). Z 이송으로 보면 100° 모서리라 κr 95° · 뒤날 −15° 여서
+  앱 공구 모양(80° 모서리 · 뒤날 0° 이상)으로는 그릴 수 없다 — 빈칸이면 끝면 쪽 날(정면 뒤날각 5°)은 실제와 같고 지름 쪽 날만 다르다. 까닭 줄이 이를 적는다
+  (계산기에 모서리 각 · 이송 기준을 더하지는 않았다). 근거 · 값은 `company-holders.json` 의 DCKNL `simulator` 칸, 시험 `VerifyHoldersTest`(3 · 3').
+  THCER 는 공식 카탈로그 · 제품 페이지에서 찾지 못해 제조사 · 값 없이 종류(나사)만. 값 · 제조사는 `company-holders.json` 의 `holders` 와 같다(`CompanyHoldersJsonTest.simHoldersMatchJson` — κr 은 `simulator` 칸이 있으면 그 값).
+  예제를 열어 그 번호의 공구표가 예제 것으로 바뀌면 그 번호의 이름표는 뺀다. 시험: `CompanyHolderTest`(채우기 · 그대로 두는 칸 · 수정됨 · Saver · 예제),
+  몽키 `SimMonkeyTest.toolSheet` 의 '회사 홀더 차례'(BMT_MONKEY — 홀더 칸 → 20 줄을 차례로 눌러 카드 값 · 이름표를 보고 다섯 줄마다 2D 재생 · 3D, 팁 칸은 `TIP_BOX` 로 가른다),
+  `UiMonkeyTest.roundInner` 는 회사 프리셋 · 빈 프리셋을 고른 시작 상태를 더했다.
 - 테스트: `PlayStateTest`(M00 · M01 · 싱글 블록 · 싱글 블록이 먼저 멈춰도 뒤 M00 남김 · \|◀ ▶\| · 척 멈춤 · 속도 · 글 꼴 · 설정 저장 · Saver · 원점 자동) · `TrajPerfTest`(이동 10만 개 프로그램의 ×200 재생 프레임 — `build/perf/traj-big.txt`) · `TrajGoldenTest`(골든 `sim-trajectory` — 예제마다 자동 소재 · 원점 · 시간 · 닿음 · 나사 · 남은 넓이 · 50 % 의 S/F, `sim-trajectory-scenes` — 스크린샷 장면의 카드 값, 06 의 X34.000 Z-2.186) ·
-  `TrajShotsTest`(장면은 `TrajScenes` — 재생을 멈춘 채 시각 고정): `sim-2d`(06 꼴) · `sim-2d-measure`(10 꼴) · `sim-2d-mid`(G71 층 반쯤) · `sim-2d-angle` · `sim-2d-thread` · `sim-2d-chuck` · `sim-stop-error` · `sim-settings` · `sim-tools` · `sim-legend` · `-w360` · `-fs130` · `-fs130-w360` · `pc-wide-traj` · `pc-short-traj`.
+  `TrajShotsTest`(장면은 `TrajScenes` — 재생을 멈춘 채 시각 고정): `sim-2d`(06 꼴) · `sim-2d-measure`(10 꼴) · `sim-2d-mid`(G71 층 반쯤) · `sim-2d-angle` · `sim-2d-thread` · `sim-2d-chuck` · `sim-stop-error` · `sim-settings` · `sim-tools` · `sim-legend` · `-w360` · `-fs130` · `-fs130-w360` · `pc-wide-traj` · `pc-short-traj`,
+  회사 홀더 `sim-tools-holder`(05 꼴 부품의 공구 넷에 홀더 — PCLNL 은 κr 을 고쳐 '수정됨', 내경은 제조사로 나뉜 S16R-STFCR11 대구텍 · `-fs130-w360`) · `sim-holders`(공구 설정 위 홀더 고르기 시트 · `-w360` · `-fs130-w360` · 20 줄이 다 보이는 `-all`).
 - 3D 테스트: `Sim3DTest`(z-버퍼 앞면 · 뒷면 · 깊이 · 눈 앞 자르기, 카메라 맞춤 · 처음 시점, 05 꼴 부품 글이 멈춤 · 닿음 없이 돎, 1/4 단면 픽셀 · 재생 중간 ≠ 끝 · 0.5배) · `Traj3DGoldenTest`(골든 `sim-3d` — 예제마다 메시 삼각형 · 부피와 단면 회전 부피, `sim-3d-scenes` — 3D 장면의 메시 · 412 × 500 그림의 tag 별 픽셀) ·
   `Sim3DPerfTest`(메시 · z-버퍼 한 장 · ×200 재생 프레임 — `build/perf/sim-3d.txt`) · `Traj3DShotsTest`(장면은 `TrajScenes.all3d`, 05 꼴 부품 `PART05`): `sim-3d`(재생 중간 — 바깥 나사를 내는 중) · `sim-3d-end`(05 꼴) · `sim-3d-full`(절개 끔 · 자유 · 돌린 시점) · `sim-3d-mid`(09 글 G71 층 반쯤) · `sim-3d-thread`(G76) · `-w360` · `-fs130` · `pc-wide-3d` · `pc-short-3d`.
   calc `RevolveMeshTest`(부피 손 계산 · 1/4 = 270° 몫 · 바깥쪽 감김 · 삼각형 한도 · 나사 골 자리 = 2D 톱니 · 척 · 둥근 홈 법선).

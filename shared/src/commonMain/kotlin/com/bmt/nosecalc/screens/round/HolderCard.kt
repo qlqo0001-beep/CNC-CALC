@@ -106,7 +106,12 @@ internal fun HolderCard(s: RoundState, r: Double, preview: String? = null, rever
         HolderSketch(Modifier.fillMaxWidth().clip(shape).background(c.subtle).border(1.dp, c.lineCard, shape).aspectRatio(SKETCH_W / SKETCH_H), reverse)
         Spacer(Modifier.height(14.dp))
         PresetField(s.preset, s.presetEdited()) { picking = true }
-        s.preset?.let { Text("출처: ${it.host}", Modifier.padding(top = 4.dp), color = c.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        s.preset?.let { p ->
+            // 회사 사용 줄은 카탈로그 · 쪽까지(두 줄까지), 나머지는 사이트 이름
+            val src = if (p.company) "회사 사용 · 출처: ${p.source ?: p.host}" else "출처: ${p.host}"
+            Text(keepWords(src), Modifier.padding(top = 4.dp), color = c.textMuted, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            p.note?.let { Text(keepWords(it), Modifier.padding(top = 2.dp), color = c.textMuted, fontSize = 12.sp, lineHeight = 16.sp) }
+        }
         Spacer(Modifier.height(14.dp))
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -207,9 +212,12 @@ private fun PresetField(p: HolderPreset?, edited: Boolean, onClick: () -> Unit) 
     }
 }
 
-/** 프리셋 고르기 시트: 직접 입력 → 제조사별 품번(Ø · f · Dmin · κr · 인서트). 고른 줄은 청록 체크 */
+/**
+ * 프리셋 고르기 시트: 직접 입력 → '회사 사용'(같은 품번은 제조사마다 한 줄 — 품번 옆에 제조사) → 제조사별 카탈로그 품번(Ø · f · Dmin · κr · 인서트).
+ * 출처에 바 값이 없는 줄(슬리브 · 계열 이름)은 아랫줄에 까닭. 고른 줄은 청록 체크
+ */
 @Composable
-private fun PresetSheet(current: HolderPreset?, onPick: (HolderPreset?) -> Unit, onDismiss: () -> Unit) {
+internal fun PresetSheet(current: HolderPreset?, onPick: (HolderPreset?) -> Unit, onDismiss: () -> Unit) {
     val c = AppTheme.colors
     BottomSheet(onDismiss, maxHeightFraction = 0.85f) {
         SheetTitle("보링바 프리셋", "제조사 카탈로그 값")
@@ -221,29 +229,38 @@ private fun PresetSheet(current: HolderPreset?, onPick: (HolderPreset?) -> Unit,
         )
         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
             PresetRow("직접 입력", "칸에 넣은 값 그대로", current == null) { onPick(null) }
-            HOLDER_PRESETS.groupBy { it.maker }.forEach { (maker, list) ->
-                Text(maker, Modifier.padding(top = 14.dp, bottom = 4.dp), color = c.tealDeep, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            val (mine, catalog) = HOLDER_PRESETS.partition { it.company }
+            (listOf("회사 사용" to mine) + catalog.groupBy { it.maker }.toList()).forEach { (group, list) ->
+                Text(group, Modifier.padding(top = 14.dp, bottom = 4.dp), color = c.tealDeep, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 list.forEach { p ->
-                    PresetRow(p.code, "Ø${plain(p.dia)} · f ${plain(p.f)} · Dmin ${plain(p.dMin)} · κr ${plain(p.kappa)}° · ${p.shape.name} ${plain(p.edge)}", p == current) {
-                        onPick(p)
-                    }
+                    PresetRow(p.code, presetSub(p), p == current, tag = if (p.company) p.maker else null) { onPick(p) }
                 }
             }
         }
     }
 }
 
-/** 시트 한 줄(52dp 이상): 이름(굵게) · 아랫줄 값, 고른 줄은 오른쪽 청록 체크 */
+/** 시트 줄의 아랫줄: 값(Ø · f · Dmin · κr · 인서트), 출처에 값이 없으면 그 까닭 */
+private fun presetSub(p: HolderPreset): String {
+    val bar = p.bar
+    val dMin = bar?.dMin ?: return p.note ?: "값 없음 — 칸에 직접 넣습니다"
+    return "Ø${plain(bar.dia)} · f ${plain(bar.f)} · Dmin ${plain(dMin)} · κr ${plain(bar.kappaDeg)}° · ${bar.shape.name} ${plain(bar.edge)}"
+}
+
+/** 시트 한 줄(52dp 이상): 이름(굵게) + 제조사(tag, 회사 사용 묶음) · 아랫줄 값, 고른 줄은 오른쪽 청록 체크 */
 @Composable
-private fun PresetRow(name: String, sub: String, on: Boolean, onClick: () -> Unit) {
+private fun PresetRow(name: String, sub: String, on: Boolean, tag: String? = null, onClick: () -> Unit) {
     val c = AppTheme.colors
     Row(
         Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(name, color = c.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text(sub, color = c.textMuted, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, Modifier.weight(1f, fill = false), color = c.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (tag != null) Text(tag, Modifier.padding(start = 6.dp), color = c.textMuted, fontSize = 13.sp, maxLines = 1)
+            }
+            Text(sub, color = c.textMuted, fontSize = 12.5.sp, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         if (on) Icon(AppIcons.Check, "고름", Modifier.size(20.dp), tint = c.teal)
     }

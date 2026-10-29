@@ -84,12 +84,13 @@ class SimToolShortcutTest {
                     t += 100_000_000L
                 }
                 fun walk(n: SemanticsNode): List<SemanticsNode> = listOf(n) + n.children.flatMap(::walk)
-                fun tap(text: String) = scene.semanticsOwners.flatMap { walk(it.rootSemanticsNode) }.first { n ->
+                // 글을 모두 가진 누르는 노드(홀더 칸도 '고르기' 로 끝나 팁 칸은 '—' 와 함께 찾는다)
+                fun tap(vararg text: String) = scene.semanticsOwners.flatMap { walk(it.rootSemanticsNode) }.first { n ->
                     n.config.getOrNull(SemanticsActions.OnClick) != null &&
-                        n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == text }
+                        n.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text }.containsAll(text.toList())
                 }.config[SemanticsActions.OnClick].action!!.invoke()
                 frames()
-                tap("고르기")
+                tap("—", "고르기")
                 frames()
                 tap(pick)
                 frames()

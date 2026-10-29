@@ -1,0 +1,572 @@
+{
+ "title": "회사 사용 홀더 — 제조사 카탈로그 값과 출처",
+ "researchedAt": "2026-10-29",
+ "rules": [
+  "값은 제조사 공식 카탈로그 PDF · 공식 디지털 카탈로그 · 공식 제품 페이지에서만 읽었다. 판매처 글은 '제조사가 누구인가'를 가리키는 근거로만 적고 값으로 쓰지 않았다.",
+  "출처로 확인 안 되는 칸은 빈칸(null)으로 두고 missing 에 까닭을 적었다. 지어내지 않았다.",
+  "같은 품번을 여러 제조사가 내면 제조사마다 따로 적었다. 값이 다르면 둘 다 그대로 둔다.",
+  "품번은 하이픈 · 띄어쓰기 없는 꼴로 code 에 적고, 제조사가 실제로 쓰는 꼴은 designation 에 적었다(C08K-SCLCR06 = 한국야금 C08K-SCLCR-06 = 대구텍 C08K SCLCR 06).",
+  "카탈로그 PDF 의 표는 쪽을 그림으로 그려 눈으로 대조했다(한국야금 B86 · B91 · B97 · B112 · B121 · B132 · B137, 대구텍 A44 · A164 · A175 · A182). 대구텍 A55 · A59 와 교세라 F156 · F157 은 PDF 글을 뽑아 읽었다."
+ ],
+ "appFields": {
+  "note": "보링바 프리셋(HolderPreset) 칸과 카탈로그 기호의 짝. 시뮬레이터 공구 설정은 κr · 인서트 모양만 쓴다(holders 에 simulator 칸이 있으면 κr 은 그 값)",
+  "dia": "DCON (DCONMS, 바 지름)",
+  "f": "WF (기능 폭 — 바 중심에서 날끝까지)",
+  "dMin": "DMIN (최소 가공경)",
+  "kappa": "KAPR (절입각 κr)",
+  "shape": "인서트 모양 기호(C · T · V …)",
+  "edge": "인서트 크기 숫자(CC 0602 → 6, CC 09T3 → 9, TC 1102 → 11). 앱 HolderPreset 주석과 같은 뜻",
+  "noseR": "카탈로그의 기준 인서트(MIID · master insert)의 R 은 홀더 값이 아니다. 실제 끼운 인서트를 따른다"
+ },
+ "sources": [
+  {
+   "id": "KOR_T2526",
+   "maker": "한국야금 (KORLOY)",
+   "title": "KORLOY Cutting Tools_Turning 2025-2026 (영문 미터판)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf",
+   "edition": "2025-2026, 카탈로그 목록의 날짜 2024.12 (466쪽)",
+   "listedAt": "https://www.korloy.com/en/download/cata.do?searchType=CT",
+   "pages": "B86 외경 홀더 부호(PDF 154) · B91 DCKNR/L(PDF 159) · B97 PCLNR/L(PDF 165) · B112 MVJNR/L(PDF 180) · B121 보링바 부호(PDF 189) · B132 SCLCR/L(PDF 200) · B137 STFCR/L(PDF 205)"
+  },
+  {
+   "id": "KOR_DC",
+   "maker": "한국야금 (KORLOY)",
+   "title": "KORLOY Digital Catalog (ISO 13399 속성: DCON-MS · DMIN · WF · KAPR · LF · OHX · LH · MIID)",
+   "url": "https://catalog.korloy.com/app/main.do",
+   "edition": "2026-10-29 열람(웹 자료라 판 번호 없음)",
+   "note": "품목 묶음 C-SCLCR/L · C-STFCR/L · PCLNR/L · DCKNR/L · MVJNR/L 의 품목 값과 품목 정보의 기준 인서트(MIID). S-STFCR/L 묶음은 치수 칸이 0 으로 비어 있어 KOR_T2526 B137 을 썼다"
+  },
+  {
+   "id": "TTK_T2026",
+   "maker": "대구텍 (TaeguTec)",
+   "title": "TaeguTec Non-Rotating: Turning 카탈로그 (T-TURN)",
+   "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202603/69b8a59826f185433660.pdf",
+   "edition": "2026 (PDF 만든 날 2026-03-13, 330쪽)",
+   "listedAt": "https://www.taegutec.com/pages/en/publications/cutting-tools-catalogs/",
+   "pages": "A44 외경 홀더 부호 · A55 MVJNR/L · A59 PCLNR/L · A164 보링바 부호 · A175 C-SCLCR/L · A182 S-STFCR/L (쪽 번호 = PDF 쪽)"
+  },
+  {
+   "id": "TTK_TH2026",
+   "maker": "대구텍 (TaeguTec)",
+   "title": "TaeguTec Non-Rotating: Thread Making 카탈로그 (T-THREAD)",
+   "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202603/69b8a619612399317283.pdf",
+   "edition": "2026",
+   "listedAt": "https://www.taegutec.com/pages/en/publications/cutting-tools-catalogs/",
+   "pages": "C12 나사 홀더 부호 · C13 SER/L"
+  },
+  {
+   "id": "TTK_EC",
+   "maker": "대구텍 (TaeguTec)",
+   "title": "TaeguTec E-catalogue — External Threading SER/L",
+   "url": "https://www.imc-companies.com/taegutec/ttkCatalog/Family.aspx?fnum=695&mapp=TH&app=78&GFSTYP=M",
+   "edition": "2026-10-29 열람"
+  },
+  {
+   "id": "TTK_NR2024",
+   "maker": "대구텍 (TaeguTec)",
+   "title": "TaeguTec Non-Rotating: All (종합)",
+   "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202402/65dd93884dde05050531.pdf",
+   "edition": "CT 02/2026 (마지막 쪽 'Cat. no.: 6298827, English version: CT 02/2026', PDF 만든 날 2026-03-13, 967쪽). 주소의 폴더 이름은 202402 지만 지금 그 주소에 있는 파일은 2026판이다",
+   "note": "THCER 를 찾으려고 글 전체를 검색했으나 없음. 2024판은 따로 보지 못했다"
+  },
+  {
+   "id": "SVK_PCLNL",
+   "maker": "샌드빅 코로만트 (Sandvik Coromant)",
+   "title": "PCLNL 2525M 12 제품 페이지 (T-Max P)",
+   "url": "https://www.sandvik.coromant.com/en-gb/product-details?c=PCLNL%202525M%2012",
+   "edition": "2026-10-29 열람, Material Id 5738233, 제품 자료의 ValFrom 날짜 1991-01-28 (화면에 '출시일' 이라는 표기는 없음)"
+  },
+  {
+   "id": "SVK_DCKNL",
+   "maker": "샌드빅 코로만트 (Sandvik Coromant)",
+   "title": "DCKNL 2525M 12 제품 페이지 (T-Max P)",
+   "url": "https://www.sandvik.coromant.com/en-gb/product-details?c=DCKNL%202525M%2012",
+   "edition": "2026-10-29 열람, Material Id 5730593, 제품 자료의 ValFrom 날짜 2002-09-09 (화면에 '출시일' 이라는 표기는 없음)"
+  },
+  {
+   "id": "SVK_MVJNR",
+   "maker": "샌드빅 코로만트 (Sandvik Coromant)",
+   "title": "MVJNR 2525M 16 제품 페이지",
+   "url": "https://www.sandvik.coromant.com/en-gb/product-details?c=MVJNR%202525M%2016",
+   "edition": "2026-10-29 열람",
+   "note": "'Product not found' — 샌드빅에는 이 품번이 없음 (대조 때 사이트 검색 'MVJNR' 결과도 인치 단종품 MVJNR 20 4D 뿐)"
+  },
+  {
+   "id": "SVK_STFCR",
+   "maker": "샌드빅 코로만트 (Sandvik Coromant)",
+   "title": "S12M-STFCR 11 · S16R-STFCR 11 제품 페이지 (CoroTurn 107)",
+   "url": "https://www.sandvik.coromant.com/en-gb/product-details?c=S12M-STFCR%2011",
+   "url2": "https://www.sandvik.coromant.com/en-gb/product-details?c=S16R-STFCR%2011",
+   "edition": "2026-10-29 열람, Material Id 5752024 · 5752061. 사이트 검색에서 둘 다 단종(IsObsolete, LCS 90) 표시"
+  },
+  {
+   "id": "MMC_WEB",
+   "maker": "미쓰비시 머티리얼 (Mitsubishi Materials)",
+   "title": "Mitsubishi Materials Web Catalog — 품번 검색 · 제품 페이지",
+   "url": "https://www.mmc-carbide.com/en_jp/webcatalog/search_number/result?iso_order_number=C*SCLC*",
+   "edition": "2026-10-29 열람(웹 자료라 판 번호 없음)",
+   "pages": "C10KSCLCR06 product/20055542 · C12MSCLCR06 product/20055543 · C16RSCLCR09 product/20055544 · PCLNL2525M12 product/20054136 (모두 https://www.mmc-carbide.com/en_jp/webcatalog/product/ 아래). 품번 검색 S*STFC* · S*SCLC* · C*STFC*",
+   "note": "품번 검색 결과: C08K*SCLC* · C12MSCLCR09 · MVJN*2525* · DCKN*2525* · S10KSTFCR09 · S12MSTFCR09/11 · S16RSTFCR11 · SNR0020L09A · THCER* 는 없음"
+  },
+  {
+   "id": "SECO_SNR",
+   "maker": "세코 (Seco Tools)",
+   "title": "SNR0020L09A 제품 페이지 (Snap-Tap 레이다운 인서트 나사 가공, 제품 번호 75069222)",
+   "url": "https://www.secotools.com/article/p_75069222",
+   "edition": "2026-10-29 열람(한국어 화면)"
+  },
+  {
+   "id": "KYO_F2024",
+   "maker": "교세라 (KYOCERA)",
+   "title": "KYOCERA 2024-2026 Global General Catalog (Asia Pacific) — Chapter F Boring",
+   "url": "https://asia.kyocera.com/products/cuttingtools/wp-content/uploads/2025/02/07_Chapter_F_2024_KAP.pdf",
+   "edition": "2024-2026 (PDF 만든 날 2024-10-09)",
+   "listedAt": "https://asia.kyocera.com/products/cuttingtools/catalog-1/",
+   "pages": "F156 슬리브 SH 치수 · F157 SH 슬리브와 맞는 보링바 표"
+  },
+  {
+   "id": "KYO_T2024",
+   "maker": "교세라 (KYOCERA)",
+   "title": "KYOCERA 2024-2026 Global General Catalog (Asia Pacific) — Chapter T Index",
+   "url": "https://asia.kyocera.com/products/cuttingtools/wp-content/uploads/2025/02/17_Chapter_T_Index_2024_KAP.pdf",
+   "edition": "2024-2026",
+   "note": "색인: 'SH OOOO-OOO  F156  Sleeve (for Boring bars)'"
+  },
+  {
+   "id": "ISCAR_PICCO",
+   "maker": "이스카 (ISCAR)",
+   "title": "PICCO Solid Carbide Mini Boring Bars 제품 페이지",
+   "url": "https://www.iscar.com/products.aspx/lang/en/productid/39",
+   "edition": "2026-10-29 열람"
+  },
+  {
+   "id": "ISO_5608",
+   "maker": "ISO",
+   "title": "ISO 5608:2012 Turning and copying tool holders and cartridges for indexable inserts — Designation",
+   "url": "https://www.iso.org/standard/60180.html",
+   "edition": "4판 2012-08, 2023 재확인(iso.org 페이지: 'last reviewed and confirmed in 2023')",
+   "note": "규격 본문은 유료라 읽지 않았다(제목 · 판은 iso.org 페이지로 확인, 요약: 사각 자루 선삭 홀더). 기호 풀이는 아래 제조사 설명 쪽을 출처로 썼다"
+  },
+  {
+   "id": "ISO_6261",
+   "maker": "ISO",
+   "title": "ISO 6261:2011 Tool holders with cylindrical shank (boring bars) for indexable inserts — Designation",
+   "url": "https://www.iso.org/standard/52308.html",
+   "edition": "3판 2011-09, 폐지(Withdrawn) — iso.org 페이지에 'Revised by ISO 5609-1:2012'",
+   "note": "보링바 부호는 ISO 5608 이 아니라 이 규격(지금은 ISO 5609-1) 쪽이다. 본문은 읽지 않았다"
+  },
+  {
+   "id": "ISO_5610",
+   "maker": "ISO",
+   "title": "ISO 5610-1:2010 Tool holders with rectangular shank for indexable inserts — Part 1: General survey, correlation and determination of dimensions",
+   "url": "https://scc-ccn.ca/standardsdb/standards/8145586",
+   "edition": "2010-07-13, 캐나다 표준위원회(SCC) 목록에서 'Withdrawn'",
+   "note": "SCC 목록의 요약: 사각 자루 홀더의 모양과 치수는 ISO 5610-2 ~ 5610-15 에 따른다. iso.org 쪽은 열지 못했다. 본문은 읽지 않았다"
+  },
+  {
+   "id": "RETAIL_THCER",
+   "maker": "판매처 (공식 아님)",
+   "title": "아이씨뱅큐 '[대구텍] 외경나사홀더 THCER2525M16Q' (부제 'THCER 2525 M16-Q')",
+   "url": "https://www.icbanq.com/P013138100",
+   "edition": "2026-10-29 열람",
+   "note": "제목은 대구텍, '제조사' 칸은 유통사 크레텍. 또 다른 판매처 검색 결과 제목 '대구텍종합 외경나사홀더 3800024 THCER 2525 M16'(http://09m.kr/goods/goods_view.php?goodsNo=1006217605, 쪽은 열지 않음). 값 출처로 쓰지 않음"
+  }
+ ],
+ "codeSystem": {
+  "standards": "외경 홀더 부호 = ISO 5608 (ISO_5608), 사각 자루 홀더 치수 = ISO 5610-1 ~ 5610-15 (ISO_5610), 보링바 부호 = ISO 6261 → ISO 5609-1 (ISO_6261). 규격 본문 대신 제조사 설명 쪽(KOR_T2526 B86 · B121, TTK_T2026 A44 · A164, TTK_TH2026 C12)을 출처로 쓴다",
+  "external": {
+   "example": "P C L N L 25 25 M 12 (KOR_T2526 B86 의 P S K N R 25 25 - M 12 꼴)",
+   "positions": [
+    {"pos": 1, "name": "고정 방식", "symbols": {"C": "위 누름(구멍 없음)", "D": "위 · 구멍 누름(한국야금 Double Clamp)", "M": "위 · 구멍 누름(Multi clamp, 핀과 클램프)", "P": "구멍 누름(레버 · 핀 락)", "S": "나사 고정", "W": "위 · 구멍 누름 (한국야금 B86; 대구텍 A44 는 Wedge clamp)", "T": "T-holder (대구텍 A44)", "H": "Hook lever (대구텍 A44)"}, "source": "KOR_T2526 B86, TTK_T2026 A44"},
+    {"pos": 2, "name": "인서트 모양", "symbols": {"C": "마름모 80°", "D": "마름모 55°", "E": "마름모 75°", "K": "평행사변형 55°", "R": "원", "S": "정사각 90°", "T": "삼각 60°", "V": "마름모 35°", "W": "삼각형꼴 80°"}, "source": "KOR_T2526 B86, TTK_T2026 A44"},
+    {"pos": 3, "name": "홀더 모양(절입각)", "symbols": {"B": "75°", "D": "45°", "E": "60°", "F": "90° (대구텍 A44 는 91°)", "G": "90° (대구텍 A44 는 91°)", "J": "93°", "K": "75°", "L": "95°", "N": "62.5°", "R": "75°", "S": "45°", "T": "60°", "V": "72.5°", "Y": "85° (한국야금)"}, "source": "KOR_T2526 B86, TTK_T2026 A44"},
+    {"pos": 4, "name": "인서트 여유각", "symbols": {"N": "0°", "B": "5°", "C": "7°", "P": "11°", "D": "15°", "E": "20°", "F": "25°"}, "source": "KOR_T2526 B86, TTK_T2026 A44"},
+    {"pos": 5, "name": "손", "symbols": {"R": "오른손", "L": "왼손", "N": "중립"}, "source": "KOR_T2526 B86"},
+    {"pos": "6 · 7", "name": "자루 높이 H · 폭 B (mm)", "symbols": {"2525": "25 × 25"}, "source": "KOR_T2526 B86"},
+    {"pos": 8, "name": "홀더 길이 LF", "symbols": {"H": "100", "J": "110", "K": "125", "L": "140", "M": "150", "N": "160", "P": "170", "Q": "180", "R": "200", "S": "250", "T": "300"}, "source": "KOR_T2526 B86"},
+    {"pos": 9, "name": "인서트 날 길이", "symbols": {"12": "C 인서트 12 (CN 1204)", "16": "V 인서트 16 (VN 1604)"}, "source": "KOR_T2526 B86"}
+   ]
+  },
+  "boring": {
+   "example": "S 12 M - S T F C R - 11 (자리 나눔은 KOR_T2526 B121 · TTK_T2026 A164 를 따름. 두 쪽에 실린 예는 각각 S12M-STFPR-11 · S32S-CTFPR-16)",
+   "positions": [
+    {"pos": 1, "name": "바 종류", "symbols": {"S": "강 자루", "A": "강 자루 · 절삭유 구멍", "C": "카바이드 자루", "E": "카바이드 자루 · 절삭유 구멍(한국야금: 강 머리 붙임)", "X": "특수"}, "source": "KOR_T2526 B121, TTK_T2026 A164"},
+    {"pos": 2, "name": "바 지름 DCON (mm)", "symbols": {"08": "8", "10": "10", "12": "12", "16": "16"}, "source": "KOR_T2526 B121"},
+    {"pos": 3, "name": "바 길이 LF (mm)", "symbols": {"H": "100", "J": "110", "K": "125", "M": "150", "N": "160", "Q": "180", "R": "200", "S": "250", "T": "300", "U": "350", "V": "400", "W": "450", "Y": "500"}, "source": "KOR_T2526 B121 (대구텍 A164 표는 K 부터)"},
+    {"pos": 4, "name": "고정 방식", "symbols": {"C": "위 누름", "D": "위 · 구멍 누름", "M": "위 · 구멍 누름", "P": "구멍 누름", "S": "나사 고정"}, "source": "KOR_T2526 B121"},
+    {"pos": 5, "name": "인서트 모양", "symbols": {"C": "마름모 80°", "T": "삼각 60°"}, "source": "KOR_T2526 B121"},
+    {"pos": 6, "name": "절입각", "symbols": {"L": "95°", "F": "90° (한국야금 B121) / 91° (대구텍 A164)", "U": "93°", "K": "75°", "Q": "107.5° (대구텍 A164 는 45°)", "Z": "93° (한국야금 93°(95°))", "J": "52° (한국야금)", "W": "60° (한국야금)", "P": "117.5° (대구텍)"}, "source": "KOR_T2526 B121, TTK_T2026 A164"},
+    {"pos": 7, "name": "인서트 여유각", "symbols": {"N": "0°", "B": "5°", "C": "7°", "P": "11°"}, "source": "KOR_T2526 B121, TTK_T2026 A164"},
+    {"pos": 8, "name": "손", "symbols": {"R": "오른손(왼손 인서트를 씀 — 대구텍 A164)", "L": "왼손"}, "source": "TTK_T2026 A164"},
+    {"pos": 9, "name": "인서트 날 길이", "symbols": {"06": "CC 0602", "09": "CC 09T3 / TC 0902", "11": "TC 1102 (대구텍은 '1102' 로 씀)"}, "source": "KOR_T2526 B121 · B132 · B137, TTK_T2026 A182"}
+   ]
+  },
+  "threading": {
+   "note": "대구텍 SER 2020 K 16 꼴: S 나사 고정 · E 외경(I 내경) · R 오른손 · 자루 2020 · 길이 기호(K 125, L 140, M 150 …) · 인서트 크기(16 = IC 9.52 mm). THCER · SNR 의 앞 글자 뜻은 공식 출처로 확인 못 함",
+   "source": "TTK_TH2026 C12"
+  },
+  "differences": [
+   "절입각 F: 한국야금 B121 = 90°, 대구텍 A164 = 91°. 같은 STFCR 바의 κr 이 제조사마다 90 / 91 로 다르게 적혀 있다(한국야금 디지털 카탈로그 C20S-STFCR-11 은 KAPR 91, 샌드빅 S12M-STFCR 11 · S16R-STFCR 11 도 KAPR_1 91).",
+   "보링바 절입각 Q: 한국야금 107.5°, 대구텍 45°."
+  ]
+ },
+ "holders": [
+  {
+   "code": "DCKNL2525M12",
+   "kind": "외경 바이트",
+   "decode": "D 위 · 구멍 누름(더블 클램프) · C 80° 인서트를 100° 모서리로 씀 · K 75° · N 여유각 0° · L 왼손 · 자루 25×25 · M 150 · 12 (CN 1204)",
+   "simulator": {
+    "kappa": null,
+    "why": "K 꼴의 KAPR 75° 는 정면(X) 이송 기준이다 — 대구텍 Turning 2026 A44 의 홀더 모양 K 그림은 75° 를 자루 축(X) 쪽 기준선에서 재고(B · L · J 는 Z 쪽), 한국야금 B91(PDF 159) DCKNR/L 의 작업 그림은 끝면을 따라 이송한다. 시뮬레이터 κr 은 Z 이송(척 쪽 선삭) 기준이라 75 를 넣으면 다른 공구(B 꼴 75°)가 되어 정면 깎기에서 끝면을 판다. Z 이송으로 보면 100° 모서리라 κr 95° · 뒤날 −15° 여서 앱 공구 모양(80° 모서리 · 뒤날 0° 이상)으로 그릴 수 없다 — κr 은 빈칸(앱 가정 C 95°, 끝면 쪽 날은 실제와 같음)"
+   },
+   "makers": [
+    {
+     "maker": "한국야금", "designation": "DCKNL2525-M12", "edp": "1-06-018472",
+     "values": {"KAPR": 75, "H": 25, "B": 25, "HF": 25, "LF": 150, "WF": 32, "LH": 21, "insert": "CN□□1204□□", "masterInsert": "CNMG120408", "insertCornerUsed": 100, "insertShape": "C", "edge": 12},
+     "sourceIds": ["KOR_T2526", "KOR_DC"], "page": "B91 (PDF 159)", "missing": []
+    },
+    {
+     "maker": "샌드빅 코로만트", "designation": "DCKNL 2525M 12", "edp": "5730593",
+     "values": {"KAPR": 75, "PSIR": 15, "H": 25, "B": 25, "HF": 25, "LF": 150, "OAL": 153.09, "LPR": 153.09, "WF": 32, "OHX": 21.2, "GAMO": -6, "LAMS": -6, "insert": "CNMG 120408 (100deg)", "masterInsert": "CNMG 12 04 08", "insertCornerUsed": 100, "insertShape": "C", "edge": 12},
+     "sourceIds": ["SVK_DCKNL"], "page": "제품 데이터", "missing": ["LH — OHX 로 적음"]
+    }
+   ],
+   "notFoundMakers": ["대구텍 — 2026 선삭 카탈로그(TTK_T2026)와 종합 카탈로그(TTK_NR2024, CT 02/2026)에 DCKN 홀더 없음", "미쓰비시 — 품번 검색 DCKN*2525* 결과 없음 (MMC_WEB)"]
+  },
+  {
+   "code": "MVJNR2525M16",
+   "kind": "외경 바이트",
+   "decode": "M 위 · 구멍 누름 · V 35° · J 93° · N 여유각 0° · R 오른손 · 자루 25×25 · M 150 · 16 (VN 1604)",
+   "makers": [
+    {
+     "maker": "한국야금", "designation": "MVJNR2525-M16", "edp": "1-06-006851",
+     "values": {"KAPR": 93, "H": 25, "B": 25, "HF": 25, "LF": 150, "WF": 32, "LH": 45.5, "insert": "VN□□1604□□", "masterInsert": "VNMG160408", "insertShape": "V", "edge": 16},
+     "sourceIds": ["KOR_T2526", "KOR_DC"], "page": "B112 (PDF 180)", "missing": []
+    },
+    {
+     "maker": "대구텍", "designation": "MVJNR/L 2525 M16",
+     "values": {"KAPR": 93, "H": 25, "B": 25, "HF": 25, "LF": 150, "WF": 32, "LH": 42, "insert": "VN... 1604...", "masterInsert": null, "insertShape": "V", "edge": 16},
+     "sourceIds": ["TTK_T2026"], "page": "A55", "missing": ["masterInsert"]
+    }
+   ],
+   "notFoundMakers": ["샌드빅 코로만트 — 제품 페이지 'Product not found' (SVK_MVJNR)", "미쓰비시 — 품번 검색 MVJN*2525* 결과 없음 (MMC_WEB)"]
+  },
+  {
+   "code": "PCLNL2525M12",
+   "kind": "외경 바이트",
+   "decode": "P 구멍(레버) 누름 · C 80° · L 95° · N 여유각 0° · L 왼손 · 자루 25×25 · M 150 · 12 (CN 1204)",
+   "makers": [
+    {
+     "maker": "한국야금", "designation": "PCLNL2525-M12", "edp": "6-01-010621",
+     "values": {"KAPR": 95, "H": 25, "B": 25, "HF": 25, "LF": 150, "WF": 32, "LH": 28, "insert": "CN□□1204□□", "masterInsert": "CNMG120408", "insertShape": "C", "edge": 12},
+     "sourceIds": ["KOR_T2526", "KOR_DC"], "page": "B97 (PDF 165)", "missing": []
+    },
+    {
+     "maker": "대구텍", "designation": "PCLNR/L 2525 M12",
+     "values": {"KAPR": 95, "H": 25, "B": 25, "HF": 25, "LF": 150, "WF": 32, "LH": 27, "insert": "CN... 1204...", "masterInsert": null, "insertShape": "C", "edge": 12},
+     "sourceIds": ["TTK_T2026"], "page": "A59", "missing": ["masterInsert — 카탈로그 표는 CN... 1204... 만 적음"]
+    },
+    {
+     "maker": "샌드빅 코로만트", "designation": "PCLNL 2525M 12", "edp": "5738233",
+     "values": {"KAPR": 95, "PSIR": -5, "H": 25, "B": 25, "HF": 25, "LF": 150, "OAL": 150, "WF": 32, "OHX": 27.2, "GAMO": -6, "LAMS": -6, "insert": "CNMG 120408", "masterInsert": "CNMG 12 04 08", "insertShape": "C", "edge": 12},
+     "sourceIds": ["SVK_PCLNL"], "page": "제품 데이터", "missing": ["LH — 샌드빅은 OHX(최대 돌출)로 적음"]
+    },
+    {
+     "maker": "미쓰비시 머티리얼", "designation": "PCLNL2525M12", "edp": "104063",
+     "values": {"KAPR": 95, "H": 25, "B": 25, "HF": 25, "LF": 150, "WF": 32, "LH": 28, "HAND": "L", "insert": "CN〇A1204〇〇, CN〇G1204〇〇, CN〇M1204〇〇", "masterInsert": null, "insertShape": "C", "edge": 12},
+     "sourceIds": ["MMC_WEB"], "page": "product/20054136 Product Details", "missing": ["masterInsert — 제품 페이지에 MIID 칸 없음", "GAMO · LAMS — 페이지에 '6°' 로만 나와 부호를 확인 못 해 적지 않음"]
+    }
+   ]
+  },
+  {
+   "code": "SNR0020L09A",
+   "kind": "내경 나사 보링바",
+   "decode": "공식 부호 설명은 못 찾았다. 제품 데이터와 글자가 맞아 보이는 것만: S ↔ ICS S(나사 고정) · R ↔ HAND R · 0020 ↔ DCONMS 20 · L ↔ LF 140 (한국야금 B86 길이 기호 L-140 과 같음) · 09 ↔ CTWS 09NR. N 과 끝 A 의 뜻은 확인 못 함(제품 데이터의 VER 은 Internal)",
+   "makers": [
+    {
+     "maker": "세코", "designation": "SNR0020L09A", "edp": "75069222",
+     "values": {"DCON": 20, "B": 19.0, "H": 18.0, "LF": 140, "LU": 20.0, "WF": 5.1, "DMIN": 10.2, "HAND": "R", "insertSeat": "09NR", "coolant": "내부 절삭유", "shank": "원통 (Cylindrical)", "clamp": "S (나사)"},
+     "sourceIds": ["SECO_SNR"], "page": "전체 제원", "missing": ["KAPR — 나사 홀더라 없음"]
+    }
+   ]
+  },
+  {
+   "code": "THCER2525M16",
+   "kind": "외경 나사 홀더",
+   "decode": "ER 2525 M 16 = 외경 · 오른손 · 자루 25×25 · 150 · 16 크기 인서트로 보임(대구텍 SER 부호 C12 와 같은 자리라면). 앞의 TH · C 와 판매처 꼴의 끝 -Q 뜻은 확인 못 함",
+   "makerGuess": "대구텍으로 보임 — 판매처 제목 두 곳(RETAIL_THCER, 그중 하나는 대구텍 번호 3800024). 공식 카탈로그 · 제품 페이지로는 확인 못 함 → 제조사 확인 필요",
+   "makers": [],
+   "reference": {
+    "note": "참고만 — 같은 품번 아님. 대구텍의 지금 25×25 외경 나사 홀더",
+    "maker": "대구텍", "designation": "SER 2525 M16", "edp": "3820002",
+    "values": {"H": 25, "HF": 25, "B": 25, "LF": 150, "WF": 25, "insert": "16 ER...", "helix": 1.5},
+    "sourceIds": ["TTK_TH2026", "TTK_EC"], "page": "C13"
+   },
+   "notFoundMakers": [
+    "대구텍 — 지금 e-카탈로그(번호 3800024 로 열면 검색 화면 'NO DATA' 로 돌아감) · 2026 나사 카탈로그 · 종합 카탈로그(TTK_NR2024, 실제로는 CT 02/2026 판)에 THCER 없음. 옛 판은 보지 못했으므로 '단종' 은 짐작이다",
+    "미쓰비시 · 샌드빅 — 사이트 품번 검색 THCER 결과 없음 (MMC_WEB, 샌드빅 사이트 검색)"
+   ]
+  },
+  {
+   "code": "C08K-SCLCR06",
+   "kind": "보링바 (카바이드 자루)",
+   "decode": "C 카바이드 자루 · 08 지름 8 · K 125 · S 나사 고정 · C 80° · L 95° · C 여유각 7° · R 오른손 · 06 (CC 0602)",
+   "makers": [
+    {
+     "maker": "한국야금", "designation": "C08K-SCLCR-06", "edp": "6-01-012030",
+     "values": {"DCON": 8, "WF": 5, "DMIN": 10, "KAPR": 95, "LF": 125, "H": 7, "OHX": 93.75, "insert": "CC□T0602□□", "masterInsert": "CCGT060204", "insertShape": "C", "edge": 6},
+     "sourceIds": ["KOR_T2526", "KOR_DC"], "page": "B132 (PDF 200)", "missing": ["OHN — 카바이드형은 카탈로그에 '-'", "LU — 칸 없음"]
+    },
+    {
+     "maker": "대구텍", "designation": "C08K SCLCR 06",
+     "values": {"DCON": 8, "WF": 6, "DMIN": 11, "KAPR": 95, "LF": 125, "H": 7, "LDRED": 15, "insert": "CC... 0602...", "masterInsert": null, "insertShape": "C", "edge": 6},
+     "sourceIds": ["TTK_T2026"], "page": "A175", "missing": ["masterInsert"]
+    }
+   ],
+   "notFoundMakers": ["교세라 — C 형 SCLC-A(N) 는 03 · 04 크기(C04G~C07K)만, 06 · 09 는 E 형(E08L …)이고, 카바이드 06 은 C080X-SCLCR06-100EZP 같은 다른 꼴뿐(KYO_F2024 F31 · F32 · F62)", "미쓰비시 — 8 mm 는 C08HSCLCR06(길이 H) 꼴뿐, C08K 없음 (MMC_WEB)", "샌드빅 — 사이트 검색 C08K-SCLCR 결과 없음"]
+  },
+  {
+   "code": "C10K-SCLCR06",
+   "kind": "보링바 (카바이드 자루)",
+   "decode": "C 카바이드 · 10 · K 125 · SCLCR · 06",
+   "makers": [
+    {
+     "maker": "한국야금", "designation": "C10K-SCLCR-06", "edp": "6-01-012031",
+     "values": {"DCON": 10, "WF": 6, "DMIN": 12, "KAPR": 95, "LF": 125, "H": 9, "OHX": 93.75, "insert": "CC□T0602□□", "masterInsert": "CCMT060204", "insertShape": "C", "edge": 6},
+     "sourceIds": ["KOR_T2526", "KOR_DC"], "page": "B132 (PDF 200)", "missing": ["OHN", "LU"]
+    },
+    {
+     "maker": "대구텍", "designation": "C10K SCLCR 06",
+     "values": {"DCON": 10, "WF": 7, "DMIN": 13, "KAPR": 95, "LF": 125, "H": 9, "LDRED": 15, "insert": "CC... 0602...", "masterInsert": null, "insertShape": "C", "edge": 6},
+     "sourceIds": ["TTK_T2026"], "page": "A175", "missing": ["masterInsert"]
+    },
+    {
+     "maker": "미쓰비시 머티리얼", "designation": "C10KSCLCR06", "edp": "347160",
+     "values": {"DCON": 10, "WF": 7, "DMIN": 13, "KAPR": 95, "LF": 125, "H": 9, "LDRED": 16, "HAND": "R", "insert": "CC〇B0602〇〇, CC〇H0602〇〇, CC〇T0602〇〇, CC〇W0602〇〇", "masterInsert": "CCMT060204", "insertShape": "C", "edge": 6},
+     "sourceIds": ["MMC_WEB"], "page": "product/20055542 Product Details (S_SCLC_C, Carbide shank)", "missing": ["LU — 칸 없음"]
+    }
+   ]
+  },
+  {
+   "code": "C12M-SCLCR06",
+   "kind": "보링바 (카바이드 자루)",
+   "decode": "C 카바이드 · 12 · M 150 · SCLCR · 06",
+   "makers": [
+    {
+     "maker": "한국야금", "designation": "C12M-SCLCR-06", "edp": "6-01-012033",
+     "values": {"DCON": 12, "WF": 9, "DMIN": 16, "KAPR": 95, "LF": 150, "H": 11, "OHX": 112.5, "insert": "CC□T0602□□", "masterInsert": "CCMT060204", "insertShape": "C", "edge": 6},
+     "sourceIds": ["KOR_T2526", "KOR_DC"], "page": "B132 (PDF 200)", "missing": ["OHN", "LU"]
+    },
+    {
+     "maker": "대구텍", "designation": "C12M SCLCR 06",
+     "values": {"DCON": 12, "WF": 9, "DMIN": 16, "KAPR": 95, "LF": 150, "H": 11, "LDRED": 18, "insert": "CC... 0602...", "masterInsert": null, "insertShape": "C", "edge": 6},
+     "sourceIds": ["TTK_T2026"], "page": "A175", "missing": ["masterInsert"]
+    },
+    {
+     "maker": "미쓰비시 머티리얼", "designation": "C12MSCLCR06", "edp": "598364",
+     "values": {"DCON": 12, "WF": 9, "DMIN": 16, "KAPR": 95, "LF": 150, "H": 11, "LDRED": 20, "HAND": "R", "insert": "CC〇B0602〇〇, CC〇H0602〇〇, CC〇T0602〇〇, CC〇W0602〇〇", "masterInsert": "CCMT060204", "insertShape": "C", "edge": 6},
+     "sourceIds": ["MMC_WEB"], "page": "product/20055543 Product Details (S_SCLC_C, Carbide shank)", "missing": ["LU — 칸 없음"]
+    }
+   ]
+  },
+  {
+   "code": "C12M-SCLCR09",
+   "kind": "보링바 (카바이드 자루)",
+   "decode": "C 카바이드 · 12 · M 150 · SCLCR · 09 (CC 09T3)",
+   "makers": [
+    {
+     "maker": "한국야금", "designation": "C12M-SCLCR-09", "edp": "6-01-012035",
+     "values": {"DCON": 12, "WF": 9, "DMIN": 16, "KAPR": 95, "LF": 150, "H": 11, "OHX": 112.5, "insert": "CC□T09T3□□", "masterInsert": "CCMT09T308", "insertShape": "C", "edge": 9},
+     "sourceIds": ["KOR_T2526", "KOR_DC"], "page": "B132 (PDF 200)", "missing": ["OHN", "LU"]
+    },
+    {
+     "maker": "대구텍", "designation": "C12M SCLCR 09",
+     "values": {"DCON": 12, "WF": 9, "DMIN": 16, "KAPR": 95, "LF": 150, "H": 11, "LDRED": 18, "insert": "CC... 09T3...", "masterInsert": null, "insertShape": "C", "edge": 9},
+     "sourceIds": ["TTK_T2026"], "page": "A175", "missing": ["masterInsert"]
+    }
+   ],
+   "notFoundMakers": ["미쓰비시 — 품번 검색 C12MSCLCR09 결과 없음, 12 mm 카바이드는 C12MSCLCR06 뿐 (MMC_WEB)"]
+  },
+  {
+   "code": "C16R-SCLCR09",
+   "kind": "보링바 (카바이드 자루)",
+   "decode": "C 카바이드 · 16 · R 200 · SCLCR · 09",
+   "makers": [
+    {
+     "maker": "한국야금", "designation": "C16R-SCLCR-09", "edp": "6-01-012037",
+     "values": {"DCON": 16, "WF": 10, "DMIN": 20, "KAPR": 95, "LF": 200, "H": 15, "OHX": 150, "insert": "CC□T09T3□□", "masterInsert": "CCGT09T308", "insertShape": "C", "edge": 9},
+     "sourceIds": ["KOR_T2526", "KOR_DC"], "page": "B132 (PDF 200)", "missing": ["OHN", "LU"]
+    },
+    {
+     "maker": "대구텍", "designation": "C16R SCLCR 09",
+     "values": {"DCON": 16, "WF": 11, "DMIN": 20, "KAPR": 95, "LF": 200, "H": 15, "LDRED": 25, "insert": "CC... 09T3...", "masterInsert": null, "insertShape": "C", "edge": 9},
+     "sourceIds": ["TTK_T2026"], "page": "A175", "missing": ["masterInsert"]
+    },
+    {
+     "maker": "미쓰비시 머티리얼", "designation": "C16RSCLCR09", "edp": "128258",
+     "values": {"DCON": 16, "WF": 11, "DMIN": 20, "KAPR": 95, "LF": 200, "H": 14, "LDRED": 25, "HAND": "R", "insert": "CC〇B09T3〇〇, CC〇H09T3〇〇, CC〇T09T3〇〇, CC〇W09T3〇〇", "masterInsert": "CCMT09T308", "insertShape": "C", "edge": 9},
+     "sourceIds": ["MMC_WEB"], "page": "product/20055544 Product Details (S_SCLC_C, Carbide shank)", "missing": ["LU — 칸 없음"]
+    }
+   ]
+  },
+  {
+   "code": "S10K-STFCR09",
+   "kind": "보링바 (강 자루)",
+   "decode": "S 강 자루 · 10 · K 125 · S 나사 고정 · T 삼각 · F 90°/91° · C 여유각 7° · R · 09 (TC 0902)",
+   "makers": [
+    {
+     "maker": "대구텍", "designation": "S10K STFCR 09",
+     "values": {"DCON": 10, "WF": 6, "DMIN": 12, "KAPR": 91, "LF": 125, "H": 9, "LDRED": 22.5, "insert": "TC... 0902...", "masterInsert": null, "insertShape": "T", "edge": 9},
+     "sourceIds": ["TTK_T2026"], "page": "A182", "missing": ["masterInsert"]
+    }
+   ],
+   "notFoundMakers": ["한국야금 — 강 자루(S) 10 mm 는 S10M-STFCR-09(길이 150)만 있음. 길이 K(125)의 10 mm 는 카바이드 C10K-STFCR-09 · E10K-STFCR-09 뿐(KOR_T2526 B137). 디지털 카탈로그 검색 S10K-STFCR-09 결과 0", "미쓰비시 — 강 자루 STFC 는 S08FSTFCR09 · S10HSTFCR11 · S12KSTFCR11 · S16MSTFCR11 … 로 S10K 없음 (MMC_WEB 품번 검색 S*STFC*)"]
+  },
+  {
+   "code": "S12M-STFCR09",
+   "kind": "보링바 (강 자루)",
+   "decode": "S 강 · 12 · M 150 · STFCR · 09",
+   "makers": [
+    {
+     "maker": "한국야금", "designation": "S12M-STFCR-09", "edp": "1-06-001871",
+     "values": {"DCON": 12, "WF": 9, "DMIN": 16, "KAPR": 90, "LF": 150, "H": 11, "OHN": 20, "insert": "TC□T0902□□", "masterInsert": "TCMT090204", "insertShape": "T", "edge": 9},
+     "sourceIds": ["KOR_T2526", "KOR_DC"], "page": "B137 (PDF 205)", "missing": ["OHX — 디지털 카탈로그의 S-STFCR 치수 칸이 비어 있음", "LU"]
+    },
+    {
+     "maker": "대구텍", "designation": "S12M STFCR 09",
+     "values": {"DCON": 12, "WF": 9, "DMIN": 16, "KAPR": 91, "LF": 150, "H": 11, "LDRED": 30, "insert": "TC... 0902...", "masterInsert": null, "insertShape": "T", "edge": 9},
+     "sourceIds": ["TTK_T2026"], "page": "A182", "missing": ["masterInsert"]
+    }
+   ],
+   "notFoundMakers": ["미쓰비시 — 품번 검색 S12MSTFCR09 결과 없음 (MMC_WEB)", "샌드빅 — 사이트 검색 S12M-STFCR 결과는 S12M-STFCR/L 11(단종)뿐"]
+  },
+  {
+   "code": "S12M-STFCR11",
+   "kind": "보링바 (강 자루)",
+   "decode": "S 강 · 12 · M 150 · STFCR · 11 (TC 1102)",
+   "makers": [
+    {
+     "maker": "한국야금", "designation": "S12M-STFCR-11", "edp": "1-06-001872",
+     "values": {"DCON": 12, "WF": 9, "DMIN": 16, "KAPR": 90, "LF": 150, "H": 11, "OHN": 20, "insert": "TC□T1102□□", "masterInsert": "TCMT110204", "insertShape": "T", "edge": 11},
+     "sourceIds": ["KOR_T2526", "KOR_DC"], "page": "B137 (PDF 205)", "missing": ["OHX", "LU"]
+    },
+    {
+     "maker": "대구텍", "designation": "S12M STFCR 1102",
+     "values": {"DCON": 12, "WF": 9, "DMIN": 16, "KAPR": 91, "LF": 150, "H": 11, "LDRED": 25, "insert": "TC...T 1102...", "masterInsert": null, "insertShape": "T", "edge": 11},
+     "sourceIds": ["TTK_T2026"], "page": "A182", "missing": ["masterInsert"]
+    },
+    {
+     "maker": "샌드빅 코로만트 (단종 표시)", "designation": "S12M-STFCR 11", "edp": "5752024",
+     "values": {"DCON": 12, "WF": 9, "DMIN": 16, "KAPR": 91, "LF": 150, "H": 11, "OHN": 30, "OHX": 48, "masterInsert": "TCMT 11 02 04", "insertShape": "T", "edge": 11},
+     "sourceIds": ["SVK_STFCR"], "page": "제품 데이터", "missing": ["LU — 칸 없음"], "note": "사이트 검색에서 IsObsolete · LCS 90 — 단종품이라 프리셋 후보에는 넣지 않음"
+    }
+   ],
+   "notFoundMakers": ["미쓰비시 — 품번 검색 S12MSTFCR11 결과 없음 (12 mm 강 자루는 S12KSTFCR11)"]
+  },
+  {
+   "code": "S16R-STFCR11",
+   "kind": "보링바 (강 자루)",
+   "decode": "S 강 · 16 · R 200 · STFCR · 11",
+   "makers": [
+    {
+     "maker": "한국야금", "designation": "S16R-STFCR-11", "edp": "1-06-001904",
+     "values": {"DCON": 16, "WF": 11, "DMIN": 20, "KAPR": 90, "LF": 200, "H": 14, "OHN": 25, "insert": "TC□T1102□□", "masterInsert": "TCMT110204", "insertShape": "T", "edge": 11},
+     "sourceIds": ["KOR_T2526", "KOR_DC"], "page": "B137 (PDF 205)", "missing": ["OHX", "LU"]
+    },
+    {
+     "maker": "대구텍", "designation": "S16R STFCR 1102",
+     "values": {"DCON": 16, "WF": 11, "DMIN": 20, "KAPR": 91, "LF": 200, "H": 15, "LDRED": 35, "insert": "TC...T 1102...", "masterInsert": null, "insertShape": "T", "edge": 11},
+     "sourceIds": ["TTK_T2026"], "page": "A182", "missing": ["masterInsert"]
+    },
+    {
+     "maker": "샌드빅 코로만트 (단종 표시)", "designation": "S16R-STFCR 11", "edp": "5752061",
+     "values": {"DCON": 16, "WF": 11, "DMIN": 20, "KAPR": 91, "LF": 200, "H": 15, "OHN": 35, "OHX": 64, "masterInsert": "TCMT 11 02 04", "insertShape": "T", "edge": 11},
+     "sourceIds": ["SVK_STFCR"], "page": "제품 데이터", "missing": ["LU — 칸 없음"], "note": "사이트 검색에서 IsObsolete · LCS 90 — 단종품이라 프리셋 후보에는 넣지 않음"
+    }
+   ],
+   "notFoundMakers": ["미쓰비시 — 품번 검색 S16RSTFCR11 결과 없음 (16 mm 강 자루는 S16MSTFCR11)"]
+  },
+  {
+   "code": "SH0516-100",
+   "kind": "소경 보링바용 슬리브 (보링바 아님)",
+   "decode": "SH 슬리브 · 05 구멍 지름 5 mm (꽂는 바 자루) · 16 바깥 지름 · 100 길이 (KYO_F2024 F157 표 '05 (5mm)')",
+   "makers": [
+    {
+     "maker": "교세라", "designation": "SH0516-100",
+     "values": {"DCON": 16, "DCB": 5, "DCB2": 6, "H": 14, "LF": 100, "screw": "HS4X4", "wrench": "LW-2"},
+     "sourceIds": ["KYO_F2024", "KYO_T2024"], "page": "F156 (맞는 바 표 F157)",
+     "missing": ["D · f · DMIN · κr — 슬리브라 없음. 끼우는 바의 값을 써야 함", "DCB2 뜻 — 표 그림에서 두 번째 구멍 지름으로 보이나 설명 글은 없음"]
+    }
+   ]
+  },
+  {
+   "code": "SH0616-100",
+   "kind": "소경 보링바용 슬리브 (보링바 아님)",
+   "decode": "SH · 06 구멍 지름 6 mm · 16 · 100",
+   "makers": [
+    {
+     "maker": "교세라", "designation": "SH0616-100",
+     "values": {"DCON": 16, "DCB": 6, "DCB2": 7, "H": 14, "LF": 100, "screw": "HS4X4", "wrench": "LW-2"},
+     "sourceIds": ["KYO_F2024", "KYO_T2024"], "page": "F156 (맞는 바 표 F157)",
+     "missing": ["D · f · DMIN · κr — 슬리브라 없음", "DCB2 뜻"]
+    }
+   ]
+  },
+  {
+   "code": "PICCO",
+   "kind": "초경 일체 소경 보링바 계열 이름 (단일 품번 아님)",
+   "decode": "이스카 PICCO 계열. 이스카 설명: 백보링 · 형상용 최소 구멍 3 mm · 자루 4~7 mm, 0.6 mm 소경용 자루 4 mm, 7xD 긴 목 최소 구멍 4 mm",
+   "makers": [
+    {
+     "maker": "이스카", "designation": "PICCO (계열)",
+     "values": {"shankDia": "4~7 mm (계열 전체)", "DMIN": "0.6 / 3 / 4 mm (모양마다)"},
+     "sourceIds": ["ISCAR_PICCO"], "page": "제품 페이지",
+     "missing": ["어느 PICCO 품번인지 모름 → D · f · DMIN · κr · 인서트 모양은 빈칸"]
+    }
+   ]
+  }
+ ],
+ "presetCandidates": {
+  "note": "앱 HolderPreset(제조사 · 품번 · D · f · DMIN · κr · 모양 · 날 길이 · URL)에 바로 옮길 수 있는 줄. 값은 위 holders 와 같다. 한국야금 κr 은 B121 · B137 의 90°, 대구텍은 A182 의 91° 그대로. 샌드빅 S12M-STFCR 11 · S16R-STFCR 11 은 단종 표시라 넣지 않았다",
+  "rows": [
+   {"maker": "한국야금", "code": "C08K-SCLCR-06", "dia": 8, "f": 5, "dMin": 10, "kappa": 95, "shape": "C", "edge": 6, "url": "https://catalog.korloy.com/app/main.do"},
+   {"maker": "한국야금", "code": "C10K-SCLCR-06", "dia": 10, "f": 6, "dMin": 12, "kappa": 95, "shape": "C", "edge": 6, "url": "https://catalog.korloy.com/app/main.do"},
+   {"maker": "한국야금", "code": "C12M-SCLCR-06", "dia": 12, "f": 9, "dMin": 16, "kappa": 95, "shape": "C", "edge": 6, "url": "https://catalog.korloy.com/app/main.do"},
+   {"maker": "한국야금", "code": "C12M-SCLCR-09", "dia": 12, "f": 9, "dMin": 16, "kappa": 95, "shape": "C", "edge": 9, "url": "https://catalog.korloy.com/app/main.do"},
+   {"maker": "한국야금", "code": "C16R-SCLCR-09", "dia": 16, "f": 10, "dMin": 20, "kappa": 95, "shape": "C", "edge": 9, "url": "https://catalog.korloy.com/app/main.do"},
+   {"maker": "한국야금", "code": "S12M-STFCR-09", "dia": 12, "f": 9, "dMin": 16, "kappa": 90, "shape": "T", "edge": 9, "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf"},
+   {"maker": "한국야금", "code": "S12M-STFCR-11", "dia": 12, "f": 9, "dMin": 16, "kappa": 90, "shape": "T", "edge": 11, "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf"},
+   {"maker": "한국야금", "code": "S16R-STFCR-11", "dia": 16, "f": 11, "dMin": 20, "kappa": 90, "shape": "T", "edge": 11, "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf"},
+   {"maker": "대구텍", "code": "C08K SCLCR 06", "dia": 8, "f": 6, "dMin": 11, "kappa": 95, "shape": "C", "edge": 6, "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202603/69b8a59826f185433660.pdf"},
+   {"maker": "대구텍", "code": "C10K SCLCR 06", "dia": 10, "f": 7, "dMin": 13, "kappa": 95, "shape": "C", "edge": 6, "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202603/69b8a59826f185433660.pdf"},
+   {"maker": "대구텍", "code": "C12M SCLCR 06", "dia": 12, "f": 9, "dMin": 16, "kappa": 95, "shape": "C", "edge": 6, "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202603/69b8a59826f185433660.pdf"},
+   {"maker": "대구텍", "code": "C12M SCLCR 09", "dia": 12, "f": 9, "dMin": 16, "kappa": 95, "shape": "C", "edge": 9, "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202603/69b8a59826f185433660.pdf"},
+   {"maker": "대구텍", "code": "C16R SCLCR 09", "dia": 16, "f": 11, "dMin": 20, "kappa": 95, "shape": "C", "edge": 9, "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202603/69b8a59826f185433660.pdf"},
+   {"maker": "대구텍", "code": "S10K STFCR 09", "dia": 10, "f": 6, "dMin": 12, "kappa": 91, "shape": "T", "edge": 9, "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202603/69b8a59826f185433660.pdf"},
+   {"maker": "대구텍", "code": "S12M STFCR 09", "dia": 12, "f": 9, "dMin": 16, "kappa": 91, "shape": "T", "edge": 9, "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202603/69b8a59826f185433660.pdf"},
+   {"maker": "대구텍", "code": "S12M STFCR 1102", "dia": 12, "f": 9, "dMin": 16, "kappa": 91, "shape": "T", "edge": 11, "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202603/69b8a59826f185433660.pdf"},
+   {"maker": "대구텍", "code": "S16R STFCR 1102", "dia": 16, "f": 11, "dMin": 20, "kappa": 91, "shape": "T", "edge": 11, "url": "https://www.taegutec.com/pages/wp-content/uploads/kboard_attached/11/202603/69b8a59826f185433660.pdf"},
+   {"maker": "미쓰비시", "code": "C10KSCLCR06", "dia": 10, "f": 7, "dMin": 13, "kappa": 95, "shape": "C", "edge": 6, "url": "https://www.mmc-carbide.com/en_jp/webcatalog/product/20055542"},
+   {"maker": "미쓰비시", "code": "C12MSCLCR06", "dia": 12, "f": 9, "dMin": 16, "kappa": 95, "shape": "C", "edge": 6, "url": "https://www.mmc-carbide.com/en_jp/webcatalog/product/20055543"},
+   {"maker": "미쓰비시", "code": "C16RSCLCR09", "dia": 16, "f": 11, "dMin": 20, "kappa": 95, "shape": "C", "edge": 9, "url": "https://www.mmc-carbide.com/en_jp/webcatalog/product/20055544"}
+  ]
+ },
+ "notFound": [
+  "THCER2525M16 (판매처 꼴 THCER 2525 M16-Q): 대구텍 제품으로 보이나(판매처 제목) 대구텍 공식 카탈로그 · e-카탈로그 · 종합 카탈로그(CT 02/2026)에서 찾지 못함 — 값 전부 빈칸, 제조사 확인 필요. 미쓰비시 · 샌드빅 사이트 검색에도 없음. 대구텍 지금 같은 크기는 SER 2525 M16(참고만).",
+  "SNR · THCER 의 앞 글자(TH · C, 끝 A · Q) 뜻: 공식 출처 없음.",
+  "MVJNR2525M16: 샌드빅(Product not found) · 미쓰비시(품번 검색 없음)에 없음.",
+  "DCKNL2525M12: 대구텍 2026 선삭 · 종합 카탈로그와 미쓰비시 품번 검색에 없음.",
+  "S10K-STFCR09: 한국야금 · 미쓰비시에 없음(대구텍만 찾음).",
+  "C08K-SCLCR06 · C12M-SCLCR09: 교세라 · 미쓰비시 · 샌드빅에 같은 꼴 품번 없음(대구텍 · 한국야금만). C10K-SCLCR06 · C12M-SCLCR06 · C16R-SCLCR09 는 미쓰비시에도 있다(C10KSCLCR06 · C12MSCLCR06 · C16RSCLCR09) — 교세라 · 샌드빅에는 없음.",
+  "S12M-STFCR09: 미쓰비시 · 샌드빅 검색에 없음. S12M-STFCR11 · S16R-STFCR11 은 샌드빅에 있으나 단종 표시.",
+  "PICCO: 이스카 계열 이름까지만 — 어느 품번인지 몰라 값 빈칸.",
+  "외경 바이트(DCKNL · MVJNR · PCLNL)는 한국야금 · 대구텍 · 샌드빅 · 미쓰비시만 봤다(미쓰비시는 PCLNL2525M12 만 있음). 교세라 · 스미토모 · 텅갈로이 등은 보지 않았다.",
+  "보링바 LU(쓸 수 있는 길이): 한국야금 · 대구텍 카탈로그에 칸이 없다(한국야금 OHN 최소 돌출 · OHX 최대 돌출, 대구텍 LDRED 가는 목 길이만)."
+ ],
+ "notes": "같은 꼴 품번이라도 제조사마다 WF · DMIN 이 다르다: C08K-SCLCR06 한국야금 f 5 · DMIN 10 / 대구텍 f 6 · DMIN 11, C10K-SCLCR06 한국야금 6 · 12 / 대구텍 7 · 13, C16R-SCLCR09 한국야금 f 10 / 대구텍 · 미쓰비시 f 11 (H 는 한국야금 · 대구텍 15, 미쓰비시 14). 미쓰비시 C10KSCLCR06 은 f 7 · DMIN 13 으로 대구텍과 같다. STFCR 의 κr 은 한국야금 90° · 대구텍 91° (샌드빅도 91°). 외경 PCLNL 의 머리 길이는 한국야금 · 미쓰비시 LH 28 · 대구텍 LH 27 · 샌드빅 OHX 27.2. 그래서 앱에는 제조사를 고르게 하거나 둘 다 넣어야 한다.",
+ "verification": {
+  "checkedAt": "2026-10-29",
+  "method": "조사와 따로 출처를 다시 열어 칸마다 맞춤: 한국야금 · 대구텍 · 교세라 PDF 는 해당 쪽을 그림으로 그려 눈으로 대조, 한국야금 디지털 카탈로그는 품목 상세(DCON-MS · DMIN · WF · KAPR · OHX · LH · MIID · EPSR), 샌드빅 · 세코 · 이스카 · 대구텍 e-카탈로그 · iso.org 는 페이지를 열어 대조",
+  "result": "적힌 치수 · 각도 · 기준 인서트 · 제품 번호는 모두 출처와 맞았다. 고친 것은 판 표기(TTK_NR2024 는 2026판), 출처에 없는 풀이(SNR 의 N, '평면 있음', '출시'), 틀린 '없음' 주장(미쓰비시 C10K · C12M · C16R-SCLCR 은 있음)과 빠진 제조사(미쓰비시 PCLNL, 샌드빅 단종 STFCR)다"
+ }
+}

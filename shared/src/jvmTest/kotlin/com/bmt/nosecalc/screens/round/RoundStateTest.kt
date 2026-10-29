@@ -240,14 +240,25 @@ class RoundStateTest {
         assertNotNull(s.holderBar())
     }
 
-    /** 프리셋 28 줄: 출처(https) · 노즈R 0.4 · 0.8 에서 맞는 값. 고르면 D · f · DMIN · κr · 모양 · 날 길이를 채우고(돌출 길이는 그대로), 고치면 수정됨 */
+    /**
+     * 프리셋 51 줄(회사 사용 23 이 맨 앞 + 카탈로그 28): 출처(https) · 노즈R 0.4 · 0.8 에서 맞는 값(바 값이 없는 회사 줄은 까닭 글).
+     * 고르면 D · f · DMIN · κr · 모양 · 날 길이를 채우고(돌출 길이는 그대로), 고치면 수정됨
+     */
     @Test
     fun presets() {
-        assertEquals(28, HOLDER_PRESETS.size)
+        assertEquals(51, HOLDER_PRESETS.size)
+        assertEquals(23, COMPANY_PRESETS.size)
+        assertEquals(COMPANY_PRESETS, HOLDER_PRESETS.take(23))
+        assertTrue(HOLDER_PRESETS.drop(23).none { it.company })
         assertEquals(HOLDER_PRESETS.size, HOLDER_PRESETS.map { it.code }.distinct().size)
         for (p in HOLDER_PRESETS) {
             assertTrue(p.url.startsWith("https://"), p.code)
-            for (r in listOf(0.4, 0.8)) assertEquals(emptySet(), HolderCheck.problems(p.bar, r), "${p.code} 노즈R $r")
+            val bar = p.bar
+            if (bar == null) {
+                assertTrue(p.company && p.note != null, p.code)
+                continue
+            }
+            for (r in listOf(0.4, 0.8)) assertEquals(emptySet(), HolderCheck.problems(bar, r), "${p.code} 노즈R $r")
         }
         val s = RoundState()
         s.setHolder("ovh", "40")
@@ -264,6 +275,43 @@ class RoundStateTest {
         assertFalse(s.presetEdited())
         assertEquals("8", s.holder("f"))
         assertEquals("107.5", RoundState().apply { pickPreset(HOLDER_PRESETS.single { it.code == "A16R-SDQCR 07" }) }.holder("kr"))
+    }
+
+    /**
+     * 회사 사용 프리셋(10-29): 같은 품번도 제조사마다 다른 값(C08K-SCLCR06 한국야금 f 5 · 대구텍 f 6), 출처 글에 카탈로그 쪽.
+     * 바 값이 없는 줄(슬리브 SH0516-100)은 여섯 칸을 비우고(돌출 길이 · 안전 여유는 그대로) 바가 없다 — 비운 칸에 넣은 값은 '수정됨' 이 아니다.
+     * 고른 품번은 화면 상태 Saver 를 지난다
+     */
+    @Test
+    fun companyPresets() {
+        val keys = listOf("dia", "f", "dmin", "kr", "shape", "edge")
+        val s = RoundState().apply { typeInner = true }
+        s.setHolder("ovh", "40")
+        s.pickPreset(HOLDER_PRESETS.single { it.code == "C08K-SCLCR-06" })
+        assertEquals(listOf("8", "5", "10", "95", "C", "6"), keys.map(s::holder))
+        assertEquals("한국야금", s.preset!!.maker)
+        assertTrue(s.preset!!.company)
+        assertTrue("B132" in s.preset!!.source!!)
+        s.pickPreset(HOLDER_PRESETS.single { it.code == "C08K SCLCR 06" })
+        assertEquals(listOf("8", "6", "11", "95", "C", "6"), keys.map(s::holder))
+        assertEquals("대구텍", s.preset!!.maker)
+        assertEquals("91", RoundState().apply { pickPreset(HOLDER_PRESETS.single { it.code == "S12M STFCR 09" }) }.holder("kr"))
+        assertEquals("90", RoundState().apply { pickPreset(HOLDER_PRESETS.single { it.code == "S12M-STFCR-09" }) }.holder("kr"))
+
+        s.setHolder("safe", "0.8")
+        s.pickPreset(HOLDER_PRESETS.single { it.code == "SH0516-100" })
+        assertEquals(List(6) { "" }, keys.map(s::holder))
+        assertEquals("40", s.holder("ovh"))
+        assertEquals("0.8", s.holder("safe"))
+        assertNull(s.holderBar())
+        assertEquals("교세라", s.preset!!.maker)
+        assertFalse(s.presetEdited())
+        listOf("6", "4", "8", "95", "C", "6").zip(keys).forEach { (v, k) -> s.setHolder(k, v) }
+        assertNotNull(s.holderBar())
+        assertFalse(s.presetEdited())
+        val back = with(RoundState.Saver) { restore(SaverScope { true }.save(s)!!)!! }
+        assertEquals("SH0516-100", back.preset?.code)
+        assertEquals("6", back.holder("dia"))
     }
 
     /** 칸 오류 글: f 가 모자라면 f 하한(바 윗면이 노즈보다 낮게) */
@@ -490,12 +538,13 @@ class RoundStateTest {
                 Triple(RoundCalc.calc(i).solution!!, RoundCalc.machine(i).solution, true)
             }
             for (p in HOLDER_PRESETS) for (safe in listOf(0.0, 0.5)) {
-                val plan = HolderStop.plan(sol, drawn, 0.4, face, p.bar, safe)
+                val bar = p.bar ?: continue
+                val plan = HolderStop.plan(sol, drawn, 0.4, face, bar, safe)
                 if (plan.result.skip != null) continue
                 for (comp in listOf(false, true)) {
-                    val rows = hitRows(plan, comp, p.bar, backBoring(sol))
+                    val rows = hitRows(plan, comp, bar, backBoring(sol))
                     rows.forEach { it.text }
-                    val v = stopView(plan, comp, sol, drawn, 0.4, p.bar)
+                    val v = stopView(plan, comp, sol, drawn, 0.4, bar)
                     v.text
                     val nc = v.nc ?: continue
                     cuts++

@@ -78,6 +78,7 @@ import com.bmt.nosecalc.screens.polar.polarOriginal12
 import com.bmt.nosecalc.screens.polar.polarTriangle
 import com.bmt.nosecalc.screens.polar.polarTwoFlat
 import com.bmt.nosecalc.screens.polar.polarWgeOd
+import com.bmt.nosecalc.screens.round.HOLDER_PRESETS
 import com.bmt.nosecalc.screens.round.MANUAL
 import com.bmt.nosecalc.screens.round.RoundState
 import com.bmt.nosecalc.screens.round.roundExample
@@ -1168,7 +1169,7 @@ class UiMonkeyTest {
         cfgShift = 2,
     )
 
-    /** 라운드 내경 형상 1~6 · 보링바 카드 · 프리셋 · 안전 끝점 카드 · 3점호 내경 */
+    /** 라운드 내경 형상 1~6 · 보링바 카드 · 프리셋(회사 사용 줄 · 바 값 없는 슬리브 줄 포함) · 안전 끝점 카드 · 3점호 내경 */
     @Test
     fun roundInner() = monkey(
         "roundInner",
@@ -1181,6 +1182,9 @@ class UiMonkeyTest {
             add(screen("라운드 3점호 내경 입구", Feature.ROUND) { RoundScreen(roundManualInnerMouth()) } to shallow)
             add(screen("라운드 3점호 뒤보링", Feature.ROUND) { RoundScreen(roundManualBackBoring()) } to mid)
             add(screen("라운드 3점호 내경 역", Feature.ROUND) { RoundScreen(roundManualInnerRev()) } to shallow)
+            // 회사 사용 프리셋(10-29): 고른 줄의 출처 두 줄 · 바 값이 없어 빈칸이 된 카드(바 없음 안내)에서 프리셋 시트를 다시 연다
+            add(screen("라운드 보링바 회사 프리셋(대구텍 C16R)", Feature.ROUND) { RoundScreen(roundInnerExample(3).apply { pickPreset(HOLDER_PRESETS.single { it.code == "C16R SCLCR 09" }) }) } to mid)
+            add(screen("라운드 보링바 빈 프리셋(슬리브)", Feature.ROUND) { RoundScreen(roundInnerExample(5).apply { pickPreset(HOLDER_PRESETS.single { it.code == "SH0516-100" }) }) } to mid)
         },
         cfgShift = 3,
     )

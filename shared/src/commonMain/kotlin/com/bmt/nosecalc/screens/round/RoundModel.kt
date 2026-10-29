@@ -129,14 +129,17 @@ internal class RoundState(
     /** 고른 프리셋. null = 직접 입력 */
     val preset: HolderPreset? get() = HOLDER_PRESETS.firstOrNull { it.code == values["h/preset"] }
 
-    /** 프리셋을 고르면 D · f · DMIN · κr · 모양 · 날 길이를 채운다(돌출 길이 · 노즈 R 은 그대로). null = 직접 입력(칸은 그대로) */
+    /**
+     * 프리셋을 고르면 D · f · DMIN · κr · 모양 · 날 길이를 채운다(돌출 길이 · 노즈 R 은 그대로). 출처에 없는 칸은 빈칸으로(사용자가 넣는다).
+     * null = 직접 입력(칸은 그대로)
+     */
     fun pickPreset(p: HolderPreset?) {
         values["h/preset"] = p?.code ?: ""
         p?.fields()?.forEach { (k, v) -> setHolder(k, v) }
     }
 
-    /** 프리셋을 고른 뒤 그 값을 고쳤나(프리셋 이름 옆 '(수정됨)') */
-    fun presetEdited(): Boolean = preset?.fields()?.any { (k, v) -> holder(k) != v } ?: false
+    /** 프리셋을 고른 뒤 그 카탈로그 값을 고쳤나(프리셋 이름 옆 '(수정됨)'). 프리셋이 비운 칸에 넣은 값은 고친 것이 아니다 */
+    fun presetEdited(): Boolean = preset?.fields()?.any { (k, v) -> v.isNotEmpty() && holder(k) != v } ?: false
 
     /** 보링바 칸 → 계산기 바. D · f · 모양 · 날 길이 · κr 가 비었거나 숫자가 아니면 null. 돌출 길이 · DMIN 은 비우면 null(그 검사 안 함) */
     fun holderBar(): BoringBar? = BoringBar(
