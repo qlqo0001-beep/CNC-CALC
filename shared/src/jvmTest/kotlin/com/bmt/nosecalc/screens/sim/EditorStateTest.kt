@@ -20,6 +20,13 @@ class EditorStateTest {
         assertEquals(3, ed.lineCount)
         assertEquals(ed.text.length, ed.cursor)
         assertEquals("Z-2.", ed.lineText(1))
+        // 줄마다 LF 뒤 CR 둘(`\n\r\r`)을 붙인 글도 줄 끝 하나 — 빈 줄이 생기지 않는다
+        assertEquals("G00 X10.\nZ2.\nM30\n", EditorState.clean("g00 x10.\n\r\rz2.\n\r\rm30\n\r\r"))
+        // 다른 줄끝: CRLF · CR 하나는 줄 끝 하나, 원래 빈 줄(LF 여럿)은 그대로, 한 글 안에 섞여도 같다
+        assertEquals("G00 X10.\nZ2.\n", EditorState.clean("G00 X10.\r\nZ2.\r\n"))
+        assertEquals("G00 X10.\nZ2.\n", EditorState.clean("G00 X10.\rZ2.\r"))
+        assertEquals("O0001\n\n\nG00 X10.\n", EditorState.clean("O0001\n\n\nG00 X10.\n"))
+        assertEquals("O0001\nG00 X10.\nZ2.\n\nM30\n", EditorState.clean("O0001\n\r\rG00 X10.\r\nZ2.\n\n\r\rM30\r"))
     }
 
     @Test

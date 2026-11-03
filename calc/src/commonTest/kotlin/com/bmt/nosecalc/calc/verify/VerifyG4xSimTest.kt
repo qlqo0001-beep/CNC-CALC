@@ -15,6 +15,7 @@ import com.bmt.nosecalc.calc.TaperWarning
 import com.bmt.nosecalc.calc.sim.ContactKind
 import com.bmt.nosecalc.calc.sim.GSim
 import com.bmt.nosecalc.calc.sim.IssueCode
+import com.bmt.nosecalc.calc.sim.CompStartup
 import com.bmt.nosecalc.calc.sim.MachineSetup
 import com.bmt.nosecalc.calc.sim.MoveKind
 import com.bmt.nosecalc.calc.sim.MoveStep
@@ -351,7 +352,7 @@ class VerifyG4xSimTest {
     // ================================================================ GSim
 
     private fun simRun(prog: List<String>, r: Double, tip: Int, rapid: RapidPath): SimRun =
-        GSim.run(SimInput((pre + prog).joinToString("\n"), MachineSetup(rapidPath = rapid), mapOf(1 to ToolOffset(r, tip))))
+        GSim.run(SimInput((pre + prog).joinToString("\n"), MachineSetup(rapidPath = rapid, compStartup = CompStartup.AB), mapOf(1 to ToolOffset(r, tip))))
 
     /** 기계 원점에서 오는 이동([skip] 줄)은 뺀다 */
     private fun movesOf(run: SimRun, skip: Int): List<NMove> = run.steps.filterIsInstance<MoveStep>()

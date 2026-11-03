@@ -11,6 +11,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.bmt.nosecalc.KeyValueStore
 import com.bmt.nosecalc.calc.InsertShape
+import com.bmt.nosecalc.calc.sim.CompStartup
 import com.bmt.nosecalc.calc.sim.DecimalMode
 import com.bmt.nosecalc.calc.sim.GSim
 import com.bmt.nosecalc.calc.sim.GText
@@ -154,6 +155,10 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
         private set
     var blockSkip: Boolean by mutableStateOf(SetupText.decode(kv.get(ProgramStore.MACHINE))[MACHINE_SKIP] == "1")
         private set
+
+    /** 보정 시작 · 취소 형식(No.5003#1 SUV) — 처음 형식 C(회사 기계) */
+    var compStartup: CompStartup by mutableStateOf(readEnum(MACHINE_SUV, CompStartup.C))
+        private set
     var view: ViewFlags by mutableStateOf(ViewFlags.decode(kv.get(ProgramStore.VIEW)))
         private set
 
@@ -182,6 +187,11 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
         saveMachine()
     }
 
+    fun changeCompStartup(v: CompStartup) {
+        compStartup = v
+        saveMachine()
+    }
+
     fun changeView(v: ViewFlags) {
         view = v
         kv.put(ProgramStore.VIEW, v.encode())
@@ -201,7 +211,7 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
 
     private fun saveMachine() {
         val m = machineText.entries.associate { it.key.key to it.value } +
-            mapOf(MACHINE_PATH to rapidPath.name, MACHINE_DECIMAL to decimal.name, MACHINE_SKIP to if (blockSkip) "1" else "0")
+            mapOf(MACHINE_PATH to rapidPath.name, MACHINE_DECIMAL to decimal.name, MACHINE_SKIP to if (blockSkip) "1" else "0", MACHINE_SUV to compStartup.name)
         kv.put(ProgramStore.MACHINE, SetupText.encode(m))
     }
 
@@ -209,7 +219,10 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
     fun runSetup(): RunSetup {
         fun mv(f: MachineField) = fieldValue(machineText[f], machineOk(f)).orNull()
         fun sv(f: StockField) = fieldValue(stockText[f], stockOk(f)).orNull()
-        return RunSetup(machineOf(machineText, rapidPath, decimal, blockSkip), mv(MachineField.HOME_X), mv(MachineField.HOME_Z), sv(StockField.DIA), sv(StockField.FACE))
+        return RunSetup(
+            machineOf(machineText, rapidPath, decimal, blockSkip, compStartup), mv(MachineField.HOME_X), mv(MachineField.HOME_Z), sv(StockField.DIA), sv(StockField.FACE),
+            mv(MachineField.HOME2_X), mv(MachineField.HOME2_Z),
+        )
     }
 
     /** 마지막 실행 결과(글을 고치고 0.3초 뒤 다시 — 화면이 [runOf] 를 백그라운드에서 불러 넣는다) */
@@ -243,10 +256,10 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
      * (자동 소재는 이송 이동만 보므로 원점과 상관없다).
      */
     fun runOf(text: String, tools: Map<Int, ToolOffset>, setup: RunSetup = runSetup()): SimRun {
-        val first = GSim.run(SimInput(text, setup.machine.copy(home = setup.home(null)), tools))
+        val first = GSim.run(SimInput(text, setup.machineAt(setup.home(null)), tools))
         if (setup.homeX != null && setup.homeZ != null) return first
         val home = setup.home(StockAuto.of(first))
-        return if (home == first.start) first else GSim.run(SimInput(text, setup.machine.copy(home = home), tools))
+        return if (home == first.start) first else GSim.run(SimInput(text, setup.machineAt(home), tools))
     }
 
     fun saveDraft() {
@@ -426,6 +439,7 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
         private const val MACHINE_PATH = "path"
         private const val MACHINE_DECIMAL = "dec"
         private const val MACHINE_SKIP = "skip"
+        private const val MACHINE_SUV = "suv"
 
         /** 화면을 떠났다 와도(앱을 켠 동안) 공구표 · 찾기 · SHIFT · 소재 칸 · 재생 속도를 남긴다. 글 · 커서는 임시 저장에서 다시 읽는다 */
         fun saver(kv: KeyValueStore): Saver<SimState, Any> = Saver(

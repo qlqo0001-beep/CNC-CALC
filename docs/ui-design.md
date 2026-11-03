@@ -641,7 +641,7 @@
 | `CncKeypad.kt` | 화면 아래에 붙는 7 × 4 키패드(위층 아님 — 연 채 편집기를 누를 수 있게), 머리 ↶ ↷ SHIFT 🔍 ▶ 궤적 ✕ |
 | `EditorState.kt` | 글 모델(대문자 · 되돌리기 200 · 찾기 · 줄), 키 배치 `CncRows` · `pressKey` · `nextShift` |
 | `SimModel.kt` | `SimState`(임시 글 · 저장소 · 키패드 · 찾기 · 공구표 · 실행 결과 · 시트 · 묻는 창, Saver) · `ProgramStore`(`sim/prog/<번호>` · `sim/progs`) |
-| `ProgramSheet.kt` | 목록 시트(저장한 프로그램 · 예제 11개) · ⋯ 시트 · 문제 목록 시트 · 묻는 창(번호 · 덮어쓰기 · 저장 안 한 글 · 지우기) |
+| `ProgramSheet.kt` | 목록 시트(저장한 프로그램 · 예제 14개) · ⋯ 시트 · 문제 목록 시트 · 묻는 창(번호 · 덮어쓰기 · 저장 안 한 글 · 지우기) |
 | `SimColors.kt` · `SimIcons.kt` · `SimTexts.kt` | 구문 · 키패드 색(대비표), 선 아이콘, 문제 글 `simIssueText` · 도움말 `SimHelp` |
 
 - 화면 글은 한글, G코드 · 주소 글자 · 단위는 그대로. 번호를 묻는 칸만 숫자 칸(`NumberField` + 칸 묶음, 처음 빈칸) — 나머지 입력은 CNC 키패드.

@@ -10,8 +10,11 @@ import kotlin.math.sin
 
 enum class MoveKind { RAPID, FEED, THREAD }
 
-/** 이동이 어디서 나왔나. 사이클 값은 고정 사이클 단계가 쓴다 */
-enum class StepSrc { BLOCK, CORNER, CYCLE_APPROACH, CYCLE_CUT, CYCLE_RETRACT, CYCLE_RETURN, CYCLE_FINISH, G28_VIA, G28_HOME }
+/**
+ * 이동이 어디서 나왔나. 사이클 값은 고정 사이클 단계가 쓴다. G28_VIA · G28_HOME 은 G30(제2 원점)도.
+ * SHIFT_START · SHIFT_CANCEL = 형식 C 의 이동 없는 G41/G42 · G40 블록에서 노즈를 보정값만큼 옮긴 이동(명령 경로는 그 자리 한 점 — [MachineSetup.compStartup])
+ */
+enum class StepSrc { BLOCK, CORNER, CYCLE_APPROACH, CYCLE_CUT, CYCLE_RETRACT, CYCLE_RETURN, CYCLE_FINISH, G28_VIA, G28_HOME, SHIFT_START, SHIFT_CANCEL }
 
 enum class SpindleDir { STOP, CW, CCW }
 

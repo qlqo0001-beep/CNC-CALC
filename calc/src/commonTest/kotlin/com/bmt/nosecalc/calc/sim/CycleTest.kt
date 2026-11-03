@@ -202,10 +202,13 @@ class CycleTest {
         // S 4-93: 사이클 모드 블록에 축과 T · M 이 같이 = 오류, 모드를 끝낸 G00 블록에서는 된다
         stops(head + listOf("X80.", "X75. T0505 M05"), IssueCode.CYCLE_BLOCK_TM, 7)
         ok(head + listOf("X80.", "G00 X75. T0505 M05", "M30"))
-        // 축 없이 M 만: S 4-93 은 보통 블록이라 하나 FANUC 은 사이클을 한 번 더 돌며 M 을 '함께'(FF 4.1.6 · F0 13.1 주 2(3)) — 순서를 몰라 멈춤
-        stops(head + listOf("M08", "X80.", "G00 X100.", "M30"), IssueCode.CYCLE_REPEAT_MST, 6)
+        // 축 없이 M 만: S 4-93 은 보통 블록이라 하나 FANUC 은 사이클을 한 번 더 돌며 M 을 '함께'(FF 4.1.6 · F0 13.1 주 2(3)) —
+        // 절삭유 · 기계 M 은 사이클 뒤 M, 순서가 결과를 바꾸는 주축 M 은 멈춤(singleCycleRepeatsOnBlockWithoutMove)
+        assertEquals(2, moves(ok(head + listOf("M08", "X80.", "G00 X100.", "M30"))).filter { it.line == 6 }.mapNotNull { it.pass }.distinct().single())
+        stops(head + listOf("M05", "X80.", "G00 X100.", "M30"), IssueCode.CYCLE_REPEAT_MST, 6)
         stops(head + "G80", IssueCode.G80_IN_CYCLE, 6)
         stops(head + "G28 U0.", IssueCode.CYCLE_ONESHOT, 6)
+        stops(head + "G30 U0.", IssueCode.CYCLE_ONESHOT, 6)
         stops(PRE + listOf("G00 X87. Z72.", "G90 X85. F0.25"), IssueCode.WORD_MISSING, 5)
         stops(PRE + listOf("G00 X87. Z72.", "G90 X85. Z30. R1. I1. F0.25"), IssueCode.WORD_NOT_USED, 5)
         stops(PRE + listOf("G00 X87. Z72.", "G90 X85. Z30. ,C1. F0.25"), IssueCode.WORD_NOT_USED, 5)
@@ -709,7 +712,8 @@ class CycleTest {
     /**
      * FF 4.1.6 '- Block in which no move command is specified' · F0 13.1 주 2(1): G90/G92/G94 모드에서 이동 없는 블록(EOB 만 · 주석만 · N 만 ·
      * F 만 · R 만)도 같은 사이클을 한 번 더 — F · R 은 새 값으로. 모달 값이 없으면(모드에 막 들어온 `G90 F0.2`) 사이클 없음(FF 4.1.6).
-     * 축 없는 S · T · M 은 사이클과 '함께'(F0 주 2(3)) 라 멈춤. 모드를 잇는 G18 은 모달 값을 지워(FF 4.1.6) 멈춤.
+     * 축 없는 S · T · 주축 M(M03~M05) · 끝(M02 · M30) · M98/M99 는 사이클과 '함께'(F0 주 2(3)) 라 순서가 결과를 바꿔 멈춤 — 그 밖의 M(기계 M ·
+     * M00 · M01 · M08 · M09)은 사이클을 한 번 더 돈 뒤 M(설계 13.1 · 18). 모드를 잇는 G18 은 모달 값을 지워(FF 4.1.6) 멈춤.
      */
     @Test
     fun singleCycleRepeatsOnBlockWithoutMove() {
@@ -731,7 +735,29 @@ class CycleTest {
         assertEquals(4, at(e, 7).size)
         // 한 줄에 `;` 둘 = 블록 둘 — 두 번째(EOB 만)도 사이클
         assertEquals(8, at(ok(PRE + listOf("G00 X60. Z2.", "G90 X50. Z-20. F0.2;;", "G00 X100.", "M30")), 5).size)
-        for (x in listOf("M08", "S800", "T0101", "G97 S800", "G99")) stops(head + listOf(x, "G00 X100.", "M30"), IssueCode.CYCLE_REPEAT_MST, 6)
+        for (x in listOf("M03", "M05", "M30", "M98 P10", "S800", "T0101", "G97 S800", "G99")) stops(head + listOf(x, "G00 X100.", "M30"), IssueCode.CYCLE_REPEAT_MST, 6)
+        // 기계 M · M01 · M08 · M09: 같은 사이클(마지막 X)을 한 번 더 돈 뒤 M 을 실행
+        for (x in listOf("M71", "M01", "M08")) {
+            val r = ok(head + listOf(x, "G00 X100.", "M30"))
+            val m6 = at(r, 6)
+            assertEquals(4, m6.size, x)
+            assertEquals(2, m6[0].pass, x)
+            near(Pt.ofDia(-20.0, 50.0), m6[1].tip.end, msg = x)
+            val after = r.steps.subList(r.steps.indexOf(m6.last()) + 1, r.steps.size).filter { it.line == 6 }
+            when (x) {
+                "M71" -> assertTrue(r.issues.any { it.code == IssueCode.MACHINE_M && it.line == 6 }, x)
+                "M01" -> assertTrue(after.single() is StopStep, x)
+                else -> assertTrue((after.single() as StateStep).coolant, x)
+            }
+        }
+        // M08 · M09 이어서: 줄마다 사이클을 한 번 더(pass 2 · 3) 돈 뒤 절삭유 켬 · 끔
+        val cool = ok(head + listOf("M08", "M09", "G00 X100.", "M30"))
+        assertEquals(listOf(2, 3), listOf(6, 7).map { at(cool, it)[0].pass })
+        assertEquals(listOf(true, false), cool.steps.filterIsInstance<StateStep>().filter { it.line in 6..7 }.map { it.coolant })
+        // 나사: G92 패스들 뒤 기계 M 만 쓴 줄 → 마지막 패스를 한 번 더(같은 X) 돈 뒤 M, G00 으로 모드를 끝냄
+        val th = ok(PRE + listOf("G00 X10. Z5.", "M71", "G92 X5.76 Z-25. F1.27", "X5.59", "M72", "G00 Z200.", "M30"))
+        assertEquals(listOf(1, 2, 3), moves(th).filter { it.kind == THREAD }.mapNotNull { it.pass })
+        assertEquals(listOf(5.76, 5.59, 5.59), moves(th).filter { it.kind == THREAD }.map { round(it.tip.start.xDia * 1000) / 1000 })
         stops(head + listOf("G18", "G00 X100.", "M30"), IssueCode.CYCLE_ONESHOT, 6)
         stops(head + listOf("G18 X48.", "G00 X100.", "M30"), IssueCode.CYCLE_ONESHOT, 6)
         ok(PRE + listOf("G00 X60. Z2.", "G18 G90 X50. Z-20. F0.2", "G00 X100.", "M30"))

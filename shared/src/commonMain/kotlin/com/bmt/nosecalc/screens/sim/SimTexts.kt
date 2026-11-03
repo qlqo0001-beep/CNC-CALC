@@ -68,21 +68,31 @@ internal fun simIssueText(i: SimIssue): String {
         IssueCode.FULL_CIRCLE -> "원호 시작점과 끝점이 같습니다 — 완전한 원은 지원하지 않습니다"
         IssueCode.COMP_START_ARC -> "보정 시작(G41 / G42)은 직선 블록에서 — 원호로 시작할 수 없습니다"
         IssueCode.COMP_CANCEL_ARC -> "보정 취소(G40)는 직선 블록에서 — 원호로 끝낼 수 없습니다"
-        IssueCode.COMP_START_ZERO -> "보정 시작 블록에 움직임이 없습니다 — G41 / G42 는 움직이는 블록에"
+        IssueCode.COMP_START_ZERO ->
+            if (a0.isNotEmpty()) "${a0}줄 G41 / G42 뒤 움직이는 블록 없이 보정을 끕니다 — 형식 C 의 옮길 방향(다음 이동 블록의 법선)이 없습니다"
+            else "보정 시작 블록에 움직임이 없습니다 — G41 / G42 는 움직이는 블록에(형식 A · B 기계)"
         IssueCode.COMP_ACUTE_OUTER -> "바깥 모서리가 90° 보다 급하게 꺾입니다(${a0}줄과 이음) — 제어기마다 끼우는 길이 달라 지원하지 않습니다"
         IssueCode.COMP_INTERFERENCE -> "노즈 R 보정 간섭 — 보정 경로가 거꾸로 갑니다(${a0}줄과 이음). 요소가 노즈 R 보다 짧거나 홈이 좁습니다"
         IssueCode.COMP_ARC_SMALL -> "오목 원호 R$a0 이 노즈 R$a1 보다 작아 보정할 수 없습니다"
         IssueCode.COMP_IDLE_BLOCKS -> "보정 중 움직임 없는 블록이 둘 넘게 이어집니다 — 보정 경로를 정할 수 없습니다"
-        IssueCode.COMP_SWITCH -> "보정 중 G41 ↔ G42 를 바로 바꿀 수 없습니다 — G40 으로 끈 뒤 다시"
+        IssueCode.COMP_SWITCH -> when {
+            a0 == "G40" -> "G41 ↔ G42 를 바꾼 바로 다음 블록에서 보정을 끕니다 — 그 경로는 확인하지 못해 지원하지 않습니다(한 블록 더 간 뒤에)"
+            a0.isNotEmpty() -> "${a0}줄 원호 끝에서 G41 ↔ G42 를 바꾸는데 두 쪽 보정선이 만나지 않습니다 — 그 경로는 지원하지 않습니다(직선 끝에서 바꾸세요)"
+            else -> "보정 시작 블록 바로 다음 블록에서는 G41 ↔ G42 를 바꿀 수 없습니다(FANUC) — 한 블록 더 간 뒤에, 또는 G40 으로 끈 뒤 다시"
+        }
         IssueCode.COMP_G40_IK -> "G40 의 I · K(빠지는 방향)는 지원하지 않습니다"
         IssueCode.COMP_TOOL_CHANGE -> "보정 중 공구 · 보정 번호를 바꿨습니다($w) — G40 으로 먼저 끄세요"
         IssueCode.COMP_IN_CYCLE -> "보정(G41 / G42) 중에는 고정 사이클을 부르지 않습니다 — 보정은 P~Q 안에서 켜고 끄세요"
-        IssueCode.COMP_AT_G28 -> "보정 중 G28 은 지원하지 않습니다 — G40 으로 먼저 끄세요"
+        IssueCode.COMP_AT_G28 -> "보정 중 G28 · G30 은 지원하지 않습니다 — G40 으로 먼저 끄세요"
         IssueCode.COMP_CANCEL_NO_MOVE -> "${a0}줄에서 움직임 없이 보정을 끈 뒤 원호 · 모서리 · 사이클 · 다시 보정 — 그 경로는 확인하지 못해 지원하지 않습니다(그 앞에 직선 이동을)"
-        IssueCode.COMP_CANCEL_ALONE -> "움직임 없는 G40 — 앞 블록 끝에서 법선으로 서고 다음 직선 이동에서 보정을 풀었습니다(형식 A · B). 형식 C 기계는 이 자리가 다릅니다"
+        IssueCode.COMP_CANCEL_ALONE ->
+            if (a0 == "C") "움직임 없는 G40 — 형식 C: 이 줄에서 노즈가 앞 블록 끝 법선에서 지령점(팁 벡터만큼 뒤)으로 옮겨집니다"
+            else "움직임 없는 G40 — 앞 블록 끝에서 법선으로 서고 다음 직선 이동에서 보정을 풀었습니다(형식 A · B). 형식 C 기계는 이 자리가 다릅니다"
         IssueCode.COMP_NO_OFFSET -> "G41 / G42 인데 T 보정 번호가 00 이라 보정하지 않습니다"
         IssueCode.COMP_NOT_CANCELLED -> "G40 으로 보정을 끄지 않고 프로그램이 끝납니다"
-        IssueCode.COMP_TYPE_A -> "보정 시작 · 취소가 바깥 모서리 — 형식 A(법선)로 그렸습니다. 형식 B 기계는 이 블록 경로가 다릅니다"
+        IssueCode.COMP_TYPE_A ->
+            if (a0 == "C") "이 이동 블록에서 보정이 시작 · 취소됩니다(혼자 줄 G41 / G42 뒤 보정 번호를 이 블록 T 로 준 것도). 바깥 모서리라 형식 A(법선, No.5003#0 SUP = 0)로 그렸습니다 — SUP = 1 기계는 이 블록 경로가 다릅니다"
+            else "보정 시작 · 취소가 바깥 모서리 — 형식 A(법선)로 그렸습니다. 형식 B 기계는 이 블록 경로가 다릅니다"
         IssueCode.AGAINST_TOOL -> "바이트 반대쪽으로 깎습니다 — 팁 번호를 확인하세요"
         IssueCode.TOOL_DATA_MISSING -> {
             val off = a1.padStart(2, '0')
@@ -99,7 +109,7 @@ internal fun simIssueText(i: SimIssue): String {
         IssueCode.CYCLE_MOTION_MISSING -> "G00~G03 이 없습니다 — 고정 사이클 뒤 첫 이동은 G 를 다시 씁니다"
         IssueCode.CYCLE_FIRST_LINE -> "$a0 첫 줄이 없습니다 — 기계 기본값을 몰라 첫 줄 값을 프로그램에 씁니다"
         IssueCode.CYCLE_BLOCK_TM -> "$w: 사이클 블록에 S · T · M 을 같이 쓰지 않습니다 — 앞 블록에"
-        IssueCode.CYCLE_REPEAT_MST -> "$a0 모드에서 축 없이 $w — 제어기는 사이클을 한 번 더 돕니다(지원 안 함). G00 으로 모드를 먼저 끝내세요"
+        IssueCode.CYCLE_REPEAT_MST -> "$a0 모드에서 축 없이 $w — 제어기는 사이클을 한 번 더 돌며 함께 실행해 순서를 알 수 없습니다(지원 안 함). G00 으로 모드를 먼저 끝내세요"
         IssueCode.CYCLE_ONESHOT -> "$a0 모드 중 $w — G00 으로 모드를 먼저 끝내세요"
         IssueCode.CYCLE_PQ_NOT_FOUND -> "$a1 블록이 이 프로그램에 없습니다($a0)"
         IssueCode.CYCLE_PQ_DUP -> "$a0 블록이 둘입니다"
@@ -119,6 +129,7 @@ internal fun simIssueText(i: SimIssue): String {
         IssueCode.M98_IN_PQ -> "$w: P~Q 안에서는 M98 / M99 를 쓰지 않습니다"
         IssueCode.SUB_NOT_FOUND ->
             if (a0.startsWith("N")) "M99 P: $a0 블록이 없습니다" else "O${a0.padStart(4, '0')} 이 이 글에 없습니다"
+        IssueCode.SUB_SKIPPED -> "O${a0.padStart(4, '0')} 이 이 글에 없습니다 — 기계에 따로 있는 부프로그램으로 보고 건너뜁니다(그 안의 이동 · 시간은 빠짐)"
         IssueCode.SUB_NEST -> "부프로그램은 ${a0}단까지 겹칩니다"
         IssueCode.SUB_NO_M99 -> "$a0 부프로그램이 M99 없이 끝납니다"
         IssueCode.M99_MAIN -> "M99: 처음으로 돌아가 반복 — 시뮬레이션은 한 번만"
@@ -215,7 +226,9 @@ internal val SimHelp: List<HelpSection> = listOf(
     HelpSection(
         "시뮬레이션 · 공구 설정",
         listOf(
-            "시뮬레이션 설정: 소재(봉재 지름 · 돌출 · 기장여유 · 구멍 · 척), 기계(급송 · 공구 교환 · 최대 회전수 · 원점 · 급송 경로), 프로그램 읽기(소수점 없는 수 · 블록 스킵 · G92 끝 빼기), 보기 스위치. 빈칸은 자동 값이나 가정 값을 흐린 청록 글로 보입니다.",
+            "시뮬레이션 설정: 소재(봉재 지름 · 돌출 · 기장여유 · 구멍 · 척), 기계(급송 · 공구 교환 · 최대 회전수 · 원점 · 제2 원점 · 급송 경로 · 보정 시작 · 취소 형식), 프로그램 읽기(소수점 없는 수 · 블록 스킵 · G92 끝 빼기), 보기 스위치. 빈칸은 자동 값이나 가정 값을 흐린 청록 글로 보입니다.",
+            "보정 시작 · 취소 형식은 기계 매개변수 No.5003#1 SUV 입니다. 형식 C(SUV = 1, 처음 값)는 이동 없이 쓴 G41 · G42 줄에서 노즈를 다음 이동 블록에 직각으로, G40 줄에서 앞 블록 끝 법선에서 지령점으로 노즈 R 만큼 옮깁니다. 형식 A · B(SUV = 0)는 그 줄에서 움직이지 않습니다. 이동과 같이 쓴 G41 · G42 · G40 은 두 설정 모두 형식 A 로 그립니다.",
+            "형식 C 에서 G40 줄의 옮김이 소재를 깎으면 노란 ▲ 와 띠로 알립니다 — 팁 번호가 바이트 반대쪽이면 마지막에 깎은 면을 팝니다.",
             "공구 설정: 프로그램의 보정 번호마다 종류 · 노즈 R · 팁 번호 · 인서트 · 절입각(홈은 폭, 나사는 각도). G41/G42 를 쓰는 번호는 노즈 R · 팁이 있어야 돕니다(빨간 테).",
             "공구표 · 소재 칸은 앱을 켠 동안만, 기계 · 읽기 · 보기 설정은 다음에 켜도 그대로입니다.",
         ),
@@ -223,15 +236,16 @@ internal val SimHelp: List<HelpSection> = listOf(
     HelpSection(
         "지원하는 G · M 코드",
         listOf(
-            "G00 · G01 · G02 · G03(R 또는 I · K, I 는 반경값) · G04 · G18 · G21 · G28 · G40 · G41 · G42 · G50 S · G54 · G70~G76(FANUC 2줄 형식) · G80 · G90 · G92 · G94 · G96 · G97 · G98 · G99, 모서리 ,C · ,R.",
-            "M00 · M01 · M02 · M30 · M03 · M04 · M05 · M08 · M09 · M98 · M99. 그 밖의 M 은 움직임 없이 건너뛰고 노란 표.",
+            "G00 · G01 · G02 · G03(R 또는 I · K, I 는 반경값) · G04 · G18 · G21 · G28 · G30(제2 원점 — 설정, 빈칸이면 G28 원점) · G40 · G41 · G42 · G50 S(같은 블록 M 받음) · G54 · G70~G76(FANUC 2줄 형식) · G80 · G90 · G92 · G94 · G96 · G97 · G98 · G99, 모서리 ,C · ,R.",
+            "M00 · M01 · M02 · M30 · M03 · M04 · M05 · M08 · M09 · M98 · M99. 그 밖의 M 은 움직임 없이 건너뛰고 노란 표. 글에 없는 부프로그램(M98 P)도 노란 표 뒤 건너뜁니다.",
+            "G90 · G92 · G94 모드에서 기계 M 만 쓴 줄(나사 끝 따위)은 제어기처럼 사이클을 한 번 더 돈 뒤 M 을 실행합니다. 주축(M03~M05) · 끝 · S · T 만 쓴 줄은 순서를 몰라 멈춥니다 — G00 으로 모드를 먼저 끝내세요.",
             "지원 안 함: G20(인치) · G32 · G50 X/Z · G55~G59 · Haas 1줄 사이클 형식 · G71/G72 형식 II · G01 의 I/K/R 모서리 등 — 줄 번호와 함께 알립니다.",
         ),
     ),
     HelpSection(
         "정확 · 모형 · 지원 안 함",
         listOf(
-            "정확 = 출처(FANUC · Siemens · Haas 설명서) 그대로라 숫자를 믿어도 됩니다: G00~G03 · ,C ,R · 노즈R 보정(형식 A) · G90 · G92 · G94 · G70 · G74 · G75.",
+            "정확 = 출처(FANUC · Siemens · Haas 설명서) 그대로라 숫자를 믿어도 됩니다: G00~G03 · ,C ,R · 노즈R 보정(형식 A, 이동 없는 시작 · 취소는 설정의 형식 A · B / C) · G90 · G92 · G94 · G70 · G74 · G75.",
             "모형 = 순서는 출처대로, 층 위치 같은 세부는 우리가 정함(시간 · 층 그림만 다를 수 있음): G71 · G72 층, G73, G76 진입. 남는 모양은 같습니다.",
             "지원 안 함 = 오류로 멈춤.",
         ),

@@ -134,6 +134,49 @@ class StockTest {
         assertTrue(cut(listOf("G00 X40. Z2.", "G01 Z-10. F0.2", "G01 X60.", "G00 Z5.")).contacts.isEmpty())
     }
 
+    /**
+     * 형식 C 의 이동 없는 G40 옮김(설계 3.2 · 5.5): 끝면을 중심 쪽으로 깎고 끝낸 G41 글 — 팁 4(바이트 반대쪽)면 옮김이 끝 법선(Z0.4)에서
+     * 지령점 − 팁 벡터(Z-0.4)로 끝면 속을 지나 CANCEL_CUT(노랑, 7줄). 표준 팁 3 은 깎은 끝면을 따라 올라가 닿음 없음. 형식 A · B 는 그 줄에서 움직이지 않는다.
+     * 공구는 둥근(노즈 원만) — 바이트 몸통이 끝면 깎기에서 먼저 소재를 지우지 않게
+     */
+    @Test
+    fun cancelShiftCut() {
+        val text = listOf("G00 X44. Z2.", "G41 G01 X40. Z0. F0.1", "G01 X10.", "G40", "G00 Z5.")
+        val t4 = mapOf(1 to ToolOffset(0.4, 4, ToolKind.ROUND))
+        val bad = cut(text, tools = t4)
+        val c = bad.contacts.single { it.kind == ContactKind.CANCEL_CUT }
+        assertEquals(7, c.line)
+        assertEquals(StepSrc.SHIFT_CANCEL, (bad.run.steps[c.step] as MoveStep).src)
+        assertTrue(c.area > 0.1, "넓이 ${c.area}")
+        assertTrue(cut(text, tools = mapOf(1 to ToolOffset(0.4, 3, ToolKind.ROUND))).contacts.isEmpty(), "팁 3")
+        val ab = SimKit.ok(SimKit.PRE + text + "M30", t4, MachineSetup(compStartup = CompStartup.AB))
+        assertTrue(StockSim(bar50, ab, t4).also { it.cutTo(ab.totalSec) }.contacts.none { it.kind == ContactKind.CANCEL_CUT })
+    }
+
+    /**
+     * G40 옮김이 깎은 면을 따라 미끄러지면(외경 어깨를 타고 X32 로 뺀 뒤 표준 팁 3 — 옮김 · nₑ = 0, 노즈가 +X 로 0.4) 그 너머 소재를 깎아도
+     * CANCEL_CUT 이 아니다(설계 5.5 — 자동 소재가 크게 잡은 빈 자리의 헛경보). 같은 글에 팁 4 면 옮김이 어깨(앞 블록 면) 속으로 들어가 CANCEL_CUT(8줄)
+     */
+    @Test
+    fun cancelShiftSlideAlongFaceIsNotCut() {
+        val text = listOf("G00 X26. Z2.", "G42 G01 X26. Z0. F0.1", "G01 Z-19.", "G01 X32. F0.3", "G40", "G01 X60.", "G00 Z5.")
+        val t3 = mapOf(1 to ToolOffset(0.4, 3, ToolKind.ROUND))
+        val slide = cut(text, tools = t3)
+        assertTrue(slide.contacts.isEmpty(), "팁 3 ${slide.contacts}")
+        val m8 = slide.run.steps.filterIsInstance<MoveStep>().single { it.line == 8 }
+        assertEquals(StepSrc.SHIFT_CANCEL, m8.src)
+        assertTrue((m8.nose.end - Pt.ofDia(-18.6, 32.8)).length < 1e-9, "팁 3 옮김 끝 ${SimKit.xz(m8.nose.end)}")
+        // 옮김은 소재를 깎기는 한다(둥근 공구라 어깨 위가 남아 있음) — 그래도 경고는 없다
+        fun area(): Double = (0 until slide.columns).sumOf { i -> slide.intervals(i).toList().chunked(2).sumOf { (a, b) -> b - a } * slide.dz }
+        slide.cutTo(m8.t0)
+        val before = area()
+        slide.cutTo(m8.t1)
+        assertTrue(before - area() > 0.1, "옮김이 깎은 넓이 ${before - area()}")
+        val t4 =mapOf(1 to ToolOffset(0.4, 4, ToolKind.ROUND))
+        val dig = cut(text, tools = t4)
+        assertEquals(listOf(ContactKind.CANCEL_CUT to 8), dig.contacts.map { it.kind to it.line })
+    }
+
     /** 척(척 면 Z−40 왼쪽, 반경 < 척 지름/2)에 들어가면 CHUCK — 시각은 닿는 순간 */
     @Test
     fun chuckHit() {

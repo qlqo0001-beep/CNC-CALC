@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.calc.InsertShape
+import com.bmt.nosecalc.calc.sim.CompStartup
 import com.bmt.nosecalc.calc.sim.DecimalMode
 import com.bmt.nosecalc.calc.sim.MachineSetup
 import com.bmt.nosecalc.calc.sim.RapidPath
@@ -61,7 +62,7 @@ import com.bmt.nosecalc.ui.theme.onFill
 /**
  * 시뮬레이션 설정(설계 7.8 — 원본에 없어 우리가 정함): 한 칸 묶음(`FieldChainHost`), 빈칸 = 자동/가정 값(`autoValue`).
  * '소재' [봉재 지름 ØD] [돌출 길이] / [기장여유 (끝면 Z)] [구멍 지름 Ød] / [척 지름] · '기계' [급송 X] [급송 Z] / [공구 교환] [최대 회전수] /
- * [원점 X] [원점 Z] · 급송 경로 · '프로그램 읽기' 소수점 없는 수 · 블록 스킵 · G92 끝 빼기 · '보기' 스위치 다섯.
+ * [원점 X] [원점 Z] / [제2 원점 X] [제2 원점 Z] · 급송 경로 · 보정 시작 · 취소 형식 · '프로그램 읽기' 소수점 없는 수 · 블록 스킵 · G92 끝 빼기 · '보기' 스위치 다섯.
  */
 @Composable
 internal fun SimSettingsSheet(sim: SimState, run: SimRun, bad: Set<StockField>, onDismiss: () -> Unit) {
@@ -94,10 +95,16 @@ internal fun SimSettingsSheet(sim: SimState, run: SimRun, bad: Set<StockField>, 
                     MachineNum(sim, MachineField.TOOL_CHANGE, "공구 교환", "초", d.toolChangeSec)
                     MachineNum(sim, MachineField.MAX_RPM, "최대 회전수", "rpm", d.maxRpm)
                 }
+                val setup = sim.runSetup()
+                val home = setup.home(auto)
                 Pair2 {
-                    val home = sim.runSetup().home(auto)
                     MachineNum(sim, MachineField.HOME_X, "원점 X (직경)", "mm", home.xDia)
                     MachineNum(sim, MachineField.HOME_Z, "원점 Z", "mm", home.z)
+                }
+                Pair2 {
+                    val h2 = setup.home2(home) ?: home
+                    MachineNum(sim, MachineField.HOME2_X, "제2 원점 X (G30)", "mm", h2.xDia)
+                    MachineNum(sim, MachineField.HOME2_Z, "제2 원점 Z (G30)", "mm", h2.z)
                 }
                 Label("급송 경로")
                 Segmented(
@@ -106,6 +113,18 @@ internal fun SimSettingsSheet(sim: SimState, run: SimRun, bad: Set<StockField>, 
                     { sim.changeRapidPath(if (it == 0) RapidPath.DOGLEG else RapidPath.LINEAR) },
                     Modifier.fillMaxWidth(),
                     fontSize = 14,
+                )
+                Label("보정 시작 · 취소 형식 (이동 없는 G41 · G42 · G40 줄)")
+                Segmented(
+                    listOf("형식 A · B (그 줄 멈춤)", "형식 C (그 줄에서 옮김)"),
+                    if (sim.compStartup == CompStartup.AB) 0 else 1,
+                    { sim.changeCompStartup(if (it == 0) CompStartup.AB else CompStartup.C) },
+                    Modifier.fillMaxWidth(),
+                    fontSize = 13,
+                )
+                Note(
+                    "기계 매개변수 No.5003#1 SUV(0 = 형식 A · B, 1 = 형식 C). 형식 C 는 이동 없이 쓴 G41 · G42 줄에서 노즈를 다음 이동 블록에 직각으로, " +
+                        "G40 줄에서 앞 블록 끝 법선에서 지령점으로 노즈 R 만큼 옮깁니다. 이동과 같이 쓴 G41 · G42 · G40 은 둘 다 형식 A 로 그립니다.",
                 )
                 Section("프로그램 읽기", null)
                 Label("소수점 없는 수")
@@ -149,6 +168,12 @@ private fun Section(title: String, note: String?) {
     }
 }
 
+/** 고르기 아래 작은 설명 글 */
+@Composable
+private fun Note(text: String) {
+    Text(keepWords(text), Modifier.padding(top = 6.dp), color = AppTheme.colors.textMuted, fontSize = 12.5.sp, lineHeight = 18.sp)
+}
+
 @Composable
 private fun Label(text: String) {
     Text(text, Modifier.padding(top = 10.dp, bottom = 6.dp), color = AppTheme.colors.fieldNormal.label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -186,7 +211,7 @@ private fun RowScope.MachineNum(sim: SimState, f: MachineField, label: String, u
         label, v, { sim.setMachine(f, it) }, Modifier.weight(1f),
         unit = unit,
         autoValue = numText(assumed),
-        tag = if (f == MachineField.HOME_X || f == MachineField.HOME_Z) null else "가정",
+        tag = if (f in HOME_FIELDS) null else "가정",
         error = fieldValue(v, machineOk(f)) == FieldValue.Bad,
         hint = when (f) {
             MachineField.RAPID_X -> "X 축 슬라이드(반경 방향) 급송 속도. 빈칸 = 20 m/min(가정)"
@@ -195,12 +220,17 @@ private fun RowScope.MachineNum(sim: SimState, f: MachineField, label: String, u
             MachineField.MAX_RPM -> "주축 최대 회전수 — G50 S 와 함께 작은 쪽으로 자름. 빈칸 = 4000 rpm(가정)"
             MachineField.HOME_X -> "G28 원점 · 시작 자리(직경). 빈칸 = max(200, 소재 Ø + 100)"
             MachineField.HOME_Z -> "G28 원점 · 시작 자리. 빈칸 = 끝면 + 100"
+            MachineField.HOME2_X -> "G30 제2 원점(직경). 빈칸 = 원점 X 와 같음"
+            MachineField.HOME2_Z -> "G30 제2 원점. 빈칸 = 원점 Z 와 같음"
             MachineField.G92_CHAMFER -> null
         },
         blankable = true,
         id = "m.${f.key}",
     )
 }
+
+/** 원점 칸(가정 값이 아니라 자동 값 — '가정' 표 없음) */
+private val HOME_FIELDS = setOf(MachineField.HOME_X, MachineField.HOME_Z, MachineField.HOME2_X, MachineField.HOME2_Z)
 
 /** 스위치 한 줄(48dp — 줄 전체를 누른다). 켜짐 = 청록 */
 @Composable

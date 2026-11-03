@@ -271,20 +271,26 @@ private fun TopBar(ui: TrajUi, onClose: () -> Unit) {
 
 /**
  * ⑩ 멈춤 · 닿음 띠(뷰포트 위, 한두 줄): 실행이 멈춘 줄(빨강 + [편집기로] — 공구 값이 없으면 [공구 설정]) · 척 닿음(빨강) ·
- * 급송 깎음(노랑 — 소재가 자동이면 그 말을 붙임). 없으면 그리지 않는다.
+ * 형식 C 의 G40 옮김이 앞 블록 면 쪽으로 들어가며 깎음(노랑 — 팁 번호 확인) · 급송 깎음(노랑). 노랑 둘은 소재가 자동이면 그 말을 붙인다. 없으면 그리지 않는다.
  */
 @Composable
 private fun StatusBand(run: SimRun, contacts: List<Contact>, spec: StockSpec?, autoStock: Boolean, onEditor: (Int) -> Unit, onTools: () -> Unit) {
     val stop = run.stop
     val chuck = contacts.firstOrNull { it.kind == ContactKind.CHUCK }
     val rapid = contacts.filter { it.kind == ContactKind.RAPID_CUT }
+    val cancel = contacts.filter { it.kind == ContactKind.CANCEL_CUT }
+    val auto = if (autoStock && spec != null) " — 소재가 자동 값입니다" else ""
     val (level, text, line) = when {
         stop != null -> Triple(IssueLevel.STOP, "${lineLabel(stop.line)}에서 멈춤 — ${simIssueText(stop)}", stop.line)
         chuck != null -> Triple(IssueLevel.STOP, "${lineLabel(chuck.line)}: 공구가 척에 닿습니다 — 재생이 그 자리에서 멈춥니다 (${xzText(chuck.at)})", chuck.line)
+        cancel.isNotEmpty() -> {
+            val k = cancel.first()
+            val more = if (cancel.size > 1) " 외 ${cancel.size - 1}곳" else ""
+            Triple(IssueLevel.WARN, "${lineLabel(k.line)} G40 줄의 노즈 옮김(형식 C)이 소재를 깎습니다 (${xzText(k.at)})$more — 공구 설정의 팁 번호를 확인하세요$auto", k.line)
+        }
         rapid.isNotEmpty() -> {
             val k = rapid.first()
             val more = if (rapid.size > 1) " 외 ${rapid.size - 1}곳" else ""
-            val auto = if (autoStock && spec != null) " — 소재가 자동 값입니다" else ""
             Triple(IssueLevel.WARN, "${lineLabel(k.line)} G00 이 소재를 지납니다 (${xzText(k.at)})$more$auto", k.line)
         }
         else -> return

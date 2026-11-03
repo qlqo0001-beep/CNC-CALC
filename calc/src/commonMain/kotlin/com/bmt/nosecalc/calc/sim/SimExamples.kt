@@ -10,12 +10,17 @@ data class SimExample(val name: String, val source: String, val text: String, va
  * 편집기 '목록' 의 예제(설계 7.3). 출처 글을 바꾼 곳은 각 글의 주석과 [SimExample.source] 에 적는다:
  * S 예제는 앞에 공구 · 회전 · 이송 줄(T0101 · G97 S1000 M03 · G99)을 붙이고, 체계 B 의 G90(절대)은 뺐으며(12.10),
  * 소수점 없는 좌표는 소수점을 붙였다(S 4-111 `X120` · `Z70`, S 4-116 `X60640 Z25000 R200`). 프로그램 번호는 9000번대.
+ * 회사 꼴 예제(O9020~ — 설계 18.5)는 회사 작성 꼴만 따르고 치수는 계산기 골든 도형(taper-b · round-inner-b3 · thread)으로 새로 지었다.
+ * 회사 글을 옮기지 않는다.
  */
 object SimExamples {
     private val OD = mapOf(1 to ToolOffset(0.4, 3))
     private val PRE = listOf("T0101", "G97 S1000 M03", "G99")
 
     private fun text(o: String, comment: String, body: List<String>) = (listOf("$o ($comment)") + body).joinToString("\n")
+
+    /** 회사 꼴 꼬리: 절삭유 · 주축 끄고, 보정 번호 없는 T 로 보정을 지운 뒤 원점으로, M99 로 끝(설계 18.5) */
+    private fun companyTail(t: String) = listOf("M09", "M05", "M01", t, "G28U0.W0.", "M01", "M99")
 
     val all: List<SimExample> = listOf(
         SimExample(
@@ -138,6 +143,53 @@ object SimExamples {
                 ),
             ),
             mapOf(3 to ToolOffset(0.2, 3, ToolKind.GROOVE, width = 3.0)),
+        ),
+        SimExample(
+            "회사 꼴 ① 외경 — 혼자 줄 G42 · G40 · G41",
+            "우리 예 — 회사 작성 꼴, 테이퍼 X40→X50 · R0.5 · 어깨. 'G40 바로 G41' 은 형식 C 만. T01 R0.4 팁 3",
+            text(
+                "O9020", "회사 꼴 외경",
+                listOf(
+                    "M01",
+                    "N1G50S2400M08(PCLNL2525M12)", "G96S200", "T0101M03",
+                    "G0X58.Z20.", "Z.1", "G1X-2.F.1", "G0Z5.",
+                    "G42", "X36.", "Z3.", "G1Z0.F.1", "X40.", "X50.Z-5.", "Z-9.5F.15", "G2X51.Z-10.R.5", "G1X60.F.3",
+                    "G40", "G41", "X51.F.1", "G3X50.Z-9.5R.5", "G1Z-5.", "X40.Z0.", "X0.",
+                    "G40", "G0Z200.", "M01",
+                ) + companyTail("T0100"),
+            ),
+            OD,
+        ),
+        SimExample(
+            "회사 꼴 ② 내경 — 보링바 혼자 줄 G41",
+            "우리 예 — 회사 작성 꼴, Ø20 · R1 · SR12.5 자리에서 Ø15 구멍으로 빼기. T02 R0.4 팁 2",
+            text(
+                "O9021", "회사 꼴 내경",
+                listOf(
+                    "M01",
+                    "N1G50S2000M08(C08K-SCLCR06)", "G96S150", "T0202M03",
+                    "G41", "G0X20.Z20.", "Z1.", "G1Z-9.659F.1", "G3X19.565Z-10.281R1.", "X15.Z-12.5R12.5F.07", "G1X12.Z-13.4F.3",
+                    "G40", "G0Z150.", "M01",
+                ) + companyTail("T0200"),
+            ),
+            mapOf(2 to ToolOffset(0.4, 2)),
+        ),
+        SimExample(
+            "회사 꼴 ③ 나사 — G92 묶음 · 다른 블록 다듬질",
+            "우리 예 — 회사 작성 꼴, 1/4-20 UNC 바깥(골 X4.688) · 다듬질 두 번은 다른 블록. T03 보정 없음",
+            text(
+                "O9022", "회사 꼴 나사",
+                listOf(
+                    "M01",
+                    "N1G50S1000M08(THCER2525M16Q)", "G97S1000", "T0303M03",
+                    "G0X10.Z20.", "Z5.", "G92X5.76Z-25.F1.27", "X5.56", "X5.4", "X5.26", "X5.14", "X5.03", "X4.93", "X4.84", "X4.76",
+                    "G0Z200.", "M01",
+                    "N2G50S1000M08(THCER2525M16Q)", "G97S1000", "T0303M03",
+                    "G0X10.Z20.", "Z5.", "G92X4.688Z-25.F1.27", "X4.688",
+                    "G0Z200.", "M01",
+                ) + companyTail("T0300"),
+            ),
+            mapOf(3 to ToolOffset(0.0, 0, ToolKind.THREAD)),
         ),
     )
 }

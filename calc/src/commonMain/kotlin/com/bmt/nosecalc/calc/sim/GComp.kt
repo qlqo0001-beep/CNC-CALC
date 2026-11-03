@@ -23,6 +23,7 @@ import kotlin.math.min
  *   접해서 이어짐 → e + nA·r · 안쪽 모서리 → 두 보정선의 교점(e + (nA + nB)·r/2 에 가까운 것) ·
  *   바깥 꺾임 ≤ 90° → 두 보정선을 늘인 교점 · 바깥 꺾임 > 90° → 지원 안 함(COMP_ACUTE_OUTER — 제어기가 끼우는 토막을 출처로 확인 못 함).
  *   시작 블록 끝이 바깥이면 e + nB·r, 취소 블록 앞이 바깥이면 e + nA·r(형식 A).
+ * - 보정 중 G41 ↔ G42 바꿈: 두 쪽 보정선의 교점, 없으면 B 처음 법선([switchTo] — FF 5.4.3).
  * - 간섭: 이음점 사이 보정 토막이 거꾸로 가면 COMP_INTERFERENCE(H 61), 오목 원호 R < r 은 COMP_ARC_SMALL.
  * 같은 규칙의 독립 구현이 테스트의 `RefG4x`(앱 `VerifyFlipTest.simG4x(typeB = false)` 를 옮긴 것)다.
  */
@@ -89,6 +90,24 @@ internal class GComp(val r: Double, val tip: Int, val side: Side) {
     }
 
     /**
+     * 보정 중 G41 ↔ G42 바꿈의 이음점(FF 5.4.3 189~191쪽 'Change in the offset direction in the offset mode'): A 는 이 쪽, B 는 [next] 쪽 보정선의
+     * 교점('a vector is generated at the intersection of the tool nose radius center path of that block and … of a preceding block') — 여럿이면
+     * 이음점 e 에 가까운 것. 교점이 없으면 B 처음 법선 e + nB·r('the vector normal to block B is created at the start point of block B' — A 의 노즈는
+     * 그 자리로 곧게). A 가 원호인데 교점이 없으면 그 길(191쪽 '끝이 원호 위에 없는 원호')은 옮기지 않아 COMP_SWITCH.
+     */
+    fun switchTo(next: GComp, a: Seg, b: Seg): Res {
+        val e = a.end
+        val na = normal(tanAt(a, e))
+        val nb = next.normal(tanAt(b, b.start))
+        val p = meetAll(off(a, e, na), next.off(b, e, nb)).minByOrNull { (it - e).length }
+        return when {
+            p != null -> Ok(p, false)
+            a is Arc -> Bad(IssueCode.COMP_SWITCH)
+            else -> Ok(e + nb * r, false)
+        }
+    }
+
+    /**
      * 블록 [a](보정 중 — 시작 · 취소 아님)의 노즈 토막 s → e. 0.0005 mm(입력 최소 단위의 반) 넘게 거꾸로 가면 COMP_INTERFERENCE
      * (H 61 — 그보다 작은 것은 0.001 반올림 자국이라 길이 0 으로 본다). R = r 오목 원호(보정선이 한 점)나 길이 0 은 [Line].
      */
@@ -116,10 +135,12 @@ internal class GComp(val r: Double, val tip: Int, val side: Side) {
     }
 
     /** 두 보정선(직선은 e 의 법선 자리를 지나는 무한 직선, 원호는 원)의 교점 가운데 guess 에 가까운 것 */
-    private fun meet(a: Seg, b: Seg, e: Pt, na: Pt, nb: Pt, guess: Pt): Pt? {
-        val oa = off(a, e, na)
-        val ob = off(b, e, nb)
-        val cands: List<Pt> = when {
+    private fun meet(a: Seg, b: Seg, e: Pt, na: Pt, nb: Pt, guess: Pt): Pt? =
+        meetAll(off(a, e, na), off(b, e, nb)).minByOrNull { (it - guess).length }
+
+    /** 두 보정선의 교점 전부 */
+    private fun meetAll(oa: Off, ob: Off): List<Pt> =
+        when {
             oa is OffLine && ob is OffLine -> listOfNotNull(Intersect.lineLine(oa.p, oa.d, ob.p, ob.d))
             oa is OffLine && ob is OffCircle -> lineCircle(oa, ob)
             oa is OffCircle && ob is OffLine -> lineCircle(ob, oa)
@@ -133,8 +154,6 @@ internal class GComp(val r: Double, val tip: Int, val side: Side) {
                 }
             }
         }
-        return cands.minByOrNull { (it - guess).length }
-    }
 
     private fun lineCircle(l: OffLine, c: OffCircle): List<Pt> =
         if (c.rad <= 1e-9) {

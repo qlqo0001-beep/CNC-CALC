@@ -85,6 +85,14 @@ class SimGoldenTest {
                 assertTrue(t.isNotBlank() && "null" !in t && "()" !in t && "  " !in t.trim(), "$code: '$t'")
                 appendLine("${mark(code.level)} $code: $t")
             }
+            // 보정 시작 · 취소 형식 A · B 설정의 글(args 없음 — 위는 처음 값 형식 C 의 글)
+            for (code in listOf(IssueCode.COMP_START_ZERO, IssueCode.COMP_CANCEL_ALONE, IssueCode.COMP_TYPE_A)) {
+                appendLine("${mark(code.level)} $code(A · B): ${simIssueText(SimIssue(code, 12))}")
+            }
+            // G41 ↔ G42 바꿈의 다른 갈래(바꾼 바로 다음 취소 · 원호 끝에서 두 쪽 보정선이 안 만남)
+            for (a in listOf("G40", "11")) {
+                appendLine("${mark(IssueLevel.STOP)} COMP_SWITCH($a): ${simIssueText(SimIssue(IssueCode.COMP_SWITCH, 12, args = listOf(a)))}")
+            }
         }
         golden("sim-issue-texts", text)
     }
@@ -114,7 +122,8 @@ class SimGoldenTest {
         IssueCode.COMP_TOOL_CHANGE -> "T0202"
         IssueCode.CORNER_C_ARC, IssueCode.CORNER_TOO_BIG, IssueCode.CORNER_NO_VERTEX, IssueCode.CORNER_NO_NEXT, IssueCode.CORNER_ON_RAPID -> ",C1."
         IssueCode.CYCLE_PQ_FORBIDDEN -> "G04"
-        IssueCode.CYCLE_BLOCK_TM, IssueCode.CYCLE_REPEAT_MST -> "M08"
+        IssueCode.CYCLE_BLOCK_TM -> "M08"
+        IssueCode.CYCLE_REPEAT_MST -> "M05"
         IssueCode.G7X_RELIEF -> "R0.1"
         IssueCode.G73_COUNT -> "R1"
         IssueCode.M98_IN_PQ -> "M98"
@@ -132,7 +141,8 @@ class SimGoldenTest {
         IssueCode.WORD_MISSING -> listOf("Z")
         IssueCode.NO_CLAMP_G96, IssueCode.RPM_OVER_LIMIT -> listOf("4000")
         IssueCode.ARC_R_SHORT, IssueCode.ARC_END_OFF -> listOf("0.012")
-        IssueCode.COMP_ACUTE_OUTER, IssueCode.COMP_INTERFERENCE, IssueCode.COMP_CANCEL_NO_MOVE -> listOf("11")
+        IssueCode.COMP_ACUTE_OUTER, IssueCode.COMP_INTERFERENCE, IssueCode.COMP_CANCEL_NO_MOVE, IssueCode.COMP_START_ZERO -> listOf("11")
+        IssueCode.COMP_CANCEL_ALONE, IssueCode.COMP_TYPE_A -> listOf("C")
         IssueCode.COMP_ARC_SMALL -> listOf("0.3", "0.4")
         IssueCode.TOOL_DATA_MISSING -> listOf("1", "1")
         IssueCode.CYCLE_PQ_FORBIDDEN, IssueCode.CYCLE_FIRST_LINE, IssueCode.CYCLE_PQ_BEFORE, IssueCode.G7X_P_BLOCK, IssueCode.M98_IN_PQ -> listOf("G71")
@@ -140,7 +150,8 @@ class SimGoldenTest {
         IssueCode.CYCLE_PQ_NOT_FOUND -> listOf("Q", "N25")
         IssueCode.CYCLE_PQ_DUP -> listOf("N10")
         IssueCode.G7X_SIGN -> listOf("U")
-        IssueCode.SUB_NOT_FOUND -> listOf("2000")
+        IssueCode.SUB_NOT_FOUND -> listOf("N77")
+        IssueCode.SUB_SKIPPED -> listOf("9000")
         IssueCode.SUB_NEST -> listOf("4")
         IssueCode.SUB_NO_M99 -> listOf("O2000")
         else -> emptyList()

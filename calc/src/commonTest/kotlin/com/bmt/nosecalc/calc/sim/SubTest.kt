@@ -67,7 +67,12 @@ class SubTest {
         val r = ok(head + listOf("G01 W-1. F0.1", "M99"))
         assertTrue(has(r, IssueCode.M99_MAIN))
         assertEquals(99, (r.steps.last() as EndStep).m)
-        stops(head + listOf("M98 P2000", "M30") + sub, IssueCode.SUB_NOT_FOUND, 4)
+        // 글에 없는 부프로그램(기계에만 있는 것)은 노랑 경고 뒤 건너뛴다: 그 안 이동은 없고 다음 블록으로
+        val skip = ok(head + listOf("M98 P2000", "G01 W-2. F0.1", "M30") + sub)
+        assertEquals(listOf(4), skip.issues.filter { it.code == IssueCode.SUB_SKIPPED }.map { it.line })
+        assertEquals(IssueLevel.WARN, IssueCode.SUB_SKIPPED.level)
+        assertEquals(-2.0, zEnd(skip), 1e-12)
+        assertEquals(listOf(3, 5), moves(skip).map { it.line }.distinct())
         stops(head + listOf("M98", "M30"), IssueCode.WORD_MISSING, 4)
         stops(head + listOf("M98 P1000", "M30", "O1000", "G01 W-1. F0.1"), IssueCode.SUB_NO_M99, 7)
         stops(head + listOf("M98 P1000", "M30") + sub + sub, IssueCode.DUP_PROGRAM, 4)
