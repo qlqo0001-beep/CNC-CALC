@@ -19,6 +19,7 @@ import com.bmt.nosecalc.calc.TaperInput
 import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
+import com.bmt.nosecalc.calc.sim.CompStartup
 import com.bmt.nosecalc.calc.sim.DecimalMode
 import com.bmt.nosecalc.calc.sim.DwellStep
 import com.bmt.nosecalc.calc.sim.GSim
@@ -76,7 +77,13 @@ class SimVerifyTest {
     /** 앞에 붙이는 준비 줄(공구 · 회전 · 이송) */
     private val pre = listOf("T0101", "G97 S1000 M03", "G99 F0.2")
 
-    private fun sim(lines: List<String>, tools: Map<Int, ToolOffset> = emptyMap(), machine: MachineSetup = MachineSetup()): SimRun =
+    /**
+     * 계산기 G41/G42 글은 형식 A · B 기계를 전제로 만든 것이라(설계 13.7 · 13.9) 이 시험은 보정 시작 · 취소 형식 A · B 로 돌린다 —
+     * 형식 C(시뮬레이터 처음 값)의 이동 없는 G40 은 설계 18절 · `CompTest`
+     */
+    private val ab = MachineSetup(compStartup = CompStartup.AB)
+
+    private fun sim(lines: List<String>, tools: Map<Int, ToolOffset> = emptyMap(), machine: MachineSetup = ab): SimRun =
         GSim.run(SimInput(lines.joinToString("\n"), machine, tools))
 
     private fun moves(r: SimRun) = r.steps.filterIsInstance<MoveStep>()
@@ -238,7 +245,7 @@ class SimVerifyTest {
             return ms.filter { it.line > firstLine }.map { (rr - pts(it.nose).minOf { p -> distSet(p, drawFull) }) to it }.maxByOrNull { it.first }
         }
         val (d, m) = deepest(run)?.takeIf { it.first > tol } ?: return null
-        val lin = moves(sim(lines, tools, MachineSetup(rapidPath = RapidPath.LINEAR))).filter { it.line == m.line }
+        val lin = moves(sim(lines, tools, ab.copy(rapidPath = RapidPath.LINEAR))).filter { it.line == m.line }
             .maxOfOrNull { rr - pts(it.nose).minOf { p -> distSet(p, drawFull) } } ?: 0.0
         return Gouge(d, lines[m.line - 1], m.kind, tag, lines.drop(pre.size).joinToString(" / "), lin > tol)
     }
@@ -1069,7 +1076,7 @@ class SimVerifyTest {
             Bad("원호 중심 없음", one("G02 X60. Z-10."), IssueCode.ARC_NO_CENTER, 5, 4),
             Bad("G04 시간 없음", one("G04"), IssueCode.WORD_MISSING, 5, 4),
             Bad("주석 안 닫힘", one("G01 Z-10. (안 닫힌 주석"), IssueCode.COMMENT_OPEN, 5, 4),
-            Bad("없는 부프로그램", one("M98 P9999"), IssueCode.SUB_NOT_FOUND, 5, 4),
+            Bad("M99 P 의 없는 순번", head + listOf("M98 P1001", "M30", "O1001", "G01 Z-5.", "M99 P77"), IssueCode.SUB_NOT_FOUND, 9, 8),
             Bad("받지 않는 글자", one("G01 Z-10. #1"), IssueCode.BAD_CHAR, 5, 4),
             Bad("한 줄 세 블록의 셋째", one("G01 Z0. ; G01 X40. ; G32 Z-10. F1.5"), IssueCode.UNSUPPORTED_G, 5, 5),
             Bad("주축 정지", listOf("T0101", "G97 S1000", "G99 F0.2", "G00 X50. Z5.", "G01 X40. Z-10.", "M30"), IssueCode.SPINDLE_STOPPED, 5, 4),

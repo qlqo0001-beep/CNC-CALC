@@ -87,6 +87,13 @@ class SimShotsTest {
         sheet = SimSheet.PROGRAMS
     }
 
+    /** 목록 시트의 예제 전부(끝 셋 = 회사 꼴 — 설계 18.5): 회사 꼴 외경을 연 채, 끝까지 보이게 길게 */
+    @Test
+    fun programsExamples() = shot("sim-programs-examples", heightDp = 1700) {
+        perform(Pending.Example(11))
+        sheet = SimSheet.PROGRAMS
+    }
+
     @Test
     fun more() = shot("sim-more") {
         original09()

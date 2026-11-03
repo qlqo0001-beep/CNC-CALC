@@ -28,6 +28,7 @@ import com.bmt.nosecalc.calc.TaperWarning
 import com.bmt.nosecalc.calc.distTo
 import com.bmt.nosecalc.calc.sim.GSim
 import com.bmt.nosecalc.calc.sim.IssueCode
+import com.bmt.nosecalc.calc.sim.CompStartup
 import com.bmt.nosecalc.calc.sim.MachineSetup
 import com.bmt.nosecalc.calc.sim.MoveStep
 import com.bmt.nosecalc.calc.sim.RapidPath
@@ -67,7 +68,7 @@ class VerifyG4xHandTest {
     private val tol = 1e-3
 
     private fun sim(nc: List<String>, r: Double, tip: Int, rapid: RapidPath = RapidPath.DOGLEG): SimRun =
-        GSim.run(SimInput((pre + nc).joinToString("\n"), MachineSetup(rapidPath = rapid), mapOf(1 to ToolOffset(r, tip))))
+        GSim.run(SimInput((pre + nc).joinToString("\n"), MachineSetup(rapidPath = rapid, compStartup = CompStartup.AB), mapOf(1 to ToolOffset(r, tip))))
 
     private fun moves(run: SimRun) = run.steps.filterIsInstance<MoveStep>().filter { it.line > pre.size }
 

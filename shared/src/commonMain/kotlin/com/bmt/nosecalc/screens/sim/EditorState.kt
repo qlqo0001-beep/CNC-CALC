@@ -225,8 +225,11 @@ internal class EditorState(text: String = "", cursor: Int = 0) {
     companion object {
         const val UNDO_MAX = 200
 
-        /** 편집기 글: 대문자, 줄 끝 \n 하나 */
-        fun clean(s: String): String = s.replace("\r\n", "\n").replace('\r', '\n').uppercase()
+        /**
+         * 편집기 글: 대문자, 줄 끝 \n 하나. `\n\r\r`(줄마다 LF 뒤 CR 둘을 붙이는 편집기가 만든 글)도 줄 끝 하나 — CR 을 줄 끝으로 바꾸면
+         * 줄마다 빈 줄 둘이 생긴다
+         */
+        fun clean(s: String): String = s.replace("\n\r\r", "\n").replace("\r\n", "\n").replace('\r', '\n').uppercase()
     }
 }
 

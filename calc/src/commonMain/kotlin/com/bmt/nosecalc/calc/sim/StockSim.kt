@@ -21,10 +21,14 @@ import kotlin.math.min
  */
 data class ThreadFeature(val root: Line, val lead: Double, val angleDeg: Double, val outer: Boolean, val line: Int)
 
-enum class ContactKind { RAPID_CUT, CHUCK }
+/**
+ * RAPID_CUT = 급송이 소재를 깎음(노랑), CHUCK = 척 닿음(빨강), CANCEL_CUT = 형식 C 의 이동 없는 G40 블록의 노즈 옮김([StepSrc.SHIFT_CANCEL])이
+ * 앞 블록 면 쪽으로 들어가며 소재를 깎음(노랑 — 팁 번호가 바이트 반대쪽이면 마지막 깎은 면을 판다, 설계 3.2 · 5.5)
+ */
+enum class ContactKind { RAPID_CUT, CHUCK, CANCEL_CUT }
 
 /**
- * 급송 깎음 · 척 닿음(설계 5.5). [step] = 그 [MoveStep] 의 `run.steps` 번호, [t] = 처음 닿는 시각(이분법 — 1/2^20 이동 안),
+ * 급송 깎음 · 척 닿음 · G40 옮김 깎음(설계 5.5 · 3.2). [step] = 그 [MoveStep] 의 `run.steps` 번호, [t] = 처음 닿는 시각(이분법 — 1/2^20 이동 안),
  * [at] = 그때 가상 인선, [area] = 그 이동이 깎은 넓이(mm², 반단면 — 척은 0).
  */
 data class Contact(val kind: ContactKind, val step: Int, val line: Int, val t: Double, val at: Pt, val area: Double)
@@ -45,8 +49,8 @@ data class StockProfile(val pieces: List<StockPiece>, val threads: List<ThreadFe
  *
  * 이동마다 쓸고 간 영역 = 시작 · 끝 자세의 공구 다각형([ToolShape]) 볼록 껍질(직선). 원호는 현 높이 [ARC_SAG] 이하로 나눠 같은 방법.
  * 열 가운데 Z 에서 껍질의 x 범위를 재고, 축 아래(x < 0)는 |x| 로 접는다(회전체). 반경은 정확, Z 오차 ≤ 기울기 × dz/2.
- * 나사(THREAD) 이동은 깎지 않고 [ThreadFeature] 로 남긴다. 급송이 깎으면 [ContactKind.RAPID_CUT], 공구가 척(척 면 왼쪽, 반경 < 척 지름/2)에
- * 들어가면 [ContactKind.CHUCK].
+ * 나사(THREAD) 이동은 깎지 않고 [ThreadFeature] 로 남긴다. 급송이 깎으면 [ContactKind.RAPID_CUT], 형식 C 의 G40 옮김이 앞 블록 면 쪽으로
+ * 들어가며 깎으면([digsIn]) [ContactKind.CANCEL_CUT], 공구가 척(척 면 왼쪽, 반경 < 척 지름/2)에 들어가면 [ContactKind.CHUCK].
  *
  * [cutTo] 는 앞으로는 이어서, 뒤로는 저장점(이동 [saveEvery] 개마다 — 합 40개 이하)에서 다시 깎는다. 한 스레드에서만 쓴다.
  */
@@ -141,13 +145,14 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
         if (shape.isEmpty()) return
         if (record) {
             chuckHit(m, shape)?.let { (ff, at) ->
-                found[k * 2 + ContactKind.CHUCK.ordinal] = Contact(ContactKind.CHUCK, moves[k], m.line, m.t0 + ff * (m.t1 - m.t0), at, 0.0)
+                found[k * KINDS + ContactKind.CHUCK.ordinal] = Contact(ContactKind.CHUCK, moves[k], m.line, m.t0 + ff * (m.t1 - m.t0), at, 0.0)
             }
         }
         if (m.kind == MoveKind.THREAD) return
         // 나사 패스 바로 뒤 급송(나사 골에서 빠짐)은 깎지 않는다 — 래스터에는 나사 골이 없어 헛경보가 된다
         if (m.kind == MoveKind.RAPID && k > 0 && step(k - 1).kind == MoveKind.THREAD) return
-        if (record && m.kind == MoveKind.RAPID) {
+        val cancel = m.src == StepSrc.SHIFT_CANCEL && digsIn(m)
+        if (record && (m.kind == MoveKind.RAPID || cancel)) {
             val dry = cutSeg(m.tip, 1.0, shape, arr, dry = true)
             if (dry > RAPID_AREA) {
                 // 처음 닿는 자리: 깎는 넓이가 한도의 반을 넘는 가장 작은 f
@@ -158,12 +163,22 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
                     if (cutSeg(m.tip, c, shape, arr, dry = true) > RAPID_AREA / 2) b = c else a = c
                 }
                 val area = cutSeg(m.tip, 1.0, shape, arr, dry = false)
-                found[k * 2 + ContactKind.RAPID_CUT.ordinal] =
-                    Contact(ContactKind.RAPID_CUT, moves[k], m.line, m.t0 + b * (m.t1 - m.t0), SimRun.at(m.tip, b), area)
+                val kind = if (cancel) ContactKind.CANCEL_CUT else ContactKind.RAPID_CUT
+                found[k * KINDS + kind.ordinal] = Contact(kind, moves[k], m.line, m.t0 + b * (m.t1 - m.t0), SimRun.at(m.tip, b), area)
                 return
             }
         }
         cutSeg(m.tip, f, shape, arr, dry = false)
+    }
+
+    /**
+     * 형식 C 의 G40 옮김 [m](노즈 E + r·nₑ → E − t, E = 지령점 = 가상 인선 끝)이 앞 블록 면 쪽으로 들어가는가: 옮김 · nₑ < 0.
+     * 표준 팁이면 (−t)·nₑ = r 이라 0 — 노즈가 깎은 면을 따라 미끄러질 뿐이다. 그때 깎이는 것은 그 면 너머의 빈 자리(자동 소재가 크게 잡은 곳)라
+     * 경고하지 않는다(보통 이송처럼 깎기만 — 급송이면 급송 검사).
+     */
+    private fun digsIn(m: MoveStep): Boolean {
+        val n = m.nose.start - m.tip.end
+        return ((m.nose.end - m.nose.start) dot n) < -DIG_IN * max(m.r, 1e-9)
     }
 
     /** 가상 인선이 seg 를 f 까지 갈 때의 자리들(원호는 현 높이 ARC_SAG 이하) */
@@ -522,8 +537,14 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
         /** 원호를 나누는 현 높이(mm) */
         const val ARC_SAG = 0.002
 
-        /** 급송 깎음으로 보는 넓이(mm²) */
+        /** 급송 깎음 · G40 옮김 깎음으로 보는 넓이(mm²) */
         const val RAPID_AREA = 0.001
+
+        /** G40 옮김이 앞 블록 면 쪽으로 들어간다고 보는 깊이(옮김 · nₑ, mm) 의 r 배 — 계산 오차만 넘으면 */
+        private const val DIG_IN = 1e-6
+
+        /** 닿음 종류 수(이동마다 종류별 하나 — found 열쇠) */
+        private val KINDS = ContactKind.entries.size
 
         /** 닿음으로 보는 깊이(mm) — 면에 닿기만 한 것은 아님 */
         const val CONTACT = 1e-6

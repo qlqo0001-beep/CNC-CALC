@@ -72,7 +72,10 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
  * 씨앗 [SEED] 고정. 한 부분(시험 함수)은 [PART_MS] 안에서 끊는다(15분 안). 기록은 build/monkey/<부분>.txt.
  */
 class SimMonkeyTest {
-    /** 부분마다 8~11분 · 합쳐 약 50분 — BMT_MONKEY 가 있을 때만(평소 jvmTest 에서는 건너뜀). MonkeyRecheckTest 처럼 직접 부르면 이 검사를 거치지 않는다 */
+    /**
+     * 부분마다 8~11분 · 합쳐 약 50분 — BMT_MONKEY 가 있을 때만(평소 jvmTest 에서는 건너뜀). 값은 보지 않는다(UiMonkeyTest 와 달리 배율이 아니다 — 부분 길이는
+     * [PART_MS] 고정). MonkeyRecheckTest 처럼 직접 부르면 이 검사를 거치지 않는다
+     */
     @BeforeTest
     fun onlyWhenAsked() = assumeTrue(System.getenv("BMT_MONKEY") != null, "BMT_MONKEY 가 없어 건너뜀(약 50분 걸리는 몽키 시험)")
 
@@ -1329,7 +1332,10 @@ class SimMonkeyTest {
         })
 
         fun weirdMachine(kv: KeyValueStore) {
-            val m = mapOf("rx" to "0", "rz" to "-1", "tc" to "999999999999", "rpm" to "0.00000000001", "hx" to "-200", "hz" to "0", "g92" to "9.9", "path" to RapidPath.LINEAR.name, "dec" to DecimalMode.CALCULATOR.name, "skip" to "1")
+            val m = mapOf(
+                "rx" to "0", "rz" to "-1", "tc" to "999999999999", "rpm" to "0.00000000001", "hx" to "-200", "hz" to "0", "h2x" to "-1", "h2z" to "99999",
+                "g92" to "9.9", "path" to RapidPath.LINEAR.name, "dec" to DecimalMode.CALCULATOR.name, "skip" to "1", "suv" to "Z",
+            )
             kv.put(ProgramStore.MACHINE, SetupText.encode(m))
             kv.put(ProgramStore.VIEW, "01010")
         }

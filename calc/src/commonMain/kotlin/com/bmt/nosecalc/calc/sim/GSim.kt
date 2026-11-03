@@ -22,13 +22,16 @@ import kotlin.math.sqrt
  * G코드 실행기(`docs/simulator-design.md` 1~4절). 글 → 시간 순 이동 목록 · 고스트 · 문제 · 사이클 타임.
  * 예외를 던지지 않는다 — 실행을 멈추는 문제는 [SimRun.stop] 으로, 그 앞까지의 걸음은 그대로 둔다.
  *
- * 파서 · 모달 · G00~G03 · `,C` `,R` · G04 · G28 · G50 S · G96/G97 · G98/G99 · M · T · S · F ·
- * G40/G41/G42(형식 A 모형, [GComp]) · M98/M99 · 시간, 고정 사이클 G90/G92/G94 · G70~G76(FANUC 2줄 형식 — 기하는 [GCycles],
- * 블록 읽기 · 모달 · P~Q 는 여기 — 설계 문서 1.6 · 12절).
+ * 파서 · 모달 · G00~G03 · `,C` `,R` · G04 · G28 · G30 · G50 S · G96/G97 · G98/G99 · M · T · S · F ·
+ * G40/G41/G42(형식 A 모형, [GComp] — 이동 없는 시작 · 취소는 기계 설정 [MachineSetup.compStartup] 의 형식 A · B / C) · M98/M99 · 시간,
+ * 고정 사이클 G90/G92/G94 · G70~G76(FANUC 2줄 형식 — 기하는 [GCycles], 블록 읽기 · 모달 · P~Q 는 여기 — 설계 문서 1.6 · 12절).
  */
 object GSim {
     /** 실행 블록 수 한도(M99 P · M98 L 고리) */
     const val EXEC_LIMIT = 200_000
+
+    /** G90/G92/G94 모드의 축 없는 M 블록에서 멈추는 M — 사이클과의 순서가 결과를 바꾼다(주축 · 끝 · 부프로그램, 설계 13.1) */
+    internal val REPEAT_STOP_M = setOf(2, 3, 4, 5, 30, 98, 99)
 
     /** 부프로그램 겹침 한도(S 4-131: 4단) */
     const val SUB_NEST = 4
@@ -92,6 +95,14 @@ private class FS(val f: Double?, val s: Double?, val css: Boolean, val perRev: B
 /** M98 호출 쌓임: 돌아갈 단위 · 블록, 남은 반복 */
 private class Frame(val unit: Int, val ret: Int, var left: Int)
 
+/**
+ * 형식 C 의 이동 없는 시작 블록(설계 3.2): 지령점 [at] 에서 노즈를 P − t → P + r·n₁ 로 옮기는데 n₁ 은 다음 이동 블록의 법선이라
+ * 그 블록이 올 때까지 미룬다. [kind] = 그 블록의 모달(G00 급송 · G01 이송), [ctx] = 그 블록 때 상태, [after] = 그 사이 블록의 M · 상태(시간 순을 지킨다)
+ */
+private class CStart(val line: Int, val unit: Int, val at: Pt, val kind: MoveKind, val ctx: Ctx) {
+    val after: MutableList<() -> Unit> = mutableListOf()
+}
+
 private sealed interface Flow
 private object Next : Flow
 private object End : Flow
@@ -126,6 +137,12 @@ private class Runner(val input: SimInput) {
 
     /** 이동 없이 끈 보정의 노즈 자리(마지막 보정 블록 끝 법선) — 다음 직선 이동이 여기서 시작한다(FF 5.4.4 그림 5.4.4(e)) */
     var noMoveNose: Pt? = null
+
+    /** 형식 C 기계(이동 없는 시작 · 취소 블록에서 옮김 — [MachineSetup.compStartup]) */
+    val typeC = m.compStartup == CompStartup.C
+
+    /** 형식 C 의 이동 없는 시작 — 다음 이동 블록을 기다림([CStart]) */
+    var cStart: CStart? = null
     var idle = 0
     var noOffsetWarned = false
 
@@ -170,6 +187,7 @@ private class Runner(val input: SimInput) {
             if (!e.fromParse) issues += e.issue
             held = null
             pend = null
+            cStart = null
         }
         // G71~G73 의 마른 실행과 G70 이 같은 P~Q 에서 같은 문제(COMP_TYPE_A 등)를 내면 하나만
         val all = (prog.issues + issues).distinct().sortedBy { it.line }
@@ -299,16 +317,17 @@ private class Runner(val input: SimInput) {
         }
 
         val wantOn = g4x != null && offset != 0
-        gc?.let { if (wantOn && g4x != it.side) fail(IssueCode.COMP_SWITCH, line, b.words.firstOrNull { w -> w.key == "G" && w.value.toInt() in 41..42 }) }
+        gc?.let { if (wantOn && g4x != it.side) gc = switchSide(it, b) }
 
         var moved = false
         when {
-            g0 == 28 -> {
-                if (gc != null || wantOn) fail(IssueCode.COMP_AT_G28, line, b.words.first { it.key == "G" && it.value.toInt() == 28 })
-                moved = g28(b)
+            g0 == 28 || g0 == 30 -> {
+                // FF 5.4.3 '- Command canceling the offset vector temporarily': G28 · G30 앞에 G40 으로 끈다(보정 중이면 벡터가 잠시 사라짐 — 그 경로는 그리지 않음)
+                if (gc != null || wantOn) fail(IssueCode.COMP_AT_G28, line, b.words.first { it.key == "G" && it.value.toInt() == g0 })
+                moved = g28(b, g0)
             }
             moveBlock -> moved = move(b, mot!!, wantOn)
-            gc != null && !wantOn -> cancelNoMove(line)
+            else -> moved = compNoMove(line, b.unit, wantOn)
         }
         if (g4x != null && offset == 0 && moved && !noOffsetWarned) {
             noOffsetWarned = true
@@ -364,7 +383,8 @@ private class Runner(val input: SimInput) {
      * 축과 S · T · M(G96~G99) 이 같이 있으면 CYCLE_BLOCK_TM(S 4-93 'X T0505 M05 ; Error'). 보정 중이면 COMP_IN_CYCLE(H 73 — 그 경로가 출처에 없다).
      * X · Z · R 은 모달(S 4-93 · 4-96 · 4-99: 다음 블록에 X(G94 는 Z)만). 처음 블록은 X(U) · Z(W) 둘 다.
      * 축 없는 블록(모달 값이 있을 때 — EOB 만 · 주석만 · F 만 · R 만 …)도 같은 사이클을 한 번 더 돈다(FF 4.1.6 · F0 13.1 주 2(1)).
-     * 축 없이 S · T · M(G96~G99) 이 있으면 FANUC 은 사이클과 그 기능을 '함께' 실행해(F0 주 2(3)) 순서를 몰라 CYCLE_REPEAT_MST.
+     * 축 없이 S · T · M(G96~G99) 이 있으면 FANUC 은 사이클과 그 기능을 '함께' 실행한다(F0 주 2(3)). 순서가 결과를 바꾸는 S · T · 주축(M03~M05) ·
+     * 끝(M02 · M30) · M98/M99 · G96~G99 는 CYCLE_REPEAT_MST, 그 밖의 M(기계 M · M00 · M01 · M08 · M09)은 사이클을 한 번 더 돈 뒤 M 을 실행한다([cycleM]).
      */
     private fun singleCycle(b: Block, g: Int, gMotion: Int?): Flow {
         val line = b.line
@@ -374,7 +394,8 @@ private class Runner(val input: SimInput) {
             if (axes) fail(IssueCode.CYCLE_BLOCK_TM, line, w) else fail(IssueCode.CYCLE_REPEAT_MST, line, w, listOf("G$g"))
         for (w in b.words) when (w.key) {
             "X", "Z", "U", "W", "R", "F", taperKey -> {}
-            "S", "T", "M" -> mst(w)
+            "S", "T" -> mst(w)
+            "M" -> if (axes || w.value.toInt() in GSim.REPEAT_STOP_M) mst(w)
             "G" -> when (w.value.toInt()) {
                 90, 92, 94, 40, 41, 42, 21, 54 -> {}
                 // FF 4.1.6 '- Plane selection command': 모드 중 평면 G 는 사이클 공통 모달 값을 지운다 — 한 번 G 와 같이 막는다
@@ -423,7 +444,20 @@ private class Runner(val input: SimInput) {
         emitCycle(GCycles.single(g, a, Pt(tz, tx), taper, chamfer, pass), line, b.unit, c)
         cyc = Cyc(g, tx, tz, taper, lead, pass)
         cmd = a
+        b.w("M")?.let { cycleM(b, it) }
         return Next
+    }
+
+    /** 사이클 모드의 M 만 블록(FF 4.1.6): 사이클을 한 번 더 돈 뒤 M — 정지 · 절삭유 · 기계 M 만 온다([singleCycle] 이 나머지를 막았다) */
+    private fun cycleM(b: Block, w: Word) {
+        val before = coolant
+        when (val mc = w.value.toInt()) {
+            0, 1 -> queue { t0 -> StopStep(b.line, b.unit, t0, t0, mc == 1) }
+            8 -> coolant = true
+            9 -> coolant = false
+            else -> issues += SimIssue(IssueCode.MACHINE_M, b.line, w.cols, w.text)
+        }
+        if (coolant != before) stateStep(b.line, b.unit)
     }
 
     /** G70~G76 블록. 첫 줄(G71~G73 은 P · Q 없음, G74~G76 은 축 없음 — S 4-103 주 1 · 4-112 주 1 · 4-116 주 1)은 모달 값만 */
@@ -750,6 +784,7 @@ private class Runner(val input: SimInput) {
         val saveG4x = g4x
         val saveNoMove = noMoveCancelLine
         val saveNoMoveNose = noMoveNose
+        val saveCStart = cStart
         val saveIdle = idle
         val out = mutableListOf<GCycles.Piece>()
         val blocks = prog.units[ui].blocks
@@ -770,6 +805,7 @@ private class Runner(val input: SimInput) {
             g4x = saveG4x
             noMoveCancelLine = saveNoMove
             noMoveNose = saveNoMoveNose
+            cStart = saveCStart
             idle = saveIdle
         }
         val pLine = blocks[p].line
@@ -800,12 +836,8 @@ private class Runner(val input: SimInput) {
         }
         if (gMotion != null) motion = gMotion
         val wantOn = g4x != null && offset != 0
-        gc?.let { if (wantOn && g4x != it.side) fail(IssueCode.COMP_SWITCH, line, b.words.firstOrNull { w -> w.key == "G" && w.value.toInt() in 41..42 }) }
-        var moved = false
-        when {
-            moveBlock -> moved = move(b, mot!!, wantOn)
-            gc != null && !wantOn -> cancelNoMove(line)
-        }
+        gc?.let { if (wantOn && g4x != it.side) gc = switchSide(it, b) }
+        val moved = if (moveBlock) move(b, mot!!, wantOn) else compNoMove(line, b.unit, wantOn)
         if (g4x != null && offset == 0 && moved && !noOffsetWarned) {
             noOffsetWarned = true
             issues += SimIssue(IssueCode.COMP_NO_OFFSET, line)
@@ -854,10 +886,16 @@ private class Runner(val input: SimInput) {
         val used = mutableSetOf("G", "M", "T", "S", "F")
         when (g0) {
             28 -> used += xzuw
+            // G30 P2(P 는 빼도 됨 — F0 6 '2nd reference position return'). P3 · P4(제3 · 제4 원점)는 자리를 몰라 지원 안 함
+            30 -> {
+                used += xzuw + "P"
+                b.w("P")?.let { if (it.value.toInt() != 2) fail(IssueCode.BAD_VALUE, line, it) }
+            }
             50 -> {
                 b.words.firstOrNull { it.key in xzuw }?.let { fail(IssueCode.G50_COORD, line, it) }
                 used.clear()
-                used += setOf("G", "S") // H 49: G50 S 는 다른 명령 없이
+                // G50 S 와 같은 블록의 M 은 받는다(블록 끝에 실행 — H 133). FANUC(F0 9.3 · FF)에는 막는 말이 없다 — 'G50 S 는 다른 명령 없이' 는 H 49(Haas)
+                used += setOf("G", "S", "M")
             }
             null -> if (moveBlock) {
                 used += xzuw
@@ -947,15 +985,19 @@ private class Runner(val input: SimInput) {
         return Next
     }
 
-    /** G28(S 2-47~2-48 · H 48): 쓴 축만 급송으로 중간점 → 원점. U0 · W0 = 중간점 없이 */
-    private fun g28(b: Block): Boolean {
+    /**
+     * G28(S 2-47~2-48 · H 48): 쓴 축만 급송으로 중간점 → 원점. U0 · W0 = 중간점 없이.
+     * G30(F0 6 · FF G 코드 표 '2nd reference position return'): 같은 꼴로 제2 원점([MachineSetup.home2], 없으면 G28 원점)
+     */
+    private fun g28(b: Block, g: Int): Boolean {
         val line = b.line
         if (!(b.has("X") || b.has("Z") || b.has("U") || b.has("W"))) fail(IssueCode.WORD_MISSING, line, args = listOf("X"))
         noMoveCancelLine?.let { fail(IssueCode.COMP_CANCEL_NO_MOVE, line, args = listOf(it.toString())) }
         val via = target(b)
+        val ref = if (g == 30) m.home2 ?: m.home else m.home
         val home = Pt(
-            if (b.has("Z") || b.has("W")) m.home.z else via.z,
-            if (b.has("X") || b.has("U")) m.home.x else via.x,
+            if (b.has("Z") || b.has("W")) ref.z else via.z,
+            if (b.has("X") || b.has("U")) ref.x else via.x,
         )
         val c = ctx()
         val start = cmd
@@ -981,10 +1023,10 @@ private class Runner(val input: SimInput) {
         val zero = (tgt - start).length <= 1e-9
         if (zero && mot <= 1) {
             held?.let { fail(IssueCode.CORNER_NO_NEXT, it.line, it.corner!!.word, listOf(line.toString())) }
-            if (gc == null && wantOn) fail(IssueCode.COMP_START_ZERO, line)
+            // 형식 A · B 는 움직임 0 인 블록을 시작 블록으로 받지 않는다. 형식 C 는 '이동 없는 시작 블록'(FF 5.4.2 시작 조건 (4) · 표 5.4.1(a))
+            if (gc == null && wantOn && !typeC) fail(IssueCode.COMP_START_ZERO, line)
             if (cornerW != null) fail(IssueCode.CORNER_NO_VERTEX, line, cornerW)
-            if (gc != null && !wantOn) cancelNoMove(line)
-            return false
+            return compNoMove(line, b.unit, wantOn)
         }
         val seg: Seg = if (mot <= 1) Line(start, tgt) else arc(b, start, tgt, mot == 2)
         val corner = cornerW?.let {
@@ -1078,7 +1120,11 @@ private class Runner(val input: SimInput) {
         }
         if (lW != null && (times < 1 || times > 9999)) fail(IssueCode.BAD_VALUE, line, lW)
         val units = prog.units.indices.filter { prog.units[it].number == num }
-        if (units.isEmpty()) fail(IssueCode.SUB_NOT_FOUND, line, pW, listOf(num.toString()))
+        // 글에 없는 부프로그램은 기계에만 있는 것으로 보고 건너뛴다(노랑) — 그 안의 이동 · 시간은 그리지 않는다
+        if (units.isEmpty()) {
+            issues += SimIssue(IssueCode.SUB_SKIPPED, line, pW.cols, pW.text, listOf(num.toString()))
+            return Next
+        }
         if (units.size > 1) fail(IssueCode.DUP_PROGRAM, line, pW, listOf(num.toString()))
         if (stack.size >= GSim.SUB_NEST) fail(IssueCode.SUB_NEST, line, pW, listOf(GSim.SUB_NEST.toString()))
         stack += Frame(ui, bi + 1, max(1, times))
@@ -1104,17 +1150,89 @@ private class Runner(val input: SimInput) {
     // ================================================================ 보정 세션
 
     /**
-     * 이동 없는 블록에서 보정을 끔(G40 · T□□00) — 마지막 보정 블록을 끝 법선 자리까지 그린다(형식 A·B: 'In the block preceding the cancel block,
-     * a vector is created … in the vertical direction. The tool does not operate in the cancel block' — FF 5.4.4 그림 5.4.4(e) 204쪽, F0 14.3.4 228쪽).
-     * 다음 직선 이동이 그 자리에서 벡터를 지운다([move]). 형식 C(SUV = 1, FF 그림 5.4.4(f))는 다르게 움직여 INFO
+     * 움직임 없는 블록(축이 없거나 움직임 0)에서 보정이 꺼지거나(G40 · T□□00) 켜지면(G41/G42 · 보정 번호) 그 처리. 형식 C 의 옮김이 있었으면 true.
+     * 형식 A · B 의 이동 없는 시작은 할 일이 없다 — 다음 이동 블록이 시작 블록(FF 179쪽 'The tool does not operate in a start-up block').
      */
-    private fun cancelNoMove(line: Int) {
+    private fun compNoMove(line: Int, unit: Int, wantOn: Boolean): Boolean = when {
+        gc != null && !wantOn -> {
+            cancelNoMove(line, unit)
+            typeC
+        }
+        gc == null && wantOn && typeC -> {
+            startNoMove(line, unit)
+            true
+        }
+        else -> false
+    }
+
+    /** 형식 C 의 옮김 이동 종류 = 그 블록의 01 그룹 모달. G00/G01 만(FF 5.4.2 시작 조건 (3) — G02/G03 모드면 알람 PS0034) */
+    private fun shiftKind(line: Int, start: Boolean): MoveKind = when (motion) {
+        0 -> MoveKind.RAPID
+        1 -> MoveKind.FEED.also { if (dry == null) checkFeed(line) }
+        null -> fail(IssueCode.CYCLE_MOTION_MISSING, line)
+        90, 92, 94 -> fail(IssueCode.COMP_IN_CYCLE, line)
+        else -> fail(if (start) IssueCode.COMP_START_ARC else IssueCode.COMP_CANCEL_ARC, line)
+    }
+
+    /**
+     * 형식 C 의 이동 없는 시작(FF 180쪽 'For type C — The tool shifts by the compensation value in the direction vertical to the block with tool
+     * movement subsequent to the start-up block', 표 5.4.1(a)): 보정 세션을 지금 열고, 노즈 옮김(P − t → P + r·n₁)은 다음 이동 블록이 와서
+     * n₁ 을 알 때 그린다([compPush]). 그 블록은 시작 블록이 아니라 보정 중 블록이다(끝 = 다음 블록과의 이음).
+     */
+    private fun startNoMove(line: Int, unit: Int) {
+        val kind = shiftKind(line, start = true)
+        val td = input.tools[offset]
+        val r = td?.noseR
+        val tip = td?.tip
+        if (r == null || tip == null || tip !in 0..9 || r < 0) {
+            fail(IssueCode.TOOL_DATA_MISSING, line, args = listOf(tool?.toString() ?: "", offset.toString()))
+        }
+        gc = GComp(r, tip, g4x!!)
+        compOffsets += offset
+        cStart = CStart(line, unit, cmd, kind, ctx())
+    }
+
+    /**
+     * 이동 없는 블록에서 보정을 끔(G40 · T□□00) — 마지막 보정 블록을 끝 법선 자리까지 그린다('In the block preceding the cancel block,
+     * a vector is created … in the vertical direction' — FF 5.4.4 그림 5.4.4(e) 204쪽, F0 14.3.4 228쪽).
+     * 형식 A · B: 'The tool does not operate in the cancel block' — 다음 직선 이동이 그 자리에서 벡터를 지운다([move]).
+     * 형식 C: 'The tool shifts by the compensation value in the direction vertical to the block preceding the cancel block'(FF 그림 5.4.4(f) 205쪽) —
+     * 이 블록에서 노즈가 끝 법선 E + r·nₑ → 지령점 − 팁 벡터(G40 상태 노즈)로 옮긴다(그 블록의 모달 G00/G01).
+     * 알려진 차이: FANUC 은 G02/G03 모드의 취소를 형식과 무관하게 알람한다(FF 5.4.1 'When performing offset cancel, circular arc commands (G02 and G03)
+     * are not available … alarm PS0034', F0 알람표 'The start up or cancel was going to be performed in the G02 or G03 mode'). 형식 C 는 [shiftKind] 가
+     * COMP_CANCEL_ARC 로 멈추지만 형식 A · B 는 아직 멈추지 않는다 — 앱 계산기의 G41/G42 글(형식 A · B 전제)이 끝 원호 뒤 `G40` 한 줄을 써서 그 검증이
+     * 이 설정에 기대어 있다(설계 18.3 — 글을 회사 꼴로 바꾸는 단계 4 에서 함께).
+     */
+    private fun cancelNoMove(line: Int, unit: Int) {
         held?.let { fail(IssueCode.CORNER_NO_NEXT, it.line, it.corner!!.word, listOf(line.toString())) }
-        noMoveNose = pend?.let { it.gc!!.openEnd(it.seg) }
+        if (!typeC) {
+            noMoveNose = pend?.let { it.gc!!.openEnd(it.seg) }
+            closeOpen()
+            gc = null
+            noMoveCancelLine = line
+            issues += SimIssue(IssueCode.COMP_CANCEL_ALONE, line)
+            return
+        }
+        // 이동 없는 G41/G42 뒤 이동 블록 없이 끔 — 시작 옮김의 방향(다음 이동 블록의 법선)이 없다
+        cStart?.let { fail(IssueCode.COMP_START_ZERO, line, args = listOf(it.line.toString())) }
+        val kind = shiftKind(line, start = false)
+        val from = pend?.let { it.gc!!.openEnd(it.seg) }
         closeOpen()
         gc = null
-        noMoveCancelLine = line
-        issues += SimIssue(IssueCode.COMP_CANCEL_ALONE, line)
+        if (from != null) {
+            pushMove(Mv(Line(cmd, cmd), kind, line, unit, StepSrc.SHIFT_CANCEL, ctx(), CompMode.OFF, null, null, noseFrom = from))
+        }
+        issues += SimIssue(IssueCode.COMP_CANCEL_ALONE, line, args = listOf("C"))
+    }
+
+    /**
+     * 보정 중 G41 ↔ G42 바꿈(FF 5.4.3 189쪽 'The offset direction can be changed in the offset mode … However, the change is not available in the
+     * start-up block and the block following it'): 바뀐 쪽 세션 — 이음점은 다음 이동 블록이 [compPush] 에 올 때 [GComp.switchTo].
+     * 시작 블록(이동 있는 시작 · 형식 C 의 이동 없는 시작) 바로 다음 블록이면 COMP_SWITCH.
+     */
+    private fun switchSide(cur: GComp, b: Block): GComp {
+        if (cStart != null || pend?.mode == CompMode.START) fail(IssueCode.COMP_SWITCH, b.line, b.words.firstOrNull { it.key == "G" && it.value.toInt() in 41..42 })
+        return GComp(cur.r, cur.tip, g4x!!)
     }
 
     /** 보정 중 움직임 없는 블록이 둘 이어지면 멈춘다(H 58 — 한두 블록 앞을 읽는다). M98/M99 블록은 세지 않는다(S 3-77 주 2) */
@@ -1130,6 +1248,12 @@ private class Runner(val input: SimInput) {
     /** 정상 끝(M30 · M02 · 글 끝): 열린 모서리는 오류, 열린 보정은 끝 법선 자리까지 그리고 경고 */
     private fun finishOpen() {
         held?.let { fail(IssueCode.CORNER_NO_NEXT, it.line, it.corner!!.word) }
+        // 형식 C 의 이동 없는 시작 뒤 이동 블록 없이 끝 — 옮김은 그리지 않고 미룬 M · 상태만
+        cStart?.let { cs ->
+            cStart = null
+            cs.after.forEach { it() }
+            issues += SimIssue(IssueCode.COMP_NOT_CANCELLED, lastLine)
+        }
         if (pend != null) {
             closeOpen()
             issues += SimIssue(IssueCode.COMP_NOT_CANCELLED, lastLine)
@@ -1176,12 +1300,38 @@ private class Runner(val input: SimInput) {
                 val g = mv.gc!!
                 val seg = mv.seg
                 if (seg is Arc && !g.arcOk(seg)) fail(IssueCode.COMP_ARC_SMALL, mv.line, args = listOf(Fmt.nc(seg.radius), Fmt.nc(g.r)))
-                val p = pend!!
                 val cancel = mv.mode == CompMode.CANCEL
-                when (val res = g.junction(p.seg, seg, pendStartup, cancel)) {
+                val cs = cStart
+                if (pend == null && cs != null) {
+                    // 형식 C 의 이동 없는 시작: 이 블록(시작 뒤 첫 이동 블록) 처음의 공구 쪽 법선 n₁ 으로 그 블록 자리에서 P − t → P + r·n₁
+                    cStart = null
+                    val p1 = cs.at + g.normal(GComp.tanAt(seg, seg.start)) * g.r
+                    emitMove(Mv(Line(cs.at, cs.at), cs.kind, cs.line, cs.unit, StepSrc.SHIFT_START, cs.ctx, CompMode.ON, g, null), Line(cs.at - g.tv, p1), g.tv)
+                    ghost(cs.line, cs.at, p1, g.tv, g.r, g.tip)
+                    cs.after.forEach { it() }
+                    if (cancel) {
+                        // 곧바로 이동 있는 취소(형식 A): 옮긴 자리에서 끝점 − 팁 벡터로 곧게
+                        emitMove(mv, Line(p1, seg.end - g.tv), g.tv)
+                        ghost(mv.line, seg.end, seg.end - g.tv, g.tv, g.r, g.tip)
+                        runAfter(mv)
+                    } else {
+                        pend = mv
+                        pendStart = p1
+                        pendStartup = false
+                    }
+                    return
+                }
+                val p = pend!!
+                val pg = p.gc!!
+                // 보정 중 G41 ↔ G42 바꿈([switchSide]) 뒤 첫 이동 블록 — 바꾼 바로 다음 취소는 그 경로가 출처에 없어 멈춘다
+                val joint = if (pg.side == g.side) g.junction(p.seg, seg, pendStartup, cancel) else {
+                    if (cancel) fail(IssueCode.COMP_SWITCH, mv.line, args = listOf("G40"))
+                    pg.switchTo(g, p.seg, seg)
+                }
+                when (val res = joint) {
                     is GComp.Bad -> fail(res.code, mv.line, args = listOf(p.line.toString()))
                     is GComp.Ok -> {
-                        if (res.outer) issues += SimIssue(IssueCode.COMP_TYPE_A, if (pendStartup) p.line else mv.line)
+                        if (res.outer) issues += SimIssue(IssueCode.COMP_TYPE_A, if (pendStartup) p.line else mv.line, args = if (typeC) listOf("C") else emptyList())
                         finalizePend(res.p)
                         if (!cancel) {
                             pend = mv
@@ -1235,9 +1385,11 @@ private class Runner(val input: SimInput) {
         }
         val h = held
         val p = pend
+        val cs = cStart
         when {
             h != null -> h.after += action
             p != null -> p.after += action
+            cs != null -> cs.after += action
             else -> action()
         }
     }

@@ -152,7 +152,11 @@ class GBasicTest {
         assertEquals(200.0, moves(clamped).last().css)
         stops(listOf("G50 X100. Z50."), IssueCode.G50_COORD, 1)
         stops(listOf("G50"), IssueCode.WORD_MISSING, 1)
-        stops(listOf("G50 S2000 M03"), IssueCode.WORD_NOT_USED, 1)
+        // G50 S 블록의 M(블록 끝에 실행 — H 133) · 주석은 받는다: FANUC(F0 9.3 · FF)에는 막는 말이 없다('다른 명령 없이' 는 H 49 — Haas)
+        val gm = ok(listOf("N1G50S2000M03(HOLDER)", "G97S3000", "G00 X40. Z2.", "G01 Z0. F0.2", "M30"))
+        assertEquals(2000.0, moves(gm).last().rpm0)
+        assertTrue(ok(listOf("G50 S2000 M08", "M30")).steps.filterIsInstance<StateStep>().single().coolant)
+        stops(listOf("G50 S2000 T0101"), IssueCode.WORD_NOT_USED, 1)
     }
 
     /** G28(S 2-47 · H 48): 쓴 축만, 중간점 거쳐 원점(설정). U0 · W0 = 중간점 없이 */
@@ -174,6 +178,29 @@ class GBasicTest {
         near(Pt(home.z - 10, home.x), moves(d).last().tip.end)
         stops(listOf("G28"), IssueCode.WORD_MISSING, 1)
         stops(listOf("G28 U0. R1."), IssueCode.WORD_NOT_USED, 1)
+    }
+
+    /** G30(F0 6 · FF G 코드 표 '2nd reference position return'): G28 과 같은 꼴로 제2 원점 — 기계 설정, 빈칸이면 G28 원점. P2 는 받고 P3 · P4 는 멈춤 */
+    @Test
+    fun g30() {
+        val home = MachineSetup().home
+        // 빈칸 = G28 원점
+        near(home, moves(ok(listOf("G00 X40. Z2.", "G30 U0. W0.", "M30"))).last().tip.end)
+        val h2 = Pt.ofDia(150.0, 300.0)
+        val m2 = MachineSetup(home2 = h2)
+        val a = ok(listOf("G00 X40. Z2.", "G30U0.W0.", "M30"), machine = m2)
+        assertTrue(moves(a).filter { it.line == 2 }.let { g -> g.isNotEmpty() && g.all { it.src == StepSrc.G28_HOME } })
+        near(h2, moves(a).last().tip.end)
+        // 쓴 축만 · 중간점 거쳐 · P2
+        val b = ok(listOf("G00 X40. Z2.", "G30 P2 X60. Z10.", "M30"), machine = m2)
+        near(Pt.ofDia(10.0, 60.0), moves(b).filter { it.src == StepSrc.G28_VIA }.last().tip.end)
+        near(h2, moves(b).last().tip.end)
+        near(Pt(2.0, h2.x), moves(ok(listOf("G00 X40. Z2.", "G30 U0.", "M30"), machine = m2)).last().tip.end)
+        // G28 은 그대로 G28 원점
+        near(home, moves(ok(listOf("G30 U0. W0.", "G28 U0. W0.", "M30"), machine = m2)).last().tip.end)
+        stops(listOf("G30"), IssueCode.WORD_MISSING, 1)
+        stops(listOf("G30 P3 U0."), IssueCode.BAD_VALUE, 1)
+        stops(listOf("T0101", "G42", "G30 U0."), IssueCode.COMP_AT_G28, 3)
     }
 
     /** T(H 65 · S 3-78): 뒤 2자리 = 보정 번호. T 와 이송이 한 블록이면 멈춤(S 2-24) */

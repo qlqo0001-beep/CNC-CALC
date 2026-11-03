@@ -1,6 +1,7 @@
 package com.bmt.nosecalc.screens.sim
 
 import com.bmt.nosecalc.calc.Pt
+import com.bmt.nosecalc.calc.sim.CompStartup
 import com.bmt.nosecalc.calc.sim.DecimalMode
 import com.bmt.nosecalc.calc.sim.MachineSetup
 import com.bmt.nosecalc.calc.sim.RapidPath
@@ -11,8 +12,10 @@ import com.bmt.nosecalc.calc.sim.StockSpec
 /** 시뮬레이션 설정의 소재 칸(설계 7.8 '소재') */
 internal enum class StockField(val key: String) { DIA("dia"), LENGTH("len"), FACE("face"), BORE("bore"), CHUCK("chuck") }
 
-/** 시뮬레이션 설정의 기계 칸(설계 7.8 '기계' · '프로그램 읽기' 의 숫자 칸) — 단위는 화면 그대로(m/min · 초 · rpm · 직경 X) */
-internal enum class MachineField(val key: String) { RAPID_X("rx"), RAPID_Z("rz"), TOOL_CHANGE("tc"), MAX_RPM("rpm"), HOME_X("hx"), HOME_Z("hz"), G92_CHAMFER("g92") }
+/** 시뮬레이션 설정의 기계 칸(설계 7.8 '기계' · '프로그램 읽기' 의 숫자 칸) — 단위는 화면 그대로(m/min · 초 · rpm · 직경 X). HOME2 = G30 제2 원점 */
+internal enum class MachineField(val key: String) {
+    RAPID_X("rx"), RAPID_Z("rz"), TOOL_CHANGE("tc"), MAX_RPM("rpm"), HOME_X("hx"), HOME_Z("hz"), HOME2_X("h2x"), HOME2_Z("h2z"), G92_CHAMFER("g92"),
+}
 
 /** 보기 스위치(설계 7.8 '보기') — 처음: 고스트 · 급송 · 황삭 층 · 소재 칠하기 켬, 노즈 중심 경로 끔 */
 internal data class ViewFlags(
@@ -34,7 +37,8 @@ internal data class ViewFlags(
 
 /**
  * 한 번의 실행에 쓰는 설정(화면 상태를 백그라운드 스레드에서 읽지 않게 미리 뽑아 넘긴다). [homeX] · [homeZ] null = 자동(설계 4.1 —
- * X max(200, 소재 Ø + 100) · Z 끝면 + 100), [stockDia] · [stockFace] = 소재 칸(null = 자동 — 원점 자동 값에 쓴다).
+ * X max(200, 소재 Ø + 100) · Z 끝면 + 100), [stockDia] · [stockFace] = 소재 칸(null = 자동 — 원점 자동 값에 쓴다),
+ * [home2X] · [home2Z] = G30 제2 원점 칸(null = 그 축은 원점과 같음).
  */
 internal data class RunSetup(
     val machine: MachineSetup,
@@ -42,7 +46,16 @@ internal data class RunSetup(
     val homeZ: Double? = null,
     val stockDia: Double? = null,
     val stockFace: Double? = null,
+    val home2X: Double? = null,
+    val home2Z: Double? = null,
 ) {
+    /** G30 제2 원점(공작물 좌표, x 반경) — 칸이 둘 다 빈칸이면 null(= [home]) */
+    fun home2(home: Pt): Pt? =
+        if (home2X == null && home2Z == null) null else Pt(home2Z ?: home.z, home2X?.let { it / 2 } ?: home.x)
+
+    /** 원점 [home] 으로 실행할 기계 설정(제2 원점도 그 원점에 맞춘다) */
+    fun machineAt(home: Pt): MachineSetup = machine.copy(home = home, home2 = home2(home))
+
     /** 원점(공작물 좌표, x 반경). auto = 첫 실행의 자동 소재 */
     fun home(auto: StockSpec?): Pt {
         val dia = stockDia ?: auto?.dia
@@ -83,8 +96,8 @@ internal fun machineOk(f: MachineField): (Double) -> Boolean = when (f) {
     MachineField.RAPID_X, MachineField.RAPID_Z -> { v -> v > 0 && v <= 200 }
     MachineField.TOOL_CHANGE -> { v -> v in 0.0..600.0 }
     MachineField.MAX_RPM -> { v -> v > 0 && v <= 100_000 }
-    MachineField.HOME_X -> { v -> v in 0.0..10_000.0 }
-    MachineField.HOME_Z -> { v -> v in -10_000.0..10_000.0 }
+    MachineField.HOME_X, MachineField.HOME2_X -> { v -> v in 0.0..10_000.0 }
+    MachineField.HOME_Z, MachineField.HOME2_Z -> { v -> v in -10_000.0..10_000.0 }
     MachineField.G92_CHAMFER -> { v -> v in 0.0..9.9 }
 }
 
@@ -96,9 +109,9 @@ internal fun stockOk(f: StockField): (Double) -> Boolean = when (f) {
 }
 
 /**
- * 기계 칸 · 스위치 → [MachineSetup](원점은 [RunSetup.home] 이 정한다). 빈칸 · 틀린 칸은 가정 값(설계 4.1).
+ * 기계 칸 · 스위치 → [MachineSetup](원점 · 제2 원점은 [RunSetup.machineAt] 이 정한다). 빈칸 · 틀린 칸은 가정 값(설계 4.1).
  */
-internal fun machineOf(text: Map<MachineField, String>, path: RapidPath, decimal: DecimalMode, skip: Boolean): MachineSetup {
+internal fun machineOf(text: Map<MachineField, String>, path: RapidPath, decimal: DecimalMode, skip: Boolean, comp: CompStartup): MachineSetup {
     val d = MachineSetup()
     fun v(f: MachineField) = fieldValue(text[f], machineOk(f)).orNull()
     return MachineSetup(
@@ -110,6 +123,7 @@ internal fun machineOf(text: Map<MachineField, String>, path: RapidPath, decimal
         decimal = decimal,
         blockSkip = skip,
         g92ChamferLeads = v(MachineField.G92_CHAMFER) ?: 0.0,
+        compStartup = comp,
     )
 }
 

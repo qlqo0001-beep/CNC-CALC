@@ -71,6 +71,12 @@ class GTextTest {
         only(parse("G00 X1. (A (B)"), IssueCode.COMMENT_NESTED)
         // 주석 안의 ; 와 한글은 괜찮다
         assertTrue(parse("G00 X1. (가공; 시작)").issues.isEmpty())
+        // 짝 없는 ) 는 무시한다(F0 12.1 주) — 주석 뒤 괄호 하나 더 · 줄에 ) 만
+        val stray = parse("N2G50S2500M08(TOOL))", ")")
+        assertTrue(stray.issues.isEmpty(), "${stray.issues}")
+        assertEquals("TOOL", stray.units[0].blocks.single().comment)
+        assertEquals(listOf("G", "S", "M"), stray.units[0].blocks.single().words.map { it.key })
+        assertEquals(listOf(0..1 to "N", 2..4 to "G", 5..9 to "S", 10..12 to "M", 13..18 to "(", 19..19 to "("), GText.tokens("N2G50S2500M08(TOOL))"))
     }
 
     @Test
@@ -154,6 +160,9 @@ class GTextTest {
         for (g in listOf("G52", "G53", "G55", "G59", "G154")) only(parse("$g X0."), IssueCode.WORK_OFFSET)
         for (g in listOf("G32", "G17", "G33", "G81", "G10", "G65")) only(parse("$g X0."), IssueCode.UNSUPPORTED_G)
         assertTrue(parse("G00 G18 G21 G40 G54 G80 G97 G99 X1.").issues.isEmpty())
+        // G30(제2 원점)은 00 그룹 — G28 과 한 블록이면 같은 그룹
+        assertTrue(parse("G30 U0. W0.").issues.isEmpty())
+        only(parse("G28 G30 U0."), IssueCode.DUP_GROUP)
     }
 
     @Test

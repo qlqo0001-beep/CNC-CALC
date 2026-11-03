@@ -83,30 +83,42 @@ enum class IssueCode(val level: IssueLevel) {
     FULL_CIRCLE(IssueLevel.STOP),
 
     // ---- 노즈R 보정(3.5)
+    /** 시작 블록이 원호 — 형식 C 이동 없는 시작은 G02/G03 모드(FF 5.4.2 시작 조건 (3) · 알람 PS0034) */
     COMP_START_ARC(IssueLevel.STOP),
+    /** 취소 블록이 원호 — 형식 C 이동 없는 취소는 G02/G03 모드 */
     COMP_CANCEL_ARC(IssueLevel.STOP),
+    /**
+     * 형식 A · B: 시작 블록 움직임 0. 형식 C: 이동 없는 G41/G42 뒤 이동 블록 없이 보정을 끔(옮길 방향이 없음) — args = [시작 줄]
+     */
     COMP_START_ZERO(IssueLevel.STOP),
     COMP_ACUTE_OUTER(IssueLevel.STOP),
     COMP_INTERFERENCE(IssueLevel.STOP),
     COMP_ARC_SMALL(IssueLevel.STOP),
     COMP_IDLE_BLOCKS(IssueLevel.STOP),
+    /**
+     * 보정 중 G41 ↔ G42 바꿈 가운데 그리지 않는 것(바꿈 자체는 FF 5.4.3 대로 받는다): args 없음 = 시작 블록 바로 다음 블록에서 바꿈(FF 189쪽 'not available'),
+     * ["G40"] = 바꾼 바로 다음 블록이 이동 있는 취소, [줄] = 그 줄 원호 끝에서 두 쪽 보정선이 만나지 않음(끝이 원호 위에 없는 원호 — 옮기지 않음)
+     */
     COMP_SWITCH(IssueLevel.STOP),
     COMP_G40_IK(IssueLevel.STOP),
     COMP_TOOL_CHANGE(IssueLevel.STOP),
     COMP_IN_CYCLE(IssueLevel.STOP),
     COMP_AT_G28(IssueLevel.STOP),
     /**
-     * 이동 없는 블록에서 보정을 끈(G40 · T□□00) 뒤 원호 · 모서리(,C ,R) · 곧바로 다시 보정 시작 · 사이클 · G28 이 옴 — 그 경로를 출처로 확인하지 못함.
-     * 직선(G00/G01)은 그린다(FF 5.4.4 그림 5.4.4(e) — [COMP_CANCEL_ALONE])
+     * 형식 A · B 만: 이동 없는 블록에서 보정을 끈(G40 · T□□00) 뒤 원호 · 모서리(,C ,R) · 곧바로 다시 보정 시작 · 사이클 · G28 · G30 이 옴 — 그 경로를 출처로 확인하지 못함.
+     * 직선(G00/G01)은 그린다(FF 5.4.4 그림 5.4.4(e) — [COMP_CANCEL_ALONE]). 형식 C 는 G40 블록에서 지령점으로 옮겨 이 일이 없다
      */
     COMP_CANCEL_NO_MOVE(IssueLevel.STOP),
-    /** 이동 없는 블록에서 보정을 끔 — 앞 블록 끝 법선에 서고 다음 직선 이동에서 벡터를 지움(형식 A·B). 형식 C 기계는 다름 */
+    /**
+     * 이동 없는 블록에서 보정을 끔. 형식 A · B: 앞 블록 끝 법선에 서고 다음 직선 이동에서 벡터를 지움.
+     * 형식 C(args = ["C"]): 그 블록에서 끝 법선 → 지령점 − 팁 벡터로 옮김(FF 그림 5.4.4(f))
+     */
     COMP_CANCEL_ALONE(IssueLevel.INFO),
     /** G41/G42 인데 T 보정 번호가 없어(00) 보정하지 않음(S 3-78: T 보정과 G41/G42 가 둘 다 있어야 보정) */
     COMP_NO_OFFSET(IssueLevel.WARN),
     /** 보정을 G40 으로 끄지 않고 프로그램이 끝남 — 마지막 블록은 끝 법선 자리까지 그림 */
     COMP_NOT_CANCELLED(IssueLevel.WARN),
-    /** 시작 · 취소가 바깥 모서리 — 형식 A 로 봄(형식 B 기계는 그 블록 경로가 다름) */
+    /** 이동 있는 시작 · 취소가 바깥 모서리 — 형식 A 로 봄(형식 B 기계는 그 블록 경로가 다름). args = ["C"] 면 기계 설정이 형식 C(그래도 이동 있는 블록은 SUP 를 따름) */
     COMP_TYPE_A(IssueLevel.INFO),
     AGAINST_TOOL(IssueLevel.WARN),
     TOOL_DATA_MISSING(IssueLevel.STOP),
@@ -134,11 +146,12 @@ enum class IssueCode(val level: IssueLevel) {
     /** G90/G92/G94 모드 블록에 축과 S · T · M · G96~G99 가 같이 있음(S 4-93), 또는 G70~G76 줄에 M */
     CYCLE_BLOCK_TM(IssueLevel.STOP),
     /**
-     * G90/G92/G94 모드에서 축 없이 S · T · M(또는 G96~G99)이 있는 블록. FANUC 은 이동 없는 블록에서도 사이클을 한 번 더 돌며
-     * 그 기능을 '함께' 실행한다(FF 4.1.6 · F0 13.1 주 2(3)) — 순서가 기계마다라 지원 안 함. G00/G01 로 모드를 먼저 끝낸다(FF 예 `N011 G00 T0202`). args = [G9x]
+     * G90/G92/G94 모드에서 축 없이 S · T · 주축(M03~M05) · 끝(M02 · M30) · M98/M99(또는 G96~G99)이 있는 블록. FANUC 은 이동 없는 블록에서도 사이클을 한 번 더 돌며
+     * 그 기능을 '함께' 실행한다(FF 4.1.6 · F0 13.1 주 2(3)) — 순서가 결과를 바꿔 지원 안 함. G00/G01 로 모드를 먼저 끝낸다(FF 예 `N011 G00 T0202`).
+     * 그 밖의 M(기계 M · M00 · M01 · M08 · M09)만 있는 블록은 사이클을 한 번 더 돈 뒤 M 을 실행한다. args = [G9x]
      */
     CYCLE_REPEAT_MST(IssueLevel.STOP),
-    /** G90/G92/G94 모드 중 한 번 G(G28 · G50 · G70~G76), 또는 모드를 잇는 블록의 G18(FF 4.1.6: 모달 값을 지움) — G00~G03 으로 모드를 먼저 끝낸다. args = [G9x] */
+    /** G90/G92/G94 모드 중 한 번 G(G28 · G30 · G50 · G70~G76), 또는 모드를 잇는 블록의 G18(FF 4.1.6: 모달 값을 지움) — G00~G03 으로 모드를 먼저 끝낸다. args = [G9x] */
     CYCLE_ONESHOT(IssueLevel.STOP),
     /** P · Q 순번 블록이 그 프로그램 단위에 없음. args = [P|Q, "N순번"] */
     CYCLE_PQ_NOT_FOUND(IssueLevel.STOP),
@@ -168,7 +181,10 @@ enum class IssueCode(val level: IssueLevel) {
     M98_IN_PQ(IssueLevel.STOP),
 
     // ---- 부프로그램 · 끝(1.8)
+    /** M99 P 의 N 이 없음(args = ["N순번"]) · 그 밖 부를 곳 없음 */
     SUB_NOT_FOUND(IssueLevel.STOP),
+    /** M98 P 의 프로그램이 이 글에 없음 — 기계에만 있는 부프로그램으로 보고 건너뜀(그 안 이동은 그리지 않음). args = [번호] */
+    SUB_SKIPPED(IssueLevel.WARN),
     SUB_NEST(IssueLevel.STOP),
     /** 부프로그램이 M99 없이 끝남 */
     SUB_NO_M99(IssueLevel.STOP),

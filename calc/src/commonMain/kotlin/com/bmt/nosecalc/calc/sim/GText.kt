@@ -60,12 +60,12 @@ data class ParsedProgram(val units: List<ProgramUnit>, val issues: List<SimIssue
  */
 object GText {
     /** 실행기가 아는 G(그 밖은 UNSUPPORTED_G · INCH · WORK_OFFSET) */
-    internal val SUPPORTED_G = setOf(0, 1, 2, 3, 4, 18, 21, 28, 40, 41, 42, 50, 54, 70, 71, 72, 73, 74, 75, 76, 80, 90, 92, 94, 96, 97, 98, 99)
+    internal val SUPPORTED_G = setOf(0, 1, 2, 3, 4, 18, 21, 28, 30, 40, 41, 42, 50, 54, 70, 71, 72, 73, 74, 75, 76, 80, 90, 92, 94, 96, 97, 98, 99)
 
     /** G 그룹(H 29 · S 표): 같은 그룹 둘이 한 블록이면 DUP_GROUP. 00 = 한 번만 쓰는 G */
     internal fun group(g: Int): Int? = when (g) {
         0, 1, 2, 3, 32, 34, 90, 92, 94 -> 1
-        4, 10, 28, 31, 50, 52, 53, 65, 70, 71, 72, 73, 74, 75, 76 -> 0
+        4, 10, 28, 30, 31, 50, 52, 53, 65, 70, 71, 72, 73, 74, 75, 76 -> 0
         96, 97 -> 2
         98, 99 -> 5
         20, 21 -> 6
@@ -127,7 +127,7 @@ object GText {
         return lex(l).map { t ->
             when (t) {
                 is TWord -> t.cols to (if (t.num == null || t.key == null) "!" else t.key)
-                is TComment -> t.cols to "("
+                is TComment, is TClose -> t.cols to "("
                 is TSep -> t.cols to ";"
                 is TSlash -> t.cols to "/"
                 is TBad -> t.cols to "!"
@@ -168,7 +168,7 @@ object GText {
                     t.num == null -> mine += SimIssue(IssueCode.NO_NUMBER, lineNo, t.cols, t.key)
                     else -> raws += t
                 }
-                is TSep -> {}
+                is TSep, is TClose -> {}
             }
         }
 
@@ -309,6 +309,9 @@ object GText {
     private class TSlash(override val cols: IntRange) : Tok
     private class TBad(override val cols: IntRange) : Tok
 
+    /** 짝 없는 `)` — 무시한다(F0 12.1 125쪽 주: 짝 control-out 없이 읽은 control-in 은 무시) */
+    private class TClose(override val cols: IntRange) : Tok
+
     private fun lex(s: String): List<Tok> {
         val out = mutableListOf<Tok>()
         var i = 0
@@ -328,6 +331,10 @@ object GText {
                     val end = if (closed) j else n - 1
                     out += TComment(s.substring(i + 1, if (closed) j else n), closed, nested, i..end)
                     i = end + 1
+                }
+                c == ')' -> {
+                    out += TClose(i..i)
+                    i++
                 }
                 c == ';' -> {
                     out += TSep(i..i)

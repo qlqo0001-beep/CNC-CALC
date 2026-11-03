@@ -167,7 +167,9 @@ internal class SimPaths(run: SimRun) {
                 xb = min(xb, p.x)
                 xt = max(xt, p.x)
             }
-            val cut = s.src == StepSrc.BLOCK || s.src == StepSrc.CORNER || s.src == StepSrc.CYCLE_FINISH
+            // 형식 C 의 G41/G42 · G40 줄 옮김도 블록 이동처럼(이송이면 깎는 길) — 명령 경로는 한 점이라 긋지 않는다
+            val shift = s.src == StepSrc.SHIFT_START || s.src == StepSrc.SHIFT_CANCEL
+            val cut = s.src == StepSrc.BLOCK || s.src == StepSrc.CORNER || s.src == StepSrc.CYCLE_FINISH || shift
             if (!cut || s.kind == MoveKind.THREAD) {
                 pl.seg(s.tip)
                 continue
@@ -175,7 +177,7 @@ internal class SimPaths(run: SimRun) {
             if (s.tip is Arc) pa.seg(s.tip) else pt.seg(s.tip)
             pn.seg(s.nose)
             val c = s.cmd
-            if (c != null && ((c.start - s.tip.start).length > 1e-6 || (c.end - s.tip.end).length > 1e-6)) {
+            if (c != null && !shift && ((c.start - s.tip.start).length > 1e-6 || (c.end - s.tip.end).length > 1e-6)) {
                 pc.seg(c)
             }
             val l = c ?: s.tip

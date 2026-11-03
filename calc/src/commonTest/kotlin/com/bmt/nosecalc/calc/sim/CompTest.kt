@@ -27,6 +27,9 @@ import kotlin.test.assertTrue
 class CompTest {
     private fun tool(r: Double, tip: Int) = mapOf(1 to ToolOffset(r, tip))
 
+    /** 형식 A · B 기계(No.5003#1 SUV = 0) — 이동 없는 시작 · 취소 블록에서 움직이지 않음 */
+    private val ab = MachineSetup(compStartup = CompStartup.AB)
+
     /** 블록 끝 고스트의 실제 인선(보정 좌표) */
     private fun tipAt(r: SimRun, line: Int): Pt = r.ghosts.last { it.line == line }.tip
 
@@ -117,7 +120,7 @@ class CompTest {
         val pre = listOf("T0101", "G97 S1000 M03", "G00 X44. Z1.")
         stops(pre + listOf("G42 G02 X40. Z-1. R2. F0.1"), IssueCode.COMP_START_ARC, 4)
         stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40 G02 X44. Z-12. R2."), IssueCode.COMP_CANCEL_ARC, 6)
-        stops(listOf("T0101", "G97 S1000 M03", "G00 X40. Z0.", "G42 G01 X40. Z0. F0.1"), IssueCode.COMP_START_ZERO, 4)
+        stops(listOf("T0101", "G97 S1000 M03", "G00 X40. Z0.", "G42 G01 X40. Z0. F0.1"), IssueCode.COMP_START_ZERO, 4, machine = ab)
         // 바깥 꺾임 > 90°: −Z 로 가다 +Z · −X 로 되돌아감
         stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G01 X30. Z-5.", "G40 G00 X20."), IssueCode.COMP_ACUTE_OUTER, 6)
         // 노즈(0.8 폭)보다 좁은 0.5 홈 바닥 → 보정 토막이 거꾸로
@@ -132,12 +135,16 @@ class CompTest {
         stops(pre + listOf("G42 G01 X40. Z0. F0.1", "T0202"), IssueCode.COMP_TOOL_CHANGE, 5)
         stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G28 U0."), IssueCode.COMP_AT_G28, 5)
         stops(listOf("T0101", "G42", "G28 U0."), IssueCode.COMP_AT_G28, 3)
-        // 이동 없는 G40 뒤 원호 · 모서리 · 곧바로 다시 보정은 경로를 모른다 → 멈춤. 뒤에 이동이 없으면 괜찮다
-        stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G02 X50. Z-15. R5."), IssueCode.COMP_CANCEL_NO_MOVE, 7)
-        stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G01 X50. ,C1.", "G01 Z-20."), IssueCode.COMP_CANCEL_NO_MOVE, 7)
-        stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G42 G01 X50."), IssueCode.COMP_CANCEL_NO_MOVE, 7)
-        val tail = ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "M30"))
+        // 형식 A · B: 이동 없는 G40 뒤 원호 · 모서리 · 곧바로 다시 보정은 경로를 모른다 → 멈춤. 뒤에 이동이 없으면 괜찮다
+        stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G02 X50. Z-15. R5."), IssueCode.COMP_CANCEL_NO_MOVE, 7, machine = ab)
+        stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G01 X50. ,C1.", "G01 Z-20."), IssueCode.COMP_CANCEL_NO_MOVE, 7, machine = ab)
+        stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G42 G01 X50."), IssueCode.COMP_CANCEL_NO_MOVE, 7, machine = ab)
+        val tail = ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "M30"), machine = ab)
         assertEquals("X40.000 Z-10.400", xz(tipAt(tail, 5))) // 끝 법선 자리까지
+        // 형식 C: G40 블록에서 지령점으로 옮겨 뒤는 보통 G40 상태 — 원호 · 모서리 · 다시 보정도 된다
+        ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G02 X50. Z-15. R5.", "M30"))
+        ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G01 X50. ,C1.", "G01 Z-20.", "M30"))
+        ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G42 G01 X50.", "G40 G01 X52.", "M30"))
         // 공구 설정 빈칸
         stops(pre + listOf("G42 G01 X40. Z0. F0.1"), IssueCode.TOOL_DATA_MISSING, 4, tools = emptyMap())
         stops(pre + listOf("G42 G01 X40. Z0. F0.1"), IssueCode.TOOL_DATA_MISSING, 4, tools = mapOf(1 to ToolOffset(0.4, null)))
@@ -145,13 +152,14 @@ class CompTest {
 
     /**
      * 이동 없는 G40(FF 5.4.4 그림 5.4.4(e) 204쪽 형식 A·B · F0 14.3.4 228쪽): 앞 블록 끝에 법선 벡터 — 노즈 접점이 끝점, 인선 X40 Z-10.4 —
-     * 취소 블록에서는 움직이지 않고, 다음 이동이 그 자리에서 끝점(G40 상태: 노즈 = 점 − 팁 벡터)으로 곧게(G00 이면 급송 설정대로). INFO 하나
+     * 취소 블록에서는 움직이지 않고, 다음 이동이 그 자리에서 끝점(G40 상태: 노즈 = 점 − 팁 벡터)으로 곧게(G00 이면 급송 설정대로). INFO 하나.
+     * 기계 설정 형식 A · B(형식 C 는 [typeCCancelAndStart])
      */
     @Test
     fun cancelWithoutMove() {
         val pre = listOf("T0101", "G97 S1000 M03", "G00 X44. Z1.")
         for (rapid in listOf(RapidPath.LINEAR, RapidPath.DOGLEG)) {
-            val r = ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G00 X60.", "G00 Z5.", "M30"), machine = MachineSetup(rapidPath = rapid))
+            val r = ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40", "G00 X60.", "G00 Z5.", "M30"), machine = ab.copy(rapidPath = rapid))
             assertEquals("X40.000 Z-10.400", xz(tipAt(r, 5)))
             assertEquals(listOf(6), r.issues.filter { it.code == IssueCode.COMP_CANCEL_ALONE }.map { it.line })
             val m7 = moves(r).filter { it.line == 7 }
@@ -163,7 +171,7 @@ class CompTest {
             near(Pt.ofDia(5.4, 60.8), m8.nose.end)
         }
         // T□□00(보정 번호 0)으로 끈 것도 같다 — 그 뒤 팁 벡터 0
-        val t0 = ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "T0100", "G01 X60.", "M30"))
+        val t0 = ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "T0100", "G01 X60.", "M30"), machine = ab)
         near(Pt.ofDia(-10.0, 40.8), moves(t0).first { it.line == 7 }.nose.start)
         near(Pt.ofDia(-10.0, 60.0), moves(t0).last { it.line == 7 }.nose.end)
     }
@@ -174,10 +182,16 @@ class CompTest {
         val noOff = ok(listOf("T0100", "G97 S1000 M03", "G00 X44. Z1.", "G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40 G00 X44.", "M30"))
         assertTrue(has(noOff, IssueCode.COMP_NO_OFFSET))
         assertEquals("X40.000 Z-10.000", xz(tipAt(noOff, 5)))
-        // G41/G42 를 먼저 걸고 T 는 나중(S 3-78 그림 3-16) — T 뒤 첫 이동이 시작 블록
-        val late = ok(listOf("G97 S1000 M03", "G00 X36. Z1.", "G42", "T0101", "G01 X40. Z0. F0.1", "G01 Z-10.", "G40 G00 X44.", "M30"))
+        // G41/G42 를 먼저 걸고 T 는 나중(S 3-78 그림 3-16) — 형식 A · B 는 T 뒤 첫 이동이 시작 블록
+        val lateText = listOf("G97 S1000 M03", "G00 X36. Z1.", "G42", "T0101", "G01 X40. Z0. F0.1", "G01 Z-10.", "G40 G00 X44.", "M30")
+        val late = ok(lateText, machine = ab)
         assertTrue(!has(late, IssueCode.COMP_NO_OFFSET))
         assertEquals("X40.000 Z-0.400", xz(tipAt(late, 5)))
+        // 형식 C: 보정이 걸리는 T 블록(이동 없음)이 시작 — 그 블록에서 옮기고, 다음 이동은 보정 중 블록(끝 = 다음 블록과 늘인 교점)
+        val lateC = ok(lateText)
+        assertEquals(StepSrc.SHIFT_START, moves(lateC).first { it.line == 4 }.src)
+        near(Pt.ofDia(1.0, 36.0) - NoseComp.tipVector(3, 0.4), moves(lateC).first { it.line == 4 }.nose.start)
+        for ((a, b) in moves(lateC).filter { it.line >= 4 }.zipWithNext()) near(a.nose.end, b.nose.start)
         // G40 없이 끝
         val open = ok(listOf("T0101", "G97 S1000 M03", "G00 X36. Z1.", "G42 G01 X40. Z0. F0.1", "G01 Z-10.", "M30"))
         assertTrue(has(open, IssueCode.COMP_NOT_CANCELLED))
@@ -226,7 +240,7 @@ class CompTest {
     }
 
     /**
-     * 같은 규칙의 독립 구현(RefG4x = 앱 VerifyFlipTest.simG4x(typeB = false))과 무작위 2 000 프로그램에서 노즈 경로가 같아야(1e-8).
+     * 같은 규칙의 독립 구현(RefG4x = 앱 VerifyFlipTest.simG4x(typeB = false) — 이동 없는 G40 은 형식 A · B)과 무작위 2 000 프로그램에서 노즈 경로가 같아야(1e-8).
      * 시뮬레이터가 멈춘 사례(바깥 꺾임 > 90° · 간섭 · R < r)는 비교에서 빼고 개수만 본다.
      */
     @Test
@@ -264,7 +278,7 @@ class CompTest {
             // 셋에 하나는 이동 없는 G40 + 다음 이동(FF 5.4.4 그림 5.4.4(e))
             val cancel = if (rnd.nextInt(3) == 0) listOf("G40", put("G01", c)) else listOf("G40 " + put("G01", c))
             val prog = listOf("G00 X${f(entry.xDia)} Z${f(entry.z)}", start) + body + cancel
-            val sim = SimKit.run(listOf("T0101", "G97 S1000 M03", "G99 F0.2") + prog + "M30", mapOf(1 to ToolOffset(r, tip)))
+            val sim = SimKit.run(listOf("T0101", "G97 S1000 M03", "G99 F0.2") + prog + "M30", mapOf(1 to ToolOffset(r, tip)), ab)
             val ref = RefG4x.run(RefG4x.parse(prog), NoseComp.tipVector(tip, r).let { RefG4x.P(it.z, it.x) }, r)
             if (sim.stop != null) {
                 stopped++
@@ -283,5 +297,161 @@ class CompTest {
         }
         println("randomAgainstReference compared=$compared stopped=$stopped")
         assertTrue(compared >= 600, "비교 $compared · 멈춤 $stopped")
+    }
+
+    /** 고스트 노즈를 0.001 글로 — 줄마다 마지막 */
+    private fun noseAt(r: SimRun, line: Int): String = xz(r.ghosts.last { it.line == line }.nose)
+
+    /**
+     * 형식 C(No.5003#1 SUV = 1 — 기계 설정 처음 값): 이동 없는 G40 블록에서 노즈가 앞 블록 끝 법선 E + r·nₑ → 지령점 − 팁 벡터(FF 그림 5.4.4(f) 205쪽),
+     * 이동 없는 G41/G42 블록에서 P − t → P + r·n₁(n₁ = 다음 이동 블록의 공구 쪽 법선 — FF 180쪽). 'G40 바로 G41' 은 그 둘을 차례로(형식 A · B 는 설명서에
+     * 경로가 없어 멈춤). 손 계산(0.4R · 팁 3, 팁 벡터 t = Z −0.4 · X −0.4 반경)은 줄 옆 주석의 노즈(직경 X).
+     */
+    @Test
+    fun typeCCancelAndStart() {
+        val text = listOf(
+            "T0101", "G97 S1000 M03", "G99", "G00 X44. Z2.",
+            "G42", // 5: X44.8 Z2.4 → X44.8 Z2.(다음 −Z 블록의 G42 법선 +X)
+            "G01 Z-10. F0.1", // 6: 다음(+X)과 안쪽 교점 X44.8 Z-9.6
+            "X50.", // 7: 끝 법선 X50. Z-9.6
+            "G40", // 8: → X50.8 Z-9.6(지령점 − 팁 벡터)
+            "G41", // 9: X50.8 Z-9.6 → X49.2 Z-10.(다음 −Z 블록의 G41 법선 −X)
+            "Z-12.", // 10: 다음(−X)과 안쪽 교점 X49.2 Z-11.6
+            "X44.", // 11: 끝 법선 X44. Z-11.6
+            "G40", // 12: → X44.8 Z-11.6
+            "G00 Z5.", // 13: G40 상태 X44.8 Z5.4
+            "M30",
+        )
+        val r = ok(text)
+        val want = listOf(
+            5 to "X44.800 Z2.000", 6 to "X44.800 Z-9.600", 7 to "X50.000 Z-9.600", 8 to "X50.800 Z-9.600", 9 to "X49.200 Z-10.000",
+            10 to "X49.200 Z-11.600", 11 to "X44.000 Z-11.600", 12 to "X44.800 Z-11.600", 13 to "X44.800 Z5.400",
+        )
+        for ((line, w) in want) assertEquals(w, noseAt(r, line), "줄 $line")
+        // 옮김 이동은 그 줄의 모달(G01 → 이송), 명령 경로는 그 자리 한 점
+        val s8 = moves(r).single { it.line == 8 }
+        assertEquals(StepSrc.SHIFT_CANCEL, s8.src)
+        assertEquals(MoveKind.FEED, s8.kind)
+        assertEquals("X50.000 Z-9.600", xz(s8.nose.start))
+        val s9 = moves(r).single { it.line == 9 }
+        assertEquals(StepSrc.SHIFT_START, s9.src)
+        assertEquals("X50.800 Z-9.600", xz(s9.nose.start))
+        near(s9.cmd!!.start, s9.cmd!!.end)
+        assertEquals(MoveKind.RAPID, moves(r).single { it.line == 5 }.kind)
+        for ((a, b) in moves(r).zipWithNext()) near(a.nose.end, b.nose.start)
+        val alone = r.issues.filter { it.code == IssueCode.COMP_CANCEL_ALONE }
+        assertEquals(listOf(8, 12), alone.map { it.line })
+        assertTrue(alone.all { it.args == listOf("C") })
+        assertEquals(setOf(1), r.compOffsets)
+        // 형식 A · B 는 'G40 바로 G41' 의 경로가 설명서에 없어 멈춘다
+        stops(text, IssueCode.COMP_CANCEL_NO_MOVE, 10, machine = ab)
+    }
+
+    /**
+     * 형식 C 의 이동 없는 시작은 다음 '이동 있는' 블록의 법선으로 — 사이 제자리 이동(U0 꼴, FF 5.4.3 'A block without tool movement')은 이동 없는 블록이라
+     * 건너뛴다(FF 5.4.2 시작 조건 (4) — 형식 A · B 는 제자리 시작 블록에서 멈춤). 사이 M 걸음은 옮김 이동 뒤, 이동 없는 블록이 둘이면 멈춤(설계 3.2).
+     */
+    @Test
+    fun typeCStartReadsAhead() {
+        val pre = listOf("T0101", "G97 S1000 M03", "G99", "G00 X30. Z2.")
+        val text = pre + listOf("G42", "X30.", "G01 Z-5. F0.1", "X40.", "G40", "G00 Z5.", "M30")
+        val r = ok(text)
+        assertEquals("X30.800 Z2.000", xz(moves(r).single { it.line == 5 }.nose.end))
+        assertTrue(moves(r).none { it.line == 6 })
+        stops(text, IssueCode.COMP_START_ZERO, 6, machine = ab)
+        val m = ok(pre + listOf("G42", "M08", "G01 Z-5. F0.1", "X40.", "G40", "G00 Z5.", "M30"))
+        val iShift = m.steps.indexOfFirst { it is MoveStep && it.line == 5 }
+        val iState = m.steps.indexOfFirst { it is StateStep && it.line == 6 }
+        assertTrue(iShift in 0 until iState, "$iShift $iState")
+        for ((a, b) in m.steps.zipWithNext()) assertEquals(a.t1, b.t0, 1e-12)
+        stops(pre + listOf("G42", "M08", "M09", "G01 Z-5. F0.1"), IssueCode.COMP_IDLE_BLOCKS, 7)
+    }
+
+    @Test
+    fun typeCErrors() {
+        val pre = listOf("T0101", "G97 S1000 M03", "G99", "G00 X44. Z2.")
+        // G02/G03 모드의 이동 없는 시작 · 취소(FF 5.4.2 시작 조건 (3) — 알람 PS0034)
+        stops(pre + listOf("G02 X44. Z0. R1. F0.1", "G42"), IssueCode.COMP_START_ARC, 6)
+        stops(pre + listOf("G42 G01 Z0. F0.1", "G02 X48. Z-2. R2.", "G40"), IssueCode.COMP_CANCEL_ARC, 7)
+        // 이동 없는 시작 뒤 이동 블록 없이 끔 — 옮길 방향이 없다
+        val z = stops(pre + listOf("G42", "G40"), IssueCode.COMP_START_ZERO, 6)
+        assertEquals(listOf("5"), z.stop!!.args)
+        stops(pre + listOf("G42"), IssueCode.TOOL_DATA_MISSING, 5, tools = emptyMap())
+        // 보정 중 공구 바꿈 · G28 은 이동 없는 시작 블록 뒤에도 멈춤
+        stops(pre + listOf("G42", "T0202"), IssueCode.COMP_TOOL_CHANGE, 6)
+        stops(pre + listOf("G42", "G28 U0."), IssueCode.COMP_AT_G28, 6)
+        // 이동 있는 시작 · 취소는 형식 C 기계도 SUP 를 따른다 — 시뮬레이터는 형식 A(바깥이면 알림, args C)
+        val outer = ok(listOf("T0101", "G97 S1000 M03", "G00 X36. Z1.", "G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G40 G00 X36. Z-11.", "M30"))
+        assertEquals("X40.000 Z-0.400", xz(tipAt(outer, 4)))
+        assertEquals("X40.000 Z-10.400", xz(tipAt(outer, 5)))
+        val ta = outer.issues.filter { it.code == IssueCode.COMP_TYPE_A }
+        assertEquals(listOf(4, 6), ta.map { it.line })
+        assertTrue(ta.all { it.args == listOf("C") })
+        // T□□00 으로 이동 없이 끔: 보정 번호 0 의 지령점(팁 벡터 0)으로 옮김
+        val t0 = ok(listOf("T0101", "G97 S1000 M03", "G00 X44. Z1.", "G42 G01 X40. Z0. F0.1", "G01 Z-10.", "T0100", "G01 X60.", "M30"))
+        val s6 = moves(t0).single { it.line == 6 }
+        near(Pt.ofDia(-10.0, 40.8), s6.nose.start)
+        near(Pt.ofDia(-10.0, 40.0), s6.nose.end)
+        near(Pt.ofDia(-10.0, 60.0), moves(t0).last { it.line == 7 }.nose.end)
+    }
+
+    /**
+     * 회사 꼴 손 계산(형식 C · 0.4R · 팁 3 — 앱 골든 taper-b 의 도형 X40 Z0 / X50 Z-5 · 끝 X50 Z-10 을 끝면부터 한 보정 구간으로 지은 글:
+     * 혼자 G42 → G0 X Z20. → Z 로 다가감 → 깎기 → 공기로 빼는 줄 → 혼자 G40 → G0 Z):
+     * 테이퍼 시작 노즈 X40.331 Z0.4 · 끝 X50.8 Z-4.834(= 직접 보정 글 X39.531 Z0. · X50. Z-5.234 의 노즈), 어깨 앞 X50.8 Z-9.6(안쪽 교점),
+     * 빼는 줄 끝 X56. Z-9.6(끝 법선), G40 줄 X56.8 Z-9.6(지령점 − 팁 벡터, 공기). 깎는 줄의 노즈는 형식 A · B 와 같다 — 다른 곳은 G42 · G40 줄 둘레(공기)뿐.
+     */
+    @Test
+    fun typeCCompanyStyleTaper() {
+        val text = listOf(
+            "T0101", "G97 S1000 M03", "G99",
+            "G42", "G0X36.Z20.", "Z2.", "G1Z0.F.1", "X40.", "X50.Z-5.", "Z-10.F.15", "X56.F.3", "G40", "G0Z200.", "M30",
+        )
+        val c = ok(text)
+        assertEquals("X36.800 Z0.400", noseAt(c, 7))
+        assertEquals("X40.331 Z0.400", noseAt(c, 8))
+        assertEquals("X50.800 Z-4.834", noseAt(c, 9))
+        assertEquals("X50.800 Z-9.600", noseAt(c, 10))
+        assertEquals("X56.000 Z-9.600", noseAt(c, 11))
+        assertEquals("X56.800 Z-9.600", noseAt(c, 12))
+        assertEquals("X56.800 Z200.400", noseAt(c, 13))
+        // 형식 A · B 로 돌려도 깎는 줄(7~11)의 노즈 경로는 같다
+        val a = ok(text, machine = ab)
+        fun cut(r: SimRun) = moves(r).filter { it.line in 7..11 }
+        assertEquals(cut(a).size, cut(c).size)
+        for ((ma, mc) in cut(a).zip(cut(c))) {
+            near(ma.nose.start, mc.nose.start, 1e-9, "줄 ${ma.line} 처음")
+            near(ma.nose.end, mc.nose.end, 1e-9, "줄 ${ma.line} 끝")
+        }
+        // 다른 곳: 형식 A · B 는 G40 줄에서 움직이지 않는다
+        assertTrue(moves(a).none { it.line == 12 })
+    }
+
+    /**
+     * 보정 중 G41 ↔ G42 바꿈(FF 5.4.3 189~191쪽 — 형식과 무관): 바꾸기 앞 블록 A 의 보정선(앞 쪽)과 다음 이동 블록 B 의 보정선(바뀐 쪽)의 교점,
+     * 교점이 없으면(평행) B 처음 법선. 시작 블록 바로 다음 블록에서 바꿈 · 바꾼 바로 다음 이동 있는 취소 · 원호 끝에서 보정선이 안 만남은 멈춤.
+     * 손 계산(0.4R · 팁 3, 노즈 직경 X).
+     */
+    @Test
+    fun switchSideInOffsetMode() {
+        val pre = listOf("T0101", "G97 S1000 M03", "G00 X44. Z1.")
+        // 교점: A = `Z-10.`(−Z · G42 → 노즈 X40.8) · B = `X50.`(+X · G41 → 노즈 Z-10.4) → X40.8 Z-10.4. B → C(−Z · G41) 는 안쪽 교점 X49.2 Z-10.4
+        val a = ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G41", "G01 X50.", "G01 Z-20.", "G40 G00 X60.", "M30"))
+        assertEquals("X40.800 Z-10.400", noseAt(a, 5))
+        assertEquals("X49.200 Z-10.400", noseAt(a, 7))
+        for ((x, y) in moves(a).zipWithNext()) near(x.nose.end, y.nose.start)
+        // 교점 없음(A · B 한 직선): A 의 노즈가 B 처음 법선 X39.2 Z-10 으로 곧게, B 는 G41 보정선 위
+        val b = ok(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G41", "G01 Z-20.", "G40 G00 X30.", "M30"))
+        assertEquals("X39.200 Z-10.000", noseAt(b, 5))
+        assertEquals("X39.200 Z-19.600", noseAt(b, 7))
+        // 형식 C 이동 없는 시작 뒤 한 블록 간 다음이면 된다(시작 블록 · 그 다음 블록만 막힘)
+        ok(pre + listOf("G42", "G01 Z-5. F0.1", "G41", "G01 X50.", "G40", "G00 Z5.", "M30"))
+        stops(pre + listOf("G42", "G41", "G01 Z-5. F0.1"), IssueCode.COMP_SWITCH, 5)
+        stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G41", "G01 Z-10."), IssueCode.COMP_SWITCH, 5, machine = ab)
+        // 바꾼 바로 다음이 이동 있는 취소
+        assertEquals(listOf("G40"), stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-10.", "G41", "G40 G01 X50."), IssueCode.COMP_SWITCH, 7).stop!!.args)
+        // 원호 끝(오목 — 보정선 R5 − 0.4)에서 바꾼 쪽 보정선(Z-10.4)이 만나지 않음
+        val arc = stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-5.", "G02 X50. Z-10. R5.", "G41", "G01 X60.", "G40 G00 X70."), IssueCode.COMP_SWITCH, 8)
+        assertEquals(listOf("6"), arc.stop!!.args)
     }
 }

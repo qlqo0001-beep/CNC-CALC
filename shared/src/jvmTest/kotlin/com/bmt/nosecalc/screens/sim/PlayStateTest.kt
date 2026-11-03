@@ -1,6 +1,7 @@
 package com.bmt.nosecalc.screens.sim
 
 import com.bmt.nosecalc.KeyValueStore
+import com.bmt.nosecalc.calc.sim.CompStartup
 import com.bmt.nosecalc.calc.sim.DecimalMode
 import com.bmt.nosecalc.calc.sim.GSim
 import com.bmt.nosecalc.calc.sim.MachineSetup
@@ -184,6 +185,30 @@ class PlayStateTest {
         assertEquals(RapidPath.LINEAR, m.rapidPath)
         assertEquals(DecimalMode.CALCULATOR, m.decimal)
         assertIs<FieldValue.Bad>(fieldValue("abc", machineOk(MachineField.RAPID_Z)))
+        // 보정 시작 · 취소 형식: 처음 형식 C(회사 기계), 고르면 남는다
+        assertEquals(CompStartup.C, t.compStartup)
+        assertEquals(CompStartup.C, m.compStartup)
+        t.changeCompStartup(CompStartup.AB)
+        assertEquals(CompStartup.AB, SimState(kv).runSetup().machine.compStartup)
+    }
+
+    /** G30 제2 원점 칸: 빈칸이면 원점(G28)과 같고, 한 축만 넣으면 다른 축은 원점 값 */
+    @Test
+    fun secondHomeFeedsG30() {
+        val kv = KeyValueStore(File.createTempFile("bmt-sim", ".properties").apply { delete() })
+        val s = SimState(kv)
+        s.editor.insert("G00 X40. Z2.\nG30 U0. W0.\nM30")
+        s.setMachine(MachineField.HOME_X, "300")
+        s.setMachine(MachineField.HOME_Z, "80")
+        fun end() = s.runOf(s.editor.text, s.tools).steps.filterIsInstance<MoveStep>().last().tip.end
+        assertEquals(300.0, end().xDia, 1e-12)
+        assertEquals(80.0, end().z, 1e-12)
+        s.setMachine(MachineField.HOME2_Z, "150")
+        assertEquals(300.0, end().xDia, 1e-12)
+        assertEquals(150.0, end().z, 1e-12)
+        s.setMachine(MachineField.HOME2_X, "250")
+        assertEquals(250.0, end().xDia, 1e-12)
+        assertEquals("250", SimState(kv).machineText[MachineField.HOME2_X])
     }
 
     /** 화면을 떠났다 와도(앱을 켠 동안) 소재 칸 · 속도 · 싱글 블록 · M01 이 남는다(Saver) */
