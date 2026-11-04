@@ -161,7 +161,10 @@ class CycleTest {
         near(Pt.ofDia(0.1, 0.5), at(r, 12)[0].tip.end)
     }
 
-    /** H 130 O00133: G92 12 번(M23 은 Haas 기계 M 이라 경고 — S 4-93 이 사이클 블록의 M 을 오류로 적어 앞 줄로 옮김) */
+    /**
+     * H 130 O00133: G92 12 번(M23 은 S 4-93 이 사이클 블록의 M 을 오류로 적어 앞 줄로 옮김). M23 = 나사 끝 빼기 켬(H 111 — 설계 18.8)이라 '기계 M' 알림이 없고,
+     * 설정 끝 빼기가 처음 0 이라 패스는 곧다(모르는 M 의 알림은 GBasicTest.mCodes · singleCycleRepeatsOnBlockWithoutMove 의 M41 · M71 이 본다)
+     */
     @Test
     fun haas130G92() {
         val xs = listOf(".98", ".96", ".94", ".935", ".93", ".925", ".9225", ".92", ".9175", ".9155", ".915", ".9148")
@@ -175,7 +178,7 @@ class CycleTest {
             near(Pt.ofDia(-1.05, x.toDouble()), m.tip.end, 1e-12, "X$x")
         }
         assertEquals((1..12).toList(), th.map { it.pass })
-        assertTrue(has(r, IssueCode.MACHINE_M))
+        assertTrue(!has(r, IssueCode.MACHINE_M))
     }
 
     /** H 132 O00135: G94 G41 → COMP_IN_CYCLE. G41 을 빼면 K 테이퍼(K = R) 여섯 번 */

@@ -82,6 +82,7 @@ import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.Side
 import com.bmt.nosecalc.calc.TaperCalc
+import com.bmt.nosecalc.calc.ncWords
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.AppIcons
 import com.bmt.nosecalc.ui.BottomSheet
@@ -623,7 +624,7 @@ internal fun directNc(lines: List<String>, noseR: Double, tip: Int): List<String
 internal data class NcFact(val text: String, val tone: WarnLevel? = null)
 
 /**
- * NC 블록 카드: 머리(제목 · 복사 아이콘) → 꼭 알 것(facts) →
+ * NC 블록 카드: 머리(제목 · 복사 아이콘) → (top — 나사의 G92 · G76 탭) → 꼭 알 것(facts) →
  * 줄 번호 + 고정폭 줄(골라 복사할 수 있고, 줄은 접지 않고 옆으로 민다 · 줄 번호는 복사되지 않음) →
  * 큰 복사 단추(프로그램 이름 · 줄 수, 누르면 2초 "복사됨") → 설명(첫 문장 + 자세히). 복사하면 토스트.
  * 테이퍼 · 라운드의 프로그램(기계 보정 · 직접 보정)은 결과 맨 위 [CompModeSwitch] 가 고른다.
@@ -636,6 +637,8 @@ internal fun NcCard(
     programName: String = "NC 프로그램",
     facts: List<NcFact> = emptyList(),
     flagged: Set<Int> = emptySet(),
+    title: String = "NC 프로그램",
+    top: (@Composable () -> Unit)? = null,
 ) {
     val c = AppTheme.colors
     val state = LocalAppState.current
@@ -655,7 +658,7 @@ internal fun NcCard(
     }
     val shown = lines.take(MAX_NC_SHOWN)
     AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
-        CardHeader("NC 프로그램") {
+        CardHeader(title) {
             Box(
                 Modifier
                     .minimumInteractiveComponentSize()
@@ -667,6 +670,10 @@ internal fun NcCard(
             ) {
                 Icon(AppIcons.Copy, "복사", Modifier.size(20.dp), tint = c.textBody)
             }
+        }
+        if (top != null) {
+            top()
+            Spacer(Modifier.height(10.dp))
         }
         if (facts.isNotEmpty()) {
             FlowRow(
@@ -767,7 +774,7 @@ private fun FactChip(f: NcFact) {
     }
 }
 
-/** G 는 파랑, X·Z 는 초록(09 편집기의 색 갈래), 주석 줄 "(…)" 은 흐리게. 접지 않는다 */
+/** G 는 파랑, X·Z 는 초록(09 편집기의 색 갈래), 주석 줄 "(…)" 은 흐리게. 낱말은 붙여 쓴 그대로(회사 표기 — 복사 글과 같다). 접지 않는다 */
 @Composable
 private fun NcLine(line: String) {
     val c = AppTheme.colors
@@ -776,8 +783,7 @@ private fun NcLine(line: String) {
             AnnotatedString(line, SpanStyle(color = c.textMuted))
         } else {
             buildAnnotatedString {
-                line.split(' ').forEachIndexed { i, w ->
-                    if (i > 0) append(' ')
+                ncWords(line).forEach { w ->
                     val color = when (w.firstOrNull()) {
                         'G' -> c.blue
                         'X', 'Z' -> c.valuePos

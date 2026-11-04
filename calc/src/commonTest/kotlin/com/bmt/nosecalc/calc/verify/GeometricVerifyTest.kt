@@ -22,6 +22,7 @@ import com.bmt.nosecalc.calc.TaperInput
 import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
+import com.bmt.nosecalc.calc.legacy
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -423,13 +424,17 @@ class GeometricVerifyTest {
         val skip = (if (sol.fromStart) emptySet() else setOf(0)) + (if (sol.toEnd) emptySet() else setOf(drawing.lastIndex))
         checkPath(
             rep, id, drawing, reg, leftMat, sol.program.segs.map(::el), sol.center.segs.map(::el), sol.tip, r,
-            sol.ncG40, ncSkip = skip, looseApproach = false, legTrim = r, exitMove = true, lead = sol.approach.size,
+            sol.ncG40.legacy, ncSkip = skip, looseApproach = false, legTrim = r, exitMove = true, lead = sol.approach.size,
         ) { it in small && warned }
         checkEnds(rep, id, sol, drawing, sign, r, inner)
-        // 외경 단면을 중심(X0)까지 깎아 끝나면 G41/G42 는 그 단면을 중심 너머 r(X −2r)까지 쓰고 Z 로 빼며 취소한다(설계 문서 "가공 방향 뒤집기" ②)
+        // 단면을 중심(X0)까지 깎아 끝나면 G41/G42 는 그 단면을 중심 너머 r(X −2r)까지 쓰고 공구 쪽으로 뺀다 — 외경(설계 문서 "가공 방향 뒤집기" ②)도
+        // 내경 바닥 단면도(회사 꼴 — calc-design '진입점과 NC')
         val lu = drawing.last().tangent(0.0)
-        val toAxis = !inner && sol.toEnd && drawing.last() is Ln && abs(lu.z) < 1e-9 && lu.x < 0 && drawing.last().b.x <= 1e-9
-        checkG4x(rep, id, sol.ncG41G42, drawing, reg, expSide, sol.tip, r, sol.tip == physicalTip(inner, reverse), sol.fromStart, sol.toEnd, toAxis)
+        val toAxis = sol.toEnd && drawing.last() is Ln && abs(lu.z) < 1e-9 && lu.x < 0 && drawing.last().b.x <= 1e-9
+        checkG4x(
+            rep, id, sol.ncG41G42.legacy, drawing, reg, expSide, sol.tip, r, sol.tip == physicalTip(inner, reverse), sol.fromStart, sol.toEnd, toAxis,
+            inner, TaperWarning.CONCAVE_R_LE_NOSE in res.warnings,
+        )
     }
 
     /**
@@ -450,18 +455,18 @@ class GeometricVerifyTest {
         val s0 = foot(drawing.first(), drawing.first().a)
         val e0 = foot(drawing.last(), drawing.last().b)
         // 접근 줄(뒤집어 척 쪽에서 시작할 때 진입 G00 앞의 G00)은 빼고 진입 G00 부터
-        val pts = ncPoints(sol.ncG40).drop(sol.approach.size)
+        val pts = ncPoints(sol.ncG40.legacy).drop(sol.approach.size)
         // 시작 요소가 수평이면 진입점·시작점′·다음 점이 한 직선이라 시작점′ 을 따로 쓰지 않는다 — 그때는 진입선 위에 있으면 된다
         val a = pts[0]
         val b = pts[1]
         val onEntry = abs((b - a).unit() cross (s0 - a)) <= NC_TOL && ((s0 - a) dot (b - s0)) >= -NC_TOL
-        if (sol.fromStart && (b - s0).len > NC_TOL && !onEntry) rep.bad(id, "시작점", "NC 첫 형상 점 $b, 인선을 시작점에 둔 점은 $s0  NC=${sol.ncG40}")
+        if (sol.fromStart && (b - s0).len > NC_TOL && !onEntry) rep.bad(id, "시작점", "NC 첫 형상 점 $b, 인선을 시작점에 둔 점은 $s0  NC=${sol.ncG40.legacy}")
         val end = pts[pts.size - 2]
         if (sol.toEnd) {
             val lu = drawing.last().tangent(0.0)
             val toAxis = !inner && drawing.last() is Ln && abs(lu.z) < 1e-9 && lu.x < 0 && drawing.last().b.x <= 1e-9
             val want = if (toAxis) e0 + lu * max(0.0, (e0 - tv).x) else e0
-            if ((end - want).len > NC_TOL) rep.bad(id, "끝점", "NC 끝 점 $end, 인선을 끝점에 둔 점은 $e0 (중심까지 깎으면 노즈 중심이 중심선에 닿는 $want)  NC=${sol.ncG40}")
+            if ((end - want).len > NC_TOL) rep.bad(id, "끝점", "NC 끝 점 $end, 인선을 끝점에 둔 점은 $e0 (중심까지 깎으면 노즈 중심이 중심선에 닿는 $want)  NC=${sol.ncG40.legacy}")
         } else {
             val l = drawing.last()
             val u = l.tangent(0.0)
@@ -469,82 +474,127 @@ class GeometricVerifyTest {
             // 보정점은 요소를 따라 꼭짓점에서 많아야 r + |팁 벡터| 밀린다
             val along = (end - (l.a + off)) dot u
             if (abs(u cross (end - (l.a + off))) > NC_TOL || along > (1 + sqrt(2.0)) * r + NC_TOL) {
-                rep.bad(id, "끝점", "끝점을 비웠는데 NC 끝 점 $end 가 끝 요소 보정선의 처음이 아니다  NC=${sol.ncG40}")
+                rep.bad(id, "끝점", "끝점을 비웠는데 NC 끝 점 $end 가 끝 요소 보정선의 처음이 아니다  NC=${sol.ncG40.legacy}")
             }
         }
     }
 
     /**
-     * G41/G42 프로그램: 첫 줄 주석 (R… T…) = 노즈R·팁, G00 진입 → G4x G01 시작점(길이 ≥ r) → 형상(도면 좌표) → G40 G01 후퇴(길이 ≥ r — 또는 이동 없는 G40 + G01).
-     * 형상 줄은 도면 위에 있고 도면의 꼭짓점을 모두 지난다(시작점을 비웠으면 시작 요소는 빼고). 첫 형상 줄만은 시작 요소의 연장선 위여도 된다
-     * (공구 쪽으로 띄운 G00 점에서 그 선에 직각으로 들어간 뒤 선을 따라가는 줄 — 볼록 첫 꺾임이면 첫 깎는 요소의 연장선). 표준 팁이면 진입점·후퇴점(G40 상태의 인선)에서 노즈가 재료 밖이다.
-     * 끝점을 비웠으면(toEnd = false) 끝 요소는 프로그램에 없다. toAxis = 외경 단면을 중심(X0)까지 깎아 끝남 — 그 단면은 중심 너머 r 까지
-     * (노즈 중심이 중심선에 닿게, 그 끝 점이 NC 에 있다).
+     * G41/G42 프로그램(회사 꼴 — 계획 단계 4): `G41`/`G42` 혼자(보정 쪽) → G0X…Z20. → G0 들(한 축씩 — 마지막 하나는 첫 깎는 줄의 공구 쪽에서 직각일 수 있다) →
+     * G1 첫 깎는 줄 F.1 → 형상(도면 좌표) → G1 빼는 줄(첫 줄 F.3) → `G40` 혼자 → G0Z200.(X 그대로). 공구 주석은 없다(노즈 R · 팁은 화면에만).
+     * 형상 줄은 도면 위에 있고 도면의 꼭짓점을 모두 지난다(시작점을 비웠으면 시작 요소는 빼고). 끝점을 비웠으면(toEnd = false) 끝 요소는 프로그램에 없다.
+     * toAxis = 단면을 중심(X0)까지 깎아 끝남(외경 · 내경 바닥) — 그 단면은 중심 너머 r 까지(노즈 중심이 중심선에 닿게, 그 끝 점이 NC 에 있다).
+     * 보정 중 노즈(진입 · 빼는 줄 — 꺾임마다 두 보정선의 교점, 한 직선이면 법선; 이 파일에서 따로 셈)는 재료 밖이고, G40 자리(마지막 빼는 점)에서
+     * (1 + √2)·r + 0.02 안 · 거기서 +Z 로 물러나는 띠에 도면이 없다(팁 1~9 의 G40 옮김이 도면에 닿지 않게). 표준 팁이면 G40 뒤 노즈(그 점 − 팁 벡터)도 재료 밖.
+     * 알려진 한계는 그 검사만 빼고 센다: 도면 자체가 제어기 알람 꼴(오목 R ≤ r — alarm)이면 보정 중 노즈, 노즈에 비해 좁은 구멍(가장 좁은 반지름 < G40 자리 규칙 반지름)이면
+     * 보정 중 노즈 · G40 자리 규칙(계산기는 축 위에 G40 을 둔다 — calc-design '진입점과 NC')
      */
     private fun checkG4x(
         rep: Report, id: String, nc: List<String>, drawing0: List<El>, reg: Region, side: Side, tip: Int, r: Double, standard: Boolean,
-        fromStart: Boolean, toEnd: Boolean, toAxis: Boolean = false,
+        fromStart: Boolean, toEnd: Boolean, toAxis: Boolean, inner: Boolean, alarm: Boolean,
     ) {
-        // 중심까지 깎는 끝: 공구 쪽 직각 취소(안쪽 모서리 교점)면 단면을 X −2r 까지 써야 노즈 중심이 중심선에 서고, 이동 없는 G40(팁 벡터·u < r —
-        // 끝 법선, 2026-10-28)이면 X0 까지
-        val cancelAlone = nc.size >= 2 && nc[nc.size - 2] == "G40"
-        val drawing = if (!toAxis || cancelAlone) drawing0 else drawing0.dropLast(1) + drawing0.last().let { Ln(it.a, it.b + it.tangent(0.0) * r) }
-        val m = Regex("""\(R([\d.]+) T(\d)\)""").matchEntire(nc.firstOrNull() ?: "")
-        if (m == null || abs(m.groupValues[1].toDouble() - r) > 0.0005 || m.groupValues[2].toInt() != tip) {
-            rep.bad(id, "G41/G42", "첫 줄 주석 ${nc.firstOrNull()} ≠ 노즈R $r 팁 $tip")
-        }
-        // 보정 시작 줄 앞은 G40 상태 G00 들(뒤집어 척 쪽에서 시작하면 접근 줄 + 진입). 접근 줄은 한 축씩 움직이고 노즈가 재료 밖이어야 한다
-        val all = nc.drop(1)
-        val k0 = all.indexOfFirst { it.startsWith("${side.name} G01 ") }
-        if (k0 < 1 || all.subList(0, k0).any { !it.startsWith("G00 ") }) {
-            rep.bad(id, "G41/G42", "보정 시작 줄 앞이 G00 이 아니다: $nc")
+        val drawing = if (!toAxis) drawing0 else drawing0.dropLast(1) + drawing0.last().let { Ln(it.a, it.b + it.tangent(0.0) * r) }
+        if (nc.firstOrNull() != side.name) rep.bad(id, "G41/G42", "첫 줄 ${nc.firstOrNull()} 이 보정 혼자 줄(${side.name})이 아니다  NC=$nc")
+        val iCut = nc.indexOfFirst { it.endsWith(" F0.1") }
+        val iExit = nc.indexOfFirst { " F0.3" in it }
+        val iG40 = nc.indexOf("G40")
+        // 진입 Z 는 늘 Z20.(도면이 Z20 가까이 오면 더 멀리 — 올림 + 20), 물러남은 Z200.
+        val zApp = Regex("""G00 X-?[0-9.]+ Z([0-9.]+)""").matchEntire(nc.getOrElse(1) { "" })?.groupValues?.get(1)?.toDouble()
+        if (iCut < 3 || iExit <= iCut + 1 || iG40 != nc.size - 2 || zApp == null || zApp < 20.0 ||
+            nc.subList(1, iCut).any { !it.startsWith("G00 ") } || !nc[iCut].startsWith("G01 ") || nc.subList(iCut, iG40).any { it.startsWith("G00") } ||
+            !Regex("""G00 Z200\.""").matches(nc.last())
+        ) {
+            rep.bad(id, "G41/G42", "회사 꼴 틀이 아니다: $nc")
             return
         }
-        val pre = parseNc(all.take(k0))
-        for (e in pre) if (e.a.x != e.b.x && e.a.z != e.b.z) rep.bad(id, "G41/G42", "접근 줄이 두 축을 함께 움직인다  NC=$nc")
-        if (standard && pre.isNotEmpty()) {
-            val (cl, at) = clearance(pre, tipVec(tip, r), r, reg)
-            if (cl < -NC_TOL) rep.bad(id, "G41/G42", "접근 줄에서 노즈 원이 재료로 ${fmt(-cl)} mm 들어감, 노즈 중심 $at  NC=$nc")
-        }
-        // 취소: 마지막 줄 G40 G01(직선 — 2026-10-28 전에는 G40 G00), 또는 이동 없는 G40 한 줄 + 마지막 G01(FF 5.4.4 그림 5.4.4(e) — 끝 법선)
-        val body0 = all.drop(k0 - 1).let { b -> listOf(ncFull(all.take(k0))) + b.drop(1) }
-        val alone = body0.size >= 2 && body0[body0.size - 2] == "G40" && body0.last().startsWith("G01 ")
-        val body = if (alone) body0.filter { it != "G40" } else body0
-        if (body.size < 4 || !body[1].startsWith("${side.name} G01 ") || !(alone || body.last().startsWith("G40 G01 "))) {
-            rep.bad(id, "G41/G42", "보정 시작·취소 줄이 약속과 다르다: $nc")
-            return
-        }
-        val els = parseNc(body.map { it.replace(Regex("^G4[012] "), "") })
-        if (els.first().length < r - 1e-9) rep.bad(id, "G41/G42", "보정 시작 이동 ${fmt(els.first().length)} < 노즈R $r")
-        if (els.last().length < r - 1e-9) rep.bad(id, "G41/G42", "보정 취소 이동 ${fmt(els.last().length)} < 노즈R $r")
-        // 너머가 막힌 끝 · 팁 벡터·u < r(2026-10-29): 취소 앞의 보정 중 직각 후퇴 한 줄(끝 꼭짓점에서 공구 쪽 — 노즈가 끝좌표의 법선을 따라 올라감)은 형상이 아니다
-        val shape = els.drop(1).dropLast(1).let { sh ->
-            val up = sh.lastOrNull()
-            val wallUp = toEnd && sh.size >= 2 && up is Ln && (up.a - drawing.last().b).len <= NC_TOL &&
-                abs((up.b - up.a).unit() dot drawing.last().tangent(1.0)) < 1e-3
-            if (wallUp) sh.dropLast(1) else sh
+        // 형상 줄 = 첫 깎는 줄 뒤 ~ 첫 빼는 줄 앞. 진입 G0 · 첫 깎는 줄 · 빼는 줄도 요소로(F 낱말은 뺀다)
+        val els = parseNc(nc.subList(1, iG40).map { it.replace(Regex(" F[0-9.]+"), "") })
+        val approach = els.subList(0, iCut - 2)
+        val firstEl = els[iCut - 2]
+        val shape = els.subList(iCut - 1, iExit - 2)
+        val exits = els.subList(iExit - 2, els.size)
+        for (k in 1 until approach.size) {
+            val e = approach[k - 1]
+            if (e.a.x != e.b.x && e.a.z != e.b.z) rep.bad(id, "G41/G42", "진입 G0 이 두 축을 함께 움직인다  NC=$nc")
         }
         val d0 = drawing.first()
-        for ((i, e) in shape.withIndex()) {
+        for (e in shape) {
             val n = max(20, ceil(e.length / STEP).toInt())
             val dev = (0..n).maxOf { k -> drawing.minOf { it.dist(e.at(k.toDouble() / n)) } }
-            // 시작 요소(또는 볼록 첫 꺾임이면 첫 깎는 요소 — 2026-10-28 바이트 반대쪽 띄운 진입)의 무한 연장선까지의 거리
-            val onLead = i == 0 && e is Ln && listOfNotNull(d0, drawing.getOrNull(1).takeIf { !fromStart }).any { d ->
-                d is Ln && (0..n).maxOf { k -> abs((d.b - d.a).unit() cross (e.at(k.toDouble() / n) - d.a)) } <= NC_TOL
-            }
-            if (dev > NC_TOL && !onLead) rep.bad(id, "G41/G42", "형상 줄이 도면에서 ${fmt(dev)} mm 벗어남  NC=$nc")
+            if (dev > NC_TOL) rep.bad(id, "G41/G42", "형상 줄이 도면에서 ${fmt(dev)} mm 벗어남  NC=$nc")
         }
-        val ncPts = listOf(shape.first().a) + shape.map { it.b }
+        val ncPts = listOf(firstEl.b) + shape.map { it.b }
+        // 짧은 막힌 끝 · 시작(그 요소가 노즈R 쯤보다 짧아 벽 앞에 선 노즈 — 벽과 그 요소에 함께 닿는 자리 — 가 그 요소의 보정 처음보다 앞): 계산기는 G41/G42 에서
+        // 그 요소를 빼고 벽을 따라 빼거나 들어간다(calc-design '진입점과 NC', 2026-11-04 — 전에는 곧게 빼 벽 속으로 갔다). 그 요소의 바깥 꼭짓점은 NC 에 없고,
+        // 대신 아래에서 노즈가 벽(그 좌표의 법선)을 넘지 않음을 본다. 막힘은 문서 규칙(척 · 구멍 바닥 쪽 수평, 재료 쪽 단면 — 외경 X0 빼고). 이웃 요소에도 자리가 없으면
+        // (작은 오목 모서리 R · 짧은 경사 — 그 블록이 거꾸로) 전처럼 곧게 가서 꼭짓점이 NC 에 있다(알려진 한계) — 그때는 전과 같은 검사
+        fun toolN(u: V) = if (side == Side.G41) u.ccw() else u.ccw() * -1.0
+        fun cornerNose(c: V, uA: V, uB: V): V {
+            val a = toolN(uA)
+            val b = toolN(uB)
+            val den = uA cross uB
+            return if (abs(den) < 1e-9) c + b * r else c + a * r + uA * ((((b - a) * r) cross uB) / den)
+        }
+        val lastD = drawing0.last()
+        val uEnd = lastD.tangent(1.0)
+        val endWall = toEnd && !toAxis && lastD is Ln && drawing0.size > 1 &&
+            (if (abs(uEnd.z) > abs(uEnd.x)) uEnd.z < 0 else (uEnd.x < 0) != inner)
+        val shortEnd = endWall &&
+            ((lastD.b + toolN(uEnd) * r - uEnd * r - cornerNose(lastD.a, drawing0[drawing0.size - 2].tangent(1.0), uEnd)) dot uEnd) < 0.05
+        val firstD = drawing0.first()
+        val uSt = firstD.tangent(0.0)
+        val startWall = fromStart && firstD is Ln && drawing0.size > 1 &&
+            (if (abs(uSt.z) > abs(uSt.x)) uSt.z > 0 else (uSt.x > 0) != inner && !(!inner && firstD.a.x <= 1e-9))
+        val shortStart = startWall &&
+            ((cornerNose(firstD.b, uSt, drawing0[1].tangent(0.0)) - (firstD.a + toolN(uSt) * r + uSt * r)) dot uSt) < 0.05
+        val skippedEnd = shortEnd && ncPts.none { (it - lastD.b).len <= NC_TOL }
+        val skippedStart = shortStart && ncPts.none { (it - firstD.a).len <= NC_TOL }
         // 시작·끝점을 비웠으면 그 요소는 프로그램에 없다
-        val cut = drawing.drop(if (fromStart) 0 else 1).dropLast(if (toEnd) 0 else 1)
-        for (q in (if (fromStart) listOf(drawing.first().a) else emptyList()) + cut.map { it.b }) {
+        val cut = drawing.drop(if (fromStart) 0 else 1).dropLast(if (toEnd && !skippedEnd) 0 else 1)
+        for (q in (if (fromStart && !skippedStart) listOf(d0.a) else emptyList()) + cut.map { it.b }) {
             if (ncPts.none { (it - q).len <= NC_TOL }) rep.bad(id, "G41/G42", "도면 꼭짓점 $q 가 NC 에 없다  NC=$nc")
         }
+        val room = (1 + sqrt(2.0)) * r + 0.02
+        val narrow = inner && drawing0.flatMap { listOf(it.a, it.b) }.filter { it.x > 1e-6 }.minOf { it.x } < room
+        if (alarm || narrow) {
+            rep.note(if (narrow) "좁은 구멍(G40 자리 · 보정 중 노즈 안 봄)" else "오목 R ≤ r 알람 꼴(보정 중 노즈 안 봄)")
+            if (narrow) return
+        }
+        // 보정 중 노즈: 진입(첫 Z20. 점은 다음 줄의 법선 — 그 앞은 공구 교환 자리) ~ 첫 깎는 점, 마지막 깎는 점 ~ 마지막 빼는 점(법선)
+        val left = side == Side.G41
+        fun sideN(u: V) = if (left) u.ccw() else u.ccw() * -1.0
+        fun nose(c: V, uA: V, uB: V): V {
+            val a = sideN(uA)
+            val b = sideN(uB)
+            val den = uA cross uB
+            if (abs(den) < 1e-9) return c + b * r
+            return c + a * r + uA * ((((b - a) * r) cross uB) / den)
+        }
+        val inLines = approach + firstEl
+        val inNoses = listOf(inLines.first().a + sideN(inLines.first().tangent(0.0)) * r) +
+            inLines.indices.map { k -> nose(inLines[k].b, inLines[k].tangent(1.0), if (k + 1 < inLines.size) inLines[k + 1].tangent(0.0) else shape.first().tangent(0.0)) }
+        val outNoses = listOf(nose(exits.first().a, shape.last().tangent(1.0), exits.first().tangent(0.0))) +
+            exits.indices.map { k -> if (k + 1 < exits.size) nose(exits[k].b, exits[k].tangent(1.0), exits[k + 1].tangent(0.0)) else exits[k].b + sideN(exits[k].tangent(1.0)) * r }
+        if (!alarm) for ((what, ns) in listOf("진입" to inNoses, "빼는 줄" to outNoses)) {
+            val (cl, at) = clearance(ns.zipWithNext { a, b -> Ln(a, b) }, V(0.0, 0.0), r, reg)
+            if (cl < -NC_TOL) rep.bad(id, "G41/G42", "$what 노즈 원이 재료로 ${fmt(-cl)} mm 들어감, 노즈 중심 $at  NC=$nc")
+        }
+        // 짧은 막힌 끝 · 시작: 노즈 중심이 벽(그 좌표의 법선)에서 r 안으로 가지 않는다(그 요소를 빼서 벽에 닿지는 않는다)
+        if (skippedEnd && outNoses.any { ((it - lastD.b) dot uEnd) > -r + NC_TOL }) rep.bad(id, "G41/G42", "짧은 막힌 끝 너머로 노즈가 간다  NC=$nc")
+        if (skippedStart && inNoses.drop(1).any { ((it - firstD.a) dot uSt) < r - NC_TOL }) rep.bad(id, "G41/G42", "짧은 막힌 시작 너머로 노즈가 간다  NC=$nc")
+        // G40 자리 규칙 · 물러남 띠(도면 — 0.001 반올림까지)
+        val q = exits.last().b
+        val qd = drawing0.minOf { it.dist(q) }
+        if (qd < room - 0.0015) rep.bad(id, "G41/G42", "G40 자리 $q 에서 도면까지 ${fmt(qd)} < ${fmt(room)}  NC=$nc")
+        val zTop = drawing0.maxOf { max(it.a.z, it.b.z) } + room
+        val nBand = max(1, ceil((zTop - q.z) / STEP).toInt())
+        val bd = if (zTop <= q.z) qd else (0..nBand).minOf { k -> drawing0.minOf { it.dist(V(q.z + (zTop - q.z) * k / nBand, q.x)) } }
+        if (bd < room - 0.0015) rep.bad(id, "G41/G42", "G40 뒤 +Z 물러남 띠가 도면에서 ${fmt(bd)} < ${fmt(room)}  NC=$nc")
+        // 표준 팁의 G40 뒤 노즈(그 점 − 팁 벡터)는 도면까지 r 이상 — 재료 영역(양 끝 접선 연장)은 빈 끝 너머를 재료로 보므로 도면 거리로 잰다
+        // (빼는 줄은 빈 끝 연장선을 노즈 r 로 타고 가 그 끝이 G40 자리다)
         if (standard) {
-            val c = els.first().a - tipVec(tip, r)
-            if (reg.inside(c) || reg.dist(c) < r - NC_TOL) rep.bad(id, "G41/G42", "진입점에서 노즈가 재료에 닿는다  NC=$nc")
-            val d = els.last().b - tipVec(tip, r)
-            if (reg.inside(d) || reg.dist(d) < r - NC_TOL) rep.bad(id, "G41/G42", "후퇴점에서 노즈가 재료에 닿는다  NC=$nc")
+            val d = q - tipVec(tip, r)
+            if (drawing0.minOf { it.dist(d) } < r - NC_TOL) rep.bad(id, "G41/G42", "G40 뒤 노즈가 도면에 닿는다  NC=$nc")
         }
     }
 
@@ -778,7 +828,7 @@ class GeometricVerifyTest {
         }
         checkPath(
             rep, id, drawing, reg, leftMat, sol.program.segs.map(::el), sol.center.segs.map(::el), sol.tip, r,
-            sol.nc, ncSkip = emptySet(), looseApproach = false,
+            sol.nc.legacy, ncSkip = emptySet(), looseApproach = false,
         ) { it in small && warned }
     }
 
@@ -822,7 +872,7 @@ class GeometricVerifyTest {
         if (sol.side != expSide) rep.bad(id, "보정쪽", "${sol.side}, 재료 반대쪽은 $expSide")
         checkPath(
             rep, id, drawing, reg, leftMat, sol.program.segs.map(::el), sol.center.segs.map(::el), sol.tip, r,
-            sol.nc, ncSkip = emptySet(), looseApproach = true,
+            sol.nc.legacy, ncSkip = emptySet(), looseApproach = true,
         ) { false }
     }
 
@@ -891,7 +941,7 @@ class GeometricVerifyTest {
         // 날의 "속심": 두 중심 사이 선분 + 두 중심에서 위로 올라가는 옆면. 날 = 속심에서 rg 안쪽
         val core = listOf(cl to cr, cl to cl + up, cr to cr + up)
         val moves = try {
-            parseNc(sol.nc).map { it as Ln }
+            parseNc(sol.nc.legacy).map { it as Ln }
         } catch (e: Exception) {
             rep.bad(id, "NC", e.message ?: "$e")
             return
@@ -1597,8 +1647,16 @@ internal class Report(val name: String) {
         stops[w] = (stops[w] ?: 0) + 1
     }
 
+    /** 알려진 한계로 뺀 검사(실패가 아님 — 수만 출력) */
+    private val notes = linkedMapOf<String, Int>()
+
+    fun note(w: String) {
+        notes[w] = (notes[w] ?: 0) + 1
+    }
+
     fun finish() {
-        val head = "$name: 사례 $cases, 계산됨 $solved, 멈춤·경고 $stops, 최소 여유 ${fmt(worstClear)} mm, 최대 남김 ${fmt(worstUncut)} mm"
+        val head = "$name: 사례 $cases, 계산됨 $solved, 멈춤·경고 $stops, 최소 여유 ${fmt(worstClear)} mm, 최대 남김 ${fmt(worstUncut)} mm" +
+            (if (notes.isEmpty()) "" else ", 알려진 한계 $notes")
         println(head)
         if (fails.isEmpty()) return
         val count = fails.mapValues { it.value.size }

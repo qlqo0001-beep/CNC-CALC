@@ -24,6 +24,7 @@ import com.bmt.nosecalc.calc.ThreadSpec
 import com.bmt.nosecalc.calc.ThreadTable
 import com.bmt.nosecalc.calc.ThreadTol
 import com.bmt.nosecalc.calc.WorkMaterials
+import com.bmt.nosecalc.calc.legacy
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -595,10 +596,10 @@ class Stage3VerifyTest {
             ),
         )
         val s = assertNotNull(r.solution, "멈춤 ${r.warnings}")
-        bad.check(s.program.first() == "G00 X80. Z130.") { "시작점: ${s.program.first()} (매뉴얼 G00 X80.0 Z130.0)" }
+        bad.check(s.program.legacy.first() == "G00 X80. Z130.") { "시작점: ${s.program.legacy.first()} (매뉴얼 G00 X80.0 Z130.0)" }
         // 첫 줄: R 은 소수점 지령 가능(같은 절 표) — R200(IS-B μm) = R0.2
-        bad.check(s.nc[0] == "G76 P011060 Q100 R0.2") { "첫 줄 ${s.nc[0]} (매뉴얼 G76 P011060 Q100 R200)" }
-        val l2 = s.nc[1]
+        bad.check(s.nc.legacy[0] == "G76 P011060 Q100 R0.2") { "첫 줄 ${s.nc.legacy[0]} (매뉴얼 G76 P011060 Q100 R200)" }
+        val l2 = s.nc.legacy[1]
         val x = word(l2, 'X')!!.toDouble()
         val z = word(l2, 'Z')!!.toDouble()
         val k = word(l2, 'P')!!.toInt()
@@ -610,7 +611,7 @@ class Stage3VerifyTest {
         bad.check(dd == 1800) { "Δd: Q$dd (매뉴얼 Q1800)" }
         bad.near(6.0, f, 1e-12, "F 리드")
         // FS10/11 형식으로 옮겨 같은 낱말인지: X Z K(= k) D(= Δd) A(= a) P1 F, 면취 1.0L
-        val p1 = word(s.nc[0], 'P')!!
+        val p1 = word(s.nc.legacy[0], 'P')!!
         val fs10 = "G76 X${word(l2, 'X')} Z${word(l2, 'Z')} K$k D$dd A${p1.substring(4, 6)} P1 F${word(l2, 'F')}"
         bad.check(fs10.startsWith("G76 X60.6") && fs10.contains(" D1800 A60 P1 F6.") && p1.substring(2, 4) == "10") {
             "FS10/11 형식 $fs10 · 면취 ${p1.substring(2, 4)} (매뉴얼 G76 X60.64 Z25.0 K3680 D1800 A60 P1 F6.0 · 5130 = 10)"
@@ -674,7 +675,7 @@ class Stage3VerifyTest {
         // O00113: 3/4-16 외경 K0.0383 D0.0122 F0.0625 — 16 산이면 10 회
         val o113 = assertNotNull(calcAt(un("3/4", 16), false, 0.0122 * 25.4))
         bad.near(0.0383, o113.height / 25.4, 0.00006, "O00113 K")
-        bad.check(o113.nc[1].endsWith(" F1.5875")) { "O00113 F: ${o113.nc[1]} (0.0625 인치 = 1.5875 mm)" }
+        bad.check(o113.nc.legacy[1].endsWith(" F1.5875")) { "O00113 F: ${o113.nc.legacy[1]} (0.0625 인치 = 1.5875 mm)" }
         val r113 = o113.passes.count { !it.finish }
         bad.check(r113 == 10 || r113 == 11) { "O00113 거친 절입 $r113 회 (D 표 16 산 10 회)" }
         bad.done()
@@ -723,13 +724,13 @@ class Stage3VerifyTest {
                     continue
                 }
                 cases++
-                val p1 = word(sol.nc[0], 'P')!!
+                val p1 = word(sol.nc.legacy[0], 'P')!!
                 bad.check(p1 == "${m.toString().padStart(2, '0')}0755") { "$n: 첫 줄 P$p1" }
-                bad.check(word(sol.nc[0], 'Q')!!.toLong() == floor(mc * 1000 + 0.5).toLong()) { "$n: 첫 줄 Q ${sol.nc[0]}" }
-                bad.near(fa, word(sol.nc[0], 'R')!!.toDouble(), 1e-12, "$n: 첫 줄 R")
-                val k = word(sol.nc[1], 'P')!!.toInt() / 1000.0
-                val dd = word(sol.nc[1], 'Q')!!.toInt() / 1000.0
-                val xNc = word(sol.nc[1], 'X')!!.toDouble()
+                bad.check(word(sol.nc.legacy[0], 'Q')!!.toLong() == floor(mc * 1000 + 0.5).toLong()) { "$n: 첫 줄 Q ${sol.nc.legacy[0]}" }
+                bad.near(fa, word(sol.nc.legacy[0], 'R')!!.toDouble(), 1e-12, "$n: 첫 줄 R")
+                val k = word(sol.nc.legacy[1], 'P')!!.toInt() / 1000.0
+                val dd = word(sol.nc.legacy[1], 'Q')!!.toInt() / 1000.0
+                val xNc = word(sol.nc.legacy[1], 'X')!!.toDouble()
                 bad.near(first, dd, 0.0005 + 1e-12, "$n: Δd")
                 val exp = fanucSchedule(k, fa, dd, mc, m)
                 if (exp.size != sol.passes.size) {
@@ -781,11 +782,11 @@ class Stage3VerifyTest {
                 val depth = tipDepthBelowPitchLine(s.pitch, rTip)
                 val xWant = if (cls.internal) pd + 2 * depth else pd - 2 * depth
                 bad.near(xWant, sol.x, 1e-6, "$n: X")
-                val xNc = word(sol.nc[1], 'X')!!.toDouble()
+                val xNc = word(sol.nc.legacy[1], 'X')!!.toDouble()
                 bad.near(xWant, xNc, 0.0005 + 1e-9, "$n: NC X")
                 val kWant = (if (cls.internal) xNc - crest else crest - xNc) / 2
                 bad.near(kWant, sol.height, 0.0005 + 1e-9, "$n: k")
-                bad.check(word(sol.nc[1], 'P')!!.toInt() == floor(sol.height * 1000 + 0.5).toInt()) { "$n: P 낱말 ${sol.nc[1]}" }
+                bad.check(word(sol.nc.legacy[1], 'P')!!.toInt() == floor(sol.height * 1000 + 0.5).toInt()) { "$n: P 낱말 ${sol.nc.legacy[1]}" }
                 // 골 한계
                 val basicMinor = s.d - 1.082532 * s.pitch
                 val limit = if (cls.internal) s.d + l.deviation else basicMinor + l.deviation
@@ -861,7 +862,7 @@ class Stage3VerifyTest {
             val base = G76Input(spec = s, zStart = 5.0, zEnd = -20.0, firstCut = 0.1)
             val a = G76Calc.calc(base).solution ?: run { bad.items += "${s.label}: 멈춤"; null } ?: continue
             val b = G76Calc.calc(base.copy(rpm = rpm.toDouble())).solution ?: run { bad.items += "${s.label} S$rpm: 멈춤"; null } ?: continue
-            bad.check(b.program == listOf("G97 S$rpm") + a.program) { "${s.label}: 프로그램 ${b.program}" }
+            bad.check(b.program.legacy == listOf("G97 S$rpm") + a.program.legacy) { "${s.label}: 프로그램 ${b.program.legacy}" }
             bad.near(3175.0, b.feedPerMin ?: -1.0, 1e-6, "${s.label} S$rpm 분당 이송(125 IPM)")
             bad.check(a.feedPerMin == null) { "${s.label}: 회전수 없는데 분당 이송 ${a.feedPerMin}" }
         }
@@ -872,13 +873,13 @@ class Stage3VerifyTest {
                 bad.items += "${s.label} 내경 $inner: 멈춤"
                 continue
             }
-            bad.check(word(f.nc[1], 'Z') == "-20." && word(rv.nc[1], 'Z') == "0.") { "${s.label}: 끝 Z ${f.nc[1]} / ${rv.nc[1]}" }
-            bad.check(rv.program.first().endsWith(" Z-25.") && f.program.first().endsWith(" Z5.")) { "${s.label}: 시작 ${f.program.first()} / ${rv.program.first()}" }
-            for (k in listOf('X', 'P', 'Q', 'F')) bad.check(word(f.nc[1], k) == word(rv.nc[1], k)) { "${s.label}: 역가공 $k ${rv.nc[1]} ≠ ${f.nc[1]}" }
-            bad.check(f.nc[0] == rv.nc[0] && f.passes == rv.passes) { "${s.label}: 역가공 첫 줄 · 분석표가 다르다" }
+            bad.check(word(f.nc.legacy[1], 'Z') == "-20." && word(rv.nc.legacy[1], 'Z') == "0.") { "${s.label}: 끝 Z ${f.nc.legacy[1]} / ${rv.nc.legacy[1]}" }
+            bad.check(rv.program.legacy.first().endsWith(" Z-25.") && f.program.legacy.first().endsWith(" Z5.")) { "${s.label}: 시작 ${f.program.legacy.first()} / ${rv.program.legacy.first()}" }
+            for (k in listOf('X', 'P', 'Q', 'F')) bad.check(word(f.nc.legacy[1], k) == word(rv.nc.legacy[1], k)) { "${s.label}: 역가공 $k ${rv.nc.legacy[1]} ≠ ${f.nc.legacy[1]}" }
+            bad.check(f.nc.legacy[0] == rv.nc.legacy[0] && f.passes == rv.passes) { "${s.label}: 역가공 첫 줄 · 분석표가 다르다" }
             // 시작 X: 숫나사 바깥지름 최대 + 2 × 여유(빈칸 1), 암나사 안지름 최소 − 2 × 여유
             val sx = if (inner) f.limits.crest.min - 2.0 else f.limits.crest.max + 2.0
-            bad.check(word(f.program.first(), 'X')!!.toDouble().let { abs(it - sx) <= 0.0005 + 1e-9 }) { "${s.label}: 시작 X ${f.program.first()} (기대 ${f4(sx)})" }
+            bad.check(word(f.program.legacy.first(), 'X')!!.toDouble().let { abs(it - sx) <= 0.0005 + 1e-9 }) { "${s.label}: 시작 X ${f.program.legacy.first()} (기대 ${f4(sx)})" }
         }
         for ((dir, zs, ze) in listOf(
             Triple(ThreadDir.FORWARD, 0.0, 0.0), Triple(ThreadDir.FORWARD, -5.0, 10.0),
@@ -1234,7 +1235,7 @@ class Stage3VerifyTest {
 
         for ((name, prog, machine) in listOf(Triple("G41", sol.ncG41G42, true), Triple("G40", sol.ncG40, false))) {
             val t = "$tag [$name]"
-            val rd = readNc(prog.lines, inp.xDiameter)
+            val rd = readNc(prog.lines.legacy, inp.xDiameter)
             rd.errs.forEach { bad.items += "$t: $it" }
             val startR = rd.startR ?: continue
             if (inner) {
@@ -1426,7 +1427,7 @@ class Stage3VerifyTest {
         fun contourPoints(shape: PolarShape, rot: Double, xDia: Boolean): List<V> {
             val inp = PolarInput(shape = shape, od = 72.0, width = 60.0, rotationDeg = rot, toolDia = 10.0, depthZ = -3.0, feed = 100.0, xDiameter = xDia)
             val sol = assertNotNull(PolarG12.calc(inp).solution)
-            val rd = readNc(sol.ncG41G42.lines, xDia)
+            val rd = readNc(sol.ncG41G42.lines.legacy, xDia)
             return rd.moves.filter { it.state == "G41" }.flatMap { listOf(it.mv.s, it.mv.e) }
         }
         val rv = 30 / cos(PI / 6)

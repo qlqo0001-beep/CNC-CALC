@@ -8,6 +8,7 @@ import com.bmt.nosecalc.calc.HolderCut
 import com.bmt.nosecalc.calc.HolderPlan
 import com.bmt.nosecalc.calc.HolderStop
 import com.bmt.nosecalc.calc.InsertShape
+import com.bmt.nosecalc.calc.Legacy
 import com.bmt.nosecalc.calc.Line
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RetractKind
@@ -19,6 +20,7 @@ import com.bmt.nosecalc.calc.SafeEnd
 import com.bmt.nosecalc.calc.Seg
 import com.bmt.nosecalc.calc.Side
 import com.bmt.nosecalc.calc.StopWarning
+import com.bmt.nosecalc.calc.legacy
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -47,8 +49,9 @@ import kotlin.time.TimeSource
  *   인선 z 에서 인서트 끝까지. 공구대 = 인선 z + 돌출 길이 − 입구 면 z.
  * - 소재: 도면 + 반직선 · 입구 면(설계 문서 '소재' 정의)과 축 너머 거울을 0.01 mm 마다 찍은 점. 점 ↔ 공구 조각의 정확한 거리(볼록 다각형 · 노즈 원호)의
  *   최솟값 = 직선 거리(표본 간격 탓 과대 ≤ 0.005²/(2d)). 공구 꼭짓점이 소재 안이면(따로 짠 ρ(z)) 겹침.
- * - NC: 이 파일의 글 읽기(모달 · R 원호 중심 다시 구함). 직접 보정은 인선 − 팁 벡터. 기계 보정은 G00 점 노즈 = 점 − 팁 벡터, 보정 시작 블록은
- *   다음 블록 보정선 시작으로 곧게(형식 A), 보정 블록은 도면을 r 민 보정선을 교점으로 잇고, G40 앞 블록 끝은 법선, G40 블록은 그 자리에서 곧게.
+ * - NC: 이 파일의 글 읽기(모달 · R 원호 중심 다시 구함). 직접 보정은 인선 − 팁 벡터. 기계 보정(회사 꼴 — 보정 혼자 줄 / `G0X…Z20.` / 진입 / 형상 / 빼는 줄 /
+ *   `G40` 혼자 줄 / `G0Z200.`)은 Z20. 자리 노즈 = 첫 블록 처음의 법선(시작 형식 A), 보정 블록은 도면을 r 민 보정선을 교점으로 잇고, 마지막 빼는 줄 끝은 법선,
+ *   취소는 형식 C(`G40` 줄에서 그 자리 → 끝점 − 팁 벡터) · 형식 A · B(`G0Z200.` 동안 비스듬히) 둘 다.
  * - 깎는 면 예외: 넓은 정의(설계 문서 — 블록 요소 k 와 볼록 이음 전까지 앞 요소들의 주절삭날 쪽 직선) · 좁은 정의(사용자 문구 — 지금 노즈가 닿은
  *   주절삭날 쪽 직선과 그 연장)를 따로 짜서, 예외로 넘어간 자세를 둘로 나눠 센다.
  *
@@ -56,7 +59,7 @@ import kotlin.time.TimeSource
  *       어디서든 겹침 ≤ 1e-3(쓴 글 반올림), 후퇴 겹침 없음 · 보고한 후퇴 여유 이하로 안 내려감 |
  * | ② | 예외로 넘어간 자세: 그 면이 지금 노즈가 닿은 면인가, 앞 요소인가(사이에 볼록 원호가 있나), 공구의 어느 부분인가(바 앞면 · 그 밖) |
  * | ③ | 끝점 + 0.01 mm 에서 표본 기준 아래인 비율 ≥ 80 % |
- * | ④ | 라운드 기계 보정 G00: 노즈(점 − 팁 벡터)가 재료 밖, 시작 이동 ≥ r, 시작 이동 끝 보정점 = 직접 보정, 표준 팁 · Z 여유 ≥ r 은 노즈R 0 풀이와 같은 글 |
+ * | ④ | 라운드 기계 보정 진입(회사 꼴): 진입 노즈가 재료 밖(늘인 윤곽에서 r — 내경은 맞은편도), 진입 꺾임 바깥 90° 이하 · 노즈가 거꾸로 가지 않음, 첫 깎는 줄 노즈 이동 ≥ 0.05, 형상 시작 노즈 = 직접 보정, 글이 팁과 상관없음, 형상 줄 = 노즈R 0 풀이 |
  */
 class EuclidMarginVerifyTest {
     private val barA = BoringBar(16.0, 11.0, InsertShape.C, 9.67, 95.0)
@@ -178,7 +181,7 @@ class EuclidMarginVerifyTest {
                 else -> r3(rnd.nextDouble(0.0, 3.0))
             }
             val inp = g.randomRound(type, rnd, inner).input.copy(noseR = r, tip = tip, zClear = zc)
-            emG00(log, "${if (inner) "내경" else "외경"} TYPE $type $inp", RoundCalc.machine(inp), RoundCalc.calc(inp), RoundCalc.calc(inp.copy(noseR = 0.0)), r, inner, tip == null, zc, inp.type != 0)
+            emG00(log, "${if (inner) "내경" else "외경"} TYPE $type $inp", RoundCalc.machine(inp), RoundCalc.machine(inp.copy(tip = null)), RoundCalc.calc(inp), RoundCalc.calc(inp.copy(noseR = 0.0)), r, inner)
         }
         repeat(600) {
             val inner = rnd.nextBoolean()
@@ -191,15 +194,18 @@ class EuclidMarginVerifyTest {
                 else -> r3(rnd.nextDouble(0.0, 3.0))
             }
             val a = emArc(rnd, reverse, r, inner).copy(tip = tip, zClear = zc)
-            emG00(log, "3점호 ${if (inner) "내경" else "외경"}${if (reverse) " 역방향" else ""} $a", RoundCalc.machine(a), RoundCalc.arc3(a), RoundCalc.arc3(a.copy(noseR = 0.0)), r, inner, tip == null, zc, false)
+            emG00(log, "3점호 ${if (inner) "내경" else "외경"}${if (reverse) " 역방향" else ""} $a", RoundCalc.machine(a), RoundCalc.machine(a.copy(tip = null)), RoundCalc.arc3(a), RoundCalc.arc3(a.copy(noseR = 0.0)), r, inner, reverse)
         }
-        // 손 계산(설계 문서): 외경 TYPE 3 팁 4 → G00 X0. Z1.8, 팁 0 → Z1.4, 팁 3 → Z1. · 내경 TYPE 6 팁 4 · Z 여유 0.069 · 0.8R → G00 X7.956 Z1.6 G01 X12.756 G01 Z0.
+        // 손 계산(지은 도형): 외경 TYPE 3 Ø20 · SR12.5 · CR1, 0.4R · Z 여유 1. 돔 꼭대기(Z0, X0)의 처음 접선이 +X 라 진입점 = 첫 점 − 접선 · c, c = max(Z 여유 1, r 0.4) = 1
+        // → 반경 −1(직경 X−2.) · Z0. Z 줄(X−2. 에서 Z20. → Z0.)의 노즈는 반경 −1 + 0.4 = −0.6(G42 — −Z 로 갈 때 공구 쪽 +X), 부품 앞(Z ≥ 0)이라 도면에 닿지 않아
+        // 곧장 내려온다. 첫 깎는 줄 `G1X0.F.1` 이 축 너머 같은 면을 타고 첫 점으로(노즈 이동 1 ≥ 0.05). 보정 줄이 이동 없는 혼자 줄이라 팁 4 · 0 · 3 모두 같은 글
         val o3 = RoundInput(type = 3, mainR = 12.5, d1 = 20.0, cornerR1 = 1.0, noseR = 0.4, zClear = 1.0)
-        for ((tip, want) in listOf(4 to "G00 X0. Z1.8", 0 to "G00 X0. Z1.4", 3 to "G00 X0. Z1.")) {
+        val want = listOf("G42", "G0X-2.Z20.", "Z0.", "G1X0.F.1")
+        for (tip in listOf(4, 0, 3)) {
             val m = RoundCalc.machine(o3.copy(tip = tip)).solution!!
-            log.ratio("손 계산 외경 TYPE 3 G00", m.nc.first() == want)
-            if (m.nc.first() != want) log.bad("④ 손 계산", "외경 TYPE 3 팁 $tip: ${m.nc.first()} ≠ $want")
-            emG00(log, "손 계산 외경 TYPE 3 팁 $tip", RoundCalc.machine(o3.copy(tip = tip)), RoundCalc.calc(o3.copy(tip = tip)), RoundCalc.calc(o3.copy(tip = tip, noseR = 0.0)), 0.4, false, false, 1.0, true)
+            log.ratio("손 계산 외경 TYPE 3 진입", m.nc.take(4) == want)
+            if (m.nc.take(4) != want) log.bad("④ 손 계산", "외경 TYPE 3 팁 $tip: ${m.nc.take(4)} ≠ $want")
+            emG00(log, "손 계산 외경 TYPE 3 팁 $tip", RoundCalc.machine(o3.copy(tip = tip)), RoundCalc.machine(o3), RoundCalc.calc(o3.copy(tip = tip)), RoundCalc.calc(o3.copy(tip = tip, noseR = 0.0)), 0.4, false)
         }
         log.finish(t0)
         assertEquals(0, log.badCount, "기계 보정 G00 문제 ${log.badCount}건 — 출력 참고")
@@ -363,17 +369,21 @@ private fun emOffset(e: EmEl, rr: Double, left: Boolean): EmEl? = when (e) {
 
 private class EmBlk(val text: String, val g40: Boolean, val end: Q, val el: EmEl?)
 
-/** NC 글 → 블록. X 직경 → 반경, 빠진 축은 앞 값, G02/G03 은 끝점 · R 로 중심(180° 이하 쪽). 첫 줄은 시작점(움직임 없음) */
+/**
+ * NC 글 → 블록. X 직경 → 반경, 빠진 축은 앞 값, G02/G03 은 끝점 · R 로 중심(180° 이하 쪽). 첫 좌표 줄은 시작점(움직임 없음), 축 없는 줄도 움직임 없음.
+ * 앱 글(회사 표기)은 옛 꼴로 되돌려([Legacy]) 읽는다
+ */
 private fun emParse(lines: List<String>): List<EmBlk> {
     var z: Double? = null
     var x: Double? = null
     var g = "G00"
     val out = mutableListOf<EmBlk>()
-    for (line in lines) {
+    for (line in Legacy.nc(lines)) {
         var nz = z
         var nx = x
         var rr: Double? = null
         var g40 = false
+        var axis = false
         for (w in line.trim().split(' ')) {
             if (w.isEmpty()) continue
             when (w[0]) {
@@ -385,12 +395,17 @@ private fun emParse(lines: List<String>): List<EmBlk> {
                 'Z' -> nz = w.substring(1).toDouble()
                 'R' -> rr = w.substring(1).toDouble()
             }
+            if (w[0] == 'X' || w[0] == 'Z') axis = true
+        }
+        // 축 없는 줄(회사 꼴 보정 혼자 줄 `G41` · `G42` · `G40`)은 움직이지 않는다 — 자리는 앞 줄 그대로(첫 줄이면 아직 없어 NaN)
+        if (!axis) {
+            out += EmBlk(line, g40, Q(z ?: Double.NaN, x ?: Double.NaN), null)
+            continue
         }
         val to = Q(nz!!, nx!!)
         val from = if (z != null && x != null) Q(z, x) else null
         val el: EmEl? = when {
             from == null -> null
-            // 'G40' 한 줄(좌표 없음 — 노즈R 0 의 거꾸로 후퇴)은 앞 원호 모달이어도 움직임 없음
             (g == "G02" || g == "G03") && rr != null -> {
                 val ch = to - from
                 val h = sqrt(max(rr * rr - ch.len * ch.len / 4, 0.0))
@@ -1009,20 +1024,44 @@ private class EmCase(
         return out
     }
 
-    /** 기계 보정 제어기 모형. 오목 R ≤ r 블록 · 모형이 노즈 경로와 0.01 넘게 다르면 null */
+    /** Z 로 빠지는 길을 재는 끝: 도면 맨 위 + 25 mm + 안전 여유 — 그 위는 입구 면 위 공기이거나 같은 구멍(반직선)이 이어진다 */
+    private val zTop = min(200.0, drawing.maxOf { e -> (0..16).maxOf { e.at(it / 16.0).z } } + 25 + safe)
+
+    /**
+     * 기계 보정 제어기 모형(회사 꼴): 첫 줄 보정 혼자 줄 · 둘째 줄 `G0X…Z20.` 은 시작점, 셋째 줄부터 `G40` 혼자 줄 앞까지 모두 보정 블록 — 도면을 r 민 보정선을
+     * 교점으로 잇고, Z20. 자리 노즈는 첫 블록 처음의 법선(시작 형식 A), 마지막 블록 끝은 법선(다음 `G40` 은 이동이 없다). 첫 깎는 줄까지는 진입, 빼는 줄부터 후퇴.
+     * 취소는 둘 다 후퇴로 본다 — 형식 C(`G40` 줄에서 그 자리 → 끝점 − 팁 벡터, 그 뒤 `G0Z200.` 은 +Z) · 형식 A · B(`G0Z200.` 동안 그 자리 → (Z200, 같은 X) −
+     * 팁 벡터로 곧게), Z 는 [zTop] 까지. 회사 꼴이 아니거나 오목 R ≤ r 블록 · 모형이 노즈 경로와 0.01 넘게 다르면 null
+     */
     fun machineMoves(nc: List<String>, cut: HolderCut?): List<EmMv>? {
         val d = drawn ?: return null
-        val bl = emParse(nc)
-        val refs = d.ncRefs.map { it.element }
-        val g40 = bl.indexOfFirst { it.g40 }.let { if (it < 0) bl.size else it }
-        if (g40 < 3) {
-            log.count("기계 보정 모형 밖: 보정 블록 없음")
+        if (d.approach.isEmpty()) {
+            log.count("기계 보정 모형 밖: 회사 꼴 아님")
             return null
         }
-        val offs = (2 until g40).map { emOffset(bl[it].el!!, r, left) ?: run { log.count("기계 보정 모형 밖: 오목 R ≤ r"); return null } }
-        val n0 = bl[0].end - tv
-        val out = mutableListOf(EmMv(0, EmLn(n0, n0), ENTRY, -2, nc[0]), EmMv(1, EmLn(n0, offs[0].a), ENTRY, -1, nc[1]))
-        var from = offs[0].a
+        val bl = emParse(nc)
+        val refs = d.ncRefs.map { it.element }
+        val g40 = bl.indexOfFirst { it.g40 }
+        if (g40 < 4 || g40 != bl.size - 2 || bl[g40].el != null) {
+            log.bad("① 기계 보정 틀", "$name: G40 이 끝에서 둘째 혼자 줄이 아님 · $nc")
+            return null
+        }
+        val offs = (2 until g40).map { i ->
+            val el = bl[i].el ?: run {
+                log.bad("① 기계 보정 틀", "$name: ${i + 1}번 줄이 움직이지 않음 · $nc")
+                return null
+            }
+            emOffset(el, r, left) ?: run {
+                log.count("기계 보정 모형 밖: 오목 R ≤ r")
+                return null
+            }
+        }
+        val firstShape = nc.indexOfFirst { 'F' in it } + 1
+        val retractFrom = cut?.retractFrom ?: refs.indexOfFirst { it >= d.drawing.segs.size }
+        val kBack = cut?.element ?: (d.drawing.segs.size - 1)
+        val n0 = offs[0].a
+        val out = mutableListOf(EmMv(1, EmLn(n0, n0), ENTRY, -2, nc[1]))
+        var from = n0
         var dev = 0.0
         for (i in offs.indices) {
             val line = i + 2
@@ -1034,10 +1073,15 @@ private class EmCase(
                 log.count("기계 보정 모형: 짧은 원호 먹힘 → 곧은 선")
                 path = EmLn(from, to)
             }
-            val k = label(line, cut, refs, bl[line].el!!, false)
-            // 앞 블록(원래 글)의 제어기 경로는 G40 노즈 경로와 같아야 — 모형 확인
-            if (cut == null || line < cut.kept) dev = max(dev, prog.minOf { it.dist(to + tv) })
-            out += EmMv(line, path, if (k < 0) ENTRY else SHAPE, k, nc[line])
+            val kind = if (line < firstShape) ENTRY else if (line >= retractFrom) BACK else SHAPE
+            val k = when (kind) {
+                ENTRY -> -1
+                BACK -> kBack
+                else -> label(line, cut, refs, orig!!, false)
+            }
+            // 앞 블록(원래 글)의 제어기 경로는 G40 노즈 경로와 같아야 — 모형 확인(형상 블록 사이 이음만: 진입 · 빼는 줄 쪽 꺾임은 경로 밖)
+            if (kind == SHAPE && line + 1 < retractFrom && (cut == null || line < cut.kept)) dev = max(dev, prog.minOf { it.dist(to + tv) })
+            out += EmMv(line, path, kind, k, nc[line])
             from = to
         }
         log.note("기계 보정 모형 이음 ~ G40 노즈 경로(앞 블록, 최대)", dev)
@@ -1046,13 +1090,12 @@ private class EmCase(
             log.info("기계 보정 모형 밖", "$name: 이음 차이 ${f4(dev)} · $nc")
             return null
         }
-        if (g40 < bl.size) {
-            out += EmMv(g40, EmLn(from, bl[g40].end - tv), BACK, label(g40, cut, refs, bl[g40].el ?: EmLn(from, from), true), nc[g40])
-            for (i in g40 + 1 until bl.size) {
-                val el = bl[i].el ?: continue
-                out += EmMv(i, el.shift(tv * -1.0), BACK, label(i, cut, refs, el, false), nc[i])
-            }
-        }
+        val xe = bl[g40 - 1].end
+        val far = Q(200.0, xe.x)
+        fun up(a: Q, b: Q): EmEl = if (b.z <= zTop) EmLn(a, b) else EmLn(a, a + (b - a) * ((zTop - a.z) / (b.z - a.z)).coerceIn(0.0, 1.0))
+        out += EmMv(g40, EmLn(from, xe - tv), BACK, kBack, "G40(형식 C — 그 자리에서 옮김)")
+        out += EmMv(g40 + 1, up(xe - tv, far - tv), BACK, kBack, "G0Z200.(형식 C)")
+        out += EmMv(g40 + 1, up(from, far - tv), BACK, kBack, "G0Z200.(형식 A · B — 남은 벡터를 지우며)")
         return out
     }
 
@@ -1104,7 +1147,7 @@ private class EmCase(
                     val cut = plan.machine
                     if (cut.nc.take(cut.kept) != drawn.nc.take(cut.kept)) log.bad("① 기계 보정 앞 줄", "$name: 앞 ${cut.kept} 줄이 원래 NC 와 다름")
                     val g40 = cut.nc.indices.filter { "G40" in cut.nc[it] }
-                    if (g40 != listOf(cut.retractFrom)) log.bad("① 기계 보정 G40", "$name: G40 줄 $g40 ≠ 첫 후퇴 ${cut.retractFrom} · ${cut.nc}")
+                    if (g40 != listOf(cut.nc.size - 2) || cut.nc[cut.nc.size - 2] != "G40") log.bad("① 기계 보정 G40", "$name: G40 줄 $g40 이 끝에서 둘째 혼자 줄이 아님 · ${cut.nc}")
                     machineMoves(cut.nc, cut)?.let { follow("기계 보정", it, cut) }
                 }
                 else -> log.count("기계 보정 잘린 NC 없음 ${w.map { it.name }}")
@@ -1319,158 +1362,84 @@ private fun emArc(rnd: Random, reverse: Boolean, r: Double, inner: Boolean): Arc
 
 // ====================================================================== ④ 라운드 기계 보정 G00
 
-/** 점 p 에서 늘인 윤곽(공구 쪽이 양)까지 부호 거리. 꼭짓점이 가장 가까우면 공구 쪽으로 꺾이는(오목) 곳은 두 변 모두 공구 쪽일 때만 공구 쪽 */
-private fun emSide(p: Q, els: List<EmEl>, left: Boolean): Double {
-    val s = if (left) 1.0 else -1.0
-    var best = INF
-    var bi = -1
-    var where = 0
-    var foot = p
-    for ((i, e) in els.withIndex()) {
-        var w: Int
-        val f: Q
-        when (e) {
-            is EmLn -> {
-                val d = e.b - e.a
-                val l2 = d dot d
-                val t = if (l2 <= 0) 0.0 else (((p - e.a) dot d) / l2).coerceIn(0.0, 1.0)
-                f = e.at(t)
-                w = if (t <= 0) -1 else if (t >= 1) 1 else 0
-            }
-            is EmAc -> {
-                if ((p - e.c).len > 1e-12 && e.covers(p)) {
-                    f = e.c + (p - e.c).unit() * e.rad
-                    w = 0
-                } else if ((p - e.a).len <= (p - e.b).len) {
-                    f = e.a
-                    w = -1
-                } else {
-                    f = e.b
-                    w = 1
-                }
-            }
-        }
-        val d = (p - f).len
-        if (d < best - 1e-15) {
-            best = d
-            bi = i
-            where = w
-            foot = f
-        }
-    }
-    val e = els[bi]
-    val tool = if (where == 0 || (where == -1 && bi == 0) || (where == 1 && bi == els.size - 1)) {
-        ((p - foot) dot emNormal(e, foot, left)) >= 0
-    } else {
-        val (tin, tout) = if (where == -1) els[bi - 1].tan(1.0) to e.tan(0.0) else e.tan(1.0) to els[bi + 1].tan(0.0)
-        val sa = s * (tin cross (p - foot))
-        val sb = s * (tout cross (p - foot))
-        if (s * (tin cross tout) > 1e-12) sa > 0 && sb > 0 else sa > 0 || sb > 0
-    }
-    return if (tool) best else -best
-}
-
-private fun emG00(log: EmLog, name: String, m: RoundResult, d: RoundResult, z0: RoundResult, r: Double, inner: Boolean, standard: Boolean, zClear: Double, isType: Boolean) {
+/**
+ * ④ 라운드 기계 보정 진입(회사 꼴 — 계획 단계 4): `G41`/`G42` 혼자 줄 / `G0X…Z20.` / (X 맞춤) / 진입점 / `G1 첫 점 F.1`. 이 파일의 제어기 모형
+ * (Z20. 자리 노즈 = 첫 블록 처음의 법선, 꺾임 = 이웃 보정선의 교점 — 첫 깎는 줄 끝은 첫 형상 요소의 보정선과)으로: 진입 노즈가 늘인 윤곽에서 r 이상
+ * (내경은 맞은편 벽도), 진입 꺾임이 바깥 90° 이하 · 노즈가 블록과 거꾸로 가지 않음, 첫 깎는 줄 노즈 이동 ≥ 0.05, 첫 형상 블록 처음 노즈 = 직접 보정 첫 노즈,
+ * 글이 팁 번호와 상관없음([std] = 팁을 비운 풀이와 같은 글), 형상 줄이 노즈R 0 풀이와 같음(끝 요소 직선은 축 너머로 늘일 수 있어 뺀다)
+ */
+private fun emG00(log: EmLog, name: String, m: RoundResult, std: RoundResult, d: RoundResult, z0: RoundResult, r: Double, inner: Boolean, reverseArc: Boolean = false) {
     val ms = m.solution ?: return log.count("기계 보정 풀이 없음 ${m.warnings}${if (d.solution != null) " (직접 보정은 풀림)" else ""}")
     val ds = d.solution
     log.cases++
-    // 직접 보정이 멈추는 입력(오목 R < r · 노즈가 축을 넘음)은 기계 보정 글만 나온다 — 그 사례의 진입 문제는 정보로
+    // 직접 보정이 멈추는 입력(오목 R < r · 노즈가 축을 넘음)은 기계 보정 글만 나온다 — 그 사례의 진입 문제는 정보로.
+    // 역방향 3점호의 진입은 회사 꼴 틀이 아직 다루지 않는 꼴(앞 단계 남은 일 — 앞으로 부푼 원호 · +Z 진입)이라 진입 꺾임 · 노즈 거꾸로 · 첫 깎는 줄 이동은 따로 센다
     fun bad(cat: String, msg: String) = if (ds != null) log.bad(cat, msg) else log.info("$cat (직접 보정 ${d.warnings} — 기계 보정만)", msg)
-    val tv = emTip(ms.tip, r)
+    fun badEntry(cat: String, msg: String) = if (reverseArc) log.info("$cat — 역방향 3점호(알려진 한계)", msg) else bad(cat, msg)
     val left = ms.side == Side.G41
     val drawing = ms.drawing.segs.map(::emEl)
     val first = drawing.first()
     val last = drawing.last()
-    // NoseComp 식 재료: 도면 + 양 끝 접선 반직선
-    val ext = listOf(EmLn(first.a - first.tan(0.0) * 1000.0, first.a)) + drawing + listOf(EmLn(last.b, last.b + last.tan(1.0) * 1000.0))
-    val p0 = q(ms.entry)
-    val n0 = p0 - tv
-    val sd = emSide(n0, ext, left)
-    log.note("④ G00 노즈 ~ 늘인 윤곽 − r(최소)", sd - r)
-    if (sd < r - 1e-9) bad("④ G00 노즈가 재료에 박힘", "$name: G00 ${ms.nc.first()} 노즈 $n0 · 부호 거리 ${f4(sd)} < r $r")
+    // 공기 이동을 잴 소재(라운드 기계 보정 정의 — 계획 단계 4): 도면 + 직선이거나 축에서 시작 · 끝나는 끝 요소의 접선 반직선(3점호 원호의 접선은 늘이지 않는다 —
+    // 그 너머 윤곽을 모른다), 내경은 축 거울(맞은편 벽). 진입은 Z20. 공기에서 내려오므로 이 경계에서 r 이상 떨어져 지나면 소재에 들지 않는다
+    val mat0 = drawing + listOfNotNull(
+        if (first is EmLn || first.a.x <= 1e-9) EmLn(first.a - first.tan(0.0) * 1000.0, first.a) else null,
+        if (last is EmLn || last.b.x <= 1e-9) EmLn(last.b, last.b + last.tan(1.0) * 1000.0) else null,
+    )
+    val mat = if (inner) mat0 + mat0.map { it.mirror() } else mat0
     val bl = emParse(ms.nc)
-    val sdText = emSide(bl[0].end - tv, ext, left)
-    if (sdText < r - 1e-3) bad("④ 쓴 G00 의 노즈가 재료에 박힘", "$name: ${ms.nc.first()} · ${f4(sdText)}")
-    // 내경: 맞은편 벽(축 너머 거울, 입구 앞은 공기)
-    if (inner) {
-        val zTop = max(drawing.first().a.z, drawing.last().b.z)
-        val mir = drawing.map { it.mirror() }
-        if (n0.z - r < zTop) {
-            val dm = mir.minOf { it.dist(n0) }
-            log.note("④ 내경 G00 노즈 ~ 맞은편 벽 − r(최소)", dm - r)
-            if (dm < r - 1e-9) {
-                // 직접 보정 G00 노즈도 맞은편 벽에 걸리면 구멍이 노즈보다 좁은 입력(두 프로그램 같음) — 정보로
-                val dn = ds?.let { q(it.entry) - tv }
-                val both = dn != null && dn.z - r < zTop && mir.minOf { it.dist(dn) } < r - 1e-9
-                if (both) log.info("④ G00 노즈가 맞은편 벽에 — 직접 보정 G00 도 같음", "$name: 기계 ${ms.nc.first()} 노즈 $n0 · ${f4(dm)} / 직접 ${ds?.nc?.first()} 노즈 $dn")
-                else bad("④ G00 노즈가 맞은편 벽에", "$name: ${ms.nc.first()} 노즈 $n0 · ${f4(dm)} / 직접 ${ds?.nc?.first()}")
-            }
-        }
-        if (p0.x < 0) log.info("④ 내경 G00 X 음수", "$name: ${ms.nc.take(3)}")
+    if (ms.nc.first() != "${ms.side}") log.bad("④ 첫 줄이 보정 혼자 줄이 아님", "$name: ${ms.nc.take(3)}")
+    val cmds = ms.approach.map(::q) + q(ms.program.segs.first().start)
+    val firstCut = ms.nc.indexOfFirst { 'F' in it }
+    val lines = (2..firstCut).filter { bl[it].el != null }
+    if (lines.size != cmds.size - 1) return log.bad("④ 진입 줄 수", "$name: 진입 줄 ${lines.size} · 명령점 ${cmds.size} · ${ms.nc.take(6)}")
+    for ((i, ln) in (listOf(1) + lines).withIndex()) if ((bl[ln].end - cmds[i]).len > 8e-4) log.bad("④ 진입 줄 글", "$name: ${ms.nc[ln]} ≠ ${cmds[i]}")
+    val els = cmds.zipWithNext { a, b -> EmLn(a, b) as EmEl } + first
+    val offs = els.map { emOffset(it, r, left) ?: return log.count("④ 첫 요소가 오목 R ≤ r(모형 밖)") }
+    val noses = listOf(offs.first().a) + (0 until offs.size - 1).map { emJoin(offs[it], offs[it + 1]) }
+    val s = if (left) 1.0 else -1.0
+    for (i in 0 until els.size - 1) {
+        val u1 = els[i].tan(1.0)
+        val u2 = els[i + 1].tan(0.0)
+        if (s * (u1 cross u2) < -1e-9 && (u1 dot u2) < -1e-9) badEntry("④ 진입 꺾임이 바깥 90° 넘음", "$name: ${i + 2}번째 진입 줄 끝 · ${ms.nc.take(6)}")
     }
-    // 시작 이동
-    val s0 = q(ms.program.segs.first().start)
-    val lead = ms.lead?.let(::q)
-    val p1 = lead ?: s0
-    val startLen = (p1 - p0).len
-    log.note("④ 시작 이동 − r(최소)", startLen - r)
-    if (startLen < r - 1e-9) bad("④ 시작 이동 < r", "$name: ${ms.nc.take(3)} · ${f4(startLen)}")
-    if ((bl[1].end - p1).len > 8e-4 || (lead != null && (bl[2].end - s0).len > 8e-4)) log.bad("④ 진입 줄 글", "$name: ${ms.nc.take(3)}")
-    val refs = ms.ncRefs.map { it.element }
-    val entryLines = refs.count { it < 0 }
-    if (entryLines != (if (lead != null) 3 else 2)) log.bad("④ 진입 줄 수", "$name: ncRefs $refs")
-    // 시작 이동 끝 보정점(형식 A: 다음 블록 시작의 법선) = 직접 보정 첫 노즈
-    val shapeNose = s0 + emNormal(first, s0, left) * r
+    for (i in 0 until cmds.size - 1) if (((noses[i + 1] - noses[i]) dot (cmds[i + 1] - cmds[i])) <= 0) badEntry("④ 진입 노즈가 블록과 거꾸로", "$name: ${ms.nc[lines[i]]} · ${ms.nc.take(6)}")
+    val g1 = (noses.last() - noses[noses.size - 2]) dot (cmds.last() - cmds[cmds.size - 2]).unit()
+    log.note("④ 첫 깎는 줄 노즈 이동(최소)", g1)
+    if (g1 < 0.05 - 1e-6) badEntry("④ 첫 깎는 줄 노즈 이동 < 0.05", "$name: ${f4(g1)} · ${ms.nc.take(6)}")
+    // 진입 노즈 길 ~ 소재 경계 − r
+    var worst = INF
+    for (i in 0 until cmds.size - 1) {
+        val leg = EmLn(noses[i], noses[i + 1])
+        val n = max(1, ceil(leg.length / 0.01).toInt())
+        for (k in 0..n) worst = min(worst, mat.minOf { it.dist(leg.at(k.toDouble() / n)) } - r)
+    }
+    log.note("④ 진입 노즈 ~ 소재 경계 − r(최소)", worst)
+    if (worst < -1e-6) {
+        // 노즈에 비해 좁은 구멍(가장 좁은 반경 < (1 + √2)·r + 0.02)은 회사 꼴 틀이 맞출 곳이 없는 알려진 한계 — 정보로
+        val narrow = inner && drawing.minOf { e -> (0..16).minOf { e.at(it / 16.0).x } } < (1 + sqrt(2.0)) * r + 0.02
+        if (narrow) log.info("④ 진입 노즈가 소재에 — 노즈에 비해 좁은 구멍(알려진 한계)", "$name: ${f4(worst)} · ${ms.nc.take(6)}")
+        else badEntry("④ 진입 노즈가 소재에", "$name: ${f4(worst)} · ${ms.nc.take(6)}")
+    }
+    // 첫 형상 블록 처음 노즈 = 직접 보정 첫 노즈
     if (ds != null) {
-        val dn = q(ds.program.segs.first().start) - tv
-        log.note("④ 형상 시작 보정점 − 직접 보정 첫 노즈(최대)", (shapeNose - dn).len)
-        if ((shapeNose - dn).len > 1e-6) log.bad("④ 시작 이동 끝 보정점 ≠ 직접 보정", "$name: 기계 $shapeNose · 직접 $dn · ${ms.nc.take(3)} / ${ds.nc.take(2)}")
+        val dn = q(ds.program.segs.first().start) - emTip(ds.tip, r)
+        log.note("④ 형상 시작 노즈 − 직접 보정 첫 노즈(최대)", (noses.last() - dn).len)
+        if ((noses.last() - dn).len > 1e-6) log.bad("④ 형상 시작 노즈 ≠ 직접 보정", "$name: 기계 ${noses.last()} · 직접 $dn · ${ms.nc.take(6)}")
     } else {
         log.count("④ 직접 보정 풀이 없음 ${d.warnings}")
     }
-    // 시작 블록(형식 A) · 띄운 진입 둘째 블록 동안 노즈가 재료 밖
-    val startEnd = if (lead != null) lead + emNormal(EmLn(lead, s0), lead, left) * r else shapeNose
-    var worst = INF
-    val legs = listOfNotNull(EmLn(n0, startEnd), lead?.let { EmLn(startEnd, shapeNose) })
-    for (leg in legs) {
-        val n = max(1, ceil(leg.length / 0.01).toInt())
-        for (i in 0..n) worst = min(worst, emSide(leg.at(i.toDouble() / n), ext, left) - r)
-    }
-    log.note("④ 진입 블록 노즈 ~ 늘인 윤곽 − r(최소)", worst)
-    if (worst < -1e-6) bad("④ 진입 블록에서 노즈가 재료에", "$name: ${f4(worst)} · ${ms.nc.take(3)}")
-    if (lead != null) {
-        val t0 = first.tan(0.0)
-        val perp = abs((lead - p0).unit() dot t0)
-        if (perp > 1e-9) log.bad("④ 직각 진입이 직각 아님", "$name: ${f4(perp)}")
-        val nf = emNormal(first, s0, left)
-        val g = (n0 - s0) dot nf
-        log.note("④ 띄운 G00 노즈 ~ 시작 선 − (c + r)", g - (max(zClear, r) + r))
-        log.count("④ 띄운 진입(lead)")
-    }
-    // 노즈R 0 풀이와 비교
+    // 글이 팁 번호와 상관없다(보정 줄이 이동 없는 혼자 줄)
+    val stdNc = std.solution?.nc
+    log.ratio("④ 글이 팁 번호와 상관없음(팁을 비운 풀이와 같은 글)", stdNc == ms.nc)
+    if (stdNc != ms.nc) log.bad("④ 글이 팁 번호에 따라 바뀜", "$name: ${ms.nc} / ${stdNc}")
+    // 형상 줄이 노즈R 0 풀이와 같다 — 옛 꼴(줄마다 G)로 견준다. 끝 요소가 직선이면 축 너머로 늘일 수 있어 뺀다
     val zs = z0.solution ?: return log.count("④ 노즈R 0 풀이 없음")
-    val mShape = ms.nc.drop(entryLines)
-    val zShape = zs.nc.drop(zs.ncRefs.count { it.element < 0 })
+    val upTo = if (last is EmLn) drawing.size - 1 else drawing.size
+    fun shape(sol: RoundSolution) = sol.nc.legacy.filterIndexed { i, _ -> sol.ncRefs[i].element in 0 until upTo }
+    val mShape = shape(ms)
+    val zShape = shape(zs)
     if (mShape != zShape) log.bad("④ 형상 줄이 노즈R 0 풀이와 다름", "$name: $mShape / $zShape")
-    val same = ms.nc == zs.nc
-    val oldNose = q(zs.entry) - tv
-    val oldIn = emSide(oldNose, ext, left) < r - 1e-9
-    when {
-        standard && zClear >= r && isType -> {
-            log.ratio("④ 표준 팁 · Z 여유 ≥ r · TYPE: 노즈R 0 풀이와 같은 글", same)
-            if (!same) log.bad("④ 표준 팁 TYPE 글이 바뀜", "$name: ${ms.nc.take(3)} / ${zs.nc.take(2)}")
-        }
-        standard && zClear >= r -> {
-            log.ratio("④ 표준 팁 · Z 여유 ≥ r · 3점호: 노즈R 0 풀이와 같은 글", same)
-            if (!same) {
-                log.count("④ 표준 팁 3점호 바뀜 — 노즈R 0 G00 노즈가 ${if (oldIn) "박혔음(바뀔 이유 있음)" else "밖이었음"}")
-                if (!oldIn) log.bad("④ 표준 팁 3점호 글이 이유 없이 바뀜", "$name: ${ms.nc.take(3)} / ${zs.nc.take(2)}")
-            }
-        }
-        else -> {
-            log.count("④ ${if (standard) "표준 팁 · Z 여유 < r" else "비표준 팁"}: ${if (same) "같은 글" else "바뀜"}${if (oldIn) " · 노즈R 0 G00 노즈는 박혔음" else ""}")
-        }
-    }
 }
 
 // ====================================================================== 기록

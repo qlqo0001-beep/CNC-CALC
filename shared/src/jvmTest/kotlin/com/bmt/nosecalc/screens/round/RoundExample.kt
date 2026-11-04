@@ -55,10 +55,13 @@ internal fun roundInnerSocketF(): RoundState = roundInnerExample(4).apply {
     setShared("leg", "5")
 }.withBar("8", "4.5", "D", "7.75", "93")
 
-/** 보링바 뒤보링 예: 3점호 역방향 내경(방 안 뒷면 X30 Z−20 → X24 Z−19 → R5 → X20 Z−15, 팁 1 · G42) + 바 Ø12 · f 12 · C 9.67 · κr 95° · DMIN 22 */
+/**
+ * 보링바 뒤보링 예: 3점호 역방향 내경(방 안 뒷면 X30.4 Z−20 → X24.4 Z−19 → R5 → 입구 X20.4 Z−15, 팁 1 · G42) + 바 Ø12 · f 12 · C 9.67 · κr 95° · DMIN 22 —
+ * calc-design 보링바 예 '뒤보링'(X30 · X24 · X20)을 반경 0.2 키운 같은 꼴(헤드 Ø22 가 입구 Ø20.4 보다 커 기계 보정은 Z20. 자리부터 못 들어감)
+ */
 internal fun roundManualBackBoring(): RoundState = roundExample(MANUAL, open = true).apply {
     inner = true
-    mapOf("x1" to "30", "z1" to "-20", "x2" to "24", "z2" to "-19", "x3" to "20", "z3" to "-15").forEach { (k, v) -> setPoint(k, v) }
+    mapOf("x1" to "30.4", "z1" to "-20", "x2" to "24.4", "z2" to "-19", "x3" to "20.4", "z3" to "-15").forEach { (k, v) -> setPoint(k, v) }
 }.withBar("12", "12", "C", "9.67", "95", dmin = "22")
 
 /** 내경 · 역방향 3점호(보링 안쪽의 R10 을 Z+ 로, X50 Z−10 → X30 Z0): 그림이 위아래 · 좌우로 뒤집힌다 */

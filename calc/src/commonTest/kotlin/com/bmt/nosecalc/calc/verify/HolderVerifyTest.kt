@@ -15,6 +15,7 @@ import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundInput
 import com.bmt.nosecalc.calc.RoundResult
 import com.bmt.nosecalc.calc.Seg
+import com.bmt.nosecalc.calc.legacy
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -137,7 +138,7 @@ class HolderVerifyTest {
         val bore = Bore(sol.drawing, faceAtStart)
         val tool = BarShape(bar, r, vb.reverse)
         val tv = tipV(sol.tip, r)
-        val nc = parseNc(sol.nc)
+        val nc = parseNc(sol.nc.legacy)
         // V7: 독립 참조
         val eref = EuclidRef(bar, r, vb.reverse)
         val (eCut, eOpp) = EuclidRef.material(sol.drawing.segs, faceAtStart)

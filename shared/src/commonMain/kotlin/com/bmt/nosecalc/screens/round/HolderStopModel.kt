@@ -16,6 +16,7 @@ import com.bmt.nosecalc.calc.RoundSolution
 import com.bmt.nosecalc.calc.SafeEnd
 import com.bmt.nosecalc.calc.Seg
 import com.bmt.nosecalc.calc.StopWarning
+import com.bmt.nosecalc.calc.ncWords
 import com.bmt.nosecalc.screens.taper.directNc
 import kotlin.math.abs
 import kotlin.math.floor
@@ -63,7 +64,7 @@ internal fun progOf(p: ProgAt, comp: Boolean): Pair<Pt, Int> {
 
 /**
  * 간섭 목록 한 줄(지금 NC 기준). [line] · [lineTo] = 닿기 시작 · 끝의 전체 NC 카드 줄(0부터), [from] · [to] = 닿기 시작 · 끝 좌표
- * (기계 보정 = 도면 명령 좌표 — 진입점 · 진입 이동은 기계 보정 프로그램 자기 진입(G00 점 · 보정 시작 블록)에서 닿는 명령점, 직접 보정 = 가상 인선),
+ * (기계 보정 = 도면 명령 좌표 — 진입점 · 진입 이동은 기계 보정 프로그램 자기 진입(회사 꼴의 Z20. 자리 · 보정 켠 진입 블록)에서 닿는 명령점, 직접 보정 = 가상 인선),
  * [part] = 부분 · 벽, [detail] = 깊이
  */
 internal class HitRow(val hit: HolderHit, val part: String, val line: Int, val lineTo: Int, val from: Pt, val to: Pt, val detail: String) {
@@ -95,7 +96,8 @@ internal enum class StopKind { CUT, CLEAR, UNSAFE, NOTHING, NO_MACHINE }
  * 끝낼 수 없을 때), [near] = 그곳의 가장 가까운 부분 · 여유(직선 거리 — 공구대는 Z), [face] = 깎는 면 예외가 쓰인 곳(작은 글 — 바 앞면이 지금 깎는 면에
  * 안전 여유보다 가까이 붙음), [retract] = 후퇴 방식 한 줄, [note] = 설명, [tight] = 후퇴 여유가 안전 여유보다 좁음(노랑).
  * [nc] = 카드에 줄 잘린 NC(직접 보정은 첫 줄 주석부터), [endLine] = 끊은 마지막 블록의 카드 줄(0부터), [retractLines] = 후퇴 카드 줄,
- * [at] = 멈추는 좌표(쓴 글 그대로 — 깎기 전에 멈추면 정확한 안전 끝점), [nose] = 그때 노즈 중심(보링바를 그릴 자리), [cut] = 잘린 프로그램
+ * [at] = 멈추는 좌표(쓴 글 그대로 — 깎기 전에 멈추면 정확한 안전 끝점), [nose] = 그때 노즈 중심(보링바를 그릴 자리), [cut] = 잘린 프로그램,
+ * [exitOnly] = 기계 보정 형상은 끝까지 안전하고 원래 끝(빼는 줄 → G40 → G0Z200.)에서만 닿아 빠지는 길만 바꾼 것([StopWarning.MACHINE_EXIT])
  */
 internal class StopView(
     val kind: StopKind,
@@ -113,6 +115,7 @@ internal class StopView(
     val cut: HolderCut? = null,
     val lack: String? = null,
     val face: String? = null,
+    val exitOnly: Boolean = false,
 ) {
     /** 골든 · 시험용 한 덩어리 글(카드에 보이는 차례) */
     val text: String get() = listOfNotNull(head, where, lack, near, face, retract, note, tight).joinToString("\n")
@@ -120,8 +123,8 @@ internal class StopView(
 
 /**
  * 가공 가능 끝점. comp = 직접 보정(G40 프로그램 · 가상 인선 · 첫 줄 주석), 아니면 기계 보정(도면 좌표 프로그램 [drawn] · 도면 명령 좌표 — 마지막 블록은
- * 제어기의 끝 블록 법선 보정으로 노즈가 안전 끝점에 서는 명령점, 첫 후퇴 줄에 G40). [sol] = G40 풀이, noseR · bar = 칸 값.
- * 기계 보정은 그 프로그램 자기 진입(도면 G00 점에 선 자세 · 보정 시작 블록)으로 본 끝점(plan.machineEnd) — 직접 보정과 진입이 다르다
+ * 빼는 줄과의 보정선 교점에 노즈가 안전 끝점에 서는 명령점 P′, 그 뒤 빼는 줄 → G40 → G0Z200.). [sol] = G40 풀이, noseR · bar = 칸 값.
+ * 기계 보정은 그 프로그램 자기 진입(Z20. 자리 · 보정 중 진입 블록)으로 본 끝점(plan.machineEnd — 원래 끝에서 닿으면 경로 끝) — 직접 보정과 진입이 다르다
  */
 internal fun stopView(plan: HolderPlan, comp: Boolean, sol: RoundSolution, drawn: RoundSolution?, noseR: Double, bar: BoringBar): StopView {
     val safe = "${plain(plan.safe)} mm"
@@ -151,7 +154,7 @@ internal fun stopView(plan: HolderPlan, comp: Boolean, sol: RoundSolution, drawn
     return cutView(plan, cut, end, comp, sol, drawn, noseR, near, safe)
 }
 
-/** 기계 보정 프로그램의 끝점 카드: 제 G00 점부터 안 됨 · 보정 시작 블록에서 멈춤 · 끝까지 안전 · 잘린 NC 없음 · 끊고 빠짐 */
+/** 기계 보정 프로그램의 끝점 카드: 진입(Z20. 자리)부터 안 됨 · 진입 블록에서 멈춤 · 끝까지 안전 · 잘린 NC 없음 · 끊고 빠짐 */
 private fun machineStop(plan: HolderPlan, sol: RoundSolution, drawn: RoundSolution, bar: BoringBar, safe: String): StopView {
     val end = plan.machineEnd ?: return StopView(StopKind.CLEAR, "끝까지 안전합니다", note = clearNote(plan, false, sol, drawn, safe))
     val near = nearText(end, bar, safe)
@@ -161,20 +164,16 @@ private fun machineStop(plan: HolderPlan, sol: RoundSolution, drawn: RoundSoluti
     if (end.element == -2) {
         return StopView(
             StopKind.UNSAFE, "진입점부터 안전 여유가 모자랍니다", near = near,
-            note = "기계 보정(${sol.side}) 프로그램의 G00 진입점 ${xz(drawn.entry)} 에 선 자세(보정 전 G40 — 노즈 중심 = 그 점 − 팁 ${sol.tip}번 벡터)부터 " +
+            note = "기계 보정(${sol.side}) 프로그램의 진입 시작(${xz(drawn.approach.firstOrNull() ?: drawn.entry)})부터 " +
                 "보링바가 소재와 $safe 떨어지지 못해 이 프로그램으로는 깎을 수 없습니다. $other",
         )
     }
     if (end.element == -1) {
         val at = end.at.machine ?: end.pose.drawn
-        // 진입 블록: 보정 시작 블록, 띄운 진입(lead)이면 그 뒤 직각 진입점 → 첫 점 블록도(둘 다 요소 −1 — 줄은 at.machineLine)
-        val lines = drawn.ncRefs.indices.filter { drawn.ncRefs[it].element == -1 }
-        val line = end.at.machineLine ?: lines.firstOrNull() ?: 1
-        val block = if (drawn.lead != null && line == lines.getOrNull(1)) {
-            "직각 진입 뒤 블록(${line + 1}줄 — 노즈가 보정선을 따라 첫 점으로)"
-        } else {
-            "보정 시작(${sol.side}) 블록(${line + 1}줄 — G00 점에서 ${if (drawn.lead != null) "직각 진입점" else "첫 점"}으로, 노즈가 보정 자리로 곧게 감)"
-        }
+        // 진입 블록: Z20. 자리 → (X 맞춤) → 진입점 → 첫 점(모두 보정 중 — 요소 −1, 줄은 at.machineLine)
+        val first = drawn.ncRefs.indexOfFirst { it.element == -1 }
+        val line = end.at.machineLine ?: first
+        val block = if (line == first) "첫 깎는 줄(${line + 1}줄 — 진입점에서 첫 점으로)" else "진입 줄(${line + 1}줄 — 보정 켠 채 진입점으로)"
         return StopView(
             StopKind.NOTHING, "첫 가공점에 닿기 전에 멈춥니다", near = near,
             note = "$block 명령점 ${xz(at)} 에서 안전 여유가 모자라 깎는 것이 없습니다. $other",
@@ -211,20 +210,23 @@ private fun cutView(
     } else {
         null
     }
-    // 기계 보정은 블록을 안전 끝점에서 끝낼 수 없으면 앞 요소 끝에서 멈춘다 — 직접 보정보다 덜 깎는 양(반올림 한 칸보다 클 때만)
+    // 기계 보정은 블록을 안전 끝점에서 끝낼 수 없으면(그 자세로 블록을 끝낼 수 없음 — 앞 요소 끝까지, 또는 공구 쪽 빼는 줄에서 바가 소재로 들어감 — 앞으로 당김)
+    // 그만큼 앞에서 멈춘다 — 직접 보정보다 덜 깎는 양(반올림 한 칸보다 클 때만)
     val lack = if (!comp && cut.lack > LACK_SHOWN) {
-        "안전 끝점보다 경로로 ${Fmt.fixed3(cut.lack)} mm 앞에서 끊음 — 이 블록을 안전 끝점에서 끝낼 수 없어 앞 요소 끝에서 멈춥니다(직접 보정은 그만큼 더 깎음)."
+        "안전 끝점보다 경로로 ${Fmt.fixed3(cut.lack)} mm 앞에서 끊음 — 이 블록을 안전 끝점에서 끝내고 공구 쪽으로 뺄 수 없어 그만큼 앞에서 멈춥니다(직접 보정은 그만큼 더 깎음)."
     } else {
         null
     }
+    // 기계 보정 형상은 끝까지 안전하고 원래 끝(빼는 줄 → G40 → G0Z200.)에서만 닿음 — 끝점은 경로 끝, 빠지는 길만 바꿨다
+    val exitOnly = !comp && StopWarning.MACHINE_EXIT in plan.warnings
     return StopView(
-        StopKind.CUT, "여기까지 깎고 빠집니다",
-        where = "${endLine + 1}줄 ${if (whole) "끝" else "중간"}에서 끊음",
+        StopKind.CUT, if (exitOnly) "끝까지 깎고 빠지는 길만 바꿉니다" else "여기까지 깎고 빠집니다",
+        where = if (exitOnly) "${endLine + 1}줄(형상 끝)까지 깎음" else "${endLine + 1}줄 ${if (whole) "끝" else "중간"}에서 끊음",
         near = near,
         retract = retractText(cut, nc.slice(back), cancel = !comp),
         tight = tight,
         nc = nc, endLine = endLine, retractLines = back, at = cut.stop, nose = cut.pose.nose, cut = cut,
-        lack = lack, face = faceNote(end, plan.safe),
+        lack = lack, face = faceNote(end, plan.safe), exitOnly = exitOnly,
     )
 }
 
@@ -264,18 +266,18 @@ private fun faceNote(end: SafeEnd, safe: Double): String? {
 }
 
 /**
- * 후퇴 방식 한 줄: X 빼기 → Z(그 줄 글) 또는 온 길을 거꾸로(줄 수), 그리고 후퇴 중 가장 좁은 여유. cancel = 기계 보정 — 첫 후퇴 줄의 G40 은
- * 보정을 풀며 지금 인선 자리를 명령하는 것이라(공구는 그 자리에서 곧게 간다) 명령 좌표가 끊은 점보다 깊어 보여도 더 들어가지 않는다고 적는다
+ * 후퇴 방식 한 줄: X 빼기 → Z(그 줄 글) 또는 온 길을 거꾸로(줄 수), 그리고 후퇴 중 가장 좁은 여유. cancel = 기계 보정(회사 꼴) — 벽에서 공구 쪽으로
+ * 빼는 줄(보정 켠 채) → G40 혼자 줄 → G0Z200.
  */
 private fun retractText(cut: HolderCut, lines: List<String>, cancel: Boolean): String {
     val how = when {
+        cancel -> "벽에서 공구 쪽으로 빼고(보정 켠 채) G40 → Z 로: ${lines.joinToString(" → ")}"
         cut.retract == RetractKind.REVERSE -> "온 길을 거꾸로 이송으로 진입점까지 (${lines.size}줄)"
         lines.size >= 2 -> "X 를 축 쪽으로 빼고 Z 로: ${lines.joinToString(" → ")}"
         else -> "그 자리에서 Z 로 (노즈가 벽에서 바로 떨어짐): ${lines.joinToString(" → ")}"
     }
     val clear = cut.retractClear.takeIf { it.isFinite() && it < 1e4 }?.let { " · 후퇴 중 가장 좁은 여유(직선 거리) ${Fmt.fixed3(it)} mm" }.orEmpty()
-    val g40 = if (cancel) " (첫 줄 G40 은 보정을 풀며 지금 인선 자리를 명령 — 더 들어가지 않음)" else ""
-    return "후퇴: $how$clear$g40"
+    return "후퇴: $how$clear"
 }
 
 /** 끝까지 안전할 때: 안전 여유와 바 · 소재 사이 가장 좁은 여유(직선 거리 — 깎는 면은 뺀 것, 지금 NC 의 줄) */
@@ -293,21 +295,22 @@ private fun clearNote(plan: HolderPlan, comp: Boolean, sol: RoundSolution, drawn
 }
 
 /**
- * NC 줄을 [from] 에서 이어 읽은 움직임(그림용 — 잘린 NC 의 후퇴 길): 빠진 축은 앞 값(모달), X 는 직경 → 반경, G02/G03 은 끝점 · R(180° 이하 쪽)로
- * 중심을 다시 구한다 — 제어기가 하는 대로. G40 같은 말은 건너뛰고, 움직임이 없는 줄은 뺀다
+ * NC 줄을 [from] 에서 이어 읽은 움직임(그림용 — 잘린 NC 의 후퇴 길): 빠진 축 · 이동 G 는 앞 값(모달 — 첫 줄 앞은 G1: 후퇴 첫 줄이 G 를 빼는 것은
+ * 앞 깎는 줄이 G1 일 때뿐, G 는 수로 본다), X 는 직경 → 반경, G2/G3 은 끝점 · R(180° 이하 쪽)로 중심을 다시 구한다 — 제어기가 하는 대로.
+ * G40 같은 말은 건너뛰고, 움직임이 없는 줄은 뺀다
  */
 internal fun ncMoves(from: Pt, lines: List<String>): List<Seg> {
     var cur = from
-    var g = "G01"
+    var g = 1
     val out = mutableListOf<Seg>()
     for (line in lines) {
         var z = cur.z
         var x = cur.x
         var rr: Double? = null
-        for (w in line.split(' ')) {
+        for (w in ncWords(line)) {
             val v = w.drop(1).toDoubleOrNull()
             when (w.firstOrNull()) {
-                'G' -> if (w in MOTIONS) g = w
+                'G' -> w.drop(1).toIntOrNull()?.takeIf { it in 0..3 && w.length <= 3 }?.let { g = it }
                 'X' -> if (v != null) x = v / 2
                 'Z' -> if (v != null) z = v
                 'R' -> rr = v
@@ -316,15 +319,13 @@ internal fun ncMoves(from: Pt, lines: List<String>): List<Seg> {
         val to = Pt(z, x)
         if ((to - cur).length < 1e-9) continue
         val r = rr
-        out += if ((g == "G02" || g == "G03") && r != null) arcR(cur, to, r, g == "G02") else Line(cur, to)
+        out += if ((g == 2 || g == 3) && r != null) arcR(cur, to, r, g == 2) else Line(cur, to)
         cur = to
     }
     return out
 }
 
-private val MOTIONS = setOf("G00", "G01", "G02", "G03")
-
-/** 끝점 R 원호(180° 이하). G02 = 이 그림에서 시계 → 중심은 현 진행 방향 오른쪽 */
+/** 끝점 R 원호(180° 이하). G2 = 이 그림에서 시계 → 중심은 현 진행 방향 오른쪽 */
 private fun arcR(a: Pt, b: Pt, r: Double, cw: Boolean): Arc {
     val ch = b - a
     val h = ch.length / 2

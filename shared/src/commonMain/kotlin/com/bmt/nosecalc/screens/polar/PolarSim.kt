@@ -70,6 +70,7 @@ import com.bmt.nosecalc.calc.PolarProgram
 import com.bmt.nosecalc.calc.PolarSolution
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.Seg
+import com.bmt.nosecalc.calc.ncWords
 import com.bmt.nosecalc.ui.AppIcons
 import com.bmt.nosecalc.ui.Modal
 import com.bmt.nosecalc.ui.arrowHead
@@ -129,7 +130,7 @@ internal class SimPlan(val blocks: List<PolarBlock>, feed: Double, val start: Pt
     val timing: List<Pair<Double, Boolean>> = blocks.mapIndexed { i, b ->
         val len = b.path.sumOf(::segLength)
         val prevZ = blocks.getOrNull(i - 1)?.z
-        val dz = if (b.path.isEmpty() && b.text.startsWith("G01") && b.z != null && prevZ != null) abs(b.z!! - prevZ) else 0.0
+        val dz = if (b.path.isEmpty() && "G1" in ncWords(b.text) && b.z != null && prevZ != null) abs(b.z!! - prevZ) else 0.0
         when {
             len > 1e-9 -> len / perSec to true
             dz > 1e-9 -> dz / perSec to true
@@ -511,7 +512,10 @@ private fun SpeedSlider(index: Int, count: Int, onChange: (Int) -> Unit, modifie
     }
 }
 
-/** G코드 목록(원본 07 의 민트 바탕 칸): 지금 줄 노란 띠, 흐린 좌표, 초록 주석. 지금 줄이 바뀌면 그 두 줄 위까지 저절로 내린다(리셋이면 맨 위로) */
+/**
+ * G코드 목록(원본 07 의 민트 바탕 칸): 지금 줄 노란 띠, 흐린 좌표, 초록 주석. 낱말은 NC 글처럼 붙여 쓴다(흐린 좌표도 제자리에 붙여).
+ * 지금 줄이 바뀌면 그 두 줄 위까지 저절로 내린다(리셋이면 맨 위로)
+ */
 @Composable
 private fun CodeList(blocks: List<PolarBlock>, current: Int, modifier: Modifier) {
     val c = AppTheme.colors
@@ -530,8 +534,7 @@ private fun CodeList(blocks: List<PolarBlock>, current: Int, modifier: Modifier)
             val toks = ncTokens(b)
             Text(
                 buildAnnotatedString {
-                    toks.forEachIndexed { k, t ->
-                        if (k > 0) append(' ')
+                    toks.forEach { t ->
                         val style = when {
                             t.text.startsWith("(") -> SpanStyle(color = c.chipMint.label, fontWeight = FontWeight.Bold)
                             t.dim -> SpanStyle(color = if (on) c.textBody else c.textMuted, fontWeight = FontWeight.Normal)

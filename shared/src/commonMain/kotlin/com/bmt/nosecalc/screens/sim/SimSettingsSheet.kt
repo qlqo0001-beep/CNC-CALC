@@ -146,6 +146,7 @@ internal fun SimSettingsSheet(sim: SimState, run: SimRun, bad: Set<StockField>, 
                     )
                     Spacer(Modifier.weight(1f))
                 }
+                Note("M24(나사 끝 빼기 끔) 뒤의 G92 · G76 은 빼지 않고, M23(켬) 뒤는 다시 뺍니다 — 흔한 FANUC 계열 기계 M 정의라 기계마다 다를 수 있습니다.")
                 Section("보기", null)
                 val f = sim.view
                 ToggleRow("고스트 원", f.ghost) { sim.changeView(f.copy(ghost = it)) }

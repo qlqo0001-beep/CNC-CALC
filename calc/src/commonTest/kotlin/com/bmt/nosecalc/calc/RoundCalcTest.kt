@@ -314,7 +314,7 @@ class RoundCalcTest {
         assertTrue(abs(s.filled!!.l1!! - 5.0) <= 1e-12)
         assertEquals(
             listOf("G00 X-0.8 Z1.", "G01 Z0.", "G03 X19.391 Z-4.87 R12.9", "G03 X20. Z-5.741 R1.4", "G01 Z-10.4"),
-            s.nc,
+            s.nc.legacy,
         )
         assertEquals(listOf("19.565", "-4.719"), s.nodes[1].drawn.let { listOf(Fmt.fixed3(it.xDia), Fmt.fixed3(it.z)) })
         near(Pt(1.0, -0.4), s.entry, "진입점")
@@ -328,7 +328,7 @@ class RoundCalcTest {
         for (zc in listOf(0.0, 0.2)) {
             val s = ok(RoundCalc.calc(i.copy(zClear = zc)))
             near(Pt(0.4, -0.4), s.entry, "진입점 Z 여유 $zc")
-            assertEquals("G00 X-0.8 Z0.4", s.nc.first())
+            assertEquals("G00 X-0.8 Z0.4", s.nc.legacy.first())
         }
         near(Pt(1.0, -0.4), ok(RoundCalc.calc(i.copy(zClear = 1.0))).entry, "Z 여유가 크면 그대로")
         val cen = Pt(-10.0, 15.0)
@@ -344,11 +344,11 @@ class RoundCalcTest {
         for (base in cases) for (r in noseRs) {
             val s = ok(RoundCalc.calc(base.copy(noseR = r)))
             val tag = "TYPE ${base.type} r=$r"
-            assertTrue(s.nc[0].startsWith("G00"), tag)
+            assertTrue(s.nc.legacy[0].startsWith("G00"), tag)
             var x = ""
             var z = ""
             val ends = mutableListOf<Triple<String, Pair<String, String>, String?>>()
-            for ((n, line) in s.nc.withIndex()) {
+            for ((n, line) in s.nc.legacy.withIndex()) {
                 val w = line.split(" ")
                 var rr: String? = null
                 for (t in w.drop(1)) when (t[0]) {
@@ -378,7 +378,7 @@ class RoundCalcTest {
                 }
                 assertEquals(Fmt.nc(seg.end.xDia) to Fmt.nc(seg.end.z), ends[k - 1].second, tag)
             }
-            assertEquals(ends.size, k, "$tag ${s.nc}")
+            assertEquals(ends.size, k, "$tag ${s.nc.legacy}")
         }
     }
 
@@ -509,7 +509,7 @@ class RoundCalcTest {
             assertTrue(RoundWarning.CONCAVE_R_LE_NOSE in w, "c=$c")
             val fillet = s.arcs.single { it.cw }
             assertNull(fillet.progR)
-            assertTrue(s.nc.none { it.startsWith("G02") }, "${s.nc}")
+            assertTrue(s.nc.legacy.none { it.startsWith("G02") }, "${s.nc.legacy}")
         }
         val (s, w) = solved(RoundCalc.calc(RoundInput(type = 4, mainR = 8.0, d1 = 10.0, cornerR1 = 0.41, noseR = 0.4)))
         assertTrue(RoundWarning.CONCAVE_R_LE_NOSE !in w)
@@ -629,14 +629,14 @@ class RoundCalcTest {
         val v = NoseComp.tipVector(3, r)
         near(cen + unit(p[0] - cen) * 5.4 + v, s.nodes[0].prog, "시작 보정")
         near(cen + unit(p[2] - cen) * 5.4 + v, s.nodes[1].prog, "끝 보정")
-        assertEquals("G03", s.nc.last().substringBefore(" "))
-        assertTrue(s.nc.last().endsWith(" R5.4"), s.nc.last())
+        assertEquals("G03", s.nc.legacy.last().substringBefore(" "))
+        assertTrue(s.nc.legacy.last().endsWith(" R5.4"), s.nc.legacy.last())
         assertEquals(s.nodes[0].prog + Pt(1.0, 0.0), s.entry)
         // 외경 오목 홈
         val g = listOf(-30.0, -90.0, -150.0).map { onCircle(Pt(-10.0, 20.0), 5.0, it) }
         val sg = ok(arc3(g[0], g[1], g[2]))
         assertTrue(abs((sg.program.segs.single() as Arc).radius - 4.6) <= 1e-9)
-        assertEquals("G02", sg.nc.last().substringBefore(" "))
+        assertEquals("G02", sg.nc.legacy.last().substringBefore(" "))
         // 내경(G41, 팁 2): 같은 볼록 모양이 공구에게는 오목
         val si = ok(arc3(p[0], p[1], p[2], inner = true))
         assertEquals(Side.G41, si.side)
@@ -663,8 +663,8 @@ class RoundCalcTest {
         val cen = Pt(-10.0, 15.0)
         val p = listOf(-60.0, 90.0, 240.0).map { onCircle(cen, 5.0, it) }
         val (s, w) = solved(arc3(p[0], p[1], p[2], noseR = 0.0, tip = 0))
-        val arcs = s.nc.filter { it.startsWith("G03") }
-        assertEquals(4, arcs.size, "${s.nc}")
+        val arcs = s.nc.legacy.filter { it.startsWith("G03") }
+        assertEquals(4, arcs.size, "${s.nc.legacy}")
         assertTrue(arcs.all { it.endsWith(" R5.") })
         val top = onCircle(cen, 5.0, 90.0)
         assertEquals("G03 X${Fmt.nc(top.xDia)} Z${Fmt.nc(top.z)} R5.", arcs[1])
@@ -686,7 +686,7 @@ class RoundCalcTest {
         assertTrue(RoundWarning.AGAINST_TOOL !in w, "$w")
         // 90.0003° 원호는 나누지 않고 한 줄
         assertTrue((s.drawing.segs.single() as Arc).sweepDeg > 90.0)
-        assertEquals(listOf("G00 X29.2 Z1.", "G01 Z0.", "G03 X50. Z-10.4 R10.4"), s.nc)
+        assertEquals(listOf("G00 X29.2 Z1.", "G01 Z0.", "G03 X50. Z-10.4 R10.4"), s.nc.legacy)
         val cen = Pt(-10.0, 15.0)
         val past = arc3(onCircle(cen, 10.0, -2.0), onCircle(cen, 10.0, 45.0), onCircle(cen, 10.0, 90.0))
         assertTrue(RoundWarning.AGAINST_TOOL in past.warnings, "${past.warnings}")

@@ -107,14 +107,14 @@ class RoundInnerTest {
         near(Pt(-10.281424, 9.782609), d[1].end, "구 접점", 1e-6)
         near(Pt(-2.5, 0.0), (d[2] as Arc).center, "구 중심")
         near(Pt(-15.0, 0.0), d[2].end, "바닥")
-        assertEquals(listOf("G00 X20. Z0.6", "G01 Z-0.4", "G01 Z-10.059", "G03 X19.739 Z-10.432 R0.6", "G03 X0.8 Z-15. R12.1"), s.nc)
+        assertEquals(listOf("G00 X20. Z0.6", "G01 Z-0.4", "G01 Z-10.059", "G03 X19.739 Z-10.432 R0.6", "G03 X0.8 Z-15. R12.1"), s.nc.legacy)
         assertEquals(
             listOf("G00 X20. Z1.", "G01 Z0.", "G01 Z-9.659", "G03 X19.565 Z-10.281 R1.", "G03 X0. Z-15. R12.5"),
-            ok(RoundCalc.calc(inp.copy(noseR = 0.0))).nc,
+            ok(RoundCalc.calc(inp.copy(noseR = 0.0))).nc.legacy,
         )
         assertTrue(w.isEmpty(), "$w")
         assertEquals(listOf(NcRef(-2, 0, 1), NcRef(-1, 0, 1), NcRef(0, 0, 1), NcRef(1, 0, 1), NcRef(2, 0, 1)), s.ncRefs)
-        assertEquals(listOf("G00 X20. Z0.", "G01 Z-0.4"), ok(RoundCalc.calc(inp.copy(zClear = 0.0))).nc.take(2))
+        assertEquals(listOf("G00 X20. Z0.", "G01 Z-0.4"), ok(RoundCalc.calc(inp.copy(zClear = 0.0))).nc.legacy.take(2))
     }
 
     /**
@@ -129,8 +129,8 @@ class RoundInnerTest {
         val (s, w) = solved(RoundCalc.calc(inp))
         assertTrue(abs(s.filled!!.l2!! - 5.0) <= 1e-12)
         val nc = listOf("G00 X40. Z0.6", "G01 Z-0.4", "G01 Z-5.266", "G03 X30. Z-10.199 R24.6", "G01 Z-16.", "G01 X0.8")
-        assertEquals(nc, s.nc)
-        assertEquals(listOf("G00 X40. Z1.", "G01 Z0.", "G01 Z-5.", "G03 X30. Z-10. R25.", "G01 Z-16.", "G01 X0."), ok(RoundCalc.calc(inp.copy(noseR = 0.0))).nc)
+        assertEquals(nc, s.nc.legacy)
+        assertEquals(listOf("G00 X40. Z1.", "G01 Z0.", "G01 Z-5.", "G03 X30. Z-10. R25.", "G01 Z-16.", "G01 X0."), ok(RoundCalc.calc(inp.copy(noseR = 0.0))).nc.legacy)
         assertTrue(w.isEmpty(), "$w")
         val t = ok(RoundCalc.calc(inp.copy(through = true)))
         assertEquals(3, t.drawing.segs.size)
@@ -138,7 +138,7 @@ class RoundInnerTest {
         assertTrue(last is Line)
         near(Pt(-16.0, 15.0), last.end, "관통 끝")
         assertTrue(abs(last.start.x - 15.0) <= 1e-12)
-        assertEquals(nc.dropLast(2) + "G01 Z-16.4", t.nc)
+        assertEquals(nc.dropLast(2) + "G01 Z-16.4", t.nc.legacy)
     }
 
     /**
@@ -151,11 +151,11 @@ class RoundInnerTest {
         val (s, w) = solved(RoundCalc.calc(inp))
         assertEquals(
             listOf("G00 X10. Z0.6", "G01 Z-0.4", "G01 Z-4.937", "G02 X10.933 Z-5.98 R1.4", "G03 X14.999 Z-14.357 R7.6", "G03 X0.8 Z-19.245 R7.6"),
-            s.nc,
+            s.nc.legacy,
         )
         assertEquals(
             listOf("G01 Z-4.537", "G02 X10.667 Z-5.282 R1.", "G03 X14.947 Z-14.1 R8.", "G03 X0. Z-19.245 R8."),
-            ok(RoundCalc.calc(inp.copy(noseR = 0.0))).nc.drop(2),
+            ok(RoundCalc.calc(inp.copy(noseR = 0.0))).nc.legacy.drop(2),
         )
         assertTrue(RoundWarning.AGAINST_TOOL in w, "$w")
         assertEquals(listOf(NcRef(2, 0, 2), NcRef(2, 1, 2)), s.ncRefs.filter { it.element == 2 })
@@ -293,16 +293,16 @@ class RoundInnerTest {
         }
         for ((tag, res, noStart) in sols) {
             val s = res.solution ?: continue
-            assertEquals(s.nc.size, s.ncRefs.size, tag)
+            assertEquals(s.nc.legacy.size, s.ncRefs.size, tag)
             assertTrue(s.ncRefs.zipWithNext().all { (a, b) -> a.element < b.element || a.element == b.element && a.piece < b.piece }, "$tag ${s.ncRefs}")
-            for ((i, p) in ncEnds(s.nc).withIndex()) {
+            for ((i, p) in ncEnds(s.nc.legacy).withIndex()) {
                 val e = s.ncRefs[i].element
                 val g = when (e) {
                     -2 -> (p - s.entry).length
                     -1 -> (p - s.program.segs[0].start).length
                     else -> dist(p, s.program.segs[e])
                 }
-                assertTrue(g <= 1e-3, "$tag 줄 $i ${s.nc[i]} 이 요소 $e 에서 $g")
+                assertTrue(g <= 1e-3, "$tag 줄 $i ${s.nc.legacy[i]} 이 요소 $e 에서 $g")
             }
             if (noStart) assertTrue(s.ncRefs.none { it.element == -1 }, tag)
             for ((k, seg) in s.program.segs.withIndex()) {
@@ -312,5 +312,28 @@ class RoundInnerTest {
             }
         }
         assertTrue(sols.any { (_, r, _) -> r.solution?.ncRefs?.any { it.pieces > 1 } == true }, "나눈 원호가 하나는 있어야")
+    }
+
+    /**
+     * 뒤보링 3점호(Ø30 입구 뒤 방으로 가는 R10 턱, X50 Z−10 → X30 Z0)의 기계 보정 진입은 구멍을 지나 들어온다. 점을 0.0001 로 쓰면 다시 구한 원의 중심이
+     * 몇 e-5 비껴 시작 접선이 축에서 조금 돈다 — 그 비낌만으로 구멍 안 진입을 버리고 `G0X52.Z20.` → `Z-10.` 으로 턱 속을 지나갔다(검증 2026-11-04, CompFrame DIR_TOL).
+     * 손 계산(반경, r 0.4, c = max(Z 여유 1, r) = 1): 진입점 e = 첫 점 (Z−10, 25) 에서 시작 접선(−X)을 거꾸로 c = (Z−10, 26). Z20. 에서 곧장(반경 26 은 턱 속)도,
+     * X 로 e 에 들어가는 것(구멍 쪽에서 오면 첫 깎는 줄과 거꾸로, 바깥에서 오면 Z 줄이 턱 속)도 안 되어 첫 깎는 줄의 공구 쪽(G42 — −Z) p3 = e − Z L 에서 직각으로.
+     * Z 줄 반경 = 그 Z 구간 도면 맨 안쪽(입구 15)에서 2r + max(r, 0.25) = 1.2 안 = 13.8(노즈는 +X 쪽 r — 입구 벽에서 0.8). L 은 2·max(r, 0.25) + MIN_MOVE = 0.85
+     * (그 +Z 줄의 노즈 이동이 꼭 0.05 라 비낀 원에서는 모자랄 수 있다) 아니면 G40 자리 반지름 (1 + √2)·0.4 + 0.02 = 0.986
+     */
+    @Test
+    fun backBoringMachineEntryThroughHole() {
+        for (z2 in listOf(-7.0711, -7.0710678)) {
+            val m = ok(RoundCalc.machine(Arc3Input(inner = true, noseR = 0.4, x1 = 50.0, z1 = -10.0, x2 = 35.8579, z2 = z2, x3 = 30.0, z3 = 0.0, zClear = 1.0)))
+            assertEquals("G42", m.nc.first())
+            val a = m.approach
+            assertEquals(4, a.size, "$z2 ${m.nc}")
+            near(Pt(20.0, 13.8), a[0], "Z20. 자리 $z2", 1e-6)
+            assertEquals(13.8, a[1].x, 1e-6, "$z2")
+            assertTrue(a[1].z in (-10 - CompFrame.g40Radius(0.4) - 1e-6)..(-10.85 + 1e-6), "$z2 p3 Z ${a[1]}")
+            near(Pt(a[1].z, 26.0), a[2], "p3 $z2", 1e-5)
+            near(Pt(-10.0, 26.0), a[3], "진입점 $z2", 1e-5)
+        }
     }
 }

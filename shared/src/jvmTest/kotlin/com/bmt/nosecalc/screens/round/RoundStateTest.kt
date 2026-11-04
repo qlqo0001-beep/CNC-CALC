@@ -17,13 +17,20 @@ import com.bmt.nosecalc.calc.L2Ref
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RetractKind
 import com.bmt.nosecalc.calc.RoundCalc
+import com.bmt.nosecalc.calc.RoundInput
 import com.bmt.nosecalc.calc.RoundWarning
 import com.bmt.nosecalc.calc.Seg
 import com.bmt.nosecalc.calc.Side
+import com.bmt.nosecalc.calc.StopWarning
+import com.bmt.nosecalc.calc.ncWords
 import com.bmt.nosecalc.screens.taper.directNc
 import com.bmt.nosecalc.ui.DockStatus
 import com.bmt.nosecalc.ui.oneLine
 import kotlin.math.abs
+import kotlin.math.asin
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -111,7 +118,7 @@ class RoundStateTest {
     @Test
     fun type3ExampleIsHandCalc() {
         val sol = RoundCalc.calc(roundExample().input(3)).solution!!
-        assertEquals(listOf("G00 X-0.8 Z1.", "G01 Z0.", "G03 X19.391 Z-4.87 R12.9", "G03 X20. Z-5.741 R1.4", "G01 Z-10.4"), sol.nc)
+        assertEquals(listOf("G0X-.8Z1.", "G1Z0.", "G3X19.391Z-4.87R12.9", "X20.Z-5.741R1.4", "G1Z-10.4"), sol.nc)
         assertEquals(5.0, sol.filled!!.l1!!, 1e-9)
     }
 
@@ -190,7 +197,7 @@ class RoundStateTest {
         val sol = RoundCalc.calc(s.input(3)).solution!!
         assertEquals(2, sol.tip)
         assertEquals(Side.G41, sol.side)
-        assertEquals(listOf("G00 X20. Z0.6", "G01 Z-0.4", "G01 Z-10.059", "G03 X19.739 Z-10.432 R0.6", "G03 X0.8 Z-15. R12.1"), sol.nc)
+        assertEquals(listOf("G0X20.Z.6", "G1Z-.4", "Z-10.059", "G3X19.739Z-10.432R.6", "X.8Z-15.R12.1"), sol.nc)
         s.typeInner = false
         val outer = s.input(5)
         assertFalse(outer.inner)
@@ -353,13 +360,14 @@ class RoundStateTest {
         )
         assertTrue(comp[1].text.startsWith("6줄 인서트 · 맞은편 벽: X"), comp[1].text)
         val machine = hitRows(a.plan, comp = false, a.bar, reverse = false)
-        assertEquals(4, machine[0].line)
+        // 기계 보정(회사 꼴) 줄: G41 / G0X20.Z20. / Z1. / G1Z0.F.1 / 요소 0 / 요소 1 / 요소 2(구) — 구는 0부터 6, 카드 글은 7줄
+        assertEquals(6, machine[0].line)
         assertEquals(hit.first.drawn, machine[0].from)
         assertEquals(hit.last.drawn, machine[0].to)
-        assertTrue(machine[0].text.startsWith("5줄 바 · 맞은편 벽: ${xz(hit.first.drawn)} → "), machine[0].text)
-        // 둘 다 같은 G40 요소 · 같은 NC 블록을 가리킨다
+        assertTrue(machine[0].text.startsWith("7줄 바 · 맞은편 벽: ${xz(hit.first.drawn)} → "), machine[0].text)
+        // 둘 다 같은 요소(구) · 같은 NC 블록을 가리킨다 — 직접 보정 글은 G0 · G1 · 요소 0 · 1 다음 4, 기계 보정 글은 보정 혼자 줄 · Z20. 자리가 앞에 더 있어 6
         assertEquals(4, a.sol.lineOf(2, hit.first.tip))
-        assertEquals(4, a.drawn.lineOf(2, hit.first.drawn))
+        assertEquals(6, a.drawn.lineOf(2, hit.first.drawn))
     }
 
     /** 목록은 바 · 인서트 · 공구대 닿음을 먼저, 최소 가공경(입체 어림)은 뒤에 — 프리셋 A16R-SCLCR 09(DMIN 20) */
@@ -401,10 +409,11 @@ class RoundStateTest {
         // 기계 보정 목록 = 그 프로그램 자기 진입(G00 점 · 보정 시작 블록)에서 닿는 곳 + 형상 요소에서 닿는 곳(직접 보정과 같은 노즈 경로)
         assertEquals(plan.machineEntry!!.size + res.hits.count { it.element >= 0 }, rows.size)
         for (row in rows) assertTrue(row.text.endsWith("mm ${if (row.hit.behind > 0) "앞" else "뒤"})"), "${row.hit.behind} ${row.text}")
-        // 기계 보정의 진입(−2 G00 점 · −1 진입 블록) 좌표는 그 프로그램 자기 진입의 명령점 — 뒤보링 진입점은 이미 구멍 안이라
-        // 도면 첫 점(Z−10)이 아니라 제 G00 블록에서 닿고, 진입 블록에서는 그 블록(보정 시작 · 띄운 진입이면 직각 진입 뒤) 위 명령점
+        // 기계 보정의 진입 좌표는 그 프로그램 자기 진입의 명령점 — 회사 꼴: G42 / G0X27.6Z20.(−2 — Z20. 자리) / 보정 켠 진입 블록들(−1)이 Ø30 입구를 지나
+        // 방 안 진입점으로 간다(calc RoundInnerTest.backBoringMachineEntryThroughHole). 바(Ø40)가 입구 Ø30 보다 굵어 구멍 축 쪽 Z20. 자리부터 맞은편 벽에
+        // 닿고(보링바 검사는 끝 접선으로 구멍을 늘인다), 진입 블록에서는 그 블록 위 명령점
         assertEquals(-2, rows.first().hit.element)
-        assertTrue(rows.first().text.startsWith("1줄 바 · 깎는 쪽 벽: ${xz(drawn.entry)} → "), rows.first().text)
+        assertTrue(rows.first().text.startsWith("2줄 바 · 맞은편 벽: ${xz(drawn.approach.first())} → "), rows.first().text)
         val blocks = entryMoves(drawn)
         for (row in rows.filter { it.hit.element == -1 }) {
             assertTrue(blocks.any { b -> distTo(b, row.from) < 1e-9 && distTo(b, row.to) < 1e-9 }, "${row.from} ${row.to} $blocks")
@@ -417,9 +426,26 @@ class RoundStateTest {
     }
 
     /**
+     * 예 A 기계 보정 잘린 글의 끝 블록 도면 점 P′(calc HolderStopTest.caseAStop 과 같은 식): 끝 블록 끝 노즈 [nose](직각 빼는 줄과의 보정선 교점)의 각을
+     * 구 중심 o = (Z−2.5, 0) 둘레로 진행 쪽(반시계 — G03)으로 asin(r/ρ) 더 돌린 도면 구(R12.5) 위 점. ρ = 노즈 보정 반지름 12.5 − 0.4 = 12.1
+     */
+    private fun domePrime(nose: Pt): Pt {
+        val th = atan2(nose.x - 0.0, nose.z + 2.5) + asin(0.4 / 12.1)
+        return Pt(-2.5, 0.0) + Pt(cos(th), sin(th)) * 12.5
+    }
+
+    /** NC 한 줄의 X(직경) · Z → 점(반경) */
+    private fun xzOf(line: String): Pt {
+        val w = ncWords(line)
+        return Pt(w.first { it[0] == 'Z' }.drop(1).toDouble(), w.first { it[0] == 'X' }.drop(1).toDouble() / 2)
+    }
+
+    /**
      * 가공 가능 끝점 · 잘린 NC — 예 A, 안전 여유 0(calc-design 손 계산): 구 원호를 바 맞은편 여유 0 이 되는 Z−11.404 X18.014 에서 끊고, 노즈가 +Z 로 바로
-     * 떨어져 Z 로만 뺀다. 직접 보정 `G03 X18.014 Z-11.404 R12.1` → `G00 Z0.6`(6줄 — 첫 줄 주석), 기계 보정 `G03 X17.785 Z-11.285 R12.5` → `G40 G00 X18.016 Z1.`(5줄 —
-     * G40 은 끝 블록 법선 보정으로 선 노즈의 인선 자리)
+     * 떨어져 Z 로만 뺀다. 직접 보정 `G03 X18.014 Z-11.404 R12.1` → `G00 Z0.6`(6줄 — 첫 줄 주석).
+     * 기계 보정(회사 꼴): 앞 6줄 그대로 + 구(R12.5)를 P′ 까지(0부터 6줄, 카드 7줄) + 공구 쪽(구 중심 쪽) 빼는 줄 F.3 → 보정 켠 채 Z 로 진입점 Z1. → G40 → G0Z200.
+     * 공구 쪽 빼는 줄은 축 쪽 성분이 있어 안전 끝점(바 맞은편 여유 0)에서는 바가 맞은편 벽으로 들어가므로 그만큼 앞에서 끊는다(덜 깎은 길이 = 안전 끝점 노즈 ~
+     * 끝 블록 끝 노즈의 노즈 원호 길이 — 카드의 작은 글)
      */
     @Test
     fun stopDomeSafe0() {
@@ -427,36 +453,54 @@ class RoundStateTest {
         val d = stopView(a.plan, comp = true, a.sol, a.drawn, 0.4, a.bar)
         assertEquals(StopKind.CUT, d.kind)
         assertEquals(5, d.endLine)
-        assertEquals("G03 X18.014 Z-11.404 R12.1", d.nc!![5])
-        assertEquals(listOf("G00 Z0.6"), d.nc.slice(d.retractLines!!))
+        assertEquals("X18.014Z-11.404R12.1", d.nc!![5])
+        assertEquals(listOf("G0Z.6"), d.nc.slice(d.retractLines!!))
         assertEquals("(G40 DIRECT R0.4 T2)", d.nc.first())
         // 앞 줄은 원래 NC 그대로
         assertEquals(directNc(a.sol.nc, 0.4, 2).take(5), d.nc.take(5))
         assertEquals("X18.014 Z-11.404", xz(d.at!!))
         assertEquals("6줄 중간에서 끊음", d.where)
         assertTrue(d.near!!.startsWith("가장 가까운 곳: 바 · 맞은편 벽 — 여유(직선 거리) 0.000 mm (기준: 안전 여유 0 mm)"), d.near)
-        assertTrue(d.retract!!.startsWith("후퇴: 그 자리에서 Z 로 (노즈가 벽에서 바로 떨어짐): G00 Z0.6 · 후퇴 중 가장 좁은 여유(직선 거리) "), d.retract)
+        assertTrue(d.retract!!.startsWith("후퇴: 그 자리에서 Z 로 (노즈가 벽에서 바로 떨어짐): G0Z.6 · 후퇴 중 가장 좁은 여유(직선 거리) "), d.retract)
         // 돔(구 원호)은 깎는 면 예외가 없다
         assertNull(d.face)
         val m = stopView(a.plan, comp = false, a.sol, a.drawn, 0.4, a.bar)
         assertEquals(StopKind.CUT, m.kind)
-        assertEquals(4, m.endLine)
-        assertEquals("G03 X17.785 Z-11.285 R12.5", m.nc!![4])
-        assertEquals(listOf("G40 G00 X18.016 Z1."), m.nc.slice(m.retractLines!!))
-        assertEquals("5줄 중간에서 끊음", m.where)
-        assertEquals("X17.785 Z-11.285", xz(m.at!!))
+        assertEquals(6, m.endLine)
+        val mnc = m.nc!!
+        assertEquals(a.drawn.nc.take(6), mnc.take(6))
+        assertTrue(mnc[6].endsWith("R12.5") && (xzOf(mnc[6]) - domePrime(m.nose!!)).length < 2e-3, "${mnc[6]} · P′ ${domePrime(m.nose!!)}")
+        // 깃발 · 좌표는 쓴 끝 블록 명령점 그대로
+        assertEquals(xz(xzOf(mnc[6])), xz(m.at!!))
+        val back = mnc.slice(m.retractLines!!)
+        // 빼는 줄은 P′ 에서 구 중심 쪽(공구 쪽 법선) — 끝을 0.001 로 써서 방향은 1e-2 안
+        val ex = xzOf(back[0]) - xzOf(mnc[6])
+        val toO = Pt(-2.5, 0.0) - xzOf(mnc[6])
+        assertTrue(back[0].endsWith("F.3") && abs(ex cross toO) / (ex.length * toO.length) < 1e-2 && (ex dot toO) > 0, "$back")
+        assertEquals(listOf("Z${Fmt.word(a.drawn.entry.z)}", "G40", "G0Z200."), back.drop(1))
+        assertEquals("7줄 중간에서 끊음", m.where)
+        // 덜 깎은 길이: 안전 끝점 노즈와 끝 블록 끝 노즈 사이 노즈 원(R12.1) 호 길이 — 카드 글의 숫자
+        val safeNose = a.plan.end!!.pose.nose
+        val o = Pt(-2.5, 0.0)
+        val arc = 12.1 * abs(atan2(safeNose.x - o.x, safeNose.z - o.z) - atan2(m.nose!!.x - o.x, m.nose!!.z - o.z))
+        val lack = m.lack!!
+        assertTrue(lack.startsWith("안전 끝점보다 경로로 ") && "그만큼 앞에서 멈춥니다" in lack, lack)
+        assertEquals(arc, lack.substringAfter("경로로 ").substringBefore(" mm").toDouble(), 1.5e-3)
     }
 
     /**
-     * 예 A, 안전 여유 0.5: 축 쪽으로 빼면 바 맞은편이 0.5 아래라 온 길을 거꾸로(같은 중심의 반대 방향 원호). 후퇴 길을 다시 읽으면 진입점으로 돌아가고
-     * 원호는 프로그램 원호와 같은 중심이다(뷰어의 파란 점선)
+     * 예 A, 안전 여유 0.5: 축 쪽으로 빼면 바 맞은편이 0.5 아래라 직접 보정은 온 길을 거꾸로(같은 중심의 반대 방향 원호). 후퇴 길을 다시 읽으면 진입점으로
+     * 돌아가고 원호는 프로그램 원호와 같은 중심이다(뷰어의 파란 점선).
+     * 기계 보정(회사 꼴)은 거꾸로 후퇴가 없다 — 보정 켠 채 깎은 길을 되짚으려면 보정 쪽을 바꿔야 해서(calc HolderStopTest.machineRetractNeverReverses).
+     * 공구 쪽(구 중심 쪽) 빼는 줄 → Z → G40 → G0Z200. 이고, 그 빼는 줄의 축 쪽 성분만큼 바 아래 변(Ø20 벽과 나란)이 맞은편 벽에 가까워져 후퇴 여유가
+     * 0.5 보다 좁다는 노란 글이 붙는다(calc handCasesOutcome 의 A 0.5 = RETRACT_TIGHT)
      */
     @Test
     fun stopDomeReverse() {
         val a = DomeA()
         val d = stopView(a.plan, comp = true, a.sol, a.drawn, 0.4, a.bar)
-        assertEquals("G03 X19.001 Z-10.874 R12.1", d.nc!![d.endLine!!])
-        assertEquals(listOf("G02 X19.739 Z-10.432 R12.1", "G02 X20. Z-10.059 R0.6", "G01 Z-0.4", "G01 Z0.6"), d.nc.slice(d.retractLines!!))
+        assertEquals("X19.001Z-10.874R12.1", d.nc!![d.endLine!!])
+        assertEquals(listOf("G2X19.739Z-10.432R12.1", "X20.Z-10.059R.6", "G1Z-.4", "Z.6"), d.nc.slice(d.retractLines!!))
         assertTrue(d.retract!!.startsWith("후퇴: 온 길을 거꾸로 이송으로 진입점까지 (4줄)"), d.retract)
         val back = ncMoves(d.at!!, d.nc.slice(d.retractLines!!))
         assertEquals(4, back.size)
@@ -467,8 +511,18 @@ class RoundStateTest {
         assertTrue((arcs[0].center - (a.sol.program.segs[2] as Arc).center).length < 2e-3, "${arcs[0].center}")
         assertTrue((arcs[1].center - (a.sol.program.segs[1] as Arc).center).length < 2e-3, "${arcs[1].center}")
         val m = stopView(a.plan, comp = false, a.sol, a.drawn, 0.4, a.bar)
-        assertEquals("G03 X18.803 Z-10.738 R12.5", m.nc!![m.endLine!!])
-        assertEquals("G40 G01 X19.001 Z-10.875", m.nc[m.retractLines!!.first])
+        val mnc = m.nc!!
+        assertEquals(6, m.endLine)
+        assertTrue(mnc[6].endsWith("R12.5") && (xzOf(mnc[6]) - domePrime(m.nose!!)).length < 2e-3, "${mnc[6]} · P′ ${domePrime(m.nose!!)}")
+        assertEquals(RetractKind.LIFT, m.cut!!.retract)
+        val mback = mnc.slice(m.retractLines!!)
+        assertTrue(mback.first().endsWith("F.3"), "$mback")
+        assertEquals(listOf("G40", "G0Z200."), mback.takeLast(2))
+        assertTrue(m.retract!!.startsWith("후퇴: 벽에서 공구 쪽으로 빼고(보정 켠 채) G40 → Z 로: ${mback.joinToString(" → ")} · "), m.retract)
+        val tight = m.tight
+        assertTrue(tight != null && tight.startsWith("후퇴 중 가장 좁은 여유(직선 거리) ") && "안전 여유 0.5 mm 보다 좁습니다" in tight, "$tight")
+        // 후퇴 길을 다시 읽으면 Z200 까지(회사 꼴 물러남 G0Z200.)
+        assertEquals(200.0, ncMoves(m.at!!, mback).last().end.z, 1e-9)
     }
 
     /**
@@ -523,7 +577,7 @@ class RoundStateTest {
 
     /**
      * 안전 끝점 글이 어떤 결과에서도 예외 없이 나온다(Fmt 는 무한대 · NaN 에서 멈춘다 — 면을 넘는 순간의 여유가 끝없는 곳 등):
-     * 내경 예시 형상 2~6 · 3점호 입구 R · 뒤보링 × 프리셋 28 × 안전 여유 0 · 0.5 × 두 보정 방식, 후퇴 길 읽기는 진입점 Z 까지
+     * 내경 예시 형상 2~6 · 3점호 입구 R · 뒤보링 × 프리셋 28 × 안전 여유 0 · 0.5 × 두 보정 방식, 후퇴 길 읽기는 직접 보정이 진입점 Z 까지 · 기계 보정이 Z200 까지
      */
     @Test
     fun holderStopTextsNeverThrow() {
@@ -549,13 +603,43 @@ class RoundStateTest {
                     val nc = v.nc ?: continue
                     cuts++
                     val back = ncMoves(v.at!!, nc.slice(v.retractLines!!))
-                    // 기계 보정의 거꾸로 후퇴는 G40 뒤라 인선 경로(직접 보정 진입점)로, X 빼기 후퇴는 제 진입점 Z 로
-                    val entryZ = if (comp || v.cut!!.retract == RetractKind.REVERSE) sol.entry.z else drawn!!.entry.z
-                    assertTrue(back.isNotEmpty() && abs(back.last().end.z - entryZ) < 1e-3, "${p.code} $t $safe $comp ${nc.slice(v.retractLines!!)}")
+                    // 직접 보정은 진입점 Z 로(X 빼기 → Z, 거꾸로 후퇴), 기계 보정(회사 꼴)은 거꾸로 후퇴가 없고 빼는 줄 → G40 → G0Z200. 으로 Z200 까지
+                    // (물러남 Z 는 calc CompFrame.RETRACT_Z — 사용자 결정 기본값)
+                    if (!comp) assertEquals(RetractKind.LIFT, v.cut!!.retract, "${p.code} $t $safe")
+                    val endZ = if (comp) sol.entry.z else 200.0
+                    assertTrue(back.isNotEmpty() && abs(back.last().end.z - endZ) < 1e-3, "${p.code} $t $safe $comp ${nc.slice(v.retractLines!!)}")
                 }
             }
         }
         assertTrue(cuts > 20, "잘린 NC 가 나온 경우 $cuts")
+    }
+
+    /**
+     * 기계 보정 원래 끝에서만 닿음(MACHINE_EXIT — calc HolderStopTest handCasesOutcome 'C38' 안전 여유 0): 막힌 단차 Ø38 · 바 A 는 경로 끝까지 되는데(가장 좁은 곳 =
+     * 축의 바 맞은편 D1/2 + r − f − D/2 = 19 + 0.4 − 11 − 8 = 0.4) 원래 끝은 바닥 면을 축 너머 X−.8 까지 쓰고 +Z 로 뺀 뒤 G40 — 형식 C · 팁 2 면 노즈가 반경
+     * 0 → −0.8 로 옮겨져 바가 맞은편으로 0.8 → 0.4 − 0.8 < 0. 그래서 빠지는 길만 바꾼다 — 카드는 '여기까지 깎고 · 나머지는 다른 공구로' 가 아니라 형상 끝까지
+     * 깎고 빠지는 길만 바꾼다고 말한다(검증 2026-11-04). 직접 보정은 끝까지 안전
+     */
+    @Test
+    fun machineExitOnlyCard() {
+        val i = RoundInput(type = 5, mainR = 30.0, d2 = 50.0, d1 = 38.0, l1 = 6.0, cornerR1 = 0.0, cornerR2 = 0.0, legLen = 5.0, inner = true, noseR = 0.4, zClear = 1.0)
+        val sol = RoundCalc.calc(i).solution!!
+        val drawn = RoundCalc.machine(i).solution!!
+        val bar = BoringBar(16.0, 11.0, InsertShape.C, 9.67, 95.0)
+        val plan = HolderStop.plan(sol, drawn, 0.4, true, bar, 0.0)
+        assertEquals(listOf(StopWarning.MACHINE_EXIT), plan.warnings)
+        assertNull(plan.end)
+        val v = stopView(plan, comp = false, sol, drawn, 0.4, bar)
+        assertEquals(StopKind.CUT, v.kind)
+        assertTrue(v.exitOnly)
+        assertEquals("끝까지 깎고 빠지는 길만 바꿉니다", v.head)
+        assertEquals("${v.endLine!! + 1}줄(형상 끝)까지 깎음", v.where)
+        // 마지막 블록 앞 줄은 원래 글 그대로, 빠지는 길은 G40 → G0Z200. 으로 끝난다
+        assertEquals(drawn.nc.take(v.endLine!!), v.nc!!.take(v.endLine!!))
+        assertEquals(listOf("G40", "G0Z200."), v.nc!!.takeLast(2))
+        val d = stopView(plan, comp = true, sol, drawn, 0.4, bar)
+        assertEquals(StopKind.CLEAR, d.kind)
+        assertFalse(d.exitOnly)
     }
 
     /**
@@ -600,27 +684,25 @@ class RoundStateTest {
      */
     @Test
     fun machineEntryLifted() {
+        // 기계 보정(회사 꼴): 보정 혼자 줄 → Z20. 자리 → 진입점 → G1 첫 점 F.1 — 팁 번호와 상관없는 같은 글(보정 중이라 G00 띄우기가 없다)
         val std = roundInnerExample(3).input(3)
-        assertEquals(RoundCalc.calc(std.copy(noseR = 0.0)).solution!!.nc, RoundCalc.machine(std).solution!!.nc)
-        assertNull(RoundCalc.machine(std).solution!!.lead)
         val i = roundInnerExample(3).apply { tip = 0 }.input(3)
         assertEquals(0, i.tip)
         val m = RoundCalc.machine(i).solution!!
-        val lead = m.lead
-        assertNotNull(lead)
+        assertEquals(RoundCalc.machine(std).solution!!.nc, m.nc)
+        assertEquals("G41", m.nc.first())
         val first = m.program.segs.first().start
         val moves = entryMoves(m)
-        assertEquals(2, moves.size)
-        assertEquals(m.entry, moves[0].start)
-        assertEquals(lead, moves[0].end)
-        assertEquals(first, moves[1].end)
-        // NC 줄도 그대로: G00 진입점 → G01 직각 진입점 → G01 첫 점
-        assertEquals(listOf(-2, -1, -1), m.ncRefs.take(3).map { it.element })
-        assertTrue(m.nc[0].startsWith("G00 ") && m.nc[1].startsWith("G01 ") && m.nc[2].startsWith("G01 "), "${m.nc.take(3)}")
-        // 직각 진입: G00 점 → lead 는 첫 요소(입구 벽, Z 로 가는 직선)에 직각 — Z 가 같다
-        assertEquals(lead.z, m.entry.z, 1e-9)
-        // 노즈R 0 풀이(예전 화면)는 진입이 한 줄
-        assertEquals(1, entryMoves(RoundCalc.calc(i.copy(noseR = 0.0)).solution!!).size)
+        assertEquals(m.approach.size, moves.size)
+        assertEquals(m.approach.first(), moves.first().start)
+        assertEquals(m.entry, moves.last().start)
+        assertEquals(first, moves.last().end)
+        // NC 줄: 혼자 줄 · 진입 G0 줄들(−2) → 첫 깎는 줄(−1, F.1)
+        val k = m.ncRefs.indexOfFirst { it.element == -1 }
+        assertTrue(m.ncRefs.take(k).all { it.element == -2 }, "${m.ncRefs.take(k + 1)}")
+        assertTrue(m.nc[k].endsWith("F.1"), m.nc[k])
+        // 직접 보정 풀이는 진입이 한 줄
+        assertEquals(1, entryMoves(RoundCalc.calc(i).solution!!).size)
     }
 
     /** 형상 확인의 빨간 경로 구간: 직접 보정은 가상 인선, 기계 보정은 도면 좌표 경로에서 노즈가 닿는 도면 점 사이(✕ 표와 같은 곳) */

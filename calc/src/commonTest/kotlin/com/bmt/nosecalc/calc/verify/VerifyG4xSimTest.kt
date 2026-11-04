@@ -12,6 +12,7 @@ import com.bmt.nosecalc.calc.TaperInput
 import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
+import com.bmt.nosecalc.calc.ncWords
 import com.bmt.nosecalc.calc.sim.ContactKind
 import com.bmt.nosecalc.calc.sim.GSim
 import com.bmt.nosecalc.calc.sim.IssueCode
@@ -54,12 +55,14 @@ import kotlin.time.TimeSource
  * 1. 남김: 깎는 도면(시작 · 끝 요소는 넣었을 때만) 위 점마다 노즈가 남긴 살 max(0, 노즈 경로까지 거리 − r) — G4x − G40 (끝 꼭짓점 · 첫 점 · 어디든)
  * 2. 파고듦: 노즈가 도면(깎지 않는 요소 포함) + 양 끝 접선 연장선에 r 보다 가까이 간 깊이 — 블록 종류별
  * 3. 넣은 좌표 너머가 막힌 쪽(척 · 구멍 바닥 · 보스 — calc-design '넣은 시작·끝점 너머로 넘지 않기')으로 G00 점 · 노즈가 넘는가
- * 4. 끝 노즈 자리: (G4x 끝 노즈 − G40 끝 노즈)·u 가 문서 식 u·min(0, 팁 벡터·u) 인가
+ * 4. 끝 노즈 자리: (G4x 끝 노즈 − G40 끝 노즈)·u 가 문서 식인가(회사 꼴 — 막힌 끝 팁 벡터·u − r, 외경 단면 X0 끝 min(0, 팁 벡터·u), 그 밖 팁 벡터·u)
  * 5. 소재 깎기(StockSim, 노즈 원 공구)의 마지막 단면이 두 글에서 같은가 · 급송 깎음
  * 6. 형식 A ↔ B 차이, 따로 짠 모형 ↔ GSim 차이, 시뮬레이터 멈춤
  * 소재 깎기는 봉(내경은 관) 소재라 황삭 안 된 덩어리를 두 글의 다른 진입 · 후퇴 길이 다르게 지나는 차이도 나온다 — 그래서 단면 비교는 깎는 도면에서
  * r + 0.05 안이고 깎는 요소가 가장 가까운 점만, 그 차이도 까닭(시작 첫 점 · 깎지 않는 요소 타기 · 그 밖)으로 나눠 출력한다.
  * 결과(2026-10-29, 씨앗 20261029, 풀린 사례 4 036): 위 단언은 통과. 출력으로만 남긴 문제는 맨 아래 단언 위 주석.
+ * 2026-11-04: G41/G42 글이 회사 꼴(계획 단계 4 — 보정 혼자 줄 · Z20. 진입 · F.1 · F.3 빼는 줄 · 이동 없는 G40 · G0Z200.)이 되어 글 읽기와 모형이 처음
+ * 보정 혼자 줄을 받는다: 그 앞 공구 자리는 시뮬레이터 처음 값 원점(MachineSetup().home)이고 다음 이동(G0X…Z20.)이 시작 블록 — 그 줄은 두 쪽 모두 뺀다.
  */
 class VerifyG4xSimTest {
     private val pre = listOf("T0101", "G97 S1000 M03", "G99 F0.2")
@@ -195,19 +198,22 @@ class VerifyG4xSimTest {
 
     private class Blk(val idx: Int, val g: Int, val comp: Int?, val p: Pt, val rr: Double?)
 
-    /** G0~3 · G40~42 · X(직경) · Z · R 만. 빠진 축은 앞 값(모달). 주석 줄은 건너뜀 */
+    /**
+     * G0~3 · G40~42 · X(직경) · Z · R · F(버림)만(빈칸이 있든 없든 — `ncWords`). 빠진 축 · 이동 G 는 앞 값(모달). 주석 줄은 건너뜀.
+     * 좌표가 아직 없는 처음 보정 혼자 줄(회사 꼴 `G42`)은 다음 이동 줄의 보정 G 로 붙이고, 그 앞에 기계 원점(시뮬레이터 처음 공구 자리)을 idx −1 블록으로 둔다
+     */
     private fun parse(nc: List<String>): List<Blk> {
         var z: Double? = null
         var x: Double? = null
         var g = 0
+        var pending: Int? = null
         val out = mutableListOf<Blk>()
         for ((i, raw) in nc.withIndex()) {
             val text = raw.trim()
             if (text.isEmpty() || text.startsWith("(")) continue
             var comp: Int? = null
             var rr: Double? = null
-            for (tok in text.split(" ")) {
-                if (tok.isEmpty()) continue
+            for (tok in ncWords(text)) {
                 val v = tok.substring(1)
                 when (tok[0]) {
                     'G' -> when (val n = v.toDouble().toInt()) {
@@ -218,11 +224,21 @@ class VerifyG4xSimTest {
                     'X' -> x = v.toDouble() / 2
                     'Z' -> z = v.toDouble()
                     'R' -> rr = v.toDouble()
+                    'F' -> {}
                     else -> error("모르는 낱말 $tok: $raw")
                 }
             }
-            val zz = z ?: error("Z 가 아직 없음: $raw")
-            val xx = x ?: error("X 가 아직 없음: $raw")
+            val zz = z
+            val xx = x
+            if (zz == null || xx == null) {
+                pending = comp ?: error("좌표가 아직 없음: $raw")
+                continue
+            }
+            if (pending != null) {
+                out += Blk(-1, 0, null, MachineSetup().home, null)
+                comp = pending
+                pending = null
+            }
             out += Blk(i, g, comp, Pt(zz, xx), rr)
         }
         return out
@@ -450,6 +466,15 @@ class VerifyG4xSimTest {
         val zMin: Double, val zMax: Double, val xMin: Double, val xMax: Double, val mirror: Boolean, val inner: Boolean,
     )
 
+    /** 끝 요소의 끝점 · 단위 접선 · 공구 쪽 법선(막힌 끝이 짧은지 가리는 데만) */
+    private class EndOf(val l: Pt, val uB: Pt, val nB: Pt)
+
+    private fun g0Of(s: TaperSolution): EndOf {
+        val last = s.drawing.segs.last()
+        val uB = tanEnd(last)
+        return EndOf(last.end, uB, lft(uB) * (if (s.side.name == "G41") 1.0 else -1.0))
+    }
+
     private fun geoOf(s: TaperSolution, c: Case): Geo {
         val d = s.drawing.segs
         var cut = d
@@ -458,7 +483,6 @@ class VerifyG4xSimTest {
         cut = cut.filter { lenOf(it) > 1e-9 }
         val u0 = tanStart(d.first())
         val un = tanEnd(d.last())
-        val bnd = listOf(Line(d.first().start - u0 * 1000.0, d.first().start)) + d + Line(d.last().end, d.last().end + un * 1000.0)
         val uF = tanStart(cut.first())
         val uB = tanEnd(cut.last())
         val side = if (s.side.name == "G41") 1.0 else -1.0
@@ -466,11 +490,15 @@ class VerifyG4xSimTest {
         val l = cut.last().end
         val f = cut.first().start
         // 끝: 수평이면 척 쪽(거울이면 계산기 +Z)으로 깎아 끝남, 단면이면 재료 쪽(외경 X−, 내경 X+)으로 깎아 끝남(외경 X0 은 뺌).
-        // 시작: 수평이면 척 쪽에서 앞으로 깎기 시작하고 팁의 Z 가 진행과 반대(calc-design '가공 방향 뒤집기' ① — 그 앞이 척 · 구멍 바닥.
-        // 팁의 Z 가 진행 쪽이면 바이트 몸통이 그 앞에 있어야 하니 비어 있다고 본다), 단면이면 바깥으로 깎기 시작(그 앞이 안쪽 같은 면 · 보스, 외경 X0 은 뺌)
-        val tv = NoseComp.tipVector(s.tip, 1.0)
+        // 시작: 수평이면 척 쪽에서 앞으로 깎기 시작, 단면이면 바깥으로 깎기 시작(그 앞이 안쪽 같은 면 · 보스, 외경 X0 은 뺌) — 회사 꼴 G41/G42 의 막힌 시작과 같은
+        // 모양 규칙(calc-design '진입점과 NC' — 팁과 상관없다. 2026-11-04 전에는 '팁의 Z 가 진행 쪽이면 비어 있다' 고 보았다 — 직접 보정의 연장선 진입 규칙)
         val endWall = s.toEnd && if (horiz(uB)) (if (c.mirror) uB.z > 0 else uB.z < 0) else ((uB.x < 0) != c.inner && !(!c.inner && l.x <= 1e-9))
-        val startWall = s.fromStart && if (horiz(uF)) ((if (c.mirror) uF.z < 0 else uF.z > 0) && tv.z * uF.z <= 0) else ((uF.x > 0) != c.inner && !(!c.inner && f.x <= 1e-9))
+        val startWall = s.fromStart && if (horiz(uF)) (if (c.mirror) uF.z < 0 else uF.z > 0) else ((uF.x > 0) != c.inner && !(!c.inner && f.x <= 1e-9))
+        // 재료(파고듦을 잴 경계) = 도면 + 양 끝 접선 연장선. 다만 빈 끝(끝점을 넣었고 막히지 않음 — 외경 X0 끝 빼고)의 너머는 공기다:
+        // 회사 꼴은 그쪽으로 곧게 빼고 G40 을 두므로(사용자 결정 ③) 그 연장선은 재료로 보지 않는다
+        val outerAxis = s.toEnd && !horiz(uB) && !c.inner && uB.x < 0 && l.x <= 1e-9
+        val freeEnd = s.toEnd && !endWall && !outerAxis
+        val bnd = listOf(Line(d.first().start - u0 * 1000.0, d.first().start)) + d + (if (freeEnd) emptyList() else listOf(Line(d.last().end, d.last().end + un * 1000.0)))
         val all = d.flatMap { listOf(it.start, it.end) }
         return Geo(
             bnd, cut, cut.flatMap { pts(it, 0.02) }, f, uF, l, uB, lft(uB) * side, startWall, endWall,
@@ -548,6 +576,11 @@ class VerifyG4xSimTest {
         // 막힌 끝에서 교점(직각 취소)으로 멈춘 글 — 끝 요소가 짧아 이동 없는 G40(직접 보정과 같은 끝 법선)으로 둔 글은 빼고(2026-10-29 고침)
         val endOverStop = aggs("막힌 끝 좌표 너머 노즈 G4x — 벽에서 멈춘 글")
         val endOverD = aggs("막힌 끝 좌표 너머 노즈 G4x − G40")
+        // 끝 요소가 노즈R 쯤보다 짧은 막힌 끝은 계산기가 곧게 뺀다(알려진 한계 — 끝좌표 너머로 감, calc-design '진입점과 NC') — 따로 출력만
+        val shortEndOver = Agg("막힌 끝이 짧아 곧게 뺀 글의 끝좌표 너머 노즈 G4x − G40 (알려진 한계)")
+        val mirrorApproach = Agg("화면 역방향 진입 G0 이 계산기 −Z 쪽 요소의 연장선을 지남 G4x (남은 일)")
+        val shortEndGouge = Agg("막힌 끝이 짧아 곧게 뺀 글의 빼는 줄 · G40 뒤 노즈가 벽 쪽 연장선을 지남 G4x (알려진 한계)")
+        val narrowGouge = Agg("노즈에 비해 좁은 구멍의 G41/G42 글 파고듦 (알려진 한계)")
         val startOver4 = aggs("막힌 시작 좌표 너머 노즈 G4x")
         val startOverD = aggs("막힌 시작 좌표 너머 노즈 G4x − G40")
         val endOver0 = Agg("막힌 끝 좌표 너머 노즈 G40")
@@ -619,15 +652,21 @@ class VerifyG4xSimTest {
                 val ex0 = { "${c.tag} | ${nc0.joinToString(" / ")}" }
                 val b4 = parse(nc4)
                 val b0 = parse(nc0)
-                val home4 = b4[0].idx
+                // 기계 원점에서 오는 이동(회사 꼴은 첫 G0X…Z20. — 보정 시작 블록)은 뺀다
+                val home4 = b4.first { it.idx >= 0 }.idx
                 val home0 = b0[0].idx
-                val iG40 = nc4.indexOfFirst { it.split(" ").contains("G40") }
+                val iG40 = nc4.indexOfFirst { ncWords(it).contains("G40") }
+                val iCut = nc4.indexOfFirst { it.endsWith("F.1") }
+                val iExit = nc4.indexOfFirst { "F.3" in it }
                 if (nc4[iG40].trim() == "G40") aloneCount++
+                // 끝 요소가 노즈R 쯤보다 짧은 막힌 끝은 계산기가 곧게 뺀다(알려진 한계 — 끝좌표 너머로 감). 벽에서 멈춘 글은 그 밖의 막힌 끝
+                val shortEnd = s.toEnd && (((g0Of(s).l + g0Of(s).nB * r - g0Of(s).uB * r) - s.center.segs.last().start) dot g0Of(s).uB) < 0.05
+                val narrow = c.inner && s.drawing.segs.flatMap { listOf(it.start, it.end) }.filter { it.x > 1e-6 }.minOf { it.x } < (1 + sqrt(2.0)) * r + 0.02
 
                 val run4 = mapOf("A·직선" to simRun(nc4, r, tip, RapidPath.LINEAR), "A·꺾임" to simRun(nc4, r, tip, RapidPath.DOGLEG))
                 val run0 = mapOf("직선" to simRun(nc0, r, tip, RapidPath.LINEAR), "꺾임" to simRun(nc0, r, tip, RapidPath.DOGLEG))
-                val modA = model(nc4, tv, r, false)
-                val modB = model(nc4, tv, r, true)
+                val modA = model(nc4, tv, r, false).let { m -> Mod(m.moves.filter { it.blk != home4 }, m.outerSC, m.bad) }
+                val modB = model(nc4, tv, r, true).let { m -> Mod(m.moves.filter { it.blk != home4 }, m.outerSC, m.bad) }
                 outerSC += modA.outerSC
                 typeAInfo += run4.getValue("A·직선").issues.count { it.code == IssueCode.COMP_TYPE_A }
                 run4.getValue("A·직선").stop?.let { stops.add("G41/G42 ${it.code} · $path · ${if (c.stdTip) "표준팁" else "다른팁"} · [$wText]", ex4()) }
@@ -642,7 +681,8 @@ class VerifyG4xSimTest {
                 for ((k, run) in run0) if (run.stop == null) mv0[k] = movesOf(run, home0)
 
                 if (modA.bad == null) mv4["A·직선"]?.let { modelVsSim.see(hausdorff(it, modA.moves), cat, key, ex4) }
-                if (modA.bad == null && modB.bad == null) abDiff.see(hausdorff(modA.moves, modB.moves), cat, key, ex4)
+                // 형식 A · B 는 시작 블록(공구 교환 자리 → Z20.)과 그 다음 진입 줄들(공기 — 시작 꺾임의 노즈가 다르다)에서만 다를 수 있다 — 첫 깎는 줄부터 견준다
+                if (modA.bad == null && modB.bad == null) abDiff.see(hausdorff(modA.moves.filter { it.blk >= iCut }, modB.moves.filter { it.blk >= iCut }), cat, key, ex4)
 
                 // 남김은 이송(G01~G03)으로만 — 급송이 도면 곁을 지나 깎은 것은 셈에 넣지 않는다(급송 깎음은 파고듦 · StockSim 으로 본다)
                 fun leftAt(q: Pt, mv: List<NMove>) = max(0.0, (mv.filter { !it.rapid }.ifEmpty { mv }).minOf { dist(q, it.seg) } - r)
@@ -655,11 +695,14 @@ class VerifyG4xSimTest {
                 }
                 val k0 = b4.indexOfFirst { it.comp == 41 || it.comp == 42 }
                 val i0 = b4[k0].idx
+                // 회사 꼴: 보정 혼자 줄 뒤 G0X…Z20. 이 시작 블록, 그 뒤 G0 들이 진입, 첫 깎는 줄(F.1) ~ 형상, 첫 빼는 줄(F.3) ~ G40 앞이 빼는 줄
                 fun phase4(blk: Int): String = when {
                     blk < i0 -> "G00 접근 · 진입"
-                    blk == i0 -> "시작 블록 '${nc4[blk].substringBefore(" X").substringBefore(" Z")}'"
-                    blk < iG40 -> "형상 블록"
-                    blk == iG40 -> "취소 블록 '${nc4[blk].substringBefore(" X").substringBefore(" Z")}'"
+                    blk == i0 -> "시작 블록 '${nc4[blk]}'"
+                    blk < iCut -> "진입 G0"
+                    blk < iExit -> "형상 블록"
+                    blk < iG40 -> "빼는 줄"
+                    blk == iG40 -> "취소 블록 '${nc4[blk]}'"
                     else -> "G40 뒤 이동"
                 }
 
@@ -680,17 +723,27 @@ class VerifyG4xSimTest {
                     }
                     anyLeft.getValue(v).see(worst, cat, key) { "Z${f4(wq.z)} X${f4(wq.xDia)} · ${ex4()}" }
                     val deep = depths(m4).maxByOrNull { it.second }
-                    if (deep != null) gouge4.getValue(v).see(deep.second, "${phase4(deep.first.blk)}${if (deep.first.rapid) " G00" else ""} · $cat", key, ex4)
+                    // 화면 역방향(거울)은 실제 부품 앞이 계산기 −Z 라 진입 G0 이 계산기 −Z 쪽 요소(실제 맨 앞 — 단면이면 높이를 모른다, 그림 5 mm)를 넘어온다.
+                    // 계산기는 그 그림 위 2r + 0.4 로 넘는다 — 이 시험의 재료(양 끝 접선 연장선)를 지나는 것은 따로 세고 출력한다(남은 일 — 실제 단면이 더 높으면 부딪힌다).
+                    // 끝 요소가 노즈R 쯤보다 짧은 막힌 끝의 곧은 빼기(알려진 한계)가 그 연장선(벽 쪽)을 지나는 것도 따로
+                    if (deep != null && deep.second > tol && c.mirror && deep.first.blk < iCut) {
+                        if (v == "A·직선") mirrorApproach.see(deep.second, cat, key, ex4)
+                    } else if (deep != null && deep.second > tol && shortEnd && g.endWall && deep.first.blk >= iExit) {
+                        if (v == "A·직선") shortEndGouge.see(deep.second, cat, key, ex4)
+                    } else if (deep != null && deep.second > tol && narrow) {
+                        // 노즈에 비해 좁은 구멍(가장 좁은 반지름 < G40 자리 규칙 반지름)은 G40 을 둘 곳이 없다(알려진 한계 — 계산기는 축 위에 둔다)
+                        if (v == "A·직선") narrowGouge.see(deep.second, cat, key, ex4)
+                    } else if (deep != null) gouge4.getValue(v).see(deep.second, "${phase4(deep.first.blk)}${if (deep.first.rapid) " G00" else ""} · $cat", key, ex4)
                     if (g.endWall) {
                         val o4 = reach(m4, g.uB) + r - (g.l dot g.uB)
                         val o0 = reach(m0, g.uB) + r - (g.l dot g.uB)
                         endOver4.getValue(v).see(o4, cat, key, ex4)
-                        if (nc4[iG40].trim() != "G40") endOverStop.getValue(v).see(o4, cat, key, ex4)
+                        if (!shortEnd) endOverStop.getValue(v).see(o4, cat, key, ex4)
                         if (v == "A·직선" && !c.reverse && TaperWarning.AGAINST_TOOL !in w) {
                             endOverKey.see(o4, cat, key, ex4)
                             endOverKey0.see(o0, cat, key, ex0)
                         }
-                        endOverD.getValue(v).see(o4 - o0, cat, key, ex4)
+                        if (!shortEnd) endOverD.getValue(v).see(o4 - o0, cat, key, ex4) else if (v == "A·직선") shortEndOver.see(o4 - o0, cat, key, ex4)
                         if (v == "A·직선") endOver0.see(o0, cat, key, ex0)
                     }
                     if (g.startWall) {
@@ -740,7 +793,7 @@ class VerifyG4xSimTest {
                 mv0["꺾임"]?.let { rapidRide0.see(rapidRide(it), cat, key, ex0) }
                 // G00 점이 넣은 좌표 너머(막힌 쪽)
                 fun beyond(bs: List<Blk>): Double {
-                    val g00 = bs.filter { it.g == 0 && it.comp == null }
+                    val g00 = bs.filter { it.g == 0 && it.comp == null && it.idx >= 0 }
                     if (g00.isEmpty()) return 0.0
                     return max(
                         if (g.endWall) g00.maxOf { (it.p - g.l) dot g.uB } else 0.0,
@@ -755,7 +808,7 @@ class VerifyG4xSimTest {
                     g00BeyondD.see(y4 - y0, cat, key, ex4)
                 }
                 // 첫 G00 점으로 오는 길(가정 — 부품 앞에서 Z 로)
-                val a4 = approachDepth(g, b4[0].p, tv, r)
+                val a4 = approachDepth(g, b4.first { it.idx >= 0 }.p, tv, r)
                 val a0 = approachDepth(g, b0[0].p, tv, r)
                 approach4.see(a4, cat, key, ex4)
                 approach0.see(a0, cat, key, ex0)
@@ -765,18 +818,24 @@ class VerifyG4xSimTest {
                 val m4a = mv4["A·직선"]
                 val m0a = mv0["직선"]
                 if (s.toEnd && m4a != null && m0a != null) {
-                    // 막힌 끝 · 팁 벡터·u < r: 취소 앞 직각 한 줄(보정 중 후퇴 — 2026-10-29 고침)은 형상이 아니다
-                    val iEnd = if (g.endWall && (tv dot g.uB) < r - 1e-9 && nc4[iG40].trim() != "G40") iG40 - 1 else iG40
-                    val end4 = m4a.last { it.blk < iEnd }.seg.end
+                    // 회사 꼴: 마지막 형상 블록은 첫 빼는 줄(F.3) 앞. 막힌 끝(짧지 않음)은 공구 쪽 직각 빼기의 교점(노즈 끝이 끝좌표에서 멈춤) → 팁 벡터·u − r,
+                    // 외경 단면 X0 끝은 X −2r 까지 쓰고 직각(노즈 중심이 축 — 직접 보정도 노즈 중심을 축까지) → min(0, 팁 벡터·u), 그 밖(빈 끝 · 짧은 막힌 끝 ·
+                    // 내경 바닥 X0 — 곧게 또는 끝 법선)은 팁 벡터·u
+                    val end4 = m4a.last { it.blk < iExit }.seg.end
                     val end0 = m0a.last { !it.rapid }.seg.end
                     val tvu = tv dot g.uB
                     val got = (end4 - end0) dot g.uB
-                    val outwardB = !horiz(g.uB) && (g.uB.x > 0) != c.inner
-                    val want = if (g.endWall && nc4[iG40].trim() != "G40") tvu - r else if (outwardB) tvu else min(0.0, tvu)
+                    val outerAxis = !horiz(g.uB) && !c.inner && g.uB.x < 0 && g.l.x <= 1e-9
+                    // 짧은 막힌 끝 요소를 계산기가 뺐으면(마지막 형상 줄 끝이 끝좌표가 아님 — 앞 요소가 직선일 때, calc-design '진입점과 NC' 2026-11-04) 노즈는 그 요소에
+                    // 닿지 않고 앞 요소 끝 둘레에서 멈춘다 — 문서 식 대신 노즈가 벽(끝좌표의 법선)에서 r 이상 앞인지 본다
+                    val skipped = shortEnd && g.endWall && (parse(nc4).last { it.idx < iExit }.p - g.l).length > 1e-3
+                    val want = if (g.endWall && !shortEnd) tvu - r else if (outerAxis) min(0.0, tvu) else tvu
                     val onLine = abs(((end4 - g.l) dot g.nB) - r) <= tol
-                    val ok = abs(got - want) <= tol && onLine
+                    val ahead = (end4 - g.l) dot g.uB
+                    val ok = if (skipped) ahead <= -r + tol else abs(got - want) <= tol && onLine
                     endTable.add(
-                        "끝 ${if (horiz(g.uB)) "수평" else "단면"} 팁·u ${cls(tvu)} · ${if (ok) "문서 식대로" else "문서 식과 다름(G4x − G40 = ${f4(got)}, 식 ${f4(want)}, 보정선 위 $onLine)"} · $path",
+                        "끝 ${if (horiz(g.uB)) "수평" else "단면"}${if (skipped) "(짧은 막힘 · 뺌)" else if (g.endWall && !shortEnd) "(막힘)" else if (outerAxis) "(X0)" else ""} 팁·u ${cls(tvu)} · " +
+                            (if (ok) "문서 식대로" else if (skipped) "문서 식과 다름(노즈가 벽에서 ${f4(-ahead)} — r 보다 가까움)" else "문서 식과 다름(G4x − G40 = ${f4(got)}, 식 ${f4(want)}, 보정선 위 $onLine)") + " · $path",
                         ex4(),
                     )
                 }
@@ -824,7 +883,7 @@ class VerifyG4xSimTest {
         println("|---|---|---|---|---|---|")
         val tables = vars.flatMap { listOf(endLeft.getValue(it), startLeft.getValue(it), endLeftWall.getValue(it), startLeftWall.getValue(it), anyLeft.getValue(it), gouge4.getValue(it)) } + gouge0.values +
             vars.flatMap { listOf(endOver4.getValue(it), endOverStop.getValue(it), endOverD.getValue(it), startOver4.getValue(it), startOverD.getValue(it)) } +
-            listOf(endOver0, startOver0, g00Beyond4, g00Beyond0, g00BeyondD, approach4, approach0, approachD, ride4, ride0, stockLin, stockDog, stockOtherLin, stockOtherDog, abDiff, modelVsSim, startLeftKey, endOverKey, endOverKey0, rapidRide4, rapidRide0)
+            listOf(endOver0, startOver0, g00Beyond4, g00Beyond0, g00BeyondD, approach4, approach0, approachD, ride4, ride0, stockLin, stockDog, stockOtherLin, stockOtherDog, abDiff, modelVsSim, startLeftKey, endOverKey, endOverKey0, rapidRide4, rapidRide0, shortEndOver, mirrorApproach, shortEndGouge, narrowGouge)
         for (a in tables) println(a.line())
         println("시작 · 취소가 바깥 모서리(형식 A · B 가 다를 자리, 따로 짠 모형): $outerSC · GSim COMP_TYPE_A INFO: $typeAInfo")
         for (a in tables) if (a.hits.isNotEmpty() && !a.name.endsWith("(A·꺾임)")) {

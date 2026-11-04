@@ -19,6 +19,7 @@ import com.bmt.nosecalc.calc.TaperInput
 import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
+import com.bmt.nosecalc.calc.legacy
 import com.bmt.nosecalc.calc.sim.CompStartup
 import com.bmt.nosecalc.calc.sim.DecimalMode
 import com.bmt.nosecalc.calc.sim.DwellStep
@@ -697,7 +698,7 @@ class SimVerifyTest {
         val startNose = startMv.last().nose.end
         val endNose = shape.last().nose.end
         val rays = listOf(cen.first().start to tanStart(cen.first()) * -1.0, cen.last().end to tanEnd(cen.last()))
-        // 띄운 진입(lead)은 노즈가 계산기 첫 점 바로 앞(TaperCalc.LEAD_PAST = 0.01 — 깎지 않는 앞 요소 보정선 위)에서 선다 — 그 안은 경로로 본다
+        // 첫 점 둘레 0.0105 안은 경로로 본다(옛 띄운 진입 lead 의 0.01 여유 — 회사 꼴은 첫 깎는 줄이 첫 요소와 한 직선 · 직각이라 노즈가 첫 점의 법선에 선다)
         fun dExt(p: Pt) = if ((p - cen.first().start).length <= 0.0105) 0.0 else min(distSet(p, cen), rays.minOf { (q, u) -> rayDist(p, q, u) })
         val fwd = (listOf(startNose) + shape.flatMap { pts(it.nose) }).maxOf { dExt(it) }
         // 끝: 따로 짠 제어기 모형(설계 3.2 · FANUC 보정 취소 — 마지막 보정 블록과 취소 블록의 이음점)으로 기대 노즈를 만든다.
@@ -711,7 +712,7 @@ class SimVerifyTest {
             t.fails += "$tag 마지막 형상 · 취소 블록의 명령 경로가 없음\n${lines.joinToString("\n")}"
             return null
         }
-        val side = if (lines[startLine - 1].contains("G41")) 1.0 else -1.0
+        val side = if (lines.any { "G41" in it }) 1.0 else -1.0
         val rr = shape.last().r
         val tA = tanEnd(lastCmd)
         val tB = unitOf(cancelCmd.end - cancelCmd.start)
@@ -809,16 +810,16 @@ class SimVerifyTest {
             }
             checkDirect(tag, s.ncG40, tools, cen, direct, s.drawing.segs)
             val lines = s.ncG41G42
-            val iStart = lines.indexOfFirst { "G41" in it || "G42" in it }
-            val iCancel = lines.indexOfFirst { "G40" in it }
+            // 회사 꼴(계획 단계 4): 첫 깎는 줄(F.1)이 '시작 블록' 자리(그 끝 노즈 = 첫 깎는 점), 첫 빼는 줄(F.3)이 '취소 블록' 자리
+            // (마지막 형상 블록과의 이음점이 끝 노즈 — 막힌 끝은 공구 쪽 직각이라 안쪽 교점, 빈 끝은 곧게라 끝 법선)
+            val iStart = lines.indexOfFirst { it.endsWith("F.1") }
+            val iCut = lines.indexOfFirst { "F.3" in it }
             // 넣은 끝좌표 너머가 막힌 끝: 척 쪽(−Z)으로 깎아 끝난 수평, 재료 쪽(외경 X− · 내경 X+)으로 깎아 끝난 단면(외경 X0 빼고) — 이 사례는 화면 역방향(거울)이 없다
             val endSeg = s.drawing.segs.last()
             val uE = (endSeg.end - endSeg.start).unit()
             val innerCase = "inner=true" in tag
             val endWall = s.toEnd && if (abs(uE.x) >= abs(uE.z)) (uE.x < 0) != innerCase && !(!innerCase && endSeg.end.x <= 1e-9) else uE.z < 0
-            // 막힌 끝에서 팁 벡터·u < r 이면 취소 앞에 보정 중 직각 후퇴 한 줄(노즈가 벽을 따라 올라감) — 그 줄부터를 취소 이동으로 본다
             val tvc = NoseComp.tipVector(s.tip, r)
-            val iCut = if (endWall && (tvc dot uE) < r - 1e-9 && lines[iCancel].trim() != "G40") iCancel - 1 else iCancel
             checkMachine(
                 tag, pre + lines, tools, cen, tvc, pre.size + iStart + 1, pre.size + iCut + 1, machine, s.drawing.segs,
                 cutOf(s.drawing.segs, s.fromStart, s.toEnd).last().end, endWall,
@@ -899,11 +900,11 @@ class SimVerifyTest {
 
     /**
      * 라운드 '기계 보정' 글: 옛 화면 안내(2026-10-28 전 '보정 시작 · 취소 블록과 공구 보정 R · T 는 기계에 맞게 직접 넣습니다')대로 노즈R 0 풀이(도면 좌표) NC 의
-     * 첫 G01 에 G41/G42 를 걸고(설계 9.3 InteropTest 의 라운드 줄 — 새 안내대로 쓴 시작은 [roundGuideStartLeavesNothing]), 취소는 마지막 요소를 끝 접선으로 2 mm 곧게 늘인 `G40 G01` — 이어진 취소라
+     * 첫 G01 에 G41/G42 를 걸고(설계 9.3 InteropTest 의 라운드 줄 — 계산기가 내는 회사 꼴 글은 [roundGuideStartLeavesNothing]), 취소는 마지막 요소를 끝 접선으로 2 mm 곧게 늘인 `G40 G01` — 이어진 취소라
      * 제어기가 끝 법선으로 보정해 노즈 접점이 도면 끝에 온다(직각으로 빼면 안쪽 모서리 교점으로 끝을 덜 깎는다 — calc-design 테이퍼 후퇴).
      */
     private fun roundMachineNc(drawn: RoundSolution, side: Side): List<String> {
-        val nc = drawn.nc.toMutableList()
+        val nc = drawn.nc.legacy.toMutableList()
         val i = nc.indexOfFirst { it.startsWith("G01") }
         nc[i] = "$side ${nc[i]}"
         val last = drawn.drawing.segs.last { lenOf(it) > 1e-9 }
@@ -987,70 +988,54 @@ class SimVerifyTest {
     }
 
     /**
-     * 라운드 기계 보정 안내(2026-10-28 고침 · 2026-10-29 판정 고침, 설계 13.7 문제 8 · 13.9): '시작은 첫 점보다 노즈R + 0.01 앞(첫 요소 · 원호면 시작 접선의
-     * 반대쪽) 점에서 공구 쪽으로 Z 여유 + 노즈R × 2 떨어진 G00 → 그 점에 첫 요소와 직각으로 G42 G01 → G01 첫 점' 대로 쓰면 모든 라운드 모양(TYPE 1~6 외경 · 내경,
-     * 3점호 — 오목하게 시작하는 홈 포함)의 첫 점에 남는 살이 없고 도면을 파고들지 않는다.
-     * (G00 을 Z 여유만 띄우거나 첫 요소와 한 직선으로 들어오면 G40 노즈 = G00 − 팁 벡터가 첫 요소 보정선 안쪽이라 오목 시작 3점호의 첫 점 모서리를 0.025 · 0.16 mm 깎았다
-     * — 검증 2026-10-29. 0.01 은 첫 점 줄의 보정 노즈 이동이 0 이 되지 않게 — TaperCalc.LEAD_PAST)
-     * 옛 안내(첫 G01 = Z 로 내려오는 줄에 G42)는 [roundBothProgramsFollowCalculatorPath] 가 남는 살을 출력한다(0.166 mm 쯤 — 시작 모서리가 안쪽이라 교점).
-     * 취소: 움직임 없는 `G40` 뒤 마지막 요소의 공구 쪽으로 `G01`(노즈R 의 2배 넘게 — G40 뒤 노즈 = 지령점 − 팁 벡터).
+     * 라운드 기계 보정 글(RoundCalc.machine — 회사 꼴, 계획 단계 4: 보정 혼자 줄 → G0 Z20. 진입 → 첫 깎는 줄 F.1 → 형상 → 빼는 줄 F.3 → G40 혼자 → G0Z200.)을
+     * 모든 라운드 모양(TYPE 1~6 외경 · 내경, 3점호 — 오목하게 시작하는 홈 포함) × r 0.4 · 0.8 × 보정 시작 · 취소 형식 A · B / C 로 돌리면
+     * 멈추지 않고, 첫 점에 남는 살이 없고(축에서 시작하는 돔은 축 너머에서 진입), 도면을 파고들지 않는다.
+     * (2026-10-28~29 에는 화면의 '기계 보정 안내'(첫 점보다 노즈R + 0.01 앞에 첫 요소와 직각으로 G42 G01, 끝은 이동 없는 G40 뒤 G01)대로 사람이 쓴 글을 보았다.
+     * 안내는 화면이 회사 꼴 글을 직접 내게 되며 없어졌고(사용자 결정 2026-10-29 ①), 그 안내 글의 '원호 뒤 이동 없는 G40' 은 G02/G03 모드의 취소라
+     * FANUC 에서 알람이다 — 시뮬레이터도 멈춘다(형식 A · B 도). 같은 성질 — 첫 점 남김 없음 · 파고듦 없음 — 을 이제 계산기가 낸 글로 본다)
      */
     @Test
     fun roundGuideStartLeavesNothing() {
         var checked = 0
+        var alarm = 0
         val bad = mutableListOf<String>()
-        class G(val tag: String, val r: Double, val s: RoundSolution, val dr: RoundSolution)
+        class G(val tag: String, val r: Double, val res: RoundResult, val direct: RoundResult)
         val sols = mutableListOf<G>()
         for (shape in roundShapes) for (inner in listOf(false, true)) for (r in listOf(0.4, 0.8)) {
             if (inner && shape.type == 1) continue
             val i = shape.copy(noseR = r, inner = inner)
-            val s = RoundCalc.calc(i).solution ?: continue
-            val dr = RoundCalc.calc(i.copy(noseR = 0.0)).solution ?: continue
-            sols += G(i.toString(), r, s, dr)
+            sols += G(i.toString(), r, RoundCalc.machine(i), RoundCalc.calc(i))
         }
         for (a in arc3Shapes) for (r in listOf(0.4, 0.8)) {
             val i = a.copy(noseR = r)
-            val s = RoundCalc.arc3(i).solution ?: continue
-            val dr = RoundCalc.arc3(i.copy(noseR = 0.0)).solution ?: continue
-            sols += G(i.toString(), r, s, dr)
+            sols += G(i.toString(), r, RoundCalc.machine(i), RoundCalc.arc3(i))
         }
         for (g in sols) {
-            val tag = g.tag
+            val s = g.res.solution ?: continue
             val r = g.r
-            val s = g.s
-            val dr = g.dr
             val first = s.drawing.segs.first { lenOf(it) > 1e-9 }
             val p0 = first.start
-            val t0 = tanStart(first)
-            val n0 = if (s.side == Side.G41) Pt(-t0.x, t0.z) else Pt(t0.x, -t0.z)
-            val c = max(1.0, r)
-            fun at(p: Pt) = "X${Fmt.nc(p.xDia)} Z${Fmt.nc(p.z)}"
-            // 도면 좌표 NC(노즈R 0 풀이)의 첫 G01(첫 점으로 가는 줄) 뒤 줄들 = 형상
-            val k = dr.nc.indexOfFirst { it.startsWith("G01") }
-            val body = dr.nc.drop(k + 1)
-            // 취소(안내): 움직임 없는 G40 한 줄 뒤 마지막 요소의 공구 쪽으로 G01 — 노즈 접점이 끝 점에 선다(FF 5.4.4 그림 5.4.4(e)).
-            // G40 뒤 노즈 = 지령점 − 팁 벡터라 팁 방향에 따라 노즈R 의 2배까지 끝 요소 쪽으로 온다 — 그만큼(lift) 더 뺀다
-            val last = dr.drawing.segs.last { lenOf(it) > 1e-9 }
-            val tE = tanEnd(last)
-            val nE = if (s.side == Side.G41) Pt(-tE.x, tE.z) else Pt(tE.x, -tE.z)
-            val liftE = max(0.0, r + (nE dot NoseComp.tipVector(s.tip, r)))
-            val cancel = listOf("G40", "G01 ${at(last.end + nE * (c + liftE))}")
-            val lead = p0 - t0 * (r + 0.01)
-            val nc = listOf("G00 ${at(lead + n0 * (c + 2 * r))}", "${s.side} G01 ${at(lead)}", "G01 ${at(p0)}") + body + cancel
             val tools = mapOf(1 to ToolOffset(r, s.tip))
-            val run = sim(pre + nc, tools)
-            checked++
-            if (run.stop != null) {
-                bad += "멈춤 ${run.stop}: $tag | ${nc.joinToString(" / ")}"
-                continue
+            val nc = pre + s.nc
+            assertTrue(s.nc.first() == s.side.name && s.nc.any { it.endsWith("F.1") } && s.nc.contains("G40") && s.nc.last() == "G0Z200.", "${g.tag} 회사 꼴이 아님 ${s.nc}")
+            for (form in CompStartup.values()) {
+                val run = sim(nc, tools, MachineSetup(compStartup = form))
+                checked++
+                val st = run.stop
+                if (st != null) {
+                    // 도면 자체가 제어기 알람 꼴(오목 R ≤ r — 계산기 경고)이면 따로 센다
+                    if (RoundWarning.CONCAVE_R_LE_NOSE in g.direct.warnings && st.code == IssueCode.COMP_ARC_SMALL) alarm++ else bad += "멈춤 $form $st: ${g.tag} | ${s.nc.joinToString(" / ")}"
+                    continue
+                }
+                val gap = moves(run).filter { it.kind == MoveKind.FEED }.flatMap { pts(it.nose) }.minOf { (it - p0).length } - r
+                if (gap > tol) bad += "$form 첫 점 ${xz(p0)} 에 ${Fmt.fixed3(gap)} 남음: ${g.tag} | ${s.nc.joinToString(" / ")}"
+                gougeOf(run, nc, s.drawing.segs, r, g.tag, tools)?.let { bad += "$form 파고듦 ${Fmt.fixed3(it.depth)} [${it.block}]: ${g.tag} | ${s.nc.joinToString(" / ")}" }
             }
-            val gap = moves(run).filter { it.kind == MoveKind.FEED }.flatMap { pts(it.nose) }.minOf { (it - p0).length } - r
-            if (gap > tol) bad += "첫 점 ${xz(p0)} 에 ${Fmt.fixed3(gap)} 남음: $tag | ${nc.joinToString(" / ")}"
-            gougeOf(run, pre + nc, s.drawing.segs, r, tag, tools)?.let { bad += "파고듦 ${Fmt.fixed3(it.depth)} [${it.block}]: $tag | ${nc.joinToString(" / ")}" }
         }
-        println("라운드 안내대로 쓴 시작 블록(TYPE 1~6 외경 · 내경, 3점호): 글 $checked, 문제 ${bad.size}")
+        println("라운드 기계 보정 글(회사 꼴, TYPE 1~6 외경 · 내경, 3점호) × 형식 A·B / C: 돌린 글 $checked, 도면 알람 꼴 $alarm, 문제 ${bad.size}")
         for (b in bad.take(10)) println("  $b")
-        assertTrue(checked >= 60, "확인한 글 $checked")
+        assertTrue(checked >= 120, "확인한 글 $checked")
         assertTrue(bad.isEmpty(), bad.take(5).joinToString("\n"))
     }
 

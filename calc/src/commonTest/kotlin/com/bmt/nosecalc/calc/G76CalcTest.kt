@@ -38,28 +38,28 @@ class G76CalcTest {
     fun fanucManualExample() {
         assertEquals(
             listOf("G76 P011060 Q100 R0.2", "G76 X60.64 Z25. P3680 Q1800 F6."),
-            G76Calc.blocks(1, 10, 60, 100, 0.2, 60.64, 25.0, 3680, 1800, 6.0),
+            G76Calc.blocks(1, 10, 60, 100, 0.2, 60.64, 25.0, 3680, 1800, 6.0).legacy,
         )
         // 같은 나사를 계산기로: M68×6(ISO 261) 숫나사 6h, 목표 0%(최대 실체 = 기본 바깥지름 68), 기본 인선 R
         val m68 = ThreadSpec(ThreadSeries.M_COARSE, "M68", 68.0, 6.0)
         val s = ok(G76Calc.calc(G76Input(spec = m68, cls = ThreadClass.M6h, zStart = 130.0, zEnd = 25.0, firstCut = 1.8,
             target = 0.0, finishCount = 1, minCut = 0.1, finishAllow = 0.2)))
         // 기본 깊이 0.61343P = 3.6806 → 매뉴얼은 3.68 로 반올림해 X60.64. 계산기는 μm 까지: X60.639 · P3681
-        assertEquals(listOf("G76 P011060 Q100 R0.2", "G76 X60.639 Z25. P3681 Q1800 F6."), s.nc)
+        assertEquals(listOf("G76P011060Q100R.2", "G76X60.639Z25.P3681Q1800F6."), s.nc)
         near(60.64, s.x, 0.002, "X")
         near(3.68, s.height, 0.0015, "k")
     }
 
-    /** 원본 08.jpg 의 첫 줄 `G76 P02 1060 Q35 R0.02` = 빈칸 기본값(m 2 · 면취 1.0P · 60° · Δdmin 0.035 · d 0.02) */
+    /** 원본 08.jpg 의 첫 줄 `G76 P02 1060 Q35 R0.02` = 빈칸 기본값(m 2 · 면취 1.0P · 60° · Δdmin 0.035 · d 0.02) — 글은 회사 표기 */
     @Test
     fun originalFirstLineFromDefaults() {
         val s = ok(G76Calc.calc(original))
-        assertEquals("G76 P021060 Q35 R0.02", s.nc[0])
+        assertEquals("G76P021060Q35R.02", s.nc[0])
         assertEquals(80.0, s.target)
         assertEquals(listOf(2, 10, 60), listOf(s.finishCount, s.chamfer, s.angle))
         // 면취 0.5P · 각도 55 · m 1 · Δdmin 0.05 · d 0.1
         val t = ok(G76Calc.calc(original.copy(chamfer = 5, angle = 55, finishCount = 1, minCut = 0.05, finishAllow = 0.1)))
-        assertEquals("G76 P010555 Q50 R0.1", t.nc[0])
+        assertEquals("G76P010555Q50R.1", t.nc[0])
     }
 
     /**
@@ -79,13 +79,56 @@ class G76CalcTest {
         near(0.734, s.height, 1e-12, "k")
         assertEquals(1.27, s.lead)
         assertEquals(
-            listOf("G97 S1821", "G00 X8.322 Z5.", "G76 P021060 Q35 R0.02", "G76 X4.688 Z-25. P734 Q200 F1.27"),
+            listOf("G97S1821", "G0X8.322Z5.", "G76P021060Q35R.02", "G76X4.688Z-25.P734Q200F1.27"),
             s.program,
         )
         assertEquals(s.program.takeLast(2), s.nc)
         near(1821 * 1.27, s.feedPerMin!!, 1e-9, "분당 이송")
         // 회전수를 비우면 G97 줄이 없다
-        assertEquals("G00 X8.322 Z5.", ok(G76Calc.calc(original)).program.first())
+        assertEquals("G0X8.322Z5.", ok(G76Calc.calc(original)).program.first())
+    }
+
+    /**
+     * G92 다회 글(회사 흐름) 손 계산 — 원본 화면 값: X 줄 = 분석표 X(X4.688 + 2(k − 깊이), 1회 깊이 0.2 → 4.688 + 2 × 0.534 = 5.756) 15줄,
+     * 깊이는 Δd·√n(0.2 · 0.283 · 0.346 …), 그 회 절입이 Δdmin 0.035 보다 작으면 앞 깊이 + 0.035, k − d = 0.714 에서 자름(13회 X4.728), 마지막 둘은 정삭(G76 X 그대로).
+     * 시작점은 G76 과 같은 X8.322 를 Z20. 에서 맞추고 Z5. 로, 끝나면 Z200. 까지 Z 만. M23(끝 빼기 켬)은 G92 바로 앞, M24(끔)는 마지막 X 바로 뒤.
+     * 다듬질 블록은 같은 꼴에 마지막 X 두 번
+     */
+    @Test
+    fun g92HandNumbers() {
+        val s = ok(G76Calc.calc(original.copy(rpm = 1821.0)))
+        assertEquals(
+            listOf(
+                "G97S1821", "G0X8.322Z20.", "Z5.", "M23", "G92X5.756Z-25.F1.27",
+                "X5.59", "X5.463", "X5.356", "X5.262", "X5.176", "X5.098", "X5.025", "X4.955", "X4.885", "X4.815", "X4.745", "X4.728",
+                "X4.688", "X4.688", "M24", "G0Z200.",
+            ),
+            s.g92,
+        )
+        assertEquals(listOf("G97S1821", "G0X8.322Z20.", "Z5.", "M23", "G92X4.688Z-25.F1.27", "X4.688", "M24", "G0Z200."), s.g92Finish)
+        // X 줄 수 = 분석표 회차 수, 회전수를 비우면 G97 줄이 없다
+        val x = ok(G76Calc.calc(original)).g92
+        assertEquals("G0X8.322Z20.", x.first())
+        assertEquals(s.passes.size, x.count { it.startsWith("X") || it.startsWith("G92") })
+        // 암나사: 시작 X 는 구멍 안(안지름 최소 − 2), 마지막 X = G76 X10.09 — 같은 꼴(M23 · M24 도 같은 자리)
+        val i = ok(G76Calc.calc(G76Input(inner = true, spec = m(10.0, 1.5), zStart = 3.0, zEnd = -20.0, firstCut = 0.3, target = 50.0)))
+        assertEquals(listOf("G0X6.376Z20.", "Z3.", "M23"), i.g92.take(3))
+        assertTrue(i.g92[3].startsWith("G92X") && i.g92[3].endsWith("Z-20.F1.5"), i.g92[3])
+        assertEquals(listOf("X10.09", "X10.09", "M24", "G0Z200."), i.g92.takeLast(4))
+        assertEquals(listOf("G0X6.376Z20.", "Z3.", "M23", "G92X10.09Z-20.F1.5", "X10.09", "M24", "G0Z200."), i.g92Finish)
+        // 역가공: 시작 Z 는 척 쪽, 끝 Z 쪽으로(Z+) 깎는다 — 진입 Z 는 두 Z 의 큰 쪽(3)이 15 아래라 그대로 Z20.
+        val r = ok(G76Calc.calc(original.copy(dir = ThreadDir.REVERSE, zStart = -28.0, zEnd = 3.0)))
+        assertEquals(listOf("G0X8.322Z20.", "Z-28.", "M23", "G92X5.756Z3.F1.27"), r.g92.take(4))
+        // 시작 Z 가 Z20 가까이(15 이상)면 진입 Z 를 올림 + 20 으로(G41/G42 글과 같은 규칙), Z200. 보다 멀면 물러남도 거기까지
+        val near20 = ok(G76Calc.calc(original.copy(zStart = 15.5))).g92
+        assertEquals(listOf("G0X8.322Z36.", "Z15.5"), near20.take(2))
+        assertEquals("G0Z200.", near20.last())
+        val far = ok(G76Calc.calc(original.copy(zStart = 300.0, zEnd = 250.0))).g92
+        assertEquals(listOf("G0X8.322Z320.", "Z300."), far.take(2))
+        assertEquals("G0Z320.", far.last())
+        // 리드는 G76 F 와 같은 넷째 자리 · 앞 0 뺌
+        assertTrue(ok(G76Calc.calc(G76Input(spec = un("1/2", 13), zStart = 5.0, zEnd = -30.0, firstCut = 0.3))).g92[3].endsWith("F1.9538"))
+        assertTrue(ok(G76Calc.calc(G76Input(spec = un("#4", 40), zStart = 2.0, zEnd = -6.0, firstCut = 0.05))).g92[3].endsWith("F.635"))
     }
 
     /**
@@ -101,13 +144,13 @@ class G76CalcTest {
         near(8.927721, e.pitchDia, 1e-6, "6g 피치경")
         near(9.850, e.crestDia, 1e-9, "6g 바깥지름")
         near(8.061696, e.x, 1e-6, "6g X")
-        assertEquals("G76 X8.062 Z-20. P894 Q300 F1.5", e.nc[1])
+        assertEquals("G76X8.062Z-20.P894Q300F1.5", e.nc[1])
         val i = ok(G76Calc.calc(G76Input(inner = true, spec = m(10.0, 1.5), zStart = 3.0, zEnd = -20.0, firstCut = 0.3, target = 50.0)))
         near(9.115721, i.pitchDia, 1e-6, "6H 피치경")
         near(8.526202, i.crestDia, 1e-6, "6H 안지름")
         near(10.090000, i.x, 1e-6, "6H X")
-        assertEquals("G76 X10.09 Z-20. P782 Q300 F1.5", i.nc[1])
-        assertEquals("G00 X6.376 Z3.", i.program.first())
+        assertEquals("G76X10.09Z-20.P782Q300F1.5", i.nc[1])
+        assertEquals("G0X6.376Z3.", i.program.first())
     }
 
     /**
@@ -243,7 +286,7 @@ class G76CalcTest {
     fun passTableX() {
         for (inner in listOf(false, true)) {
             val s = ok(G76Calc.calc(G76Input(inner = inner, spec = m(24.0, 3.0), zStart = 5.0, zEnd = -40.0, firstCut = 0.4, finishCount = 3)))
-            val xNc = s.nc[1].substringAfter(" X").substringBefore(" ").toDouble()
+            val xNc = ncWords(s.nc[1]).single { it.startsWith("X") }.drop(1).toDouble()
             for (p in s.passes) near(if (inner) xNc - 2 * (s.height - p.depth) else xNc + 2 * (s.height - p.depth), p.xDia, 1e-9, "${p.n}")
             assertEquals(xNc, s.passes.last().xDia)
             assertEquals(listOf(false, true, true, true), s.passes.takeLast(4).map { it.finish })
@@ -262,19 +305,20 @@ class G76CalcTest {
         stops(G76Warning.Z_ORDER, original.copy(zEnd = 5.0))
         stops(G76Warning.Z_ORDER, original.copy(dir = ThreadDir.REVERSE))
         val r = ok(G76Calc.calc(original.copy(dir = ThreadDir.REVERSE, zStart = -28.0, zEnd = 3.0)))
-        assertEquals("G00 X8.322 Z-28.", r.program.first())
-        assertEquals("G76 X4.688 Z3. P734 Q200 F1.27", r.nc[1])
+        assertEquals("G0X8.322Z-28.", r.program.first())
+        assertEquals("G76X4.688Z3.P734Q200F1.27", r.nc[1])
     }
 
-    /** 리드 F 는 0.0001 까지(FANUC 미터 입력 0.0001~500.0000 mm): 13 산 1.9538, 24 산 1.0583, 7 산 3.6286, 미터 1.5 */
+    /** 리드 F 는 0.0001 까지(FANUC 미터 입력 0.0001~500.0000 mm): 13 산 1.9538, 24 산 1.0583, 7 산 3.6286, 미터 1.5, 40 산 .635(앞 0 뺌) */
     @Test
     fun leadDigits() {
-        fun lead(s: ThreadSpec) = ok(G76Calc.calc(G76Input(spec = s, zStart = 5.0, zEnd = -30.0, firstCut = 0.3))).nc[1].substringAfter(" F")
+        fun lead(s: ThreadSpec) = ok(G76Calc.calc(G76Input(spec = s, zStart = 5.0, zEnd = -30.0, firstCut = 0.3))).nc[1].substringAfter("F")
         assertEquals("1.9538", lead(un("1/2", 13)))
         assertEquals("1.0583", lead(un("#10", 24)))
         assertEquals("3.6286", lead(un("1-1/8", 7)))
         assertEquals("1.5", lead(m(10.0, 1.5)))
         assertEquals("4.", lead(m(52.0, 4.0)))
+        assertEquals(".635", ok(G76Calc.calc(G76Input(spec = un("#4", 40), zStart = 2.0, zEnd = -6.0, firstCut = 0.05))).nc[1].substringAfter("F"))
     }
 
     /** 멈추는 입력 */

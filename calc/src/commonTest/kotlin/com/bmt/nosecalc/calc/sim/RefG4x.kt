@@ -1,5 +1,6 @@
 package com.bmt.nosecalc.calc.sim
 
+import com.bmt.nosecalc.calc.ncWords
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -37,16 +38,20 @@ internal object RefG4x {
 
     class Blk(val g: Int, val comp: Int?, val p: P, val rr: Double?)
 
-    /** 낱말 G0~3 · G40~42 · X(직경) · Z · R 만. 빠진 축은 앞 줄 값 */
+    /**
+     * 낱말 G0~3 · G40~42 · X(직경) · Z · R · F(버림)만(빈칸이 있든 없든 — `ncWords`). 빠진 축 · 이동 G 는 앞 줄 값.
+     * 좌표가 아직 없는 처음 보정 혼자 줄(회사 꼴 `G42` — 계획 단계 4)은 다음 이동 줄의 보정 G 로 붙이고, 그 앞에 시뮬레이터 처음 공구 자리(기계 원점, G0)를 둔다
+     */
     fun parse(lines: List<String>): List<Blk> {
         var z: Double? = null
         var x: Double? = null
         var g = -1
+        var pending: Int? = null
         val out = mutableListOf<Blk>()
         for (line in lines) {
             var comp: Int? = null
             var rr: Double? = null
-            for (tok in line.trim().split(" ").filter { it.isNotEmpty() }) {
+            for (tok in ncWords(line)) {
                 val v = tok.substring(1)
                 when (tok[0]) {
                     'G' -> when (val n = v.toInt()) {
@@ -57,8 +62,19 @@ internal object RefG4x {
                     'X' -> x = v.toDouble() / 2
                     'Z' -> z = v.toDouble()
                     'R' -> rr = v.toDouble()
+                    'F' -> {}
                     else -> error("모르는 낱말 $tok: $line")
                 }
+            }
+            if (z == null || x == null) {
+                pending = comp ?: error("좌표 없는 줄: $line")
+                continue
+            }
+            if (pending != null) {
+                val home = MachineSetup().home
+                out += Blk(0, null, P(home.z, home.x), null)
+                comp = pending
+                pending = null
             }
             out += Blk(g, comp, P(z!!, x!!), rr)
         }

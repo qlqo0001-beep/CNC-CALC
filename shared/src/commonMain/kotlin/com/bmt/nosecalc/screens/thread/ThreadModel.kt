@@ -20,6 +20,7 @@ import com.bmt.nosecalc.calc.ThreadSeries
 import com.bmt.nosecalc.calc.ThreadSpec
 import com.bmt.nosecalc.calc.ThreadTable
 import com.bmt.nosecalc.calc.WorkMaterials
+import com.bmt.nosecalc.calc.ncWords
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.sqrt
@@ -44,6 +45,9 @@ internal enum class ThreadField(val key: String, val label: String, val unit: St
 /** 고르기 시트(드롭다운) 종류 */
 internal enum class Pick { CLASS, KIND, SIZE, PITCH, MATERIAL, ANGLE, CHAMFER }
 
+/** NC 카드 탭: G92 다회(회사 흐름 — 처음 값, 사용자 결정 10-29) · G76 두 줄 */
+internal enum class ThreadNc { G92, G76 }
+
 /**
  * 나사 G76 화면 상태. 숫자칸 값은 쓴 그대로의 글(빈칸 = 안 넣음 · 기본값).
  * 처음엔 모두 빈칸 · 사이즈 안 고름(미터) — 파랑 안내가 남은 값을 적는다. 고르는 칸(급수 · 각도 · 면취량)은 null = 기본(원본 08 의 값).
@@ -61,6 +65,7 @@ internal class ThreadState(
     chamfer: Int? = null,
     values: Map<String, String> = emptyMap(),
     advOpen: Boolean = false,
+    nc: ThreadNc = ThreadNc.G92,
 ) {
     var inner by mutableStateOf(inner)
         private set
@@ -85,6 +90,9 @@ internal class ThreadState(
 
     /** 고급 설정 펼침 */
     var advOpen by mutableStateOf(advOpen)
+
+    /** NC 카드에 보이는 글(처음은 G92 다회) */
+    var nc by mutableStateOf(nc)
     private val values = mutableStateMapOf<String, String>().apply { putAll(values) }
 
     fun value(f: ThreadField): String = values[f.key] ?: ""
@@ -201,7 +209,7 @@ internal class ThreadState(
                     s.inner.toString(), s.kind.name, s.spec?.let { "${it.series.name}|${it.size}|${it.pitch}" } ?: "",
                     s.cls?.name ?: "", s.material?.name ?: "", s.dir.name, s.angle?.toString() ?: "", s.chamfer?.toString() ?: "",
                     s.advOpen.toString(),
-                ) + ThreadField.entries.map { s.value(it) }
+                ) + ThreadField.entries.map { s.value(it) } + s.nc.name
             },
             restore = { l ->
                 val kind = ThreadKind.valueOf(l[1])
@@ -219,6 +227,7 @@ internal class ThreadState(
                     chamfer = l[7].toIntOrNull(),
                     values = ThreadField.entries.mapIndexed { i, f -> f.key to l[9 + i] }.toMap(),
                     advOpen = l[8].toBoolean(),
+                    nc = ThreadNc.valueOf(l[9 + ThreadField.entries.size]),
                 )
             },
         )
@@ -307,25 +316,22 @@ internal data class NcWord(
     val note: String? = null,
 )
 
-/** 낱말 줄 → NC 글("G76 P021060 Q35 R0.02") — 주소 없는 낱말은 앞 낱말에 붙는다 */
+/** 낱말 줄 → NC 글(회사 표기 "G76P021060Q35R.02" — 낱말을 붙여 쓴다) */
 internal fun ncText(words: List<NcWord>): String = buildString {
     append("G76")
-    words.forEach { w ->
-        if (w.letter.isNotEmpty()) append(' ')
-        append(w.letter).append(w.value)
-    }
+    words.forEach { w -> append(w.letter).append(w.value) }
 }
 
 /**
  * G76 두 줄의 낱말(원본 08 의 'G76 [P 02] 1060 [Q 35] [R 0.02]' 꼴). 풀렸으면 계산기 NC 글을 그대로 쪼갠다(화면 = 복사 글),
- * 아직이면 넣은 값 · 기본값으로 첫 줄을 쓰고 둘째 줄의 X · P(k) 는 "—", 빈 도면 값은 "?"
+ * 아직이면 넣은 값 · 기본값으로 첫 줄을 쓰고 둘째 줄의 X · P(k) 는 "—", 빈 도면 값은 "?". 숫자는 NC 글과 같은 회사 표기(R.02 — 앞 0 뺌)
  */
 internal fun g76Words(s: ThreadState, sol: G76Solution?): List<List<NcWord>> {
     val raNote = "${two(s.shownChamfer)}${two(s.shownAngle)} = 면취량 ${chamferText(s.shownChamfer)} (${two(s.shownChamfer)}) · 나사산 각도 ${s.shownAngle}° (${two(s.shownAngle)}) — 설정 카드에서 고릅니다"
     fun blank(f: ThreadField) = s.value(f).isEmpty()
     if (sol != null) {
-        val l1 = sol.nc[0].split(' ').drop(1)
-        val l2 = sol.nc[1].split(' ').drop(1)
+        val l1 = ncWords(sol.nc[0]).drop(1)
+        val l2 = ncWords(sol.nc[1]).drop(1)
         fun word(w: String, f: ThreadField?, note: String? = null) = NcWord(w.take(1), w.drop(1), f, byDefault = f != null && blank(f), note = note)
         val p = l1[0]
         return listOf(
@@ -362,14 +368,14 @@ internal fun g76Words(s: ThreadState, sol: G76Solution?): List<List<NcWord>> {
             edit(ThreadField.FINISH_COUNT, "P", two(G76Calc.FINISH_COUNT_DEFAULT)) { two(it.toInt()) },
             NcWord("", two(s.shownChamfer) + two(s.shownAngle), note = raNote),
             edit(ThreadField.MIN_CUT, "Q", um(G76Calc.MIN_CUT_DEFAULT).toString()) { um(it).toString() },
-            edit(ThreadField.ALLOW, "R", Fmt.nc(G76Calc.FINISH_ALLOW_DEFAULT)) { Fmt.nc(it) },
+            edit(ThreadField.ALLOW, "R", Fmt.word(G76Calc.FINISH_ALLOW_DEFAULT)) { Fmt.word(it) },
         ),
         listOf(
             NcWord("X", "—", note = "X 는 사이즈 · Z · 첫 절입을 넣으면 계산합니다"),
-            need(ThreadField.Z_END, "Z") { Fmt.nc(it) },
+            need(ThreadField.Z_END, "Z") { Fmt.word(it) },
             NcWord("P", "—", note = "P(k) 는 사이즈 · Z · 첫 절입을 넣으면 계산합니다"),
             need(ThreadField.FIRST_CUT, "Q") { um(it).toString() },
-            NcWord("F", s.spec?.let { leadText(it.pitch) } ?: "—", note = "F = 리드 (한 줄 나사는 피치) — 사이즈 · 피치에서"),
+            NcWord("F", s.spec?.let { Fmt.shortLead(leadText(it.pitch)) } ?: "—", note = "F = 리드 (한 줄 나사는 피치) — 사이즈 · 피치에서"),
         ),
     )
 }

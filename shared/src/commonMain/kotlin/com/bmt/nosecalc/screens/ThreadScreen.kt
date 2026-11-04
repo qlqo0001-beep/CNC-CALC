@@ -62,6 +62,7 @@ import com.bmt.nosecalc.screens.thread.Pick
 import com.bmt.nosecalc.screens.thread.ResultCell
 import com.bmt.nosecalc.screens.thread.ThreadField
 import com.bmt.nosecalc.screens.thread.ThreadLabel
+import com.bmt.nosecalc.screens.thread.ThreadNc
 import com.bmt.nosecalc.screens.thread.ThreadSection
 import com.bmt.nosecalc.screens.thread.ThreadState
 import com.bmt.nosecalc.screens.thread.chamferText
@@ -106,7 +107,7 @@ fun ThreadScreen() = ThreadScreen(ThreadState())
 /**
  * 나사 G76 화면(원본 08): 외경/내경 → (값 부족 안내 · 멈춤) → '스레드 및 소재 설정'(공차 급수 · 종류 · 사이즈 · 피치 · 소재 · 방향 · Z 시작 · 회전수 ·
  * 목표 Z · 각도 · 면취량 → '고급 공차 및 인선 설정' 접이) → (확인 경고) → 'G76 파라미터 입력 및 분석'(두 줄 · 첫 절입 · 결과) → 회차별 분석표 →
- * 나사 단면 → NC. 값이 바뀌면 바로 다시 푼다(계산 버튼 없음). 숫자칸은 한 묶음(키패드 하나 · PC Tab 순서)이고, G76 줄의 테두리 칸을 눌러도
+ * 나사 단면 → NC(탭 G92 다회 · G76 두 줄, 처음은 G92 — G92 면 다듬질 블록 카드가 아래에). 값이 바뀌면 바로 다시 푼다(계산 버튼 없음). 숫자칸은 한 묶음(키패드 하나 · PC Tab 순서)이고, G76 줄의 테두리 칸을 눌러도
  * 그 칸의 키패드가 열린다(고급 설정 칸이면 접이를 편다). 결과가 화면 밖이면 아래 결과 띠에 시작점 · 끝점(G76 X Z).
  * G76 은 공구 노즈R 보정(G41/G42)을 쓰지 않아 보정 방식 스위치가 없다.
  * initial = 시험이 정한 처음 상태, editing = 처음부터 키패드를 열어 둘 칸, sheet = 처음부터 열어 둘 고르기 시트(스크린샷 시험용)
@@ -327,18 +328,55 @@ internal fun ThreadScreen(initial: ThreadState, editing: ThreadField? = null, sh
                 }
 
                 if (sol != null) {
-                    NcCard(
-                        sol.program,
-                        "G97 S 줄은 회전수를 넣었을 때만 씁니다(나사는 회전수 일정). G00 은 사이클 시작점이고, G76 은 끝나면 이 점으로 돌아옵니다. " +
-                            "P(k) · Q(Δd) · 첫 줄 Q(Δdmin) 는 소수점 없이 최소 지령 단위(0.001 mm = μm) 정수입니다 — 0.0001 mm 단위(IS-C) 기계는 이 값을 10배로 읽으니 " +
-                            "그런 기계에서는 쓰지 마세요. 주축 회전(M03/M04) · 공구 호출 · 냉각은 기계에 맞게 앞에 넣습니다.",
-                        programName = "G76 나사 프로그램",
-                        facts = listOf(
-                            NcFact("P · Q 는 μm 정수 (0.001 mm 기계)", WarnLevel.Warn),
-                            NcFact("M03/M04 · 공구 호출 없음"),
-                            NcFact("끝나면 시작점으로"),
-                        ),
-                    )
+                    // NC 탭: G92 다회(처음 — 회사 흐름) · G76 두 줄. G92 면 아래에 다듬질 블록 카드를 따로
+                    val g92 = s.nc == ThreadNc.G92
+                    val tabs = @Composable {
+                        Segmented(
+                            listOf("G92 다회", "G76 두 줄"), if (g92) 0 else 1, { s.nc = if (it == 0) ThreadNc.G92 else ThreadNc.G76 },
+                            Modifier.fillMaxWidth(), color = c.teal, height = 48.dp, fontSize = 15,
+                        )
+                    }
+                    if (g92) {
+                        NcCard(
+                            sol.g92,
+                            "G92 는 X 줄마다 나사를 한 번 깎고 시작점으로 돌아옵니다. X 줄은 회차별 분석표의 X 그대로이고(마지막 정삭 X = G76 X), 절입은 위 G76 카드의 " +
+                                "첫 절입 Δd · 최소 절입 Δdmin · 정삭 여유 d · 정삭 횟수 m 으로 정합니다. X 로 곧게 절입하므로 나사산 각도 a · 면취량 r 은 쓰지 않습니다. " +
+                                "G92 앞 M23 · 마지막 X 뒤 M24 는 나사 끝 빼기(면취) 켬 · 끔입니다 — 흔한 FANUC 계열 기계 M 정의라 기계마다 다를 수 있고, 빼는 길이는 기계 설정입니다. " +
+                                "M24 줄은 G92 모드 안이라 제어기가 그 줄에서 마지막 X 를 한 번 더 지난 뒤 끝 빼기를 끕니다(시뮬레이터도 그렇게 그립니다). " +
+                                "공구를 바꾼 뒤 Z20. 에서 시작 X 를 맞추고 Z 로 들어가며, 끝나면 Z 만 물러납니다(Z200.). " +
+                                "G97 S 줄은 회전수를 넣었을 때만 씁니다. 주축 회전(M03/M04) · 공구 호출 · 냉각은 기계에 맞게 앞에 넣습니다.",
+                            programName = "G92 나사 프로그램",
+                            facts = listOf(
+                                NcFact("회차 ${sol.passes.size}줄 = 분석표"),
+                                NcFact("M23 끝 빼기 켬 · M24 끔"),
+                                NcFact("M03/M04 · 공구 호출 없음"),
+                            ),
+                            top = tabs,
+                        )
+                        NcCard(
+                            sol.g92Finish,
+                            "${if (s.inner) "구멍 입구" else "외경"}의 버를 없앤 뒤 같은 나사 공구로 마지막 X 를 두 번 더 지나는 블록입니다. " +
+                                "공구가 휘어 덜 깎인 것을 마저 깎습니다(스프링 패스). 위 프로그램과 따로, 버를 없애는 공구 블록 뒤에 넣습니다. " +
+                                "M23 · M24 는 위 프로그램과 같은 자리입니다(M24 줄에서 마지막 X 를 한 번 더 지남).",
+                            programName = "다듬질 블록",
+                            facts = listOf(NcFact("마지막 X${Fmt.word(sol.passes.last().xDia)} 두 번")),
+                            title = "다듬질 블록",
+                        )
+                    } else {
+                        NcCard(
+                            sol.program,
+                            "G97 S 줄은 회전수를 넣었을 때만 씁니다(나사는 회전수 일정). G00 은 사이클 시작점이고, G76 은 끝나면 이 점으로 돌아옵니다. " +
+                                "P(k) · Q(Δd) · 첫 줄 Q(Δdmin) 는 소수점 없이 최소 지령 단위(0.001 mm = μm) 정수입니다 — 0.0001 mm 단위(IS-C) 기계는 이 값을 10배로 읽으니 " +
+                                "그런 기계에서는 쓰지 마세요. 주축 회전(M03/M04) · 공구 호출 · 냉각은 기계에 맞게 앞에 넣습니다.",
+                            programName = "G76 나사 프로그램",
+                            facts = listOf(
+                                NcFact("P · Q 는 μm 정수 (0.001 mm 기계)", WarnLevel.Warn),
+                                NcFact("M03/M04 · 공구 호출 없음"),
+                                NcFact("끝나면 시작점으로"),
+                            ),
+                            top = tabs,
+                        )
+                    }
                 }
                 if (chain.sheetOpen) Spacer(Modifier.height(440.dp))
             }
@@ -546,7 +584,7 @@ private fun ThreadSheet(pick: Pick, s: ThreadState, onDismiss: () -> Unit) {
     }
 }
 
-/** 헤더 도움말 버튼의 사용법: 나사 고르기 · 값 넣기 · 고급 설정 · G76 두 줄과 분석 · 경고 */
+/** 헤더 도움말 버튼의 사용법: 나사 고르기 · 값 넣기 · 고급 설정 · G92 · G76 프로그램과 분석 · 경고 */
 internal val ThreadHelp = listOf(
     HelpSection(
         "나사 고르기",
@@ -584,9 +622,12 @@ internal val ThreadHelp = listOf(
         ),
     ),
     HelpSection(
-        "G76 두 줄과 분석",
+        "G92 · G76 프로그램과 분석",
         listOf(
-            "FANUC 두 줄 형식입니다: G76 P(m)(r)(a) Q(Δdmin) R(d) / G76 X(골) Z(나사 끝) P(k) Q(Δd) F(리드). 곧은 나사라 둘째 줄의 R(i)는 쓰지 않습니다.",
+            "NC 카드는 탭으로 G92 다회(처음) · G76 두 줄을 고릅니다. G92 는 분석표의 X 를 회마다 한 줄씩 쓰고(G92X…Z…F… 뒤는 X 만), 아래 다듬질 블록(마지막 X 두 번)은 " +
+                "버를 없앤 뒤 따로 넣습니다. G92 는 X 로 곧게 절입해 나사산 각도 · 면취량을 쓰지 않습니다. G92 앞 M23 · 마지막 X 뒤 M24 는 나사 끝 빼기 켬 · 끔입니다" +
+                "(흔한 FANUC 계열 기계 M 정의 — 기계마다 다를 수 있음).",
+            "G76 은 FANUC 두 줄 형식입니다: G76 P(m)(r)(a) Q(Δdmin) R(d) / G76 X(골) Z(나사 끝) P(k) Q(Δd) F(리드). 곧은 나사라 둘째 줄의 R(i)는 쓰지 않습니다.",
             "테두리 칸은 눌러서 고칩니다(키패드). 테 없는 주황 값은 자동 계산 값이고, 누르면 어디서 나온 값인지 알려 줍니다. 넣어야 할 빈칸은 파란 '?' 입니다.",
             "P(k) · Q(Δd) · Q(Δdmin) 는 소수점 없이 μm(0.001 mm) 정수입니다. 0.0001 mm 단위(IS-C) 기계는 10배로 읽으니 그런 기계에는 쓰지 마세요.",
             "X 는 목표 피치경에서 날 단면(60° + 인선 R)의 폭이 피치선에서 P/2 가 되는 깊이로 정한 골 지름이고, k 는 목표 산봉우리 지름에서 X 까지(반경)입니다. " +

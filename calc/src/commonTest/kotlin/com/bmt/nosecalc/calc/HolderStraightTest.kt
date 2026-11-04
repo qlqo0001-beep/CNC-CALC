@@ -18,8 +18,8 @@ import kotlin.test.assertTrue
 /**
  * 10-28 사용자 결정 두 가지:
  * 1. 안전 여유는 직선(유클리드) 거리 — 볼록 조각과 소재 경계 사이 거리([clearance])의 손 계산 값, 깎는 면 예외([Bore.faceFlags])의 범위.
- * 2. 라운드 기계 보정 프로그램의 G00 을 팁에 맞게 띄운다([RoundCalc.machine]) — 표준 팁은 그대로, 비표준 팁은 손 계산, 무작위 비표준 팁에서
- *    기계 보정 진입에서 멈추는(MACHINE_ENTRY) 비율이 줄었는지
+ * 2. 라운드 기계 보정 프로그램의 진입(10-28 에는 G00 띄우기, 계획 단계 4 부터 회사 꼴 — 보정 중 블록이라 팁과 상관없다): 회사 꼴 손 계산,
+ *    무작위 비표준 팁에서 기계 보정 진입 판정(MACHINE_ENTRY · 그 끝점)이 표준 팁과 같은지
  */
 class HolderStraightTest {
     private val r = 0.4
@@ -108,54 +108,28 @@ class HolderStraightTest {
     }
 
     /**
-     * 기계 보정 G00 — 표준 팁이 제 쪽 요소를 따라가면 lift = 0: Z 여유 ≥ r 이면 노즈R 0 풀이와 같은 글(내경 · 외경 TYPE, 3점호 Z 진입).
-     * Z 여유 < r 이면 G00 이 r 만큼(직접 보정과 같은 c = max(Z 여유, r)) — 보정 시작 이동이 r 보다 짧지 않게(예전에는 Z 여유 0 이면 시작 이동이 없었다)
+     * 기계 보정 프로그램 = 회사 꼴(계획 단계 4) 손 계산(지은 도형, 0.4R · Z 여유 1). 외경 TYPE 3(Ø20 · SR12.5 · CR1): 돔 끝이 축 위(처음 접선 +X)라 진입점은 축 너머
+     * X −2c = X−2 · Z0(첫 깎는 줄이 축 너머 같은 면을 타고 올라옴 — 노즈 접점이 첫 점), 끝 Z-10 은 척 쪽 막힌 끝이라 공구 쪽 직각 X22(노즈가 교점에서 멈춤) 뒤 벽 너머에서
+     * +Z 로 (1 + √2)·0.4 + 0.02 = 0.986(Z-9.014). 내경 TYPE 3 바닥 돔: 끝 원호가 축에서 끝나 끝 접선으로 축 너머 r + 0.01(X−0.82) 뒤 +Z.
+     * 형상 줄은 노즈R 0 풀이와 같고, 글은 팁 번호와 상관없다(보정 줄이 이동 없는 혼자 줄)
      */
     @Test
-    fun machineStandardTipUnchanged() {
+    fun machineCompanyFrame() {
         val outer3 = RoundInput(type = 3, mainR = 12.5, d1 = 20.0, cornerR1 = 1.0, noseR = 0.4)
-        val inputs = listOf(step, step.copy(through = true), dome, outer3, RoundInput(type = 1, mainR = 10.0, cornerR1 = 1.0, l1 = 14.8, noseR = 0.8))
-        for (i in inputs) {
+        assertEquals(
+            listOf("G42", "G0X-2.Z20.", "Z0.", "G1X0.F.1", "G3X19.565Z-4.719R12.5", "X20.Z-5.341R1.", "G1Z-10.", "X22.F.3", "Z-9.014", "G40", "G0Z200."),
+            RoundCalc.machine(outer3).solution!!.nc,
+        )
+        assertEquals(
+            listOf("G41", "G0X20.Z20.", "Z1.", "G1Z0.F.1", "Z-9.659", "G3X19.565Z-10.281R1.", "X0.Z-15.R12.5", "G1X-.82F.3", "Z-14.007", "G40", "G0Z200."),
+            RoundCalc.machine(dome).solution!!.nc,
+        )
+        for (i in listOf(step, step.copy(through = true), dome, outer3, RoundInput(type = 1, mainR = 10.0, cornerR1 = 1.0, l1 = 14.8, noseR = 0.8))) {
             val m = RoundCalc.machine(i).solution!!
-            assertEquals(RoundCalc.calc(i.copy(noseR = 0.0)).solution!!.nc, m.nc, "$i")
-            assertNull(m.lead)
+            for (tip in 0..9) assertEquals(m.nc, RoundCalc.machine(i.copy(tip = tip)).solution!!.nc, "$i 팁 $tip")
+            // 도면(형상 줄의 좌표)은 노즈R 0 풀이와 같다
+            assertEquals(RoundCalc.calc(i.copy(noseR = 0.0)).solution!!.drawing, m.drawing, "$i")
         }
-        // 무작위 TYPE(표준 팁, Z 여유 ≥ r)
-        val rnd = Random(28)
-        val g = GeometricVerifyTest()
-        var n = 0
-        repeat(400) {
-            val inner = rnd.nextBoolean()
-            val i = g.randomRound(rnd.nextInt(if (inner) 2 else 1, 7), rnd, inner = inner).input.copy(tip = null)
-            if (i.zClear < i.noseR) return@repeat
-            val m = RoundCalc.machine(i).solution ?: return@repeat
-            n++
-            assertEquals(RoundCalc.calc(i.copy(noseR = 0.0)).solution!!.nc, m.nc, "$i")
-        }
-        assertTrue(n > 150, "$n")
-        // Z 여유 0 < r: 외경 TYPE 3 의 G00 = (Z r, X0) 다음 G01 Z0 — 노즈R 0 풀이는 G00 이 첫 점 Z0 이라 보정 시작 이동이 없었다
-        assertEquals(listOf("G00 X0. Z0.4", "G01 Z0."), RoundCalc.machine(outer3.copy(zClear = 0.0)).solution!!.nc.take(2))
-        assertEquals("G00 X0. Z0.", RoundCalc.calc(outer3.copy(zClear = 0.0, noseR = 0.0)).solution!!.nc.first())
-    }
-
-    /**
-     * 비표준 팁의 띄운 G00 손 계산. 외경 TYPE 3(돔 끝이 축 위 (0, 0), 시작 접선 +X, G42 공구 쪽 n = (1, 0)) · 팁 4 tv = (0.4, −0.4):
-     * lift = r + n·tv = 0.8, 진입은 Z(시작 선에 직각)라 G00 = (Z c + lift, X0) = Z1.8 — 노즈 (1.4, 0.4) 가 끝 면에서 c + r = 1.4.
-     * 3점호 외경 Z 진입도 같은 식
-     */
-    @Test
-    fun machineLiftHandCalc() {
-        val outer3 = RoundInput(type = 3, mainR = 12.5, d1 = 20.0, cornerR1 = 1.0, noseR = 0.4, tip = 4)
-        val m = RoundCalc.machine(outer3).solution!!
-        assertEquals("G00 X0. Z1.8", m.nc.first())
-        assertEquals(RoundCalc.calc(outer3.copy(noseR = 0.0)).solution!!.nc.drop(1), m.nc.drop(1))
-        assertNull(m.lead)
-        val nose0 = m.entry - NoseComp.tipVector(4, 0.4)
-        assertEquals(Pt(1.4, 0.4), nose0)
-        // 표준 팁 3 이면 그대로 Z1
-        assertEquals("G00 X0. Z1.", RoundCalc.machine(outer3.copy(tip = null)).solution!!.nc.first())
-        // 팁 0(중심): lift = r → Z1.4
-        assertEquals("G00 X0. Z1.4", RoundCalc.machine(outer3.copy(tip = 0)).solution!!.nc.first())
     }
 
     /**
@@ -181,33 +155,36 @@ class HolderStraightTest {
     }
 
     /**
-     * 무작위 비표준 팁(내경 TYPE 2~6 · 3점호 정방향 · 뒤보링 — 팁 0~9 가운데 표준이 아닌 것, Z 여유 0~1.5)에서 기계 보정 프로그램이 제 진입(G00 점 ·
-     * 보정 시작 블록)에서 멈추는(MACHINE_ENTRY) 사례 수: 노즈R 0 풀이(예전) 대 [RoundCalc.machine](띄운 G00). 바는 구멍에 맞춰 가늘게(지름 = 입구 반경의
-     * 0.6 배, 바 윗면이 노즈 접점보다 1 mm 아래) 하고, 직접 보정이 제 진입을 지나는 사례만 센다 — 둘 다 진입에서 막히는 것은 바 탓이지 G00 자리 탓이 아니다.
-     * 띄운 프로그램은 검사기([StopChecker])로도 본다
+     * 무작위 비표준 팁(내경 TYPE 2~6 · 3점호 정방향 · 뒤보링 — 팁 0~9 가운데 표준이 아닌 것, Z 여유 0~1.5)에서 기계 보정 진입 판정이 표준 팁(팁을 비운 풀이)과 같다:
+     * MACHINE_ENTRY 가 있고 없음, 있으면 그 끝점(요소 · 비율 · 명령점). 회사 꼴 진입은 보정 혼자 줄 뒤 보정 중 블록이라 노즈가 보정선 위 — 팁과 상관없다.
+     * (10-28 에는 노즈R 0 풀이의 G00 노즈가 비표준 팁에서 소재에 박혀 이 사례들의 80 % 가 진입에서 멈췄고 띄운 G00 으로 0 % 가 됐다 — 그 G00 이 없어져 비교 대상이
+     * 바뀌었다. 노즈R 0 풀이는 이제 기계 보정 프로그램이 아니라 계획이 보지 않는다 — [HolderStopTest.machineEntryNonStandardTip].)
+     * 바는 구멍에 맞춰 가늘게(지름 = 입구 반경의 0.6 배, 바 윗면이 노즈 접점보다 1 mm 아래). 비표준 팁 풀이는 검사기([StopChecker])로도 본다
      */
     @Test
-    fun machineEntryRatioDrops() {
+    fun machineEntryTipIndependent() {
         val rnd = Random(1028)
         val g = GeometricVerifyTest()
         var cases = 0
-        var oldStop = 0
         var newStop = 0
         val fails = mutableListOf<String>()
         fun bar(rho: Double, rr: Double): BoringBar {
             val dia = max(1.0, 0.6 * rho)
             return BoringBar(dia, HolderCheck.fMin(dia, 95.0, rr) + 1.0, InsertShape.C, HolderCheck.edgeMin(InsertShape.C, rr) + 0.5, 95.0)
         }
-        fun run(name: String, sol: RoundSolution, old: RoundSolution, new: RoundSolution, face: Boolean, rr: Double, b: BoringBar) {
+        fun run(name: String, sol: RoundSolution, solStd: RoundSolution, new: RoundSolution, newStd: RoundSolution, face: Boolean, rr: Double, b: BoringBar) {
             for (safe in listOf(0.0, 0.5)) {
-                val po = HolderStop.plan(sol, old, rr, face, b, safe)
-                if (po.result.skip != null) return
                 val pn = HolderStop.plan(sol, new, rr, face, b, safe)
-                // 직접 보정이 제 진입에서 막히면(바 탓) 세지 않는다
-                if (StopWarning.UNSAFE_AT_ENTRY in po.warnings || StopWarning.NOTHING_CUT in po.warnings) continue
+                if (pn.result.skip != null) return
+                val ps = HolderStop.plan(solStd, newStd, rr, face, b, safe)
                 cases++
-                if (StopWarning.MACHINE_ENTRY in po.warnings) oldStop++
-                if (StopWarning.MACHINE_ENTRY in pn.warnings) newStop++
+                val stop = StopWarning.MACHINE_ENTRY in pn.warnings
+                if (stop) newStop++
+                val en = pn.machineEnd
+                val es = ps.machineEnd
+                val same = stop == (StopWarning.MACHINE_ENTRY in ps.warnings) && (!stop || (en != null && es != null && en.element == es.element &&
+                    abs(en.t - es.t) < 1e-9 && (en.at.machine!! - es.at.machine!!).length < 1e-9))
+                if (!same) fails += "$name 안전 여유 $safe: 비표준 팁 ${pn.warnings} ${en?.element} ${en?.t} ${en?.at?.machine} · 표준 팁 ${ps.warnings} ${es?.element} ${es?.t} ${es?.at?.machine}"
                 val f = mutableListOf<String>()
                 StopChecker(sol, new, rr, face, b, safe).check(pn, 0.01, f)
                 fails += f.map { "$name 안전 여유 $safe: $it" }
@@ -219,7 +196,8 @@ class HolderStraightTest {
             val tip = (0..9).filter { it != 2 }[rnd.nextInt(9)]
             val i = i0.copy(noseR = rr, tip = tip, zClear = (rnd.nextDouble(0.0, 1.5) * 1000).toLong() / 1000.0)
             val sol = RoundCalc.calc(i).solution ?: return@repeat
-            run("$i", sol, RoundCalc.calc(i.copy(noseR = 0.0)).solution!!, RoundCalc.machine(i).solution!!, true, rr, bar(sol.drawing.segs.first().start.x, rr))
+            val std = i.copy(tip = null)
+            run("$i", sol, RoundCalc.calc(std).solution!!, RoundCalc.machine(i).solution!!, RoundCalc.machine(std).solution!!, true, rr, bar(sol.drawing.segs.first().start.x, rr))
         }
         repeat(160) { n ->
             val rr = listOf(0.2, 0.4, 0.8)[rnd.nextInt(3)]
@@ -241,11 +219,11 @@ class HolderStraightTest {
             )
             val sol = RoundCalc.arc3(a).solution ?: return@repeat
             val rho = min(sol.drawing.segs.first().start.x, sol.drawing.segs.last().end.x)
-            run("$a", sol, RoundCalc.arc3(a.copy(noseR = 0.0)).solution!!, RoundCalc.machine(a).solution!!, false, rr, bar(rho, rr))
+            val aStd = a.copy(tip = null)
+            run("$a", sol, RoundCalc.arc3(aStd).solution!!, RoundCalc.machine(a).solution!!, RoundCalc.machine(aStd).solution!!, false, rr, bar(rho, rr))
         }
-        println("[MACHINE_ENTRY] 비표준 팁 무작위 $cases 사례(안전 여유 0 · 0.5, 직접 보정은 진입을 지남): 노즈R 0 풀이 $oldStop (${oldStop * 100 / max(1, cases)} %) → 띄운 G00 $newStop (${newStop * 100 / max(1, cases)} %)")
+        println("[MACHINE_ENTRY] 비표준 팁 무작위 $cases 사례(안전 여유 0 · 0.5): 회사 꼴 진입에서 멈춤 $newStop (${newStop * 100 / max(1, cases)} %) — 표준 팁과 같은 판정")
         assertTrue(cases > 200, "$cases")
         assertTrue(fails.isEmpty(), fails.take(10).joinToString("\n"))
-        assertTrue(newStop * 4 <= oldStop, "띄운 G00 이 진입에서 멈추는 사례 $newStop 가 예전 $oldStop 의 1/4 을 넘는다")
     }
 }

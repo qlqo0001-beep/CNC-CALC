@@ -24,7 +24,7 @@ class ThreadStateTest {
         val r = G76Calc.calc(s.input())
         val sol = assertNotNull(r.solution)
         assertEquals(emptyList(), r.warnings)
-        assertEquals(listOf("G97 S1821", "G00 X8.322 Z5.", "G76 P021060 Q35 R0.02", "G76 X4.688 Z-25. P734 Q200 F1.27"), sol.program)
+        assertEquals(listOf("G97S1821", "G0X8.322Z5.", "G76P021060Q35R.02", "G76X4.688Z-25.P734Q200F1.27"), sol.program)
         val words = g76Words(s, sol)
         assertEquals(sol.nc, words.map(::ncText))
         // 고칠 수 있는 칸: 첫 줄 m · Δdmin · d, 둘째 줄 Z · Δd — 나머지는 자동(주황)
@@ -46,8 +46,8 @@ class ThreadStateTest {
         assertEquals(listOf("사이즈", "Z축 시작점", "가공 목표점 (Z)", "첫 절입 Δd"), s.missing())
         assertEquals(emptySet(), s.bad())
         val words = g76Words(s, null)
-        assertEquals("G76 P021060 Q35 R0.02", ncText(words[0]))
-        assertEquals("G76 X— Z? P— Q? F—", ncText(words[1]))
+        assertEquals("G76P021060Q35R.02", ncText(words[0]))
+        assertEquals("G76X—Z?P—Q?F—", ncText(words[1]))
         assertTrue(words[1].filter { it.letter == "Z" || it.letter == "Q" }.all { it.missing })
         assertEquals(ThreadClass.M6g, s.shownClass)
         assertEquals(60, s.shownAngle)
@@ -117,13 +117,15 @@ class ThreadStateTest {
         assertEquals(fine, s.spec)
     }
 
-    /** 저장 · 되살리기: 모든 칸 · 고른 것이 그대로 */
+    /** 저장 · 되살리기: 모든 칸 · 고른 것(NC 탭 포함 — 처음 값은 G92 다회)이 그대로 */
     @Test
     fun saverRoundTrip() {
+        assertEquals(ThreadNc.G92, ThreadState().nc)
         val s = threadWarn().apply {
             pickClass(ThreadClass.UN3A)
             angle = 55
             chamfer = 15
+            nc = ThreadNc.G76
         }
         val scope = SaverScope { true }
         val saved = with(ThreadState.Saver) { scope.save(s) }!!
@@ -131,6 +133,7 @@ class ThreadStateTest {
         assertEquals(s.input(), back.input())
         assertEquals(s.material, back.material)
         assertEquals(s.advOpen, back.advOpen)
+        assertEquals(ThreadNc.G76, back.nc)
         ThreadField.entries.forEach { assertEquals(s.value(it), back.value(it)) }
     }
 

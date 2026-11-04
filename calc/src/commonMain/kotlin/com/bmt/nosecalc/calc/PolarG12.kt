@@ -479,31 +479,32 @@ object PolarG12 {
         b.text(comment)
         b.text("G98")
         b.lathe(h.start)
-        b.zMove("G00", h.zUp, null)
-        b.zMove("G01", h.depth, h.feed)
+        b.zMove("G0", h.zUp, null)
+        b.zMove("G1", h.depth, h.feed)
         b.g12(h.feed)
         for (cut in plan.cuts) {
-            for (s in cut.pre) b.seg("G01", s, null)
+            for (s in cut.pre) b.seg("G1", s, null)
             val paths = centerPaths(cut.comp, r, direct)
             val first = paths.first().first().start
             val last = paths.last().last().end
             if (direct) {
-                b.move("G01", first, listOf(Line(cut.o, first)))
-                for (segs in paths) for (s in segs) b.seg("G01", s, null)
-                b.move("G01", cut.o3, listOf(Line(last, cut.o3)))
+                b.move("G1", first, listOf(Line(cut.o, first)))
+                for (segs in paths) for (s in segs) b.seg("G1", s, null)
+                b.move("G1", cut.o3, listOf(Line(last, cut.o3)))
             } else {
-                b.move("G41 G01", cut.comp.first().start, listOf(Line(cut.o, first)))
-                for ((k, s) in cut.comp.withIndex()) b.seg("G01", s, if (s is Arc) null else paths[k], r)
-                b.move("G40 G01", cut.o3, listOf(Line(last, cut.o3)))
+                b.move("G1", cut.comp.first().start, listOf(Line(cut.o, first)), "G41")
+                for ((k, s) in cut.comp.withIndex()) b.seg("G1", s, if (s is Arc) null else paths[k], r)
+                b.move("G1", cut.o3, listOf(Line(last, cut.o3)), "G40")
             }
         }
         b.g13()
-        b.zMove("G00", h.zUp, null)
+        b.zMove("G0", h.zUp, null)
         return PolarProgram(b.blocks)
     }
 
     /**
-     * 줄 모으기. 앞 줄과 같은 X · C 글은 빼고(모달), 움직임 없는 줄은 버린다(길은 앞 줄에 붙임). 줄마다 G 를 쓴다(원본 07.jpg 처럼).
+     * 줄 모으기 — 회사 표기(`G1X-36.95C-40.` · `.5` · 낱말 붙여 씀, NcLines 와 같다). 앞 줄과 같은 X · C 글은 빼고 이동 G 도 바뀔 때만 쓴다(모달),
+     * 움직임 없는 줄은 버린다(길은 앞 줄에 붙임). G12.1 · G13.1 뒤 첫 이동 줄은 X · C 와 함께 이동 G 도 다시 쓴다(모드가 바뀌어 X · C 의 뜻이 바뀐다).
      * 90° 넘는 원호는 같은 각으로 나눠 줄마다 90° 이하(NcLines 와 같은 까닭 — R 지령 원호의 중심 오차).
      */
     private class Builder(private val xDia: Boolean) {
@@ -516,6 +517,11 @@ object PolarG12 {
         private var polar = false
         private var feed: Double? = null
 
+        /** 마지막으로 쓴 이동 G(없으면 다음 이동 줄이 G 를 쓴다) */
+        private var motion: String? = null
+
+        private fun g(code: String): String = (if (code != motion) code else "").also { motion = code }
+
         fun text(t: String) {
             blocks += PolarBlock(t, emptyList(), x, c, z, polar)
         }
@@ -524,12 +530,12 @@ object PolarG12 {
         fun lathe(p: Pt) {
             x = 2 * p.x
             c = 0.0
-            text("G00 X${Fmt.nc(2 * p.x)} C0.")
+            text("${g("G0")}X${Fmt.word(2 * p.x)}C0.")
         }
 
-        fun zMove(g: String, zz: Double, f: Double?) {
+        fun zMove(code: String, zz: Double, f: Double?) {
             z = zz
-            text("$g Z${Fmt.nc(zz)}" + (f?.let { " F${Fmt.nc(it)}" } ?: ""))
+            text("${g(code)}Z${Fmt.word(zz)}" + (f?.let { "F${Fmt.word(it)}" } ?: ""))
         }
 
         /** G12.1 — 모드 안 첫 이동 줄은 X · C 를 다 쓰고 F 를 붙인다 */
@@ -538,6 +544,7 @@ object PolarG12 {
             xw = null
             cw = null
             feed = f
+            motion = null
             text("G12.1")
         }
 
@@ -545,26 +552,28 @@ object PolarG12 {
             polar = false
             xw = null
             cw = null
+            motion = null
             text("G13.1")
         }
 
-        fun move(g: String, p: Pt, path: List<Seg>) = put(g, p, "", path)
+        /** [comp] = 앞에 붙일 보정 G(G40 · G41) */
+        fun move(code: String, p: Pt, path: List<Seg>, comp: String = "") = put(code, p, "", path, comp)
 
         /** 도면 요소 한 개. 원호는 조각마다 줄, 직선은 [linePath](기계 흉내의 보정 경로 — null 이면 쓴 그대로) */
-        fun seg(g: String, s: Seg, linePath: List<Seg>?, r: Double = 0.0) {
+        fun seg(code: String, s: Seg, linePath: List<Seg>?, r: Double = 0.0) {
             when (s) {
-                is Line -> put(g, s.end, "", linePath ?: listOf(s))
+                is Line -> put(code, s.end, "", linePath ?: listOf(s))
                 is Arc -> for (piece in pieces(s)) {
-                    put(if (s.cw) "G02" else "G03", piece.end, " R" + Fmt.nc(s.radius), listOf(if (r > 0) offset(piece, r) else piece))
+                    put(if (s.cw) "G2" else "G3", piece.end, "R" + Fmt.word(s.radius), listOf(if (r > 0) offset(piece, r) else piece))
                 }
             }
         }
 
-        private fun put(g: String, p: Pt, tail: String, path: List<Seg>) {
+        private fun put(code: String, p: Pt, tail: String, path: List<Seg>, comp: String = "") {
             val xv = if (xDia) 2 * p.x else p.x
-            val nx = Fmt.nc(xv)
-            val nc = Fmt.nc(-p.z)
-            val words = (if (nx != xw) " X$nx" else "") + (if (nc != cw) " C$nc" else "")
+            val nx = Fmt.word(xv)
+            val nc = Fmt.word(-p.z)
+            val words = (if (nx != xw) "X$nx" else "") + (if (nc != cw) "C$nc" else "")
             xw = nx
             cw = nc
             x = xv
@@ -575,9 +584,9 @@ object PolarG12 {
                 blocks += prev.copy(path = prev.path + path)
                 return
             }
-            val fw = feed?.let { " F${Fmt.nc(it)}" } ?: ""
+            val fw = feed?.let { "F${Fmt.word(it)}" } ?: ""
             feed = null
-            blocks += PolarBlock(g + words + tail + fw, path, x, c, z, polar)
+            blocks += PolarBlock(comp + g(code) + words + tail + fw, path, x, c, z, polar)
         }
     }
 

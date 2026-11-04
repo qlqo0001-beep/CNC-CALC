@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
 
 /**
  * 나사 G76 화면의 숫자 · NC 지킴이(UiGoldenTest 와 같은 방식 · 같은 golden 폴더의 thread-*.txt). 스크린샷 상태마다 화면과 똑같이
- * 계산기 입력을 만들어 경고 글 · 한계 치수 · 목표 · G76 두 줄(화면 낱말을 이은 글 = 계산기 글) · 분석표 · 프로그램 · 결과 칸을 적는다.
+ * 계산기 입력을 만들어 경고 글 · 한계 치수 · 목표 · G76 두 줄(화면 낱말을 이은 글 = 계산기 글) · 분석표 · 프로그램(G76 · G92 다회 · 다듬질 블록) · 결과 칸을 적는다.
  * 일부러 바꿨을 때만 다시 쓴다: `gradlew :shared:jvmTest --tests '*ThreadGoldenTest*' -DupdateGolden=true`
  */
 class ThreadGoldenTest {
@@ -69,6 +69,8 @@ class ThreadGoldenTest {
             line("목표 ${sol.target}% · 인선 R ${f(sol.tipR)} · 피치경 ${f(sol.pitchDia)} · 산봉우리 ${f(sol.crestDia)} · X ${f(sol.x)} · k ${f(sol.height)} · 시작 X ${f(sol.startX)}")
             sol.passes.forEach { p -> line("  ${p.n} 깊이 ${f(p.depth)} 절입 ${f(p.cut)} X ${f(p.xDia)}${if (p.finish) " 정삭" else ""}") }
             sol.program.forEach { line("NC $it") }
+            sol.g92.forEach { line("G92 $it") }
+            sol.g92Finish.forEach { line("다듬질 $it") }
             line("분당 이송 ${sol.feedPerMin?.let(::f)}")
             resultCells(s, sol).forEach { (a, b, c) -> line("칸 $a = $b ($c)") }
         }

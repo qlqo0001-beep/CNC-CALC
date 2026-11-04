@@ -26,6 +26,7 @@ import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
 import com.bmt.nosecalc.calc.distTo
+import com.bmt.nosecalc.calc.legacy
 import com.bmt.nosecalc.calc.sim.GSim
 import com.bmt.nosecalc.calc.sim.IssueCode
 import com.bmt.nosecalc.calc.sim.CompStartup
@@ -56,12 +57,14 @@ import kotlin.test.assertTrue
 /**
  * 독립 검증(2026-10-29) — simulator-design.md 13.7 고침(TaperCalc.ncG41G42 끝 · 시작 · 후퇴, 이동 없는 G40, 라운드 안내)을
  * 손 계산 · FANUC 설명서(FF B-64604EN-1/01 5.4.2 · 5.4.4 · 5.4.6 · 부록 A No.1401, F0 B-61394E/08 14.3) · 사용자 결정으로 본다.
+ * 2026-11-04: G41/G42 글이 회사 꼴(계획 단계 4 — 보정 혼자 줄 · Z20. 진입 · F.1 · F.3 빼는 줄 · 이동 없는 G40 · G0Z200.)이 되어 같은 사례를 새 꼴의
+ * 손 계산으로 다시 세웠다(HEAD 글의 파고듦 · 남김 손 계산은 그대로 — 고치기 전 기록). 라운드 안내는 없어지고 계산기가 회사 꼴 글을 낸다.
  * - [handNumbers]: 재현 글 둘과 대표 사례(뒤집기 외경 · 내경 TYPE 3 끝점 넣음, 계산기 역방향 + 뒤집기 TYPE 2 의 0.508)를 손으로 푼 NC 글 · 노즈 자리와
  *   고친 계산기 · GSim 을 맞춘다. 고치기 전(HEAD) 글의 파고듦 · 남김도 손으로 다시 낸다.
  * - [sweepUserDecisions]: 넓은 사례(팁 0~8, r 0.4 · 0.8, Z 여유 0 포함)에서 직접 보정 글 · 보정점 불변(HEAD 사본 [TaperCalcHead] 와 맞춤),
  *   끝좌표 너머 · 취소 뒤 G00, 파고듦(꺾인 · 직선 급송), 끝 꼭짓점 남김, 형식 C(SUV = 1) 기계의 이동 없는 G40, 길이 0 보정 블록,
  *   부품 앞 끝면 뒤 G00 을 센다. 숫자는 출력, 단언은 지켜져야 하는 것만.
- * - [roundGuide]: 라운드 기계 보정 안내 글의 시작 · 취소 꼴을 손 계산과 GSim 으로.
+ * - [roundGuide]: 라운드 기계 보정 글(회사 꼴)의 시작 · 끝을 손 계산과 GSim(형식 A · B / C)으로.
  */
 class VerifyG4xHandTest {
     private val pre = listOf("T0101", "G97 S1000 M03", "G99 F0.2")
@@ -169,6 +172,14 @@ class VerifyG4xHandTest {
 
     // ================================================================ 1. 손 계산
 
+    /** 회사 꼴 좌표 낱말(X 직경 · Z) */
+    private fun xzw(p: Pt) = "X${Fmt.word(p.xDia)}Z${Fmt.word(p.z)}"
+
+    /** G41/G42 글을 형식 A · B 와 C 로 — 깎는 줄 노즈는 형식과 상관없다(회사 꼴, 보정 줄이 이동 없는 혼자 줄) */
+    private fun forms(nc: List<String>, r: Double, tip: Int, rapid: RapidPath = RapidPath.DOGLEG): List<SimRun> = CompStartup.values().map { f ->
+        GSim.run(SimInput((pre + nc).joinToString("\n"), MachineSetup(rapidPath = rapid, compStartup = f), mapOf(1 to ToolOffset(r, tip))))
+    }
+
     @Test
     fun handNumbers() {
         val s2 = sqrt(0.5)
@@ -183,16 +194,15 @@ class VerifyG4xHandTest {
             val e2 = Pt(-6.0, 24.0)
             val uS = Pt(-s2, -s2)
             val nS = uS.left() // G41 = 진행 왼쪽(구멍 안쪽 · 앞)
-            val lift = r + (nS dot tv) // 0.8 — G40 노즈가 경사 보정선 안쪽으로 들어오는 만큼
-            assertEquals(0.8, lift, 1e-12)
-            // 경사 연장선 위 첫 꺾임보다 r + 0.01 앞(2026-10-29 판정 고침 — `G01 X60. Z0.` 의 보정 노즈가 0.01 앞으로 가게. 꼭 r 이면 길이 0 이라 반올림으로
-            // 거꾸로 가 FANUC 간섭 검사(FF 5.4.6)에 걸릴 수 있다)
-            val past = 0.01
-            val lead = e1 - uS * (r + past)
-            val g00 = lead + nS * (c + lift)
-            val exitD = e2 + (e2 - e1) * (c / 6.0) + nS * lift // 볼록 끝(비움): 경사를 Z 로 c 늘인 점 + lift
-            val want = listOf("(R0.8 T1)", "G00 ${at(g00)}", "G41 G01 ${at(lead)}", "G01 X60. Z0.", "G01 X48. Z-6.", "G40", "G01 ${at(exitD)}")
-            assertEquals(listOf("(R0.8 T1)", "G00 X58.6 Z1.846", "G41 G01 X61.146 Z0.573", "G01 X60. Z0.", "G01 X48. Z-6.", "G40", "G01 X44.869 Z-6.434"), want)
+            // 회사 꼴(계획 단계 4): T1 볼록 → 진입점 = 경사 연장선을 Z 로 c(Z1 X62). 첫 깎는 줄이 −Z 라 Z20. 에서 Z 줄로 곧장 — Z 줄 노즈(G41 · −Z 는 −X 쪽)
+            // 반경 30.2 는 Z1 둘레에 도면이 없어 된다. 끝(비움, 볼록 T2)은 경사를 큰 축으로 c 늘인 X46 Z-7, G40 자리 (1 + √2)·r + 0.02 = 1.951 이 구멍(반경 24 —
+            // 비운 끝 요소의 반직선)에서 1 이라 −X 로 0.951 더(반경 22.049)
+            val room = (1 + sqrt(2.0)) * r + 0.02
+            val e0 = e1 + (e1 - e2) * (c / 6.0)
+            val x1 = e2 + (e2 - e1) * (c / 6.0)
+            val q = Pt(x1.z, 24.0 - room)
+            val want = listOf("G41", "G0X${Fmt.word(e0.xDia)}Z20.", "Z${Fmt.word(e0.z)}", "G1X60.Z0.F.1", "X48.Z-6.", "${xzw(x1)}F.3", "X${Fmt.word(q.xDia)}", "G40", "G0Z200.")
+            assertEquals(listOf("G41", "G0X62.Z20.", "Z1.", "G1X60.Z0.F.1", "X48.Z-6.", "X46.Z-7.F.3", "X44.097", "G40", "G0Z200."), want)
             val inps = listOf(
                 TaperInput(inner = true, type = 1, noseR = r, tip = 1, x1 = 60.0, z1 = 0.0, x2 = 48.0, z2 = -6.0),
                 TaperInput(true, 1, true, r, null, 48.0, -6.0, 60.0, 0.0, flip = true),
@@ -203,32 +213,24 @@ class VerifyG4xHandTest {
                 assertEquals(want, res.solution!!.ncG41G42, "$inp")
             }
             val s = TaperCalc.calc(inps[0]).solution!!
-            for (rp in RapidPath.values()) {
-                val run = sim(want, r, 1, rp)
+            for (rp in RapidPath.values()) for (run in forms(want, r, 1, rp)) {
                 assertNull(run.stop, "${run.stop}")
-                // G40 상태: 노즈 = 지령점 − 팁 벡터
-                near(Pt.ofDia(1.846, 58.6) - tv, nose(run, 1)?.second, "재현 A G00 노즈")
-                // 시작 블록과 다음 블록(경사 연장선 → 경사)이 공구 쪽으로 직각 = 안쪽 모서리 → 두 보정선의 교점 = E1 + nS·r − uS·0.01 (FF 5.4.2, 형식 A·B 같음)
-                near(e1 + nS * r - uS * past, nose(run, 2)?.second, "재현 A 시작 블록 끝(교점)")
-                val z = nose(run, 3)!!
-                assertEquals(past, (z.second - z.first) dot uS, tol, "재현 A `G01 X60. Z0.` 의 보정 노즈는 0.01 앞으로: ${c(z.first)}→${c(z.second)}")
-                // 이동 없는 G40 앞 블록 끝 = 끝 법선(FF 그림 5.4.4(e) — 형식 A·B), G40 블록은 움직이지 않음, 다음 G01 이 벡터를 지움
-                near(e2 + nS * r, nose(run, 4)?.second, "재현 A 끝 법선")
-                assertNull(nose(run, 5), "G40 블록은 움직이지 않는다")
-                near(Pt.ofDia(-6.434, 44.869) - tv, nose(run, 6)?.second, "재현 A 후퇴 노즈")
-                // 시작 블록의 곧은 노즈 경로가 끝면 모서리(Z0 X60)에서 r 이상(손: 그 끝에서 꼭 r — 다가가며 끝남)
-                val n1 = nose(run, 1)!!.second
-                val n2 = nose(run, 2)!!.second
-                assertTrue(segDist(n1, n2, e1) >= r - tol, "재현 A 시작 블록이 끝면 모서리에 ${segDist(n1, n2, e1)}")
+                // Z 줄 끝(진입점): Z 줄(−Z, 공구 쪽 −X) 보정선 반경 30.2 와 첫 깎는 줄(경사 연장) 보정선의 교점 — 경사 보정선 위
+                val pz = e1 + nS * r
+                near(pz + uS * ((31.0 - r - pz.x) / uS.x), nose(run, 2)?.second, "재현 A 진입점 노즈(교점)")
+                // 첫 깎는 줄 · 끝 블록은 경사와 한 직선(진입 · 빼기)이라 노즈가 T1 · T2 의 경사 법선 — 접점이 그 꼭짓점
+                near(e1 + nS * r, nose(run, 3)?.second, "재현 A 첫 깎는 점 노즈")
+                near(e2 + nS * r, nose(run, 4)?.second, "재현 A 끝 노즈")
                 assertTrue(gouge(run, s.drawing.segs, r, 2).first <= tol, "재현 A 파고듦 ${gouge(run, s.drawing.segs, r, 2)}")
+                assertTrue(leftAt(run, e1, r, 2) <= tol && leftAt(run, e2, r, 2) <= tol, "재현 A 꼭짓점 남김")
             }
             // HEAD: G00 X63.2 Z1.6 → 노즈 (Z0.8, X61.6) 에서 같은 교점으로 곧게 — 손: 모서리까지 가장 가까운 곳 t = 2/3, 0.6532 → 0.1468 파고듦
             val hd = r - segDist(Pt(0.8, 30.8), e1 + nS * r, e1)
             assertEquals(0.1468, hd, 2e-4)
-            val headNc = TaperCalcHead.calc(inps[0]).solution!!.ncG41G42
+            val headNc = TaperCalcHead.calc(inps[0]).solution!!.ncG41G42.legacy
             assertEquals(listOf("(R0.8 T1)", "G00 X63.2 Z1.6", "G41 G01 X60. Z0.", "G01 X48. Z-6.", "G40 G00 X44.869 Z-6.434"), headNc)
             for (rp in RapidPath.values()) assertEquals(hd, gouge(sim(headNc, r, 1, rp), s.drawing.segs, r, 2).first, 1e-3, "HEAD 재현 A $rp")
-            println("재현 A 손: G00 노즈 ${c(Pt.ofDia(1.846, 58.6) - tv)} → 교점 ${c(e1 + nS * r - uS * past)} → 끝 법선 ${c(e2 + nS * r)} → 후퇴 ${c(Pt.ofDia(-6.434, 44.869) - tv)} · HEAD 파고듦 ${f4(hd)}")
+            println("재현 A 손: 첫 깎는 점 노즈 ${c(e1 + nS * r)} · 끝 노즈 ${c(e2 + nS * r)} · G40 자리 ${c(q)} · HEAD 파고듦 ${f4(hd)}")
         }
 
         // ---- 재현 B: 외경 형상 1 X60 Z0 / X92.97 Z-6(70°), 0.8R, 팁 4 — 계산기 역방향 + 뒤집기(화면에 없는 조합)
@@ -239,25 +241,24 @@ class VerifyG4xHandTest {
             val e2 = Pt.ofDia(-6.0, 92.97)
             val uS = (e2 - e1).unit()
             val nS = right(uS) // G42
-            val lift = r + (nS dot tv)
-            val lead = e1 - uS * (r + 0.01)
-            val g00 = lead + nS * (c + lift)
-            val exitD = e2 + (e2 - e1) * (c / 6.0) + nS * lift
-            val want = listOf("(R0.8 T4)", "G00 ${at(g00)}", "G42 G01 ${at(lead)}", "G01 X60. Z0.", "G01 X92.97 Z-6.", "G40", "G01 ${at(exitD)}")
-            assertEquals(listOf("(R0.8 T4)", "G00 X60.036 Z2.418", "G42 G01 X58.478 Z0.277", "G01 X60. Z0.", "G01 X92.97 Z-6.", "G40", "G01 X99.339 Z-5.799"), want)
+            // 회사 꼴: T1 볼록 → 진입점 = 경사 연장선을 큰 축으로 c — 70° 경사(Z 6 · 반경 16.485)라 반경으로 1: 반경 29(X58), Z 6/16.485 = 0.364
+            // (2026-11-04 고침 전에는 Z 로 1 — 반경 30 − 16.485/6). Z 줄로 곧장: G42 · −Z 진행 노즈는 +X 쪽 반경 29.4, 꺾임 노즈 = 진입점 + (a + b)·r/(1 + a·b),
+            // a = (0, 1), b = 경사 오른쪽 (0.940, 0.342) → (Z0.924, 반경 29.8) — Z0.924 위로 도면이 없다. 끝(비움, T2 볼록) → 경사를 큰 축(X)으로 c — X94.97 Z-6.364.
+            // G40 자리 1.951: 외경 반직선(반경 46.485)에서 1 → +X 로 0.951(반경 48.436 — T2 까지도 1.985)
+            val room = (1 + sqrt(2.0)) * r + 0.02
+            val e0 = e1 + (e1 - e2) * (c / max(6.0, e2.x - e1.x))
+            val x1 = e2 + (e2 - e1) * (c / (e2.x - e1.x))
+            val q = Pt(x1.z, e2.x + room)
+            val want = listOf("G42", "G0X${Fmt.word(e0.xDia)}Z20.", "Z${Fmt.word(e0.z)}", "G1X60.Z0.F.1", "X92.97Z-6.", "${xzw(x1)}F.3", "X${Fmt.word(q.xDia)}", "G40", "G0Z200.")
+            assertEquals(listOf("G42", "G0X58.Z20.", "Z.364", "G1X60.Z0.F.1", "X92.97Z-6.", "X94.97Z-6.364F.3", "X96.873", "G40", "G0Z200."), want)
             val inp = TaperInput(false, 1, true, r, null, 92.97, -6.0, 60.0, 0.0, flip = true)
             val s = TaperCalc.calc(inp).solution!!
             assertEquals(want, s.ncG41G42)
-            for (rp in RapidPath.values()) {
-                val run = sim(want, r, 4, rp)
+            for (rp in RapidPath.values()) for (run in forms(want, r, 4, rp)) {
                 assertNull(run.stop)
-                near(Pt.ofDia(2.418, 60.036) - tv, nose(run, 1)?.second, "재현 B G00 노즈")
-                near(e1 + nS * r - uS * 0.01, nose(run, 2)?.second, "재현 B 시작 블록 끝(교점)")
-                near(e2 + nS * r, nose(run, 4)?.second, "재현 B 끝 법선")
-                near(Pt.ofDia(-5.799, 99.339) - tv, nose(run, 6)?.second, "재현 B 후퇴 노즈")
+                near(e1 + nS * r, nose(run, 3)?.second, "재현 B 첫 깎는 점 노즈(경사 법선)")
+                near(e2 + nS * r, nose(run, 4)?.second, "재현 B 끝 노즈(경사 법선)")
                 assertTrue(gouge(run, s.drawing.segs, r, 2).first <= tol, "재현 B 파고듦")
-                // 후퇴는 경사 연장선 위를 곧게 — T2 에서 r 이상
-                assertTrue(segDist(nose(run, 6)!!.first, nose(run, 6)!!.second, e2) >= r - tol)
             }
             // HEAD 취소 `G40 G00 X99.339 Z-5.799`: 취소 방향이 공구 쪽으로 꺾여(안쪽) 경사 보정선과 취소 보정선의 교점 S 에 서고(FF 그림 5.4.4(a)),
             // 거기서 G40 노즈(지령점 − 팁 벡터)로 축마다 따로 급송 — 첫 토막이 T2(Z-6 X92.97) 모서리를 깎는다
@@ -268,7 +269,7 @@ class VerifyG4xHandTest {
             val k = doglegCorner(sP, endN)
             val hb = r - min(segDist(sP, k, e2), segDist(k, endN, e2))
             val hbLin = r - segDist(sP, endN, e2)
-            val headNc = TaperCalcHead.calc(inp).solution!!.ncG41G42
+            val headNc = TaperCalcHead.calc(inp).solution!!.ncG41G42.legacy
             assertEquals("G40 G00 X99.339 Z-5.799", headNc.last())
             val hrun = sim(headNc, r, 4)
             near(sP, nose(hrun, 3)?.second, "HEAD 재현 B 교점 S", 2e-3)
@@ -278,10 +279,10 @@ class VerifyG4xHandTest {
             val g = gouge(hrun, s.drawing.segs, r, 2).first
             assertEquals(hb, g, 2e-3)
             assertTrue(hbLin <= tol, "직선 급송이면 안 파고듦 $hbLin")
-            println("재현 B 손: 교점 ${c(e1 + nS * r)} · 끝 법선 ${c(e2 + nS * r)} · HEAD S ${c(sP)} 꺾임 ${c(k)} 파고듦 ${f4(hb)}(직선 ${f4(hbLin)}) · GSim ${f4(g)}")
+            println("재현 B 손: 첫 깎는 점 노즈 ${c(e1 + nS * r)} · 끝 노즈 ${c(e2 + nS * r)} · HEAD S ${c(sP)} 꺾임 ${c(k)} 파고듦 ${f4(hb)}(직선 ${f4(hbLin)}) · GSim ${f4(g)}")
         }
 
-        // ---- 문제 1 대표: 뒤집기 외경 · 내경 형상 3, 끝점 Z6(부품 앞 끝, 너머가 빈 끝)
+        // ---- 문제 1 대표: 뒤집기 외경 · 내경 형상 3, 끝점 Z6(부품 앞 끝, 너머가 빈 끝) — 사용자 결정 ③: 끝 좌표 너머로 곧게 c
         for ((inner, r) in listOf(false to 0.4, false to 0.8, true to 0.4)) {
             val x2 = if (inner) 55.632 else 64.368
             val inp = TaperInput(inner, 3, false, r, null, 60.0, 0.0, x2, -6.0, start = 6.0).flipped()
@@ -295,48 +296,51 @@ class VerifyG4xHandTest {
             val e = Pt(6.0, 30.0)
             val uB = Pt(1.0, 0.0)
             val nB = if (side == Side.G41) uB.left() else right(uB)
-            assertEquals(-r, tv dot uB, 1e-12) // 팁 벡터·u = −r < r → 공구 쪽 직각 취소의 교점은 끝 꼭짓점에 못 닿는다
-            val back = if (inner) "X58." else "X62."
-            assertEquals(listOf("G01 Z6.", "G40", "G01 $back"), s.ncG41G42.takeLast(3), "$inp")
-            assertEquals("G00 $back", s.ncG40.last(), "직접 보정 후퇴점 = G41/G42 후퇴점")
-            val run = sim(s.ncG41G42, r, tip)
-            assertNull(run.stop)
-            val n = s.ncG41G42.size
-            near(e + nB * r, nose(run, n - 3)?.second, "P1 ${if (inner) "내경" else "외경"} r$r 끝 노즈(접점 = 끝좌표 Z6)")
-            near(e + nB * c - tv, nose(run, n - 1)?.second, "P1 후퇴 노즈")
-            val drun = sim(s.ncG40, r, tip)
-            val dEnd = nose(drun, s.ncG40.size - 2)!!.second
+            assertEquals(-r, tv dot uB, 1e-12)
+            // 빈 끝: 끝 블록 `Z6.` 뒤 곧게 c(Z7) — G40 자리 (1 + √2)·r + 0.02 가 끝 꼭짓점에서 c = 1 보다 크면(0.8R: 1.951) 같은 쪽으로 더 간 줄(Z7.951)
+            val room = (1 + sqrt(2.0)) * r + 0.02
+            val tail = listOf("Z6.", "Z7.F.3") + (if (room > c) listOf("Z${Fmt.word(e.z + room)}") else emptyList()) + listOf("G40", "G0Z200.")
+            assertEquals(tail, s.ncG41G42.takeLast(tail.size), "$inp")
+            assertEquals("G00 ${if (inner) "X58." else "X62."}", s.ncG40.legacy.last(), "직접 보정 후퇴는 그대로")
+            val k = s.ncG41G42.indexOf("Z6.")
+            val drun = sim(s.ncG40.legacy, r, tip)
+            val dEnd = nose(drun, s.ncG40.legacy.size - 2)!!.second
             near(e - tv, dEnd, "직접 보정 끝 노즈 = 끝좌표 − 팁 벡터")
-            // (G41/G42 끝 노즈) − (직접 보정 끝 노즈) = u·min(0, 팁 벡터·u)
-            near(dEnd + uB * min(0.0, tv dot uB), nose(run, n - 3)?.second, "끝 차이 u·min(0, tv·u)")
-            assertTrue(leftAt(run, e, r, 2) <= tol, "끝 꼭짓점 남김 ${leftAt(run, e, r, 2)}")
-            assertTrue(gouge(run, s.drawing.segs, r, 2).first <= tol)
+            for (run in forms(s.ncG41G42, r, tip)) {
+                assertNull(run.stop)
+                near(e + nB * r, nose(run, k)?.second, "P1 ${if (inner) "내경" else "외경"} r$r 끝 노즈(끝 법선 — 접점 = 끝좌표 Z6)")
+                // (G41/G42 끝 노즈) − (직접 보정 끝 노즈) = u·(팁 벡터·u) — 빈 끝은 끝 법선
+                near(dEnd + uB * (tv dot uB), nose(run, k)?.second, "끝 차이 u·(tv·u)")
+                assertTrue(leftAt(run, e, r, 2) <= tol, "끝 꼭짓점 남김 ${leftAt(run, e, r, 2)}")
+                assertTrue(gouge(run, s.drawing.segs, r, 2).first <= tol)
+            }
             // HEAD `G40 G00 X62.`: 교점 S = E + nB·r − uB·r, 꺾인 급송으로 G40 노즈 E + nB·c − tv 로 — 끝 꼭짓점 남김(손)
             val sP = e + nB * r - uB * r
             val endN = e + nB * c - tv
-            val k = doglegCorner(sP, endN)
-            val hl = min(segDist(sP, k, e), segDist(k, endN, e)) - r
+            val kk = doglegCorner(sP, endN)
+            val hl = min(segDist(sP, kk, e), segDist(kk, endN, e)) - r
             val hlLin = segDist(sP, endN, e) - r
-            val headNc = TaperCalcHead.calc(inp).solution!!.ncG41G42
-            assertEquals("G40 G00 $back", headNc.last())
+            val headNc = TaperCalcHead.calc(inp).solution!!.ncG41G42.legacy
+            assertEquals("G40 G00 ${if (inner) "X58." else "X62."}", headNc.last())
             val hrun = sim(headNc, r, tip)
             near(sP, nose(hrun, headNc.size - 2)?.second, "HEAD 교점")
             assertEquals(hl, leftAt(hrun, e, r, 2), 1e-3)
             println("P1 ${if (inner) "내경" else "외경"} r$r 손: 끝 노즈 ${c(e + nB * r)} · 직접 보정 ${c(dEnd)} · HEAD 교점 ${c(sP)} 남김 ${f4(hl)}(직선 급송 ${f4(hlLin)})")
         }
-        // 같은 형상 정방향, 끝점 Z-12(척 쪽, 너머가 벽): 팁 벡터·u = r → 직각 취소의 교점 = 직접 보정 끝 노즈(지금 규칙이 맞음)
+        // 같은 형상 정방향, 끝점 Z-12(척 쪽, 너머가 벽): 공구 쪽 직각 c(X66.368) — 교점 = 직접 보정 끝 노즈(팁 벡터·u = r). G40 자리는 벽 너머(Z < −12)에 붙어 +Z 로 0.986
         run {
             val r = 0.4
             val s = TaperCalc.calc(TaperInput(false, 3, false, r, null, 60.0, 0.0, 64.368, -6.0, end = -12.0)).solution!!
-            assertEquals(listOf("G01 Z-12.", "G40 G01 X66.368"), s.ncG41G42.takeLast(2))
+            assertEquals(listOf("Z-12.", "X66.368F.3", "Z-11.014", "G40", "G0Z200."), s.ncG41G42.takeLast(5))
             val e = Pt.ofDia(-12.0, 64.368)
             val uB = Pt(-1.0, 0.0)
             val nB = right(uB)
             val tv = NoseComp.tipVector(3, r)
             assertEquals(r, tv dot uB, 1e-12)
-            val run = sim(s.ncG41G42, r, 3)
-            near(e + nB * r - uB * r, nose(run, s.ncG41G42.size - 2)?.second, "벽 쪽 끝: 교점")
-            near(e - tv, e + nB * r - uB * r, "벽 쪽 끝: 교점 = 직접 보정 끝 노즈")
+            for (run in forms(s.ncG41G42, r, 3)) {
+                near(e + nB * r - uB * r, nose(run, s.ncG41G42.indexOf("Z-12."))?.second, "벽 쪽 끝: 교점")
+                near(e - tv, e + nB * r - uB * r, "벽 쪽 끝: 교점 = 직접 보정 끝 노즈")
+            }
         }
 
         // ---- 0.508: 외경 형상 2 X60 Z0 / X64.368 Z-6(20°), 0.8R, 팁 4 — 계산기 역방향 + 뒤집기, 시작 · 끝점 비움(어깨 단면을 깎지 않음)
@@ -349,27 +353,26 @@ class VerifyG4xHandTest {
             val nS = right(uS)
             val uB = Pt(0.0, 1.0) // 어깨 단면을 위로
             val nB = right(uB)
-            val lift = r + (nS dot tv)
-            val lead = e1 - uS * (r + 0.01)
-            val g00 = lead + nS * (c + lift)
-            // 오목 꺾임: 경사 보정선과 어깨 보정선의 교점 = 직접 보정의 마지막 노즈
+            // 오목 꺾임: 경사 보정선과 어깨 보정선의 교점 = 직접 보정의 마지막 노즈. 회사 꼴은 끝(비움, 오목)을 어깨 선을 따라 c 빼서 제어기가 그 교점을 잡는다.
+            // 그 빼는 줄(X66.368)은 c = 1 이 2r 보다 짧아 두 안쪽 꺾임 노즈가 거꾸로 0.36 — 0.41 더(X67.188). G40 자리 1.951: 어깨 선 위라 +Z 로, 경사 보정선 거리
+            // d·0.342 + 1·0.94 = 1.951 → d = 2.958(Z-3.042, 빼는 줄을 더 간 0.41 도 그대로)
             val nc0 = meet(e1 + nS * r, uS, e2 + nB * r, uB)
-            val skimX = (floor(nc0.xDia * 1000 + 1e-6) + 1) / 1000 // 0.001 격자에서 그 접점 바로 위
-            val exitP = nc0 + tv + nB * c // 직접 보정 후퇴점
-            val want = listOf("(R0.8 T4)", "G00 ${at(g00)}", "G42 G01 ${at(lead)}", "G01 X60. Z0.", "G01 X64.368 Z-6.", "G01 X${Fmt.nc(skimX)}", "G40", "G01 ${at(exitP)}")
-            assertEquals(listOf("(R0.8 T4)", "G00 X61.93 Z1.213", "G42 G01 X59.446 Z0.761", "G01 X60. Z0.", "G01 X64.368 Z-6.", "G01 X65.489", "G40", "G01 X63.888 Z-3.4"), want)
+            val room = (1 + sqrt(2.0)) * r + 0.02
+            val sn = uS.x // 경사의 X 성분(0.342)
+            val d = (room - (-uS.z) * c) / sn
+            val want = listOf("G42", "G0X59.272Z20.", "Z1.", "G1X60.Z0.F.1", "X64.368Z-6.", "X67.188F.3", "Z${Fmt.word(e2.z + d)}", "G40", "G0Z200.")
+            assertEquals("Z-3.042", want[6])
             val inp = TaperInput(false, 2, true, r, null, 60.0, 0.0, 64.368, -6.0).flipped()
             val s = TaperCalc.calc(inp).solution!!
             assertEquals(want, s.ncG41G42)
-            val run = sim(want, r, 4)
-            assertNull(run.stop)
-            near(nc0, nose(run, 4)?.second, "0.508 꺾임 교점")
-            near(Pt(e2.z, skimX / 2) + nB * r, nose(run, 5)?.second, "0.508 한 줄 더 간 끝 법선")
-            near(Pt.ofDia(-3.4, 63.888) - tv, nose(run, 7)?.second, "0.508 후퇴 노즈")
             val left = (nc0 - e2).length - r
             assertEquals(0.1766, left, 2e-4) // 오목 110° 꺾임에 0.8R 이 못 들어가 남는 것(직접 보정도 같음)
-            assertEquals(left, leftAt(run, e2, r, 2), 1e-3)
-            assertEquals(left, leftAt(sim(s.ncG40, r, 4), e2, r, 1), 1e-3)
+            for (run in forms(want, r, 4)) {
+                assertNull(run.stop)
+                near(nc0, nose(run, 4)?.second, "0.508 꺾임 교점")
+                assertEquals(left, leftAt(run, e2, r, 2), 1e-3)
+            }
+            assertEquals(left, leftAt(sim(s.ncG40.legacy, r, 4), e2, r, 1), 1e-3)
             // 같은 끝을 TYPE 4(앞 요소 수평)로: 끝 네 줄 · 남김 같음
             val s4 = TaperCalc.calc(TaperInput(false, 4, true, r, null, 60.0, 0.0, 64.368, -6.0).flipped()).solution!!
             assertEquals(want.takeLast(4), s4.ncG41G42.takeLast(4))
@@ -382,27 +385,28 @@ class VerifyG4xHandTest {
             val k = doglegCorner(sP, endN)
             val hl = min(segDist(sP, k, e2), segDist(k, endN, e2)) - r
             assertEquals(0.508, hl, 2e-3)
-            val headNc = TaperCalcHead.calc(inp).solution!!.ncG41G42
+            val headNc = TaperCalcHead.calc(inp).solution!!.ncG41G42.legacy
             assertEquals("G40 G00 X66.368 Z-4.4", headNc.last())
             assertEquals(hl, leftAt(sim(headNc, r, 4), e2, r, 2), 2e-3)
-            println("0.508 손: 꺾임 교점 ${c(nc0)} · 한 줄 더 X${Fmt.nc(skimX)} · 남김 ${f4(left)} = 직접 보정 · HEAD 교점 ${c(sP)} 꺾임 ${c(k)} 남김 ${f4(hl)}")
+            println("0.508 손: 꺾임 교점 ${c(nc0)} · 남김 ${f4(left)} = 직접 보정 · HEAD 교점 ${c(sP)} 꺾임 ${c(k)} 남김 ${f4(hl)}")
         }
 
-        // ---- 2026-10-29 판정 고침(simulator-design.md 13.9) — 이 검증이 낸 손 예를 고친 계산기 · GSim 으로
-        // 너머가 빈 단면 시작: 뒤집기 외경 형상 2(칸 T1 X50 Z-5 · T2 X40 Z0), 시작 X60 · 끝 X30, 0.8R T3. F = (Z-5, 반경 30), u = −X, n = +Z, 팁 벡터·u = +0.8
-        // → lead = F − u·1.6 = 반경 31.6, 시작 블록 끝(안쪽 모서리 교점) = lead + r(n + u) = (Z-4.2, 반경 30.8) = 직접 보정의 첫 노즈 F + r·n − u·0.8
+        // ---- 너머가 빈 단면 시작: 뒤집기 외경 형상 2(칸 T1 X50 Z-5 · T2 X40 Z0), 시작 X60 · 끝 X30, 0.8R T3. F = (Z-5, 반경 30), u = −X, n = +Z
+        // 회사 꼴: 진입점 = 단면 연장선 X62 Z-5, 첫 깎는 줄은 단면과 한 직선이라 노즈가 F 의 법선(Z-4.2, 반경 30) — 접점 = F 라 어깨 위 끝에 살이 안 남는다
+        // (직접 보정의 첫 노즈는 인선이 F 라 반경 30.8)
         run {
             val r = 0.8
             val s = TaperCalc.calc(TaperInput(false, 2, false, r, null, 50.0, -5.0, 40.0, 0.0, null, 1.0, start = 60.0, end = 30.0, flip = true)).solution!!
             val g4 = s.ncG41G42
-            val k = g4.indexOfFirst { it.startsWith("G41 G01") }
-            assertEquals("G41 G01 Z-5.", g4[k])
-            val run = sim(g4, r, 3)
-            assertNull(run.stop, "${run.stop}")
+            val k = g4.indexOfFirst { it.endsWith("F.1") }
+            assertEquals(listOf("G41", "G0X62.Z20.", "Z-5.", "G1X60.F.1"), g4.take(k + 1))
             val f = Pt(-5.0, 30.0)
-            near(Pt(-4.2, 30.8), nose(run, k)?.second, "빈 단면 시작: 시작 블록 끝 = 직접 보정의 첫 노즈")
-            assertTrue(leftAt(run, f, r, k) <= tol, "첫 꼭짓점 남김 ${leftAt(run, f, r, k)}(HEAD 0.302)")
-            assertTrue(gouge(run, s.drawing.segs, r, k).first <= tol)
+            for (run in forms(g4, r, 3)) {
+                assertNull(run.stop, "${run.stop}")
+                near(Pt(-4.2, 30.0), nose(run, k)?.second, "빈 단면 시작: 첫 깎는 점 노즈 = F 의 법선")
+                assertTrue(leftAt(run, f, r, k) <= tol, "첫 꼭짓점 남김 ${leftAt(run, f, r, k)}(HEAD 0.302)")
+                assertTrue(gouge(run, s.drawing.segs, r, k).first <= tol)
+            }
         }
         // 검증 2 ①: 뒤집기 내경 형상 4, 표준 T2, 0.4R, 시작 단면 0.357 < r — 고치기 전 `G01 X10.417` 에서 COMP_INTERFERENCE
         // 검증 2 ②: 외경 형상 1, 팁 9, 1.0R, T1 모서리 R0.2, 시작 비움 — 띄운 단면 진입 뒤 `G01` 의 보정 이동이 0 이라 R0.2 의 반올림으로 간섭
@@ -411,23 +415,26 @@ class VerifyG4xHandTest {
             TaperInput(false, 1, false, 1.0, 9, 115.959, -1.751, 299.33, null, 83.599, 0.0, cornerR1 = 0.2, start = null, end = -26.408) to 9,
         )) {
             val s = TaperCalc.calc(inp).solution!!
-            val run = sim(s.ncG41G42, inp.noseR, tip)
-            assertNull(run.stop, "$inp ${run.stop} ${s.ncG41G42}")
-            assertTrue(gouge(run, s.drawing.segs, inp.noseR, 2).first <= tol, "$inp")
+            for (run in forms(s.ncG41G42, inp.noseR, tip)) {
+                assertNull(run.stop, "$inp ${run.stop} ${s.ncG41G42}")
+                assertTrue(gouge(run, s.drawing.segs, inp.noseR, 2).first <= tol, "$inp")
+            }
         }
-        // 막힌 끝: 정방향 외경 형상 3, 팁 6, 1.0R, 끝 Z-7.877(척 쪽), Z 여유 2 — 교점 노즈 (Z-6.877, 반경 21.029 + 1)에서 멈추고 보정 중 직각 후퇴 →
-        // 취소(Z 로 1 비킴)까지 노즈가 Z-6.877 을 넘지 않는다(노즈 끝 = 끝좌표). 13.7 고침의 이동 없는 G40 은 노즈 중심 Z-7.877(끝 너머 1.0)
+        // 막힌 끝: 정방향 외경 형상 3, 팁 6, 1.0R, 끝 Z-7.877(척 쪽), Z 여유 2 — 공구 쪽 직각 c = 2 로 빼서 교점 노즈 (Z-6.877, 반경 21.029 + 1)에서 멈추고
+        // (두 안쪽 꺾임 노즈가 같은 점이라 0.05 더 — X46.158), G40 자리는 +Z 로 경사를 2.434 비킬 때까지(Z3.823). 노즈가 Z-6.877 을 넘지 않는다(노즈 끝 = 끝좌표)
         run {
             val r = 1.0
             val s = TaperCalc.calc(TaperInput(false, 3, false, r, 6, 40.66, 4.331, 42.058, 2.033, null, 2.0, end = -7.877)).solution!!
             val g4 = s.ncG41G42
-            assertEquals(listOf("G01 Z-7.877", "G01 X52.058", "G40 G01 X56.058 Z-6.877"), g4.takeLast(3))
-            val run = sim(g4, r, 6)
-            assertNull(run.stop, "${run.stop}")
-            near(Pt(-6.877, 21.029 + r), nose(run, g4.size - 3)?.second, "막힌 끝 교점")
-            val far = moves(run).filter { it.line - pre.size - 1 >= g4.size - 3 }.flatMap { pts(it.nose) }.minOf { it.z }
-            assertTrue(far >= -6.877 - tol, "막힌 끝 너머로 노즈 중심 Z$far")
-            assertTrue(gouge(run, s.drawing.segs, r, 2).first <= tol)
+            assertEquals(listOf("Z-7.877", "X46.158F.3", "Z3.823", "G40", "G0Z200."), g4.takeLast(5))
+            val k = g4.indexOf("Z-7.877")
+            for (run in forms(g4, r, 6)) {
+                assertNull(run.stop, "${run.stop}")
+                near(Pt(-6.877, 21.029 + r), nose(run, k)?.second, "막힌 끝 교점")
+                val far = moves(run).filter { it.line - pre.size - 1 >= k }.flatMap { pts(it.nose) }.minOf { it.z }
+                assertTrue(far >= -6.877 - tol, "막힌 끝 너머로 노즈 중심 Z$far")
+                assertTrue(gouge(run, s.drawing.segs, r, 2).first <= tol)
+            }
         }
     }
 
@@ -508,28 +515,22 @@ class VerifyG4xHandTest {
             val grp = if (screen) "화면 표준 팁" else if (cs.calcRev) "계산기 역방향" else "팁 직접 고름"
             val against = TaperWarning.AGAINST_TOOL in cs.new.warnings
             val r = cs.r
-            val tag = "${cs.tag.substringBefore(", approach")} | ${s.ncG41G42.joinToString(" / ")}"
+            val tag = "${cs.tag.substringBefore(", approach")} | ${s.ncG41G42.legacy.joinToString(" / ")}"
             // --- 사용자 결정: 직접 보정 글 · 보정점 · 진입 · 후퇴 · 도면 그대로
-            if (s.ncG40 != h.ncG40 || s.points != h.points || s.entry != h.entry || s.exit != h.exit || s.approach != h.approach ||
+            if (s.ncG40.legacy != h.ncG40.legacy || s.points != h.points || s.entry != h.entry || s.exit != h.exit || s.approach != h.approach ||
                 s.drawing != h.drawing || s.center != h.center || s.program != h.program || s.tip != h.tip || s.side != h.side ||
                 s.fromStart != h.fromStart || s.toEnd != h.toEnd || s.anglesDeg != h.anglesDeg
             ) t.add("직접 보정 글 · 보정점이 HEAD 와 다름", 0.0, cs.tag)
             if (cs.new.warnings != cs.head.warnings) t.add("[$grp] 경고가 HEAD 와 다름 ${cs.head.warnings} → ${cs.new.warnings}", 0.0, tag)
-            // --- 글 모양 분류
-            val g4 = s.ncG41G42
-            val hg = h.ncG41G42
-            val alone = g4.contains("G40")
-            val iStart = g4.indexOfFirst { "G41" in it || "G42" in it }
+            // --- 글 모양 분류(회사 꼴: 진입 G0 줄 수 · 빼는 줄 수)
+            val g4 = s.ncG41G42.legacy
+            val hg = h.ncG41G42.legacy
+            val iStart = g4.indexOfFirst { it.endsWith(" F0.1") }
+            val iCancel = g4.indexOf("G40")
             val hStart = hg.indexOfFirst { "G41" in it || "G42" in it }
-            val leadNew = g4.subList(0, iStart + 1) != hg.subList(0, hStart + 1)
-            val kind = listOfNotNull(
-                if (alone) "이동 없는 G40" else null,
-                if (leadNew) "시작 바뀜(띄운 lead)" else null,
-                if (g4.size - (if (alone) 1 else 0) - (if (leadNew) 1 else 0) > hg.size) "끝에 한 줄 더(skim)" else null,
-            ).ifEmpty { listOf(if (g4.dropLast(1) == hg.dropLast(1) && hg.last().replace("G40 G00", "G40 G01") == g4.last()) "취소 G00→G01 만" else "그 밖") }
-            t.add("[$grp] 글 갈래: ${kind.joinToString(" + ")}", 0.0, tag)
-            // 취소 뒤 · 시작 뒤 G00
-            if (g4.drop(iStart + 1).any { "G00" in it }) t.add("[$grp] 보정 시작 뒤에 G00", 0.0, tag)
+            t.add("[$grp] 글 갈래: 진입 G0 ${iStart - 1}줄 · 빼는 줄 ${iCancel - g4.indexOfFirst { " F0.3" in it }}줄", 0.0, tag)
+            // 깎는 줄 ~ G40 사이(첫 깎는 줄 · 형상 · 빼는 줄)에 G00 이 없다
+            if (iStart < 0 || iCancel < iStart || g4.subList(iStart, iCancel).any { "G00" in it }) t.add("[$grp] 보정 시작 뒤에 G00", 0.0, tag)
             val prog = progPts(g4)
             val tv = NoseComp.tipVector(s.tip, r)
             val endEl = s.drawing.segs.last()
@@ -550,7 +551,11 @@ class VerifyG4xHandTest {
             }
             val newIssues = run.issues.map { it.code }.toSet() - hrun.issues.map { it.code }.toSet() - setOf(IssueCode.COMP_CANCEL_ALONE)
             if (newIssues.isNotEmpty()) t.add("[$grp] GSim 새 알림 $newIssues", 0.0, tag)
-            val drun = sim(s.ncG40, r, s.tip)
+            // 형식 C(회사 기계 SUV = 1): 보정 혼자 줄에서 노즈가 옮겨진다 — 멈춤 · 파고듦 없음(꺾인 급송)
+            val runC = forms(g4, r, s.tip)[1]
+            if (runC.stop != null) t.add("[$grp] 형식 C 에서 멈춤 ${runC.stop!!.code}", 0.0, tag)
+            else gouge(runC, s.drawing.segs, r, 2).let { (g, gl) -> if (g > tol) t.add("[$grp] G41/G42 파고듦 · 형식 C${if (against) " · AGAINST_TOOL" else " · 경고 없음"} · 줄 '${g4[gl]}'", g, tag) }
+            val drun = sim(s.ncG40.legacy, r, s.tip)
             val draw = s.drawing.segs
             for (rp in RapidPath.values()) {
                 val rr = if (rp == RapidPath.DOGLEG) run else sim(g4, r, s.tip, rp)
@@ -567,33 +572,26 @@ class VerifyG4xHandTest {
                 if (ln > ld + tol) {
                     val hl = if (hrun.stop != null) null else leftAt(hrun, v, r, 2)
                     val same = if (hl == null) "HEAD 멈춤" else if (abs(hl - ln) <= tol) "HEAD 와 같음(이번에 안 바뀜)" else "HEAD ${f4(hl)}"
-                    t.add("[$grp] $nm 꼭짓점에 직접 보정보다 살이 더 남음 · $same · ${shapeKey(cs.tag)}", ln - ld, "$tag || 직접 ${s.ncG40.joinToString(" / ")} || 남김 G41/G42 ${f4(ln)} 직접 ${f4(ld)}")
+                    t.add("[$grp] $nm 꼭짓점에 직접 보정보다 살이 더 남음 · $same · ${shapeKey(cs.tag)}", ln - ld, "$tag || 직접 ${s.ncG40.legacy.joinToString(" / ")} || 남김 G41/G42 ${f4(ln)} 직접 ${f4(ld)}")
                 }
             }
-            // 끝 쪽으로 직접 보정보다 더 가지 않는다(끝 요소 방향의 가장 먼 노즈)
+            // 막힌 끝(척 쪽으로 끝난 수평 · 재료 쪽으로 끝난 단면 — 외경 X0 빼고)은 끝 쪽으로 직접 보정보다 더 가지 않는다(끝 요소 방향의 가장 먼 노즈).
+            // 빈 끝 · 비운 끝은 회사 꼴이 끝 좌표 너머로 곧게 빼므로(사용자 결정 ③) 더 가는 것이 맞다 — 출력만
+            val face = abs(uB.x) > abs(uB.z)
+            val wall = s.toEnd && if (face) (uB.x < 0) != cs.inner && !(!cs.inner && endEl.end.x <= 1e-9) else uB.z < 0
             val farN = moves(run).filter { it.line - pre.size - 1 >= 2 }.flatMap { pts(it.nose) }.maxOf { it dot uB }
             val farD = moves(drun).filter { it.line - pre.size - 1 >= 1 }.flatMap { pts(it.nose) }.maxOf { it dot uB }
-            if (farN > farD + tol) t.add("[$grp] 노즈가 직접 보정보다 끝 쪽으로 더 감(${if (s.toEnd) "끝점 넣음" else "끝점 비움"})", farN - farD, tag)
+            if (farN > farD + tol) t.add("[$grp] 노즈가 직접 보정보다 끝 쪽으로 더 감(${if (wall) "막힌 끝" else if (s.toEnd) "빈 끝" else "끝점 비움"})", farN - farD, tag)
             // --- 접근 급송(시작에서 도면과 0.05 넘게 떨어진 G00 — 첫 G00 뺌)이 깎는 도면에 닿듯 지나감(여유 < 0.01): 다듬질 여유를 급송으로 깎을 수 있음
             fun rapidGap(rn: SimRun) = moves(rn).filter { m ->
                 m.line - pre.size - 1 >= 2 && m.kind == com.bmt.nosecalc.calc.sim.MoveKind.RAPID && cut.minOf { distTo(it, m.nose.start) } - r > 0.05
             }.flatMap { pts(it.nose) }.minOfOrNull { p -> cut.minOf { distTo(it, p) } - r }
             val gN = rapidGap(run)
             val gH = if (hrun.stop == null) rapidGap(hrun) else null
-            if (gN != null && gN < 0.01) t.add("[$grp] G41/G42 접근 급송이 깎는 도면에 닿듯 지나감 · ${if (gH != null && gH < 0.01) "HEAD 도" else "새로 생김"} · ${shapeKey(cs.tag)}", 0.01 - gN, tag)
-            // --- 형식 C(SUV = 1): 이동 없는 G40 블록에서 노즈가 끝 법선 → 지령점 − 팁 벡터로 움직인다(FF 그림 5.4.4(f), 표 5.4.1(a))
-            if (alone) {
-                val k = g4.indexOf("G40")
-                val endNose = nose(run, k - 1)!!.second
-                val pE = prog[k - 1]!!
-                val nC = pE - tv
-                val nX = prog[k + 1]!! - tv
-                val gc = (pts(Line(endNose, nC), 0.005) + pts(Line(nC, nX), 0.005)).maxOf { p -> r - draw.minOf { distTo(it, p) } }
-                if (gc > tol) t.add("[$grp] 형식 C 기계면 이동 없는 G40 에서 파고듦${if (against) " · AGAINST_TOOL" else " · 경고 없음"}", gc, tag)
-                else t.add("[$grp] 형식 C 기계여도 이동 없는 G40 안전", 0.0, null)
-            }
+            // (회사 꼴의 접근 급송은 보정 중이라 HEAD 의 G40 상태 급송과 견줄 수 없다 — 새로 생겼는지가 아니라 있는지를 본다)
+            val zc0 = "zClear=0.0," in cs.tag
+            if (gN != null && gN < 0.01) t.add("[$grp] G41/G42 접근 급송이 깎는 도면에 닿듯 지나감${if (zc0) "(Z 여유 0)" else ""} · ${if (gH != null && gH < 0.01) "HEAD 도" else "HEAD 는 없음"} · ${shapeKey(cs.tag)}", 0.01 - gN, tag)
             // --- 보정 중 길이 0 블록(지령 이동 > 0.05 인데 노즈 이동 < 0.001) — FF 5.4.6 방향 검사는 노즈 이동의 방향을 지령과 견준다
-            val iCancel = if (alone) g4.indexOf("G40") else g4.indexOfFirst { "G40" in it }
             for (k in iStart + 1 until iCancel) {
                 if (!g4[k].startsWith("G01")) continue
                 val p0 = prog[k - 1] ?: continue
@@ -603,7 +601,7 @@ class VerifyG4xHandTest {
                 val d = nm.second - nm.first
                 if (d.length < tol) {
                     val sg = d dot (p1 - p0).unit()
-                    t.add("[$grp] 보정 중 노즈 이동 길이 0 블록 · ${if (sg < -1e-6) "거꾸로(반올림)" else "앞으로 · 0"} · ${if (leadNew && k == iStart + 1) "띄운 lead 다음 줄" else if (k == iCancel - 1 && alone) "G40 앞 한 줄 더" else "그 밖"}", abs(sg), tag)
+                    t.add("[$grp] 보정 중 노즈 이동 길이 0 블록 · ${if (sg < -1e-6) "거꾸로(반올림)" else "앞으로 · 0"} · ${if (k >= g4.indexOfFirst { " F0.3" in it }) "빼는 줄" else "형상 줄"}", abs(sg), tag)
                 }
             }
             // --- 부품 앞 끝면 뒤(척 쪽)의 첫 G00 — 접근 줄이 없을 때(앞 위치에서 X · Z 가 따로 오면 부품 앞을 지날 수 있음, 검증 2026-10-27 원칙)
@@ -629,63 +627,65 @@ class VerifyG4xHandTest {
         // 끝점을 넣었으면 노즈가 직접 보정보다 끝 쪽으로 더 가지 않음, 경고 · 풀림 그대로
         assertTrue(t.n.keys.none { "G41/G42 파고듦" in it }, "G41/G42 파고듦")
         assertTrue(t.n.keys.none { it.startsWith("[화면 표준 팁] 끝 꼭짓점") }, "화면 표준 팁 끝 꼭짓점 남김")
-        assertTrue(t.n.keys.none { "끝 쪽으로 더 감(끝점 넣음)" in it }, "끝좌표 쪽으로 더 감")
+        assertTrue(t.n.keys.none { "끝 쪽으로 더 감(막힌 끝)" in it }, "막힌 끝좌표 쪽으로 더 감")
         assertTrue(t.n.keys.none { "경고가 HEAD 와 다름" in it || "풀림 여부" in it }, "경고 · 풀림이 바뀜")
-        assertTrue(t.n.keys.none { "접근 급송" in it && "새로 생김" in it }, "새로 생긴 접근 급송 닿음")
+        // 접근 급송이 깎는 도면에 닿듯 지나가지 않는다(회사 꼴의 진입 G0 은 보정 중이라 HEAD 의 G40 상태 급송과 견주지 않고 있는지를 본다).
+        // Z 여유 0(진입 거리 = 노즈R)에 단면 바깥 끝에서 시작하는 글(뒤집기 형상 2 · 4 의 어깨 · 계산기 역방향의 앞 단면)은 진입 Z 줄이 단면 연장선을 타고 내려와
+        // 꺾임 노즈가 시작 모서리에서 0.002 쯤까지 온다 — 사용자가 고른 최소 여유라 출력만 하고 남은 일로 적는다(진입 거리 c 에서 √((c − r)² + r²) − r)
+        assertTrue(t.n.keys.none { "접근 급송" in it && "(Z 여유 0)" !in it }, "접근 급송이 깎는 도면에 닿듯 지나감")
+        assertTrue(t.n.keys.none { "형식 C 에서 멈춤" in it }, "형식 C 에서 멈춘 G41/G42 글")
         // 2026-10-29 판정 고침(13.9): 고치기 전(HEAD)에 멈추지 않던 G41/G42 글이 GSim 에서 멈추지 않음 · 화면 표준 팁 첫 G00 이 앞 끝면 뒤에 새로 생기지 않음
         assertTrue(t.n.keys.none { "HEAD 는 안 멈춤" in it }, "새로 멈춘 G41/G42 글")
         assertTrue(t.n.keys.none { it.startsWith("[화면 표준 팁] 첫 G00 이 부품 앞 끝면 뒤") && "새로 생김" in it }, "화면 표준 팁 새 앞 끝면 뒤 G00")
     }
 
-    // ================================================================ 3. 라운드 안내
+    // ================================================================ 3. 라운드 기계 보정 글
 
-    private class RS(val tag: String, val r: Double, val s: RoundSolution, val d: RoundSolution)
+    private class RS(val tag: String, val r: Double, val s: RoundSolution, val direct: com.bmt.nosecalc.calc.RoundResult)
 
+    /**
+     * 라운드 기계 보정 글(RoundCalc.machine — 회사 꼴, 계획 단계 4)의 시작 · 끝을 손 계산과 GSim(형식 A · B / C)으로.
+     * (2026-10-28~29 에는 화면의 '기계 보정 안내'(첫 점보다 노즈R + 0.01 앞에 직각으로 G42 G01, 끝은 이동 없는 G40 뒤 G01)를 보았다. 안내는 화면이 회사 꼴 글을
+     * 직접 내게 되며 없어졌고 — 사용자 결정 2026-10-29 ① — 그 안내의 '원호 뒤 이동 없는 G40' 은 G02/G03 모드 취소라 FANUC 알람이다. 같은 성질 — 첫 점 남김 없음 ·
+     * 축에서 시작 · 끝나는 모양의 노즈가 축에 닿음 · 파고듦 없음 — 을 계산기가 낸 글로 본다)
+     */
     @Test
     fun roundGuide() {
-        // 옛 안내(첫 G01 에 G42 — Z 로 내려와 첫 점): RoundInput(type=1, mainR=15, l1=20, cornerR1=1, noseR=0.4) 의 X0 Z0
+        // 손: RoundInput(type=1, mainR=15, l1=20, cornerR1=1, noseR=0.4) — 축 위 X0 Z0 에서 단면을 올라가 R1 · SR15 · R1 · 뒤 단면으로 축까지(Z-20)
         val r = 0.4
         val i0 = RoundInput(type = 1, mainR = 15.0, l1 = 20.0, cornerR1 = 1.0, noseR = r)
-        val s0 = RoundCalc.calc(i0).solution!!
-        val d0 = RoundCalc.calc(i0.copy(noseR = 0.0)).solution!!
-        println("라운드 TYPE1 SR15 L20 CR1 0.4R: 팁 ${s0.tip} · ${s0.side} · 도면 ${s0.drawing.segs.take(2).joinToString(" ; ") { "${it::class.simpleName} ${c(it.start)}→${c(it.end)}" }}")
-        println("  기계 보정 NC(도면 좌표): ${d0.nc.joinToString(" / ")}")
-        val first = s0.drawing.segs.first()
-        val p0 = first.start
-        val tv = NoseComp.tipVector(s0.tip, r)
-        // 손: 시작 블록(−Z, 공구 쪽 +X)과 첫 요소의 안쪽 모서리 교점
-        val hand: Pt = when (first) {
-            is Line -> p0 + Pt(r, r) // 단면(+X): 보정선 Z = r 와 X = r 의 교점
-            is Arc -> Pt(first.center.z + sqrt((first.radius + r) * (first.radius + r) - r * r), r)
-        }
-        val handLeft = hand.length - r
-        val k = d0.nc.indexOfFirst { it.startsWith("G01") }
-        // 취소는 새 안내대로: 움직임 없는 G40 뒤 G01 로 마지막 요소의 공구 쪽으로 노즈R 의 2배 넘게
-        val lastSeg = s0.drawing.segs.last { (it.end - it.start).length > 1e-9 }
-        val tEnd0 = when (lastSeg) { is Line -> (lastSeg.end - lastSeg.start).unit(); is Arc -> (lastSeg.end - lastSeg.center).left().unit().let { if (lastSeg.cw) it * -1.0 else it } }
-        val cancel0 = listOf("G40", "G01 ${at(lastSeg.end + (if (s0.side == Side.G41) tEnd0.left() else right(tEnd0)) * (2 * r + 0.01))}")
-        val oldNc = d0.nc.toMutableList().also { it[k] = "${s0.side} ${it[k]}" } + cancel0
-        val orun = sim(oldNc, r, s0.tip)
-        println("  옛 안내 글: ${oldNc.joinToString(" / ")} · 멈춤 ${orun.stop?.code} · 시작 블록 끝 노즈 ${nose(orun, k)?.second?.let { c(it) }} · 손 ${c(hand)} · 남김 손 ${f4(handLeft)} GSim ${f4(leftAt(orun, p0, r, k))}")
-        near(hand, nose(orun, k)?.second, "옛 안내 시작 블록 끝(교점)")
-        assertEquals(handLeft, leftAt(orun, p0, r, k), 1e-3)
-        // 새 안내의 예(화면 글 그대로 — 2026-10-29 판정 고침: lead = 첫 점 − 접선 × (r + 0.01), G00 = lead + 공구 쪽 × (Z 여유 + 2r)):
-        // G00 X-0.82 Z1.8 → G42 G01 Z0. → G01 X0.
-        val body = d0.nc.drop(k + 1)
-        for (head in listOf(listOf("G00 X-0.82 Z1.8", "G42 G01 Z0.", "G01 X0."))) {
-            val nc = head + body + cancel0
-            val run = sim(nc, r, s0.tip)
+        val s0 = RoundCalc.machine(i0).solution!!
+        assertEquals(Side.G42, s0.side)
+        assertEquals(3, s0.tip)
+        val d = s0.drawing.segs
+        val p0 = d.first().start
+        val pe = d.last().end
+        assertEquals(Pt(0.0, 0.0), p0)
+        assertEquals(-20.0, pe.z, 1e-9)
+        assertEquals(0.0, pe.x, 1e-9)
+        // 진입: 축에서 시작하는 단면(+X)이라 축 너머 c = max(Z 여유 1, r) = 1 에서 그 선과 한 직선으로(X-2 · Z0) — Z20. 에서 Z 줄로 곧장.
+        // 첫 깎는 줄 `G1X0.` 은 단면과 한 직선이라 노즈가 X0 의 법선(Z0.4 · 축) — 축에 살이 안 남는다.
+        // 끝: 뒤 단면(−X)이 축에서 끝나 X −2r(X-.8)까지 쓰고 공구 쪽(−Z)으로 c(Z-21) — 안쪽 꺾임 교점 노즈 (Z-20.4, 축).
+        // G40 자리 Z-21 X-.8 은 뒤 단면에서 1.0 ≥ 0.986, +Z 물러남 띠가 공(가장 큰 반경 15 — Z-10)을 지나야 해 바깥 15 + 0.986 = 반경 15.986(X31.971)으로 한 줄 더
+        val room = (1 + sqrt(2.0)) * r + 0.02
+        assertEquals(listOf("G42", "G0X-2.Z20.", "Z0.", "G1X0.F.1"), s0.nc.take(4))
+        assertEquals(listOf("G1X-.8", "Z-21.F.3", "X${Fmt.word(2 * (15.0 + room))}", "G40", "G0Z200."), s0.nc.takeLast(5))
+        assertEquals("X31.971", s0.nc[s0.nc.size - 3])
+        // 그 사이 형상 줄은 도면 점(단면 위 끝 → R1 → SR15 → R1 → 뒤 단면 위 끝) — 마지막 X-.8 은 뒤 단면을 축 너머 r 까지
+        val mid = progPts(s0.nc).subList(4, s0.nc.size - 5).map { it!! }
+        assertEquals(d.size - 1, mid.size)
+        for ((k, sg) in d.dropLast(1).withIndex()) near(sg.end, mid[k], "라운드 형상 점 $k", 6e-4)
+        for (run in forms(s0.nc, r, s0.tip)) {
             assertNull(run.stop, "${run.stop}")
-            val l = leftAt(run, p0, r, 1)
-            val g = gouge(run, s0.drawing.segs, r, 1).first
-            // 첫 형상 앞 노즈 — `G01 X0.` 은 보정 경로 길이 0 이라 GSim 이 이동을 내지 않을 수 있다(그 앞 줄 끝)
-            val before = moves(run).last { it.line <= pre.size + head.size }.nose.end
-            println("  새 안내 예 ${head.joinToString(" / ")}: 첫 점 남김 ${f4(l)} · 파고듦 ${f4(g)} · 첫 형상 앞 노즈 ${c(before)} · 마지막 줄 이동 ${nose(run, head.size - 1) != null}")
-            assertTrue(l <= tol && g <= tol)
-            near(p0 + Pt(r, 0.0), before, "새 안내: 노즈가 첫 점의 법선(Z0.4 X0)")
+            // Z 줄(−Z, 공구 쪽 +X) → 첫 깎는 줄(+X, 공구 쪽 +Z) 안쪽 꺾임: 노즈 (Z0.4, 반경 −0.6)
+            near(Pt(0.4, -0.6), nose(run, 2)?.second, "라운드 진입점 노즈(교점)")
+            near(Pt(0.4, 0.0), nose(run, 3)?.second, "라운드 첫 점 노즈 = 축(법선)")
+            near(Pt(-20.4, 0.0), nose(run, 8)?.second, "라운드 뒤 단면 끝 노즈 = 축(교점)")
+            assertTrue(leftAt(run, p0, r, 2) <= tol && leftAt(run, pe, r, 2) <= tol, "라운드 축 끝 남김")
+            assertTrue(gouge(run, d, r, 2).first <= tol, "라운드 파고듦")
         }
 
-        // 안내 글 그대로의 시작 두 꼴 · 취소 '움직임 없는 G40 뒤 G01 로 마지막 요소의 공구 쪽으로 노즈R 의 2배 넘게' 를 모든 라운드 모양에
+        // 모든 라운드 모양(TYPE 1~6 외경 · 내경, 3점호 — 오목 시작 포함) × 0.4 · 0.8R × 형식 A · B / C: 멈춤 없음, 첫 점 남김 없음, 파고듦 없음
         val shapes = listOf(
             RoundInput(type = 1, mainR = 15.0, l1 = 20.0, cornerR1 = 1.0),
             RoundInput(type = 1, mainR = 10.0, l1 = 6.0, cornerR1 = 2.5),
@@ -704,9 +704,8 @@ class VerifyG4xHandTest {
         for (sh in shapes) for (inner in listOf(false, true)) for (rr in listOf(0.4, 0.8)) {
             if (inner && sh.type == 1) continue
             val i = sh.copy(noseR = rr, inner = inner)
-            val s = RoundCalc.calc(i).solution ?: continue
-            val d = RoundCalc.calc(i.copy(noseR = 0.0)).solution ?: continue
-            sols += RS(i.toString(), rr, s, d)
+            val s = RoundCalc.machine(i).solution ?: continue
+            sols += RS(i.toString(), rr, s, RoundCalc.calc(i))
         }
         for (a in listOf(
             Arc3Input(false, 0.4, null, 40.0, 0.0, 46.0, -3.0, 40.0, -6.0),
@@ -715,57 +714,31 @@ class VerifyG4xHandTest {
             Arc3Input(false, 0.4, null, 20.0, 0.0, 30.0, -5.0, 36.0, -12.0),
         )) for (rr in listOf(0.4, 0.8)) {
             val i = a.copy(noseR = rr)
-            val s = RoundCalc.arc3(i).solution ?: continue
-            val d = RoundCalc.arc3(i.copy(noseR = 0.0)).solution ?: continue
-            sols += RS(i.toString(), rr, s, d)
+            val s = RoundCalc.machine(i).solution ?: continue
+            sols += RS(i.toString(), rr, s, RoundCalc.arc3(i))
         }
-        for (rs in sols.filter { "Arc3" in it.tag && "noseR=0.8" in it.tag }) println("  ${rs.tag.substringBefore(", zClear")}: 기계 보정 NC ${rs.d.nc.joinToString(" / ")} · 팁 ${rs.s.tip} ${rs.s.side}")
         val t = Tal()
         for (rs in sols) {
-            val tag = rs.tag
-            val s = rs.s
-            val d = rs.d
-            val rr = rs.r
-            val tvv = NoseComp.tipVector(s.tip, rr)
-            val f = s.drawing.segs.first { (it.end - it.start).length > 1e-9 }
-            val q0 = f.start
-            val t0 = when (f) { is Line -> (f.end - f.start).unit(); is Arc -> (q0 - f.center).left().unit().let { if (f.cw) it * -1.0 else it } }
-            val n0 = if (s.side == Side.G41) t0.left() else right(t0)
-            val last = s.drawing.segs.last { (it.end - it.start).length > 1e-9 }
-            val tE = when (last) { is Line -> (last.end - last.start).unit(); is Arc -> (last.end - last.center).left().unit().let { if (last.cw) it * -1.0 else it } }
-            val nE = if (s.side == Side.G41) tE.left() else right(tE)
-            val kk = d.nc.indexOfFirst { it.startsWith("G01") }
-            val body = d.nc.drop(kk + 1)
-            val cc = max(1.0, rr)
-            val lead = q0 - t0 * (rr + 0.01)
-            for ((sn, head) in listOf(
-                "한 직선" to listOf("G00 ${at(q0 - t0 * cc)}", "${s.side} G01 ${at(q0)}"),
-                // 안내(2026-10-29): G00 은 lead 에서 공구 쪽으로 Z 여유 + 2r — G40 노즈(G00 − 팁 벡터)가 첫 요소 보정선 바깥
-                "직각" to listOf("G00 ${at(lead + n0 * (cc + 2 * rr))}", "${s.side} G01 ${at(lead)}", "G01 ${at(q0)}"),
-            )) for ((cn, dd) in listOf("2r(반경)" to 2.0 * rr + 0.01, "X 로 2r(직경 — 반경 r)" to rr + 0.005)) {
-                val nc = head + body + listOf("G40", "G01 ${at(last.end + nE * dd)}")
-                val run = sim(nc, rr, s.tip)
-                val grp = "${if ("Arc3" in tag) "3점호" else if ("inner=true" in tag) "내경" else "외경"}"
-                if (run.stop != null) {
-                    t.add("[$grp] 시작 $sn · 취소 $cn: GSim 멈춤 ${run.stop!!.code}", 0.0, "$tag | ${nc.joinToString(" / ")}")
+            val grp = if ("Arc3" in rs.tag) "3점호" else if ("inner=true" in rs.tag) "내경" else "외경"
+            val q0 = rs.s.drawing.segs.first { (it.end - it.start).length > 1e-9 }.start
+            for ((k, run) in forms(rs.s.nc, rs.r, rs.s.tip).withIndex()) {
+                val form = CompStartup.values()[k]
+                val st = run.stop
+                if (st != null) {
+                    if (com.bmt.nosecalc.calc.RoundWarning.CONCAVE_R_LE_NOSE in rs.direct.warnings && st.code == IssueCode.COMP_ARC_SMALL) t.add("[$grp] 오목 R ≤ r 알람 꼴(따로 셈)")
+                    else t.add("[$grp] $form GSim 멈춤 ${st.code}", 0.0, "${rs.tag} | ${rs.s.nc.joinToString(" / ")}")
                     continue
                 }
-                val l = leftAt(run, q0, rr, 1)
-                if (l > tol) t.add("[$grp] 시작 $sn: 첫 점 남김", l, "$tag | ${nc.joinToString(" / ")}")
-                // 시작 블록(G42 줄)부터의 파고듦 — G00 은 따로(G40 상태라 노즈 = 지령점 − 팁 벡터)
-                val gs = gouge(run, s.drawing.segs, rr, 1)
-                if (gs.first > tol) t.add("[$grp] 시작 $sn · 취소 $cn: 파고듦 (줄 '${nc[gs.second]}')", gs.first, "$tag | ${nc.joinToString(" / ")}")
-                else t.add("[$grp] 시작 $sn · 취소 $cn: 남김 · 파고듦 없음")
-                val g00n = Pt(0.0, 0.0) + (progPts(nc)[0]!! - tvv)
-                val g00d = rr - s.drawing.segs.minOf { distTo(it, g00n) }
-                if (g00d > tol) t.add("[$grp] 시작 $sn: G00 점의 노즈(G40 상태)가 도면 속", g00d, "$tag | ${nc.first()}")
+                val l = leftAt(run, q0, rs.r, 2)
+                if (l > tol) t.add("[$grp] $form 첫 점 남김", l, "${rs.tag} | ${rs.s.nc.joinToString(" / ")}")
+                val g = gouge(run, rs.s.drawing.segs, rs.r, 2)
+                if (g.first > tol) t.add("[$grp] $form 파고듦 (줄 '${rs.s.nc[g.second]}')", g.first, "${rs.tag} | ${rs.s.nc.joinToString(" / ")}")
+                else if (l <= tol) t.add("[$grp] $form 남김 · 파고듦 없음")
             }
         }
-        t.print("라운드 안내 글 그대로 쓴 시작 · 취소(표준 팁)")
-        // 안내 꼴(직각 · G00 을 Z 여유 + 2r 띄움, 취소 2r)은 TYPE 1~6 외경 · 내경과 3점호(오목 시작 포함) 모두 남김 · 파고듦 없음.
-        // '한 직선' 꼴은 오목 시작 3점호에서 첫 점 모서리를 깎아(0.16 mm) 안내에서 뺐다 — 출력만
-        assertTrue(t.n.keys.none { "시작 직각" in it && ("파고듦 (" in it || "멈춤" in it || "첫 점 남김" in it || "도면 속" in it) && ("2r(반경)" in it || "첫 점 남김" in it || "도면 속" in it) }, "라운드 안내 글(직각)")
-        assertTrue(t.n.keys.none { (it.startsWith("[외경]") || it.startsWith("[내경]")) && "2r(반경)" in it && ("파고듦 (" in it || "멈춤" in it) }, "라운드 TYPE 안내 글")
+        t.print("라운드 기계 보정 글(회사 꼴, 표준 팁)")
+        assertTrue(t.n.keys.none { "멈춤" in it || "첫 점 남김" in it || "파고듦 (" in it }, "라운드 기계 보정 글")
+        assertTrue(sols.size >= 50, "글 ${sols.size}")
     }
 }
 
@@ -1015,28 +988,28 @@ private object TaperCalcHead {
         if ((listOf(entry, exit, entryD, exitD) + approachG40 + approachG4).any { it.x < -EPS }) warnings += TaperWarning.ENTRY_PAST_AXIS
 
         val ncG40 = NcLines().apply {
-            for (p in approachG40) move("G00", p)
-            move("G00", entry)
+            for (p in approachG40) move("G0", p)
+            move("G0", entry)
             // 시작점을 넣었으면 시작점′(시작 요소가 수평이면 진입점·시작점′ 이 그 보정선 위라 한 줄로 간다), 비웠으면 첫 꺾임점′
-            if (s0 == null) move("G01", segs[0].end) else if (!along) move("G01", s0)
-            for (s in segs.subList(fromSeg, toSeg)) if (s is Arc) arc(s) else move("G01", s.end)
-            move("G00", exit)
+            if (s0 == null) move("G1", segs[0].end) else if (!along) move("G1", s0)
+            for (s in segs.subList(fromSeg, toSeg)) if (s is Arc) arc(s) else move("G1", s.end)
+            move("G0", exit)
         }.lines
         val ncG41G42 = listOf("(R${Fmt.nc(r).removeSuffix(".")} T$tip)") + NcLines().apply {
-            for (p in approachG4) move("G00", p)
-            move("G00", entryD)
+            for (p in approachG4) move("G0", p)
+            move("G0", entryD)
             // 보정 시작·취소는 직선 이동(G00/G01)에서, 원호 블록은 안 된다 — Haas ST/TL 워크북 62쪽 APPROACH·DEPARTURE MOVES.
             // 시작 이동 끝에서 보정이 다 걸린다(같은 쪽). 시작 이동 길이 ≥ c ≥ r, 취소 이동 ≥ r(66쪽 "twice the tool radius" 는 직경값).
             // 시작 이동은 첫 형상 요소와 한 직선이거나, 그 선에 공구 쪽에서 직각으로 들어간다(안쪽 모서리 = 두 보정선의 교점)
             if (leadD != null) {
-                move("$side G01", leadD)
-                move("G01", startD)
+                move("G1", leadD, "$side")
+                move("G1", startD)
             } else {
-                move("$side G01", startD)
+                move("G1", startD, "$side")
             }
-            for (s in drawing.segs.subList(fromSeg, toSeg)) if (s is Arc) arc(s) else move("G01", if (s === last) endD else s.end)
+            for (s in drawing.segs.subList(fromSeg, toSeg)) if (s is Arc) arc(s) else move("G1", if (s === last) endD else s.end)
             // 취소 뒤 G40 상태의 인선 = 후퇴점. 진입과 같이 노즈가 끝 요소 선을 넘지 않게 lift 만큼 공구 쪽으로
-            move("G40 G00", exitD)
+            move("G0", exitD, "G40")
         }.lines
 
         // 꼭짓점 결과: 가공 순서의 k번 모서리. 칸 순서는 그림 순서를 뒤집기만큼, 가공 순서는 그림 순서를 leftFirst 만큼 뒤집은 것이라

@@ -1,6 +1,7 @@
 package com.bmt.nosecalc.screens.taper
 
 import com.bmt.nosecalc.AngleRef
+import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.GrooveCalc
 import com.bmt.nosecalc.calc.GrooveInput
 import com.bmt.nosecalc.calc.GrooveWarning
@@ -109,13 +110,34 @@ class TaperWarningsTest {
         assertTrue(TaperWarning.ENTRY_PAST_AXIS in TaperSolve.solve(face).warnings)
         val t = taperWarningText(TaperWarning.ENTRY_PAST_AXIS, face)
         assertTrue(t.startsWith("단면을 중심(X0)까지 깎아") && "Z 여유를 줄이세요" !in t && "X−0.8" in t && "Z 로 빠집니다" in t, t)
-        // 그 글대로: 인선 X-0.8 까지 깎고 Z 로 후퇴(두 프로그램 모두)
+        // 그 글대로: 인선 X-0.8 까지 깎고 Z 로 후퇴(두 프로그램 모두). 기계 보정(회사 꼴)은 단면을 X −2r = −0.8 까지 쓰고 공구 쪽(+Z)으로
+        // c = max(Z 여유 1, r) = 1 빼는 줄 Z1.(F.3) → G40 → G0Z200. — 단면 보정선(Z0.4)과 빼는 줄 보정선(반경 −0.4 + 0.4)의 교점이라 노즈 중심이 중심선에 선다
         val s = TaperSolve.solve(face).solution!!
-        assertEquals(listOf("G01 X-0.8", "G00 Z1."), s.ncG40.takeLast(2))
-        assertEquals(listOf("G01 X-0.8", "G40 G01 Z1."), s.ncG41G42.takeLast(2))
+        assertEquals(listOf("X-.8", "G0Z1."), s.ncG40.takeLast(2))
+        assertEquals(listOf("X-.8", "Z1.F.3", "G40", "G0Z200."), s.ncG41G42.takeLast(4))
         assertTrue(taperWarningText(TaperWarning.ENTRY_PAST_AXIS, face.copy(end = 30.0)).endsWith("Z 여유를 줄이세요."))
         // 끝 X30 은 공구 쪽(+Z)으로 빠져 중심을 넘지 않는다
         assertTrue(TaperWarning.ENTRY_PAST_AXIS !in TaperSolve.solve(face.copy(end = 30.0)).warnings)
+    }
+
+    /**
+     * 내경 형상 4(큰 내경 → 테이퍼 → 안쪽 단면)의 바닥 단면을 중심(끝 X0)까지 — 두 프로그램이 다르게 중심을 넘어 글이 둘을 나눠 말한다(검증 2026-11-04).
+     * 기계 보정: 바닥 단면(Z−5)을 X −2r = −0.8 까지 쓰고 공구 쪽(+Z)으로 c = max(Z 여유 1, r 0.4) = 1 → Z−4.(F.3). G40 자리 규칙 0.986 — 가장 가까운 소재는
+     * 바닥 단면(과 축 너머 같은 면)에서 1.0. 직접 보정: 끝 단면을 이어서 c 더(calc '진입점과 NC' 후퇴 — 단면이면 그대로 이어서) — 끝점′ 에서 같은 Z 로 X 를 2c 줄인 G0
+     */
+    @Test
+    fun pastAxisTextForInnerBottomToCenter() {
+        val bottom = form(TaperKind.INNER, 4, listOf(40.0, 30.0), listOf(0.0, -5.0)).copy(end = 0.0)
+        val res = TaperSolve.solve(bottom)
+        assertTrue(TaperWarning.ENTRY_PAST_AXIS in res.warnings)
+        val t = taperWarningText(TaperWarning.ENTRY_PAST_AXIS, bottom)
+        assertTrue(t.startsWith("바닥 단면을 중심(X0)까지 깎아") && "Z 여유를 줄이세요" !in t, t)
+        assertTrue("기계 보정(G41/G42)은 X−0.8 까지 간 뒤 Z 로 빠지고" in t && "직접 보정(G40)은 같은 높이로 중심 너머까지" in t, t)
+        val s = res.solution!!
+        assertEquals(listOf("X-.8", "Z-4.F.3", "G40", "G0Z200."), s.ncG41G42.takeLast(4))
+        val endX = s.ncG40[s.ncG40.size - 2].substringAfter("X").toDouble()
+        assertEquals("G0X${Fmt.word(endX - 2 * 1.0)}", s.ncG40.last())
+        assertTrue(endX - 2 * 1.0 < 0)
     }
 
     @Test

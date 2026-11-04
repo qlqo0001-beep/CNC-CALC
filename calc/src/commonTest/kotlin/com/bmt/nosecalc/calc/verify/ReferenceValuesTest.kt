@@ -16,6 +16,7 @@ import com.bmt.nosecalc.calc.TaperCalc
 import com.bmt.nosecalc.calc.TaperInput
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TriangleInput
+import com.bmt.nosecalc.calc.legacy
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -129,7 +130,7 @@ class ReferenceValuesTest {
                 ck.near("면취 ${n + 1} T${j + 1}′ X", e.first, s.at(j).prog.xDia, 0.00005)
                 ck.near("면취 ${n + 1} T${j + 1}′ Z", e.second, s.at(j).prog.z, 0.00005)
             }
-            if (n == 2) ck.same("N14 끝", "G01 Z-2.375", s.ncG40[s.ncG40.size - 2])
+            if (n == 2) ck.same("N14 끝", "G01 Z-2.375", s.ncG40.legacy[s.ncG40.size - 2])
         }
         ck.done()
     }
@@ -217,7 +218,7 @@ class ReferenceValuesTest {
             }
             ck.near("3점 ${a.line} 첫 보정점 X", a.first.first, s.nodes[0].prog.xDia, tol)
             ck.near("3점 ${a.line} 첫 보정점 Z", a.first.second, s.nodes[0].prog.z, tol)
-            ck.same("3점 NC 원호 줄", a.line, s.nc.last())
+            ck.same("3점 NC 원호 줄", a.line, s.nc.legacy.last())
         }
         ck.done()
     }
@@ -312,7 +313,7 @@ class ReferenceValuesTest {
         taper(ck, "진입점", TaperInput(type = 1, noseR = 0.0, x1 = 28.0, z1 = 0.0, x2 = 30.0, z2 = -1.0, zClear = 2.0))?.let {
             ck.near("ポイント2 X", 24.0, it.entry.xDia, 0.0005)
             ck.near("ポイント2 Z", 2.0, it.entry.z, 0.0005)
-            ck.same("ポイント2 NC", "G00 X24. Z2.", it.ncG40.first())
+            ck.same("ポイント2 NC", "G00 X24. Z2.", it.ncG40.legacy.first())
         }
         val face = NoseComp.tipPath(Contour.polyline(Pt.ofDia(0.1, 32.0), Pt.ofDia(0.1, 0.0)), 0.4, Side.G41, 3)
         ck.near("끝면 X−0.8", -0.8, face.path.segs[0].end.xDia, 0.0005)

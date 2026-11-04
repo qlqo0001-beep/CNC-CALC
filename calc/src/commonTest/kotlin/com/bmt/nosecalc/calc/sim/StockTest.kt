@@ -195,7 +195,7 @@ class StockTest {
     /** 되감기 = 처음부터 깎은 것(저장점에서 다시 — 이동 1 000 개 넘는 G71) */
     @Test
     fun rewindEqualsFresh() {
-        val text = SimExamples.all[0].text.replace("G71 U1.5 R0.5", "G71 U0.05 R0.02")
+        val text = SimExamples.all[0].text.replace("G71U1.5R.5", "G71U.05R.02")
         val run = GSim.run(SimInput(text, MachineSetup(), SimExamples.all[0].tools))
         assertTrue(run.stop == null)
         val moves = run.steps.count { it is MoveStep }
@@ -313,7 +313,7 @@ class StockTest {
     @Test
     fun frameCost() {
         val ex = SimExamples.all[0]
-        val text = ex.text.replace("G71 U1.5 R0.5", "G71 U0.05 R0.02")
+        val text = ex.text.replace("G71U1.5R.5", "G71U.05R.02")
         val run = GSim.run(SimInput(text, MachineSetup(), ex.tools))
         val spec = assertNotNull(StockAuto.of(run))
         val s = StockSim(spec, run, ex.tools)

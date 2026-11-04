@@ -14,6 +14,7 @@ import com.bmt.nosecalc.calc.PolarInput
 import com.bmt.nosecalc.calc.PolarShape
 import com.bmt.nosecalc.calc.PolarSolution
 import com.bmt.nosecalc.calc.PolarWarning
+import com.bmt.nosecalc.calc.ncWords
 import kotlin.math.abs
 
 /**
@@ -259,20 +260,20 @@ internal data class NcTok(val text: String, val dim: Boolean = false)
 
 /**
  * 시뮬레이션 G코드 목록의 한 줄: 극좌표 평면을 움직이는 줄에서 앞 줄과 같아 뺀 X · C 를 흐린 낱말로 제자리에 넣는다(원본 07 의 `C0.` · `X-87.757`).
- * 뺀 값은 블록의 줄 끝 지령값(PolarBlock.x · c) 그대로 — 계산기와 같은 Fmt.nc. 흐린 낱말을 빼고 이으면 NC 글 그대로다
+ * 뺀 값은 블록의 줄 끝 지령값(PolarBlock.x · c) 그대로 — 계산기와 같은 Fmt.word. 흐린 낱말을 빼고 (빈칸 없이) 이으면 NC 글 그대로다
  */
 internal fun ncTokens(b: PolarBlock): List<NcTok> {
     if (b.text.startsWith("(")) return listOf(NcTok(b.text))
-    val words = b.text.split(' ').map { NcTok(it) }.toMutableList()
+    val words = ncWords(b.text).map { NcTok(it) }.toMutableList()
     if (!b.polar || b.path.isEmpty()) return words
     val gEnd = words.indexOfFirst { !it.text.startsWith("G") }.let { if (it < 0) words.size else it }
     var at = gEnd
     if (words.none { it.text.startsWith("X") }) {
-        b.x?.let { words.add(at, NcTok("X${Fmt.nc(it)}", dim = true)) }
+        b.x?.let { words.add(at, NcTok("X${Fmt.word(it)}", dim = true)) }
     }
     at = words.indexOfFirst { it.text.startsWith("X") }.let { if (it < 0) gEnd else it + 1 }
     if (words.none { it.text.startsWith("C") }) {
-        b.c?.let { words.add(at, NcTok("C${Fmt.nc(it)}", dim = true)) }
+        b.c?.let { words.add(at, NcTok("C${Fmt.word(it)}", dim = true)) }
     }
     return words
 }

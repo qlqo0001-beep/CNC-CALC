@@ -289,9 +289,10 @@ internal fun SlopeScreen(s: TaperState) {
             SlopeViewer(sol, form.noseR, r, kind.inner, s.reverse, direct)
             // 역방향(뒤집기 없음)은 역바이트가 척 쪽에서 시작해 첫 G00 이 척 쪽 — 내경이면 구멍 안이다. G00 은 X · Z 가 따로 움직일 수 있어
             // (dog-leg) 앞 위치에서 바로 오면 입구 단면 · 면취나 부품에 닿는다. 그 앞에 넣을 접근 줄을 알린다(검증 2026-10-27).
-            // 뒤집기(같은 바이트로 척 쪽부터)는 계산 결과의 NC 에 접근 줄이 이미 있다(calc: 앞 끝면 바깥에서 X 를 맞추고 Z 로)
-            if (chuckFirst && !flip) {
-                val g00 = if (direct) sol.ncG40.first() else sol.ncG41G42[1]
+            // 뒤집기(같은 바이트로 척 쪽부터)는 계산 결과의 NC 에 접근 줄이 이미 있다(calc: 앞 끝면 바깥에서 X 를 맞추고 Z 로).
+            // 기계 보정(회사 꼴)은 Z20. 에서 도면에 닿지 않는 X 로 맞추고 들어가 알릴 것이 없다
+            if (chuckFirst && !flip && direct) {
+                val g00 = sol.ncG40.first()
                 val x = Regex("X(-?[\\d.]+)").find(g00)?.groupValues?.get(1) ?: ""
                 WarningBanner(
                     if (kind.inner) {
@@ -306,8 +307,6 @@ internal fun SlopeScreen(s: TaperState) {
                     collapsedText = if (kind.inner) "첫 G00 이 구멍 안 — 접근 줄 안내" else "첫 G00 이 척 쪽 — 접근 줄 안내",
                 )
             }
-            // G41/G42 글이 이동 없는 G40 한 줄로 보정을 끄나(FANUC 형식 A · B 의 끝 법선 — 형식 C 기계는 다르게 움직임)
-            val cancelAlone = sol.ncG41G42.any { it.trim() == "G40" }
             NcCard(
                 if (direct) directNc(sol.ncG40, form.noseR, sol.tip) else sol.ncG41G42,
                 if (direct) {
@@ -315,13 +314,12 @@ internal fun SlopeScreen(s: TaperState) {
                         "노즈R 만큼 두 번 밀립니다(첫 줄 주석이 그 노즈 R · 팁을 적어 둡니다 — 기계는 주석을 건너뜁니다). " +
                         "모서리 원호는 보정 R(볼록 R + r · 오목 R − r), 인선은 끝좌표에 멈춥니다. 이송 F 는 넣지 않았습니다."
                 } else {
-                    "도면 좌표에 ${sol.side} ${eulReul("${sol.side}")} 걸어 기계가 노즈R 을 보정합니다. " +
-                        "기계 공구 보정 화면에 R$r · T${sol.tip} ${eulReul("${sol.tip}")} 넣으세요(첫 줄 주석). " +
-                        "보정 시작·취소는 직선 이동에서 하고, 취소 이동은 G01 입니다(G00 이면 기계에 따라 X · Z 가 따로 움직여 끝 모서리를 깎을 수 있음). " +
-                        "끝은 기계가 취소 블록과의 관계로 정합니다 — 척 쪽으로 깎아 끝나면 공구 쪽으로 직각으로 빼서 노즈 끝이 끝좌표에서 멈추고, " +
-                        "앞 끝 쪽으로 깎아 끝나면 움직임 없는 G40 한 줄로 노즈 접점이 끝좌표에 섭니다(FANUC 형식 A · B)." +
-                        (if (cancelAlone) " 이 글은 움직임 없는 G40 을 씁니다 — 기계 매개변수 No.5003#1(SUV)이 1 인 형식 C 기계는 G40 줄에서 공구가 움직여 끝을 깎을 수 있으니 확인하세요." else "") +
-                        " 이송 F 는 넣지 않았습니다."
+                    "도면 좌표에 ${sol.side} ${eulReul("${sol.side}")} 걸어 기계가 노즈R 을 보정합니다(공구 보정 화면에 R$r · T${sol.tip}). " +
+                        "회사 꼴입니다 — ${sol.side} 혼자 줄 → G0 로 Z20. 에서 X 를 맞추고 진입점까지 Z 로 → 첫 깎는 점 G1 F.1 → 형상 → " +
+                        "보정 켠 채 공기로 빼는 줄 F.3 → G40 혼자 줄 → G0Z200. 입니다. 보정 줄이 움직임 없는 혼자 줄이라 깎는 줄의 노즈는 기계의 보정 시작 · 취소 형식" +
+                        "(No.5003#1 SUV)과 팁 번호에 상관없습니다. 척 쪽 · 바닥 쪽으로 깎아 끝나면 벽을 따라 공구 쪽으로 빼서 노즈가 끝좌표에서 멈추고, " +
+                        "앞 끝 쪽으로 깎아 끝나면 끝좌표 너머로 곧게 조금 더 갑니다. G40 줄은 둘레 (1 + √2) × 노즈R 안에 도면이 없는 자리에 둡니다" +
+                        "(형식 C 기계는 그 줄에서 공구가 움직입니다)."
                 },
                 programName = if (direct) "직접 보정(G40) 프로그램" else "기계 보정(G41/G42) 프로그램",
                 facts = if (direct) {
@@ -329,9 +327,7 @@ internal fun SlopeScreen(s: TaperState) {
                 } else {
                     listOf(
                         NcFact("공구 보정 화면: R $r · T ${sol.tip} 입력", WarnLevel.Warn),
-                        // 이동 없는 G40 한 줄 + G01 로 끝나는 글은 칩도 그 꼴로(검증 2026-10-29 — 'G40 G01' 칩이 글과 달랐다)
-                        if (cancelAlone) NcFact("취소: G40 한 줄 → G01 · 형식 C 확인", WarnLevel.Warn) else NcFact("보정 취소 G40 G01 (직선)"),
-                        NcFact("이송 F 없음"),
+                        NcFact("이송 F.1 · 빼기 F.3"),
                     )
                 },
             )

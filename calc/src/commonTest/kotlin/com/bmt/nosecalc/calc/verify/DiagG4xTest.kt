@@ -15,6 +15,7 @@ import com.bmt.nosecalc.calc.TaperInput
 import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
+import com.bmt.nosecalc.calc.legacy
 import com.bmt.nosecalc.calc.sim.GSim
 import com.bmt.nosecalc.calc.sim.MachineSetup
 import com.bmt.nosecalc.calc.sim.MoveKind
@@ -182,14 +183,14 @@ class DiagG4xTest {
 
     private fun detail(name: String, tag: String, r: Double, res: TaperResult, lines0: List<String>? = null) {
         val s = res.solution!!
-        val lines = lines0 ?: s.ncG41G42
+        val lines = lines0 ?: s.ncG41G42.legacy
         val draw = s.drawing.segs
         val cen = cutOf(s.center.segs, s.fromStart, s.toEnd)
         println("==== $name")
         println("  case: $tag")
         println("  warnings=${res.warnings} side=${s.side} tip=${s.tip} tv=${c(NoseComp.tipVector(s.tip, r))}")
         println("  G41/G42 NC: " + lines.joinToString(" / "))
-        println("  G40 NC    : " + s.ncG40.joinToString(" / "))
+        println("  G40 NC    : " + s.ncG40.legacy.joinToString(" / "))
         println("  drawing   : " + draw.joinToString(" ; ") { "${it::class.simpleName} ${c(it.start)}->${c(it.end)}" })
         println("  calc nose path (cut) start ${c(cen.first().start)} end ${c(cen.last().end)}")
         for (rp in listOf(RapidPath.DOGLEG, RapidPath.LINEAR)) {
@@ -206,18 +207,18 @@ class DiagG4xTest {
             println("  RefG4x (simG4x Type A, straight G00):")
             for (p in rf) println("    ${p::class.simpleName} nose ${c(p.start)} -> ${c(p.end)} depth ${f4(depth(p, draw, r))}")
         }
-        val d = sim(s.ncG40, r, s.tip)
+        val d = sim(s.ncG40.legacy, r, s.tip)
         val dm = moves(d)
         val df = dm.firstOrNull { it.line > pre.size }?.line ?: 0
         println("  direct(G40) GSim DOGLEG:")
-        for (m in dm.filter { it.line > df }) println("    [${(pre + s.ncG40)[m.line - 1]}] ${m.kind} nose ${c(m.nose.start)} -> ${c(m.nose.end)} depth ${f4(depth(m.nose, draw, r))}")
+        for (m in dm.filter { it.line > df }) println("    [${(pre + s.ncG40.legacy)[m.line - 1]}] ${m.kind} nose ${c(m.nose.start)} -> ${c(m.nose.end)} depth ${f4(depth(m.nose, draw, r))}")
     }
 
     @Test
     fun reproductions() {
         val cases = taperCases()
         for ((name, rep) in listOf("2-1 start block gouge" to repA, "2-2 cancel G00 gouge" to repB)) {
-            val hit = cases.firstOrNull { it.third.solution?.ncG41G42?.joinToString(" / ") == rep }
+            val hit = cases.firstOrNull { it.third.solution?.ncG41G42?.legacy?.joinToString(" / ") == rep }
             if (hit == null) println("==== $name: not found in taperCases: $rep") else detail(name, hit.first, hit.second, hit.third)
         }
         // 문제 1 대표: 뒤집기 + 끝점 넣음 외경 TYPE3 20° r0.4 · r0.8, 내경 TYPE3, 계산기 역방향 TYPE2
@@ -261,7 +262,7 @@ class DiagG4xTest {
             val s = TaperCalc.calc(inp).solution!!
             val draw = s.drawing.segs
             val v = draw.last().end
-            val nc = s.ncG41G42
+            val nc = s.ncG41G42.legacy
             val body = nc.dropLast(1)
             println("==== fix 1 (end): ${inp}")
             variant("V0 now (perpendicular G40 G00 = inner corner)", nc, r, s.tip, draw, v)
@@ -281,13 +282,13 @@ class DiagG4xTest {
             val inpA = TaperInput(true, 1, true, 0.8, null, 48.0, -6.0, 60.0, 0.0, flip = true)
             val sA = TaperCalc.calc(inpA).solution!!
             println("==== fix 2-1 (start) A: $inpA")
-            variant("now", sA.ncG41G42, 0.8, sA.tip, sA.drawing.segs, null)
-            variant("perpendicular onto lead (E - t*r), then along", listOf("G00 X58.586 Z1.838", "G41 G01 X61.131 Z0.566", "G01 X60. Z0.") + sA.ncG41G42.drop(3), 0.8, sA.tip, sA.drawing.segs, null)
+            variant("now", sA.ncG41G42.legacy, 0.8, sA.tip, sA.drawing.segs, null)
+            variant("perpendicular onto lead (E - t*r), then along", listOf("G00 X58.586 Z1.838", "G41 G01 X61.131 Z0.566", "G01 X60. Z0.") + sA.ncG41G42.legacy.drop(3), 0.8, sA.tip, sA.drawing.segs, null)
             val x2 = Fmt.nc(60 - 2 * 6 * tan(70 * PI / 180)).toDouble()
             val inp5 = TaperInput(false, 5, false, 0.8, null, 60.0, 0.0, x2, -6.0)
             val s5 = TaperCalc.calc(inp5).solution!!
             println("==== fix 2-1 (start) fwd OD TYPE5 70: $inp5 warn=${TaperCalc.calc(inp5).warnings}")
-            variant("now", s5.ncG41G42, 0.8, s5.tip, s5.drawing.segs, null)
+            variant("now", s5.ncG41G42.legacy, 0.8, s5.tip, s5.drawing.segs, null)
             // E = (0, 30), t = 경사 단위, G42 → n = −left(t). lead = E − t·r, G00 = lead + n·(c + lift)
             val e = Pt(0.0, 30.0)
             val t = unitOf(Pt.ofDia(-6.0, x2) - e)
@@ -299,7 +300,7 @@ class DiagG4xTest {
             fun xz(p: Pt) = "X${Fmt.nc(p.xDia)} Z${Fmt.nc(p.z)}"
             variant(
                 "perpendicular onto lead (E - t*r), then along (lift ${f4(lift)})",
-                listOf("G00 ${xz(g0)}", "G42 G01 ${xz(lead)}", "G01 X60. Z0.") + s5.ncG41G42.drop(3), 0.8, s5.tip, s5.drawing.segs, null,
+                listOf("G00 ${xz(g0)}", "G42 G01 ${xz(lead)}", "G01 X60. Z0.") + s5.ncG41G42.legacy.drop(3), 0.8, s5.tip, s5.drawing.segs, null,
             )
         }
         // 문제 2-2: 취소 G00 — 재현 B 와 화면이 만드는 정방향 외경 TYPE1(끝 비움, 모서리 R) — G40 G01 로(직선)
@@ -307,15 +308,15 @@ class DiagG4xTest {
             val inpB = TaperInput(false, 1, true, 0.8, null, 92.97, -6.0, 60.0, 0.0, flip = true)
             val sB = TaperCalc.calc(inpB).solution!!
             println("==== fix 2-2 (cancel) B: $inpB")
-            variant("now", sB.ncG41G42, 0.8, sB.tip, sB.drawing.segs, null)
-            variant("G40 G01 instead of G40 G00", sB.ncG41G42.dropLast(1) + sB.ncG41G42.last().replace("G40 G00", "G40 G01"), 0.8, sB.tip, sB.drawing.segs, null)
+            variant("now", sB.ncG41G42.legacy, 0.8, sB.tip, sB.drawing.segs, null)
+            variant("G40 G01 instead of G40 G00", sB.ncG41G42.legacy.dropLast(1) + sB.ncG41G42.legacy.last().replace("G40 G00", "G40 G01"), 0.8, sB.tip, sB.drawing.segs, null)
             for ((cr1, cr2) in listOf(0.0 to 0.0, 1.5 to 0.0, 2.0 to 0.6)) {
                 val x2 = Fmt.nc(60 + 2 * 6 * tan(70 * PI / 180)).toDouble()
                 val inp = TaperInput(false, 1, false, 0.8, null, 60.0, 0.0, x2, -6.0, cornerR1 = cr1, cornerR2 = cr2)
                 val s = TaperCalc.calc(inp).solution!!
                 println("==== fix 2-2 (cancel) fwd OD TYPE1 70 CR $cr1/$cr2: warn=${TaperCalc.calc(inp).warnings}")
-                variant("now", s.ncG41G42, 0.8, s.tip, s.drawing.segs, null)
-                variant("G40 G01 instead of G40 G00", s.ncG41G42.dropLast(1) + s.ncG41G42.last().replace("G40 G00", "G40 G01"), 0.8, s.tip, s.drawing.segs, null)
+                variant("now", s.ncG41G42.legacy, 0.8, s.tip, s.drawing.segs, null)
+                variant("G40 G01 instead of G40 G00", s.ncG41G42.legacy.dropLast(1) + s.ncG41G42.legacy.last().replace("G40 G00", "G40 G01"), 0.8, s.tip, s.drawing.segs, null)
             }
         }
     }
@@ -335,7 +336,7 @@ class DiagG4xTest {
         for ((tag, r, res) in taperCases()) {
             val s = res.solution ?: continue
             cases++
-            val lines = s.ncG41G42
+            val lines = s.ncG41G42.legacy
             val run = sim(lines, r, s.tip)
             if (run.stop != null) {
                 stops++
@@ -362,7 +363,7 @@ class DiagG4xTest {
             fun left(noses: List<Seg>) = noses.flatMap { pts(it) }.minOf { (it - e).length } - r
             fun beyond(noses: List<Seg>) = noses.flatMap { pts(it) }.maxOf { ((it - e) dot tA) + r }
             val simN = (shape + cancelMv).map { it.nose }
-            val dRun = sim(s.ncG40, r, s.tip)
+            val dRun = sim(s.ncG40.legacy, r, s.tip)
             val dm = moves(dRun)
             val df = dm.firstOrNull { it.line > pre.size }?.line ?: 0
             val dirN = dm.filter { it.line > df + 1 }.map { it.nose }
@@ -418,7 +419,7 @@ class DiagG4xTest {
         val rows = mutableListOf<G>()
         for ((tag, r, res) in taperCases()) {
             val s = res.solution ?: continue
-            val lines = s.ncG41G42
+            val lines = s.ncG41G42.legacy
             val draw = s.drawing.segs
             fun deepest(run: SimRun): Pair<Double, MoveStep>? {
                 val ms = moves(run)
@@ -479,14 +480,14 @@ class DiagG4xTest {
         val p0 = draw.first().start
         println("==== round TYPE1 SR15 L20 CR1 r0.4: side=${s.side} tip=${s.tip} p0=${c(p0)} first seg ${draw.first()::class.simpleName} ${c(draw.first().start)}->${c(draw.first().end)}")
         println("  direct NC: " + s.nc.joinToString(" / "))
-        println("  drawn  NC: " + dr.nc.joinToString(" / "))
-        val k = dr.nc.indexOfFirst { it.startsWith("G01") }
-        val body = dr.nc.drop(k + 1)
+        println("  drawn  NC: " + dr.nc.legacy.joinToString(" / "))
+        val k = dr.nc.legacy.indexOfFirst { it.startsWith("G01") }
+        val body = dr.nc.legacy.drop(k + 1)
         val last = dr.drawing.segs.last { lenOf(it) > 1e-9 }
         val pe = last.end + tanEnd(last) * 2.0
         val cancel = "G40 G01 X${Fmt.nc(pe.xDia)} Z${Fmt.nc(pe.z)}"
         val variants = listOf(
-            "guide now: G42 on first G01" to (dr.nc.take(k) + "${s.side} ${dr.nc[k]}" + body + cancel),
+            "guide now: G42 on first G01" to (dr.nc.legacy.take(k) + "${s.side} ${dr.nc.legacy[k]}" + body + cancel),
             "start collinear with first element (from below axis, +X)" to (listOf("G00 X-1.6 Z0.", "${s.side} G01 X0.") + body + cancel),
             "start perpendicular onto lead r beyond axis (X-2r), then along" to (listOf("G00 X-0.8 Z1.", "${s.side} G01 Z0.", "G01 X0.") + body + cancel),
         )
@@ -510,10 +511,10 @@ class DiagG4xTest {
         )) {
             val sa = RoundCalc.arc3(a).solution ?: continue
             val da = RoundCalc.arc3(a.copy(noseR = 0.0)).solution ?: continue
-            val kk = da.nc.indexOfFirst { it.startsWith("G01") }
+            val kk = da.nc.legacy.indexOfFirst { it.startsWith("G01") }
             val la = da.drawing.segs.last { lenOf(it) > 1e-9 }
             val pa = la.end + tanEnd(la) * 2.0
-            val nc = da.nc.take(kk) + "${sa.side} ${da.nc[kk]}" + da.nc.drop(kk + 1) + "G40 G01 X${Fmt.nc(pa.xDia)} Z${Fmt.nc(pa.z)}"
+            val nc = da.nc.legacy.take(kk) + "${sa.side} ${da.nc.legacy[kk]}" + da.nc.legacy.drop(kk + 1) + "G40 G01 X${Fmt.nc(pa.xDia)} Z${Fmt.nc(pa.z)}"
             val q0 = sa.drawing.segs.first().start
             val run = sim(nc, a.noseR, sa.tip)
             val ms = moves(run)

@@ -106,7 +106,10 @@ data class Arc3Input(
 /** 도면 원호 하나. [index] = drawing.segs 번호, [progR] = 보정(합성) R — 볼록 R + r, 오목 R − r, 없어졌으면 null */
 data class RoundArc(val index: Int, val cw: Boolean, val center: Pt, val r: Double, val progR: Double?)
 
-/** NC 줄 하나가 어디서 나왔나. [element] −2 = G00 진입, −1 = G01 시작점, k = drawing.segs[k]. 90° 넘게 나눈 원호는 [pieces] 조각 가운데 [piece] 번(0부터) */
+/**
+ * NC 줄 하나가 어디서 나왔나. [element] −2 = G00 진입, −1 = G01 시작점, k = drawing.segs[k]. 90° 넘게 나눈 원호는 [pieces] 조각 가운데 [piece] 번(0부터).
+ * 기계 보정 프로그램([RoundCalc.machine])은 −2 = 보정 혼자 줄 · 진입 G0 줄들, −1 = 첫 깎는 줄(G1 F.1), drawing.segs.size = 빼는 줄 · G40 · G0Z200.
+ */
 data class NcRef(val element: Int, val piece: Int, val pieces: Int)
 
 data class RoundSolution(
@@ -132,22 +135,17 @@ data class RoundSolution(
     /** [nc] 줄마다 하나 */
     val ncRefs: List<NcRef>,
     /**
-     * 기계 보정 프로그램([RoundCalc.machine])의 직각 진입점: G00 [entry] → 여기(보정 시작 블록, 첫 요소 선에 직각) → 첫 점(그 선을 따라).
-     * 띄운 진입이 아니면 null(G00 → 첫 점 한 블록)
+     * 기계 보정 프로그램([RoundCalc.machine])의 진입 명령점: `G0X…Z20.` 자리 → (바깥에서 X 를 맞추면 그 자리) → 진입점([entry]) — 그 뒤 `G1` 로 첫 점.
+     * 직접 보정 풀이는 빈 목록
      */
-    val lead: Pt? = null,
+    val approach: List<Pt> = emptyList(),
 ) {
     /**
-     * element 의 NC 줄 번호(0부터). p = 이 풀이의 프로그램 좌표 점(나눈 원호는 각 비율로 조각을 고름). 줄이 없으면 그 앞 줄.
-     * 진입 이동(−1)이 [lead] 를 거쳐 두 줄이면 p 에 가까운 블록의 줄
+     * element 의 NC 줄 번호(0부터). p = 이 풀이의 프로그램 좌표 점(나눈 원호는 각 비율로 조각을 고름). 줄이 없으면 그 앞 줄
      */
     fun lineOf(element: Int, p: Pt): Int {
         val lines = ncRefs.indices.filter { ncRefs[it].element == element }
         if (lines.isEmpty()) return max(0, ncRefs.indexOfLast { it.element < element })
-        if (element == -1 && lead != null && lines.size == 2) {
-            val start = program.segs.first().start
-            return if (distTo(Line(lead, start), p) < distTo(Line(entry, lead), p)) lines[1] else lines[0]
-        }
         val a = program.segs.getOrNull(element) as? Arc
         val pieces = ncRefs[lines.first()].pieces
         if (a == null || pieces == 1) return lines.first()
@@ -173,18 +171,17 @@ object RoundCalc {
     /** [againstTool] 의 사분면 경계 여유(내적·rad, 각으로 0.06~0.08°) */
     private const val QUADRANT_TOL = 1e-3
 
+    /** 기계 보정 프로그램이 축에서 끝나는 원호(내경 돔 · 공 바닥) 뒤 노즈 중심을 축 너머로 지나게 하는 길이(mm) */
+    const val AXIS_PAST = 0.01
+
     fun calc(i: RoundInput): RoundResult = type(i, null)
 
     /**
-     * 기계 보정(G41/G42) 프로그램 — 도면(접점) 좌표 풀이. 윤곽 · 노드 · 원호 · NC 형상은 노즈R 0 으로 푼 것(`calc(i.copy(noseR = 0.0))`)과 같고,
-     * G00 자리만 [i] 의 노즈R · 팁에 맞게 띄운다(사용자 결정 2026-10-28, 테이퍼의 lift 규칙과 같은 원칙 — 설계 문서 "라운드R 계산 · 기계 보정 진입").
-     * G40 상태의 G00 점에서는 인선이 그 점에 있어 노즈 = 점 − 팁 벡터다. 첫 요소의 시작 선(직선 · 원호 시작 접선)에서 공구 쪽 법선 n 으로
-     * lift = max(0, r + n·팁 벡터) 만큼 노즈가 모자라면: 시작 선을 따라 들어가는 진입(내경 입구 · 3점호 접선 진입)은 그 선 위 [RoundSolution.lead]
-     * (직접 보정 진입점의 발에서 r 더 바깥)에서 공구 쪽으로 c + lift 띄운 G00 → lead 로 직각(보정 시작 블록) → 첫 점, 그 밖(외경 끝 면 · 돔 끝 ·
-     * 3점호 Z 진입)은 G00 점을 공구 쪽으로 lift 더. c = max(Z 여유, r) — 직접 보정 진입과 같다(보정 시작 이동 ≥ r).
-     * 표준 팁이 제 쪽 요소를 따라가면 lift = 0 이라 Z 여유 ≥ r 이면 노즈R 0 풀이와 같은 글이다. 계산을 멈추는 경고는 [calc] 와 같다 — 직접 보정이
-     * 멈추면(노즈가 닿지 못함 · 축을 넘음 등) 그 결과를 그대로 낸다: 같은 노즈라 기계 보정도 제어기가 파거나 알람이다(10-28 검증 — 홈보다 큰 노즈에
-     * 글을 내 시작 블록 노즈가 맞은편 벽을 0.28 mm 팠다)
+     * 기계 보정(G41/G42) 프로그램 — 도면(접점) 좌표 풀이. 윤곽 · 노드 · 원호 · 형상 줄은 노즈R 0 으로 푼 것(`calc(i.copy(noseR = 0.0))`)과 같고,
+     * NC 는 회사 꼴(계획 단계 4, 사용자 결정 2026-10-29): `G42` / `G0X…Z20.` / `Z…` / `G1 첫 점 F.1` / 형상 / 빼는 줄 `F.3` / `G40` / `G0Z200.`(`machineFrame`).
+     * 보정 줄이 이동 없는 혼자 줄이라 깎는 줄의 노즈는 보정 시작 · 취소 형식과 팁 번호에 상관없다(노즈R 은 공기 이동을 재는 데만 쓴다).
+     * 계산을 멈추는 경고는 [calc] 와 같다 — 직접 보정이 멈추면(노즈가 닿지 못함 · 축을 넘음 등) 그 결과를 그대로 낸다: 같은 노즈라 기계 보정도 제어기가
+     * 파거나 알람이다(10-28 검증 — 홈보다 큰 노즈에 글을 내 시작 블록 노즈가 맞은편 벽을 0.28 mm 팠다)
      */
     fun machine(i: RoundInput): RoundResult = calc(i).let { if (it.solution == null) it else type(i, i.noseR) }
 
@@ -518,18 +515,26 @@ object RoundCalc {
         val arcs = drawing.segs.withIndex().mapNotNull { (k, s) ->
             (s as? Arc)?.let { RoundArc(k, it.cw, it.center, it.radius, if (k in gone) null else (program.segs[k] as? Arc)?.radius) }
         }
-        var lead: Pt? = null
-        val entry = if (machineR == null) prog[0] + entryShift else machineEntry(drawing, side, tip, machineR, entryShift) { lead = it }
-        val nc = NcLines().apply {
-            element = -2
-            move("G00", entry)
-            element = -1
-            lead?.let { move("G01", it) }
-            move("G01", prog[0])
-            for ((k, s) in program.segs.withIndex()) {
-                element = k
-                if (s is Arc) arc(s) else move("G01", s.end)
+        val nc: NcLines
+        val entry: Pt
+        var approach = emptyList<Pt>()
+        if (machineR == null) {
+            entry = prog[0] + entryShift
+            nc = NcLines().apply {
+                element = -2
+                move("G0", entry)
+                element = -1
+                move("G1", prog[0])
+                for ((k, s) in program.segs.withIndex()) {
+                    element = k
+                    if (s is Arc) arc(s) else move("G1", s.end)
+                }
             }
+        } else {
+            val (lines, app) = machineFrame(drawing, side, machineR, entryShift.length, inner)
+            nc = lines
+            approach = app
+            entry = app.last()
         }
         return RoundResult(
             RoundSolution(
@@ -543,39 +548,100 @@ object RoundCalc {
                 drawing = drawing,
                 center = center.path,
                 program = program,
-                ncRefs = nc.refs.mapIndexed { k, f ->
-                    // 띄운 진입은 진입 이동이 두 줄(G00 → lead 직각 · lead → 첫 점)
-                    if (lead != null && f.element == -1) NcRef(-1, nc.refs.subList(0, k).count { it.element == -1 }, 2) else f
-                },
-                lead = lead,
+                ncRefs = nc.refs.toList(),
+                approach = approach,
             ),
             warnings,
         )
     }
 
     /**
-     * 기계 보정 프로그램의 G00 점([machine]). 첫 요소 시작 s0 · 시작 접선 t0 · 공구 쪽 법선 n, 팁 벡터 tv(노즈R [r]), c = |[shift]| (= max(Z 여유, r)),
-     * lift = max(0, r + n·tv). lift = 0 이면 노즈R 0 풀이와 같은 s0 + shift. 진입이 시작 선을 거꾸로 따라가면(shift ∥ −t0) lead = s0 − t0·(c + r)
-     * (직접 보정 진입점 − tv 의 발에서 r 더 바깥 — 직각 진입 끝에서 노즈가 교점 규칙대로 선을 따라 r 앞, 곧 직접 보정 진입 노즈에 선다)이고
-     * G00 = lead + n·(c + lift). 아니면 G00 = s0 + shift + n·lift — 노즈가 시작 선에서 직접 보정 진입 노즈만큼(공구 쪽으로 c·(shift 방향·n) + r) 떨어진다
+     * 기계 보정(G41/G42) 프로그램 — 회사 꼴(계획 단계 4, 사용자 결정 2026-10-29 · `CompFrame`): `G42`(혼자 줄) / `G0X…Z20.` / (`X…`) / `Z…` /
+     * `G1 첫 점 F.1` / 형상(도면 좌표) / 빼는 줄 `… F.3` / `G40`(혼자 줄) / `G0Z200.`. 돌려주는 둘째 값 = 진입 명령점(Z20. 자리 → (X 맞춤) → 진입점).
+     * 진입점은 첫 점에서 첫 요소의 처음 접선을 거꾸로 c(= |entryShift| = max(Z 여유, r)) — 축에서 시작하는 끝 면 · 돔은 축 너머(X −2c), 내경은 입구 구멍을 따라
+     * Z 로 c, 3점호는 시작 접선을 따라. 첫 깎는 줄이 첫 요소와 한 직선이라 노즈는 첫 점의 법선(노즈 접점 = 첫 점)에서 시작한다.
+     * 끝(라운드는 끝에도 빼는 줄 — 사용자 결정 2026-10-29 ①): 척 · 구멍 바닥 쪽으로 깎아 끝난 직선(외경 끝 직선 · 플랜지 윗면 · 내경 공 뒤 구멍 · 관통 구멍)은
+     * 막힌 끝 — 공구 쪽으로 직각(노즈가 끝 점의 법선에 닿아 멈춤), 축(X0)에서 끝나는 끝 면 · 바닥 면은 그 면을 축 너머 r(X −2r)까지 쓰고 공구 쪽으로 직각
+     * (제어기의 안쪽 모서리 교점이 노즈 중심을 축에), 축에서 끝나는 원호(내경 돔 · 공 바닥)는 끝 접선으로 축 너머 r + [AXIS_PAST] 뒤 공구 쪽으로(원호 뒤에 바로
+     * G40 을 두지 않는다 — G02/G03 모드의 취소는 FANUC 알람 PS0034), 그 밖(3점호)은 끝 접선으로 곧게
      */
-    private fun machineEntry(drawing: Contour, side: Side, tip: Int, r: Double, shift: Pt, setLead: (Pt) -> Unit): Pt {
-        val first = drawing.segs.first()
+    private fun machineFrame(drawing: Contour, side: Side, r: Double, c: Double, inner: Boolean): Pair<NcLines, List<Pt>> {
+        val segs = drawing.segs
+        val first = segs.first()
+        val last = segs.last()
         val s0 = first.start
-        val t0 = when (first) {
-            is Line -> (first.end - first.start).unit()
-            is Arc -> (first.start - first.center).unit().left() * (if (first.cw) -1.0 else 1.0)
+        val t0 = CompFrame.startDir(first)
+        val p = last.end
+        val uE = CompFrame.endDir(last)
+        val nE = CompFrame.normal(uE, side)
+        val outward = if (inner) -1.0 else 1.0
+        val atAxis = p.x <= EPS
+        var endPt = p
+        var minFirst = CompFrame.MIN_MOVE
+        var stretch = true
+        // 끝 직선이 짧아(노즈R 쯤) 직각 빼는 줄과의 교점이 그 요소의 보정 시작보다 앞이면 끝 블록이 거꾸로 가 간섭 알람 — 막힌 끝이면 노즈가 벽 앞에서
+        // 그 요소에 닿을 길이 없어 그 요소를 빼고 앞 요소 끝에서 벽을 따라 공구 쪽으로 뺀다(전에는 접선으로 곧게 빼 벽 속으로 갔다 — 검증 2026-11-04)
+        val noses = runCatching { NoseComp.centerPath(drawing, r, side).path.segs }.getOrNull()
+        val shortEnd = noses?.last()?.start?.let { ((p + nE * r - uE * r - it) dot uE) < CompFrame.MIN_MOVE } ?: false
+        val wallEnd = last is Line && abs(uE.z) > abs(uE.x) && uE.z < 0
+        val blocked = wallEnd && !shortEnd
+        // 빼려면 앞 요소가 직선이고 그 노즈 길 위에 직각 빼기 교점이 MIN_MOVE 이상 남아야 한다(`CompFrame.roomOn`) — 아니면(앞이 모서리 R 등) 전처럼 곧게(알려진 한계)
+        val skipLast = wallEnd && shortEnd && segs.size > 1 && noses != null && noses.size == segs.size &&
+            CompFrame.roomOn(noses[segs.size - 2], true, last.start, nE, side, r)
+        val x1: Pt
+        val away: Pt
+        when {
+            blocked -> {
+                x1 = p + nE * c
+                away = uE * -1.0
+            }
+            skipLast -> {
+                endPt = last.start
+                x1 = endPt + nE * c
+                away = uE * -1.0
+            }
+            last is Line && atAxis -> {
+                endPt = p + uE * r
+                x1 = endPt + nE * c
+                away = nE
+            }
+            last is Arc && atAxis -> {
+                // 오목 구면은 축 너머로 아주 조금만 지난다(지난 길이 δ 면 맞은편 구면을 δ² / 2(R − r) 판다 — 그 깊이가 5e-5 mm 를 넘지 않게, [AXIS_PAST] 까지)
+                val concave = (side == Side.G41) != last.cw
+                val past = if (concave) sqrt(1e-4 * max(0.0, last.radius - r)).coerceIn(AXIS_PAST / 5, AXIS_PAST) else AXIS_PAST
+                x1 = p + uE * (r + past)
+                away = nE
+                minFirst = past / 2
+                stretch = false
+            }
+            else -> {
+                x1 = p + uE * c
+                away = nE
+            }
         }
-        val n = t0.left() * (if (side == Side.G41) 1.0 else -1.0)
-        val tv = NoseComp.tipVector(tip, r)
-        val lift = max(0.0, r + (n dot tv))
-        if (lift <= EPS) return s0 + shift
-        val c = shift.length
-        val d = shift * (1 / c)
-        if (abs(d cross t0) > 1e-9 || (d dot t0) >= 0) return s0 + shift + n * lift
-        val lead = s0 - t0 * (c + r)
-        setLead(lead)
-        return lead + n * (c + lift)
+        // 공기 이동을 잴 소재: 도면 + 직선 · 축에서 시작 · 끝나는 요소의 접선을 늘인 반직선(축 너머 같은 면, 끝 직선 너머) + 막힌 끝 너머 + 그린 구간의 소재
+        // (닫은 도면 — `FrameFill`) + 축 거울(회전체라 외경도 부품 반대쪽이 있다 — 검증 2026-11-04: 축 가까이에서 끝나는 외경 3점호의 끝 접선 빼는 줄 ·
+        // G40 옮김 · G0Z200. 이 축 너머 맞은편 호를 팠다). 3점호 원호의 접선은 늘이지 않는다 — 그 너머 윤곽을 모르고, 늘인 선이 물러남 띠를 막는다.
+        // 첫 빼는 줄의 노즈 길도 소재에서 r 이상인지 본다(끝 접선이 축을 넘어 맞은편으로 가면 G40 자리로 비키는 줄이 짧은 접선 뒤에서 꺾는다)
+        val mSegs = segs + listOfNotNull(
+            if (first is Line || s0.x <= EPS) FrameMaterial.ray(s0, t0 * -1.0) else null,
+            if (last is Line || atAxis) FrameMaterial.ray(p, uE) else null,
+        )
+        val fill = FrameFill(segs, inner).takeIf { it.valid }
+        // (외경 축 거울은 도면만 — 축에서 시작 · 끝나는 면을 늘인 반직선은 축 너머로 가므로 그 거울은 부품 앞을 막는 끝없는 벽이 된다)
+        val mat = FrameMaterial(mSegs + (if (inner) mSegs else segs).map(FrameMaterial::mirror), if (blocked || skipLast) listOf(p to uE) else emptyList(), fill)
+        val zTop = segs.maxOf { maxOf(it.start.z, it.end.z) }
+        val approach = CompFrame.entry(mat, side, r, outward, s0 - t0 * c, s0, t0, zTop)
+        val shape = if (skipLast) segs.dropLast(1) else segs
+        val exits = CompFrame.exit(mat, side, r, outward, endPt, CompFrame.endDir(shape.last()), x1, away, minFirst = minFirst, stretch = stretch, checkFirst = true)
+        val nc = NcLines()
+        CompFrame.write(nc, side, approach, s0, {
+            for ((k, s) in shape.withIndex()) {
+                element = k
+                if (s is Arc) arc(s) else move("G1", if (k == segs.lastIndex) endPt else s.end)
+            }
+        }, exits, refExit = segs.size)
+        return nc to approach
     }
 
     /** 요소의 가장 낮은 x. 원호는 맨 아래(−X 쪽)를 지나면 중심 − R */

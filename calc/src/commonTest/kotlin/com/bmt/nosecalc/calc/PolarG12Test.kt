@@ -57,7 +57,7 @@ class PolarG12Test {
                 "G40 G01 X70.",
                 "G13.1", "G00 Z1.",
             ),
-            s.ncG41G42.lines,
+            s.ncG41G42.lines.legacy,
         )
         assertEquals(
             listOf(
@@ -74,7 +74,7 @@ class PolarG12Test {
                 "G01 X70. C-10.",
                 "G13.1", "G00 Z1.",
             ),
-            s.ncG40.lines,
+            s.ncG40.lines.legacy,
         )
         near(sqrt(1325.0), s.startX, 1e-9, "시작 X(반경)")
         near(10.0, s.leadR, 1e-12, "진입 원호")
@@ -115,7 +115,7 @@ class PolarG12Test {
                 "G40 G01 C0.",
                 "G13.1", "G00 Z1.",
             ),
-            s.ncG41G42.lines,
+            s.ncG41G42.lines.legacy,
         )
         assertEquals(
             listOf(
@@ -132,7 +132,7 @@ class PolarG12Test {
                 "G01 X-20. C0.",
                 "G13.1", "G00 Z1.",
             ),
-            s.ncG40.lines,
+            s.ncG40.lines.legacy,
         )
         near(4.0, s.startX, 1e-12, "시작 X")
         near(6 + (14 - 10 * cos(PI / 4)), s.stockMax, 1e-6, "살 두께(45° 방향)")
@@ -163,7 +163,7 @@ class PolarG12Test {
                 "G40 G01 C30.",
                 "G13.1", "G00 Z1.",
             ),
-            s.ncG41G42.lines,
+            s.ncG41G42.lines.legacy,
         )
         near(48.0, s.cornerDia, 1e-12, "2면폭 꼭짓점 지름 = 외경")
         near(2 * sqrt(24.0 * 24 - 15 * 15), s.flatLength, 1e-9, "현 길이")
@@ -186,7 +186,7 @@ class PolarG12Test {
             "G01 X50.807 C-36.", "G02 X36.95 C-40. R8.", "G01 X-36.95", "G02 X-50.807 C-36. R8.", "G01 X-87.757 C-4.",
             "G02 C4. R8.", "G01 X-50.807 C36.", "G02 X-36.95 C40. R8.", "G01 X36.95",
         )
-        val lines = s.ncG41G42.lines
+        val lines = s.ncG41G42.lines.legacy
         val at = lines.windowed(want.size).indexOf(want)
         assertTrue(at > 0, "원본 07 의 줄이 없다:\n${lines.joinToString("\n")}")
         // 원본 12.jpg 기본값(외경 80 · W70 · R3): 모서리 R 끝은 반경 36.950 + 3 = 39.950 < 40 이라 소재 안
@@ -369,7 +369,7 @@ class PolarG12Test {
         // 빈 코너 R · 회전 · 여유 = 0 · 0 · 1
         val blank = ok(PolarG12.calc(base.copy(cornerR = null, rotationDeg = null, clear = null)), null)
         val zero = ok(PolarG12.calc(base.copy(cornerR = 0.0, rotationDeg = 0.0, clear = 1.0)), null)
-        assertEquals(zero.ncG41G42.lines, blank.ncG41G42.lines)
+        assertEquals(zero.ncG41G42.lines.legacy, blank.ncG41G42.lines.legacy)
     }
 
     /**
@@ -383,8 +383,8 @@ class PolarG12Test {
             val zero = assertNotNull(PolarG12.calc(base.copy(cornerR = 0.0)).solution, "$shape R0")
             for (rc in listOf(1e-11, 1e-9, 1e-7, 1e-5)) {
                 val s = assertNotNull(PolarG12.calc(base.copy(cornerR = rc)).solution, "$shape R$rc")
-                assertEquals(zero.ncG41G42.lines, s.ncG41G42.lines, "$shape R$rc 기계 보정")
-                assertEquals(zero.ncG40.lines, s.ncG40.lines, "$shape R$rc 직접 보정")
+                assertEquals(zero.ncG41G42.lines.legacy, s.ncG41G42.lines.legacy, "$shape R$rc 기계 보정")
+                assertEquals(zero.ncG40.lines.legacy, s.ncG40.lines.legacy, "$shape R$rc 직접 보정")
             }
             for (rc in listOf(34.9999, 34.9999999, 34.9999999999)) {
                 for (inner in listOf(false, true)) {
@@ -413,11 +413,11 @@ class PolarG12Test {
             listOf(PolarWarning.INNER_CORNER_LT_TOOL),
         )
         near(2 + (23 - 22 * cos(PI / 6)), s.stockMax, 1e-9, "내측 살")
-        val arcs = s.ncG41G42.lines.filter { it.startsWith("G02") || it.startsWith("G03") }
+        val arcs = s.ncG41G42.lines.legacy.filter { it.startsWith("G02") || it.startsWith("G03") }
         assertTrue(arcs.all { word(it, 'R') == 6.0 }, "모서리 R2 원호가 없어야(진입 · 후퇴 R6 만): $arcs")
         // 내측 R = r 꼭: 경고 없음(정확), 원호도 없다(보정 원호 반지름 0)
         val e = ok(PolarG12.calc(PolarInput(inner = true, od = 44.0, width = 50.0, cornerR = 3.0, toolDia = 6.0, depthZ = -5.0, feed = 100.0)))
-        assertTrue(e.ncG40.lines.none { word(it, 'R') == 0.0 })
+        assertTrue(e.ncG40.lines.legacy.none { word(it, 'R') == 0.0 })
     }
 
     // ================================================================ 블록 규칙(FANUC G12.1)
@@ -435,7 +435,7 @@ class PolarG12Test {
         )) {
             val s = ok(PolarG12.calc(i), null)
             for ((prog, g41) in listOf(s.ncG41G42 to true, s.ncG40 to false)) {
-                val l = prog.lines
+                val l = prog.lines.legacy
                 assertEquals(1, l.count { it == "G12.1" })
                 assertEquals(1, l.count { it == "G13.1" })
                 val on = l.indexOf("G12.1")
@@ -463,8 +463,8 @@ class PolarG12Test {
                     assertTrue(starts.isEmpty() && cancels.isEmpty())
                 }
                 // 첫 시작 이동까지(G40 위치 잡기)는 두 프로그램이 같은 줄
-                val su = s.ncG41G42.lines.indexOfFirst { "G41" in it }
-                assertEquals(s.ncG41G42.lines.subList(1, su), s.ncG40.lines.subList(1, su))
+                val su = s.ncG41G42.lines.legacy.indexOfFirst { "G41" in it }
+                assertEquals(s.ncG41G42.lines.legacy.subList(1, su), s.ncG40.lines.legacy.subList(1, su))
                 // 줄과 블록이 맞고, 공구 경로가 이어진다(Contour 가 끊기면 예외)
                 assertEquals(l.size, prog.blocks.size)
                 prog.toolPath
@@ -480,7 +480,7 @@ class PolarG12Test {
         prog: PolarProgram, sh: Shape, inner: Boolean, r: Double, rs: Double, clear: Double, xDia: Boolean, machine: Boolean, tag: String,
     ) {
         val tol = 0.003
-        val parsed = parse(prog.lines, xDia, tag)
+        val parsed = parse(prog.lines.legacy, xDia, tag)
         val path = if (machine) emulate(parsed, r, tag) else parsed.flatMap { it.moves }.map { it.m }
         // 시작점: X 축 위, 외측은 소재 + 여유 밖, 내측은 구멍 − 여유 안
         val s0 = parsed.first().start
@@ -777,7 +777,7 @@ class PolarG12Test {
 
     // ---------------------------------------------------------------- 작은 도우미
 
-    private fun word(t: String, k: Char): Double? = Regex("""(?:^|\s)$k(-?[\d.]+)""").find(t)?.groupValues?.get(1)?.toDouble()
+    private fun word(t: String, k: Char): Double? = ncWords(t).firstOrNull { it[0] == k }?.drop(1)?.toDouble()
 
     /** [warnings] = null 이면 경고는 보지 않는다 */
     private fun ok(r: PolarResult, warnings: List<PolarWarning>? = emptyList()): PolarSolution {

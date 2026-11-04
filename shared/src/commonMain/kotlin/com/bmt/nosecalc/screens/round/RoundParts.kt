@@ -333,7 +333,7 @@ internal fun RoundViewer(
         val nc = v.nc
         val back = v.retractLines
         val from = v.at
-        if (nc == null || back == null || from == null) null else ncMoves(from, nc.slice(back)).takeIf { it.isNotEmpty() }?.let(::Contour)
+        if (nc == null || back == null || from == null) null else clipFront(ncMoves(from, nc.slice(back)), maxZ).takeIf { it.isNotEmpty() }?.let(::Contour)
     }
     val lines = buildList {
         add(ViewerLine(sol.drawing, c.drawProfile, 3.5.dp))
@@ -350,7 +350,10 @@ internal fun RoundViewer(
             }
             add(ViewerLine(sol.center, c.viewNose, 1.4.dp, dashed = true))
         }
-        if (path != null) add(ViewerLine(Contour(entryMoves(path) + path.program.segs), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
+        if (path != null) {
+            val entry = entryMoves(path).let { if (path.approach.isEmpty()) it else clipFront(it, maxZ) }
+            add(ViewerLine(Contour(entry + path.program.segs), c.viewPath, 1.8.dp, arrows = Arrow.Filled))
+        }
         retract?.let { add(ViewerLine(it, backCol, 1.8.dp, dotted = true, arrows = Arrow.Hollow)) }
         if (holder != null && at != null) {
             for (part in HolderCheck.outline(holder.bar, r, at, maxZ, backBoring(sol))) add(ViewerLine(part, c.drawHolder, 1.6.dp, fill = c.drawHolderFill))
@@ -437,19 +440,18 @@ private fun holderPoses(hits: List<HolderHit>, res: HolderResult, sol: RoundSolu
 }
 
 /**
- * 진입점에서 첫 점까지의 이송: 한 줄, 기계 보정 프로그램이 띄운 진입이면([RoundSolution.lead]) 직각 진입점을 거친 두 줄(NC 그대로)
+ * 진입점에서 첫 점까지의 이송: 직접 보정은 한 줄, 기계 보정(회사 꼴)은 Z20. 자리부터 진입 명령점([RoundSolution.approach])을 거친 줄들(NC 그대로)
  */
 internal fun entryMoves(path: RoundSolution): List<Seg> {
-    val first = path.program.segs.first().start
-    val lead = path.lead ?: return listOf(Line(path.entry, first))
-    return listOf(Line(path.entry, lead), Line(lead, first))
+    val pts = (path.approach.ifEmpty { listOf(path.entry) }) + path.program.segs.first().start
+    return pts.zipWithNext { a, b -> Line(a, b) }
 }
 
 /**
  * 닿는 구간: 보이는 경로(path)의 그 요소에서 처음 · 마지막 닿는 곳 사이 — comp(직접 보정)는 가상 인선 점, 기계 보정은 노즈가 닿는 도면 점
  * (✕ 표와 같은 곳. 도면 좌표 경로의 요소는 보정 경로와 길이가 달라 길이 비율로는 어긋난다). 진입 이동(−1)은 직선 블록 위의 두 명령점 사이 —
- * 직접 보정은 가상 인선, 기계 보정은 그 프로그램 자기 진입 블록(보정 시작 블록 · 띄운 진입이면 직각 진입 뒤 블록)의 명령점([hitRows] 의 기계 보정 진입).
- * 진입점에 선 자세(−2)는 점이라 없다
+ * 직접 보정은 가상 인선, 기계 보정은 그 프로그램 자기 진입 블록(회사 꼴 — 보정 켠 진입 줄 · 첫 깎는 줄)의 명령점([hitRows] 의 기계 보정 진입).
+ * 진입점(기계 보정은 Z20. 자리)에 선 자세(−2)는 점이라 없다
  */
 internal fun contactBand(path: RoundSolution, h: HolderHit, comp: Boolean): Contour? {
     if (h.element == -2) return null
@@ -458,6 +460,28 @@ internal fun contactBand(path: RoundSolution, h: HolderHit, comp: Boolean): Cont
     if (h.element == -1) return Contour.polyline(a, b)
     val s = path.program.segs.getOrNull(h.element) ?: return null
     return Contour(listOf(if (s is Arc) Arc(a, b, s.center, s.cw) else Line(a, b)))
+}
+
+/**
+ * 기계 보정(회사 꼴)의 진입은 `G0X…Z20.` 자리부터, 잘린 NC 의 후퇴는 `G0Z200.` 까지 간다 — 그림은 [maxZ](바를 자르는 자리 — 입구 끝면 너머
+ * max(3, 깊이 15 %))와 가장 먼 점(Z20. · Z200. 자리)을 뺀 점들 너머 1 mm 가운데 먼 쪽에서 잘라, 맞춤 범위가 Z20 · Z200 까지 넓어져 부품이
+ * 몇십 화소로 줄지 않게(검증 2026-11-04: 보링바 잘린 NC 에서 눈금이 50 mm 가 되어 간섭 · 안전 끝 · 점 번호 라벨이 겹쳤다). 잘린 쪽 끝만 짧아진다
+ */
+private fun clipFront(moves: List<Seg>, maxZ: Double): List<Seg> {
+    val pts = (moves.map { it.start } + moves.map { it.end }).sortedByDescending { it.z }
+    val limit = max(maxZ, (pts.drop(1).maxOfOrNull { it.z } ?: maxZ) + 1.0)
+    return moves.mapNotNull { m ->
+        val a = m.start
+        val b = m.end
+        when {
+            m !is Line || (a.z <= limit && b.z <= limit) -> m
+            a.z > limit && b.z > limit -> null
+            else -> {
+                val q = a + (b - a) * ((limit - a.z) / (b.z - a.z))
+                if (a.z > limit) Line(q, b) else Line(a, q)
+            }
+        }
+    }
 }
 
 /** 축(X0)에 뒤집은 윤곽(맞은편 벽) */

@@ -127,7 +127,7 @@ class SimGoldenTest {
         IssueCode.G7X_RELIEF -> "R0.1"
         IssueCode.G73_COUNT -> "R1"
         IssueCode.M98_IN_PQ -> "M98"
-        IssueCode.MACHINE_M -> "M23"
+        IssueCode.MACHINE_M -> "M71" // M23 · M24 는 나사 끝 빼기로 아는 코드가 됐다(설계 18.8)
         IssueCode.DUP_PROGRAM -> "O1001"
         IssueCode.NUMBER_TOO_LONG, IssueCode.NUMBER_TOO_BIG -> "X1234567890"
         IssueCode.MID_BLOCK_SKIP -> "/"

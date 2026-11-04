@@ -16,6 +16,7 @@ import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.Side
 import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperWarning
+import com.bmt.nosecalc.calc.ncWords
 import com.bmt.nosecalc.screens.TaperScreen
 import java.io.File
 import kotlin.math.PI
@@ -61,7 +62,7 @@ class VerifyAngleRefTest {
         )
     }
 
-    /** NC 를 모달로 읽어 G01 로 간 자리마다 "X.. Z.." (주석 · G00 은 자리만 바꾼다) */
+    /** NC(회사 표기)를 모달로 읽어 G1 로 간 자리마다 "X.. Z.." (주석 · G0 은 자리만 바꾼다, 빠진 이동 G 는 앞 줄 값) */
     private fun g01Path(nc: List<String>): List<String> {
         var x = ""
         var z = ""
@@ -69,10 +70,10 @@ class VerifyAngleRefTest {
         val out = mutableListOf<String>()
         for (line in nc) {
             if (line.startsWith("(")) continue
-            for (w in line.split(' ')) {
+            for (w in ncWords(line)) {
                 when {
-                    w == "G00" -> g01 = false
-                    w == "G01" -> g01 = true
+                    w == "G0" -> g01 = false
+                    w == "G1" -> g01 = true
                     w.startsWith("X") -> x = w
                     w.startsWith("Z") -> z = w
                 }
@@ -334,7 +335,7 @@ class VerifyAngleRefTest {
             val all = t.joinToString("\n")
             assertTrue("각도 (X축 기준)" in t, all)
             assertTrue("-25.619" in t, "자동 Z1: $all")
-            assertTrue("G01 X41. Z-25.957" in all && "G01 X34.7 Z-24.138" in all, "직접 보정 NC: $all")
+            assertTrue("X41.Z-25.957" in all && "X34.7Z-24.138" in all, "직접 보정 NC: $all")
             println("누르는 칸(합친 글): ${scene.clickables().filter { l -> l.any { "축" in it } }}")
             scene.tap("Z축 기준")
             scene.render(100_000_000)
@@ -344,7 +345,7 @@ class VerifyAngleRefTest {
             val all2 = t2.joinToString("\n")
             assertTrue("각도 (Z축 기준)" in t2 && "각도 (X축 기준)" !in t2, all2)
             assertTrue("-25.619" in t2, "같은 경사: $all2")
-            assertTrue("G01 X41. Z-25.957" in all2, all2)
+            assertTrue("X41.Z-25.957" in all2, all2)
         } finally {
             scene.close()
         }

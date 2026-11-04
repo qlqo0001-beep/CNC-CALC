@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.calc.Fmt
+import com.bmt.nosecalc.calc.ncWords
 import com.bmt.nosecalc.screens.taper.NcFact
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.AppIcons
@@ -176,7 +177,10 @@ internal fun SafeEndCard(v: StopView, comp: Boolean, safe: Double) {
         }
         if (v.kind == StopKind.CUT) {
             Text(
-                keepWords("나머지는 다른 공구로 깎습니다. 아래 NC 는 이 점까지 깎고(초록 줄) 빠지는(파란 줄) 잘린 프로그램입니다."),
+                keepWords(
+                    if (v.exitOnly) "원래 끝(빼는 줄 · G40 · G0Z200.)에서 보링바가 소재에 닿아 빠지는 길만 바꿨습니다. 아래 NC 는 형상 끝까지 깎고(초록 줄) 바꾼 길로 빠지는(파란 줄) 프로그램입니다."
+                    else "나머지는 다른 공구로 깎습니다. 아래 NC 는 이 점까지 깎고(초록 줄) 빠지는(파란 줄) 잘린 프로그램입니다.",
+                ),
                 Modifier.padding(top = 8.dp),
                 style = AppType.caption,
                 color = c.textMuted,
@@ -390,7 +394,7 @@ private fun FactChip(f: NcFact) {
     }
 }
 
-/** G 는 파랑, X·Z 는 초록(09 편집기의 색 갈래), 주석 줄 "(…)" 은 흐리게. 접지 않는다 */
+/** G 는 파랑, X·Z 는 초록(09 편집기의 색 갈래), 주석 줄 "(…)" 은 흐리게. 낱말은 붙여 쓴 그대로(회사 표기 — 복사 글과 같다). 접지 않는다 */
 @Composable
 private fun NcLine(line: String) {
     val c = AppTheme.colors
@@ -399,8 +403,7 @@ private fun NcLine(line: String) {
             AnnotatedString(line, SpanStyle(color = c.textMuted))
         } else {
             buildAnnotatedString {
-                line.split(' ').forEachIndexed { i, w ->
-                    if (i > 0) append(' ')
+                ncWords(line).forEach { w ->
                     val color = when (w.firstOrNull()) {
                         'G' -> c.blue
                         'X', 'Z' -> c.valuePos

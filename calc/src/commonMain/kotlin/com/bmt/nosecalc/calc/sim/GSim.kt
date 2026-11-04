@@ -169,6 +169,12 @@ private class Runner(val input: SimInput) {
     var g76min: Double? = null
     var g76d: Double? = null
 
+    /**
+     * 나사 끝 빼기 켬(M23) · 끔(M24) 모달 — 흔한 FANUC 계열 기계 M 정의(H 111, 기계마다 다를 수 있음). 처음은 켬: M23/M24 가 없는 글은 전처럼
+     * G92 는 설정 [MachineSetup.g92ChamferLeads], G76 은 첫 줄 r 로 뺀다. 끄면 둘 다 끝 빼기 0
+     */
+    var threadPullOut = true
+
     /** 마른 실행(G71~G73 이 P~Q 윤곽을 보정 모형으로 미리 돌림): null 이 아니면 걸음 대신 여기에 담는다 */
     var dry: MutableList<GCycles.Piece>? = null
 
@@ -347,6 +353,8 @@ private class Runner(val input: SimInput) {
             5 -> spindle = SpindleDir.STOP
             8 -> coolant = true
             9 -> coolant = false
+            23 -> threadPullOut = true
+            24 -> threadPullOut = false
             98 -> flow = call(b, ui, bi, stack)
             99 -> {
                 if (stack.isEmpty()) {
@@ -384,7 +392,7 @@ private class Runner(val input: SimInput) {
      * X · Z · R 은 모달(S 4-93 · 4-96 · 4-99: 다음 블록에 X(G94 는 Z)만). 처음 블록은 X(U) · Z(W) 둘 다.
      * 축 없는 블록(모달 값이 있을 때 — EOB 만 · 주석만 · F 만 · R 만 …)도 같은 사이클을 한 번 더 돈다(FF 4.1.6 · F0 13.1 주 2(1)).
      * 축 없이 S · T · M(G96~G99) 이 있으면 FANUC 은 사이클과 그 기능을 '함께' 실행한다(F0 주 2(3)). 순서가 결과를 바꾸는 S · T · 주축(M03~M05) ·
-     * 끝(M02 · M30) · M98/M99 · G96~G99 는 CYCLE_REPEAT_MST, 그 밖의 M(기계 M · M00 · M01 · M08 · M09)은 사이클을 한 번 더 돈 뒤 M 을 실행한다([cycleM]).
+     * 끝(M02 · M30) · M98/M99 · G96~G99 는 CYCLE_REPEAT_MST, 그 밖의 M(기계 M · M00 · M01 · M08 · M09 · M23 · M24)은 사이클을 한 번 더 돈 뒤 M 을 실행한다([cycleM]).
      */
     private fun singleCycle(b: Block, g: Int, gMotion: Int?): Flow {
         val line = b.line
@@ -440,7 +448,7 @@ private class Runner(val input: SimInput) {
             c = ctx()
         }
         val pass = (prev?.pass ?: 0) + 1
-        val chamfer = if (g == 92) m.g92ChamferLeads * lead!! else 0.0
+        val chamfer = if (g == 92 && threadPullOut) m.g92ChamferLeads * lead!! else 0.0
         emitCycle(GCycles.single(g, a, Pt(tz, tx), taper, chamfer, pass), line, b.unit, c)
         cyc = Cyc(g, tx, tz, taper, lead, pass)
         cmd = a
@@ -448,13 +456,18 @@ private class Runner(val input: SimInput) {
         return Next
     }
 
-    /** 사이클 모드의 M 만 블록(FF 4.1.6): 사이클을 한 번 더 돈 뒤 M — 정지 · 절삭유 · 기계 M 만 온다([singleCycle] 이 나머지를 막았다) */
+    /**
+     * 사이클 모드의 M 만 블록(FF 4.1.6): 사이클을 한 번 더 돈 뒤 M — 정지 · 절삭유 · 나사 끝 빼기 · 기계 M 만 온다([singleCycle] 이 나머지를 막았다).
+     * 나사 끝의 `M24` 줄은 마지막 X 를 끝 빼기 켠 채 한 번 더 깎은 뒤 끈다
+     */
     private fun cycleM(b: Block, w: Word) {
         val before = coolant
         when (val mc = w.value.toInt()) {
             0, 1 -> queue { t0 -> StopStep(b.line, b.unit, t0, t0, mc == 1) }
             8 -> coolant = true
             9 -> coolant = false
+            23 -> threadPullOut = true
+            24 -> threadPullOut = false
             else -> issues += SimIssue(IssueCode.MACHINE_M, b.line, w.cols, w.text)
         }
         if (coolant != before) stateStep(b.line, b.unit)
@@ -696,7 +709,7 @@ private class Runner(val input: SimInput) {
         val a = cmd
         val end = target(b)
         val c = ctx().copy(feed = lead, perRev = true)
-        when (val r = GCycles.thread(a, end, b.w("R")?.value ?: 0.0, k, d1, dmin, fin, mm, rr * lead / 10, aa.toDouble())) {
+        when (val r = GCycles.thread(a, end, b.w("R")?.value ?: 0.0, k, d1, dmin, fin, mm, if (threadPullOut) rr * lead / 10 else 0.0, aa.toDouble())) {
             is GCycles.Bad -> fail(r.code, line, args = r.args)
             is GCycles.Ok -> emitCycle(r.moves, line, b.unit, c)
         }
@@ -1152,9 +1165,12 @@ private class Runner(val input: SimInput) {
     /**
      * 움직임 없는 블록(축이 없거나 움직임 0)에서 보정이 꺼지거나(G40 · T□□00) 켜지면(G41/G42 · 보정 번호) 그 처리. 형식 C 의 옮김이 있었으면 true.
      * 형식 A · B 의 이동 없는 시작은 할 일이 없다 — 다음 이동 블록이 시작 블록(FF 179쪽 'The tool does not operate in a start-up block').
+     * G02/G03 모드의 이동 없는 시작 · 취소는 형식과 무관하게 멈춘다(FF 5.4.1 'When performing offset cancel, circular arc commands (G02 and G03)
+     * are not available' · 시작 조건 (3), F0 알람표 PS0034 'The start up or cancel was going to be performed in the G02 or G03 mode') — 형식 C 는 [shiftKind]
      */
     private fun compNoMove(line: Int, unit: Int, wantOn: Boolean): Boolean = when {
         gc != null && !wantOn -> {
+            if (!typeC && (motion == 2 || motion == 3)) fail(IssueCode.COMP_CANCEL_ARC, line)
             cancelNoMove(line, unit)
             typeC
         }
@@ -1162,7 +1178,10 @@ private class Runner(val input: SimInput) {
             startNoMove(line, unit)
             true
         }
-        else -> false
+        else -> {
+            if (gc == null && wantOn && (motion == 2 || motion == 3)) fail(IssueCode.COMP_START_ARC, line)
+            false
+        }
     }
 
     /** 형식 C 의 옮김 이동 종류 = 그 블록의 01 그룹 모달. G00/G01 만(FF 5.4.2 시작 조건 (3) — G02/G03 모드면 알람 PS0034) */
@@ -1198,10 +1217,7 @@ private class Runner(val input: SimInput) {
      * 형식 A · B: 'The tool does not operate in the cancel block' — 다음 직선 이동이 그 자리에서 벡터를 지운다([move]).
      * 형식 C: 'The tool shifts by the compensation value in the direction vertical to the block preceding the cancel block'(FF 그림 5.4.4(f) 205쪽) —
      * 이 블록에서 노즈가 끝 법선 E + r·nₑ → 지령점 − 팁 벡터(G40 상태 노즈)로 옮긴다(그 블록의 모달 G00/G01).
-     * 알려진 차이: FANUC 은 G02/G03 모드의 취소를 형식과 무관하게 알람한다(FF 5.4.1 'When performing offset cancel, circular arc commands (G02 and G03)
-     * are not available … alarm PS0034', F0 알람표 'The start up or cancel was going to be performed in the G02 or G03 mode'). 형식 C 는 [shiftKind] 가
-     * COMP_CANCEL_ARC 로 멈추지만 형식 A · B 는 아직 멈추지 않는다 — 앱 계산기의 G41/G42 글(형식 A · B 전제)이 끝 원호 뒤 `G40` 한 줄을 써서 그 검증이
-     * 이 설정에 기대어 있다(설계 18.3 — 글을 회사 꼴로 바꾸는 단계 4 에서 함께).
+     * G02/G03 모드면 형식과 무관하게 COMP_CANCEL_ARC(FANUC 알람 PS0034 — [compNoMove] · [shiftKind]).
      */
     private fun cancelNoMove(line: Int, unit: Int) {
         held?.let { fail(IssueCode.CORNER_NO_NEXT, it.line, it.corner!!.word, listOf(line.toString())) }

@@ -80,7 +80,7 @@ class PolarGoldenTest {
     /** 프로그램 줄(복사 글)과 시뮬레이션 목록에 보이는 줄(흐린 좌표는 [ ])이 다를 때만 '→' 뒤에 */
     private fun StringBuilder.program(name: String, p: PolarProgram, feed: Double, sol: PolarSolution) {
         p.blocks.forEach { b ->
-            val shown = ncTokens(b).joinToString(" ") { if (it.dim) "[${it.text}]" else it.text }
+            val shown = ncTokens(b).joinToString("") { if (it.dim) "[${it.text}]" else it.text }
             line("$name ${b.text}" + if (shown != b.text) "   → $shown" else "")
         }
         val plan = simPlan(sol, p, feed)

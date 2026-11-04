@@ -9,6 +9,7 @@ import com.bmt.nosecalc.calc.PolarShape
 import com.bmt.nosecalc.calc.PolarWarning
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.Seg
+import com.bmt.nosecalc.calc.ncWords
 import com.bmt.nosecalc.screens.minSec
 import com.bmt.nosecalc.screens.previewLine
 import kotlin.math.PI
@@ -38,14 +39,14 @@ class PolarStateTest {
         assertEquals("(G40 DIRECT R5 T0)", sol.ncG40.lines.first())
     }
 
-    /** 원본 07 의 줄이 기계 보정 프로그램에 그대로(calc `originalHexagonLines` 와 같은 입력) */
+    /** 원본 07 의 줄이 기계 보정 프로그램에 그대로 — 같은 수를 회사 표기로(calc `originalHexagonLines` 와 같은 입력) */
     @Test
     fun original07Lines() {
         val sol = assertNotNull(PolarG12.calc(polarOriginal07().input()).solution)
         val lines = sol.ncG41G42.lines
         val want = listOf(
-            "G01 X50.807 C-36.", "G02 X36.95 C-40. R8.", "G01 X-36.95", "G02 X-50.807 C-36. R8.", "G01 X-87.757 C-4.", "G02 C4. R8.",
-            "G01 X-50.807 C36.", "G02 X-36.95 C40. R8.", "G01 X36.95",
+            "G1X50.807C-36.", "G2X36.95C-40.R8.", "G1X-36.95", "G2X-50.807C-36.R8.", "G1X-87.757C-4.", "G2C4.R8.",
+            "G1X-50.807C36.", "G2X-36.95C40.R8.", "G1X36.95",
         )
         val at = lines.indexOf(want.first())
         assertTrue(at >= 0, "원본 07 첫 줄이 없다: $lines")
@@ -210,7 +211,7 @@ class PolarStateTest {
                 var lastC: String? = null
                 for (b in prog.blocks) {
                     val toks = ncTokens(b)
-                    assertEquals(b.text, toks.filterNot { it.dim }.joinToString(" ") { it.text })
+                    assertEquals(b.text, toks.filterNot { it.dim }.joinToString("") { it.text })
                     if (toks.any { it.dim }) {
                         assertTrue(b.polar && b.path.isNotEmpty(), b.text)
                         toks.filter { it.dim }.forEach { t ->
@@ -229,7 +230,7 @@ class PolarStateTest {
                         lastX = null
                         lastC = null
                     }
-                    b.text.split(' ').forEach { w ->
+                    ncWords(b.text).forEach { w ->
                         if (w.startsWith("X")) lastX = w
                         if (w.startsWith("C")) lastC = w
                     }
@@ -239,8 +240,8 @@ class PolarStateTest {
         assertTrue(dims > 20, "흐린 좌표 $dims 개")
         // 원본 07 의 흐린 값: `G01 X-36.95 C-40.`(C 흐림) · `G02 X-87.757 C4. R8.`(X 흐림)
         val p = PolarG12.calc(polarOriginal07().input()).solution!!.ncG41G42
-        assertEquals(listOf(NcTok("G01"), NcTok("X-36.95"), NcTok("C-40.", dim = true)), ncTokens(p.blocks.first { it.text == "G01 X-36.95" }))
-        assertEquals(listOf(NcTok("G02"), NcTok("X-87.757", dim = true), NcTok("C4."), NcTok("R8.")), ncTokens(p.blocks.first { it.text == "G02 C4. R8." }))
+        assertEquals(listOf(NcTok("G1"), NcTok("X-36.95"), NcTok("C-40.", dim = true)), ncTokens(p.blocks.first { it.text == "G1X-36.95" }))
+        assertEquals(listOf(NcTok("G2"), NcTok("X-87.757", dim = true), NcTok("C4."), NcTok("R8.")), ncTokens(p.blocks.first { it.text == "G2C4.R8." }))
     }
 
     /** 재생 계획: 줄 시간 = 경로 길이 ÷ F(Z 이송은 Z 거리), 줄 끝 공구 = 그 줄 경로 끝, 줄 가운데 공구는 그 줄 경로 위 */
@@ -255,7 +256,7 @@ class PolarStateTest {
                 assertEquals((total + 6.0) / (100.0 / 60), plan.feedSeconds, 1e-9)
                 assertEquals(prog.toolPath.segs, plan.traveled(prog.blocks.lastIndex, 1.0))
                 assertNull(plan.toolAt(0, 0.5), "위치 잡기 전(주석 줄)에는 공구 없음")
-                val lathe = prog.blocks.indexOfFirst { it.text.startsWith("G00 X") }
+                val lathe = prog.blocks.indexOfFirst { it.text.startsWith("G0X") }
                 assertEquals(PolarG12.pt(sol.startX, 0.0), plan.toolAt(lathe, 1.0))
                 prog.blocks.forEachIndexed { i, b ->
                     if (b.path.isEmpty()) return@forEachIndexed

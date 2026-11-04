@@ -437,7 +437,7 @@ class HolderCheckTest {
         val s = RoundCalc.arc3(a3).solution!!
         assertEquals(1, s.tip)
         assertEquals(Side.G42, s.side)
-        assertEquals(listOf("G00 X30.8 Z-21.", "G01 Z-20.", "G03 X20. Z-14.6 R5.4"), s.nc)
+        assertEquals(listOf("G00 X30.8 Z-21.", "G01 Z-20.", "G03 X20. Z-14.6 R5.4"), s.nc.legacy)
         val bar = BoringBar(12.0, 11.0, InsertShape.C, 9.67, 95.0)
         val res = HolderCheck.check(s.drawing, s.program, s.entry, s.tip, r, false, bar)
         assertNull(res.skip)

@@ -122,13 +122,13 @@ object GrooveCalc {
         val finish = Contour.polyline(Pt.ofDia(first, xr), Pt.ofDia(first, d), Pt.ofDia(last, d), Pt.ofDia(last, xr))
         val nc = NcLines().apply {
             for (s in steps) {
-                move("G00", Pt.ofDia(s.z, xr))
-                move("G01", Pt.ofDia(s.z, s.xDia))
-                move("G00", Pt.ofDia(s.z, xr))
+                move("G0", Pt.ofDia(s.z, xr))
+                move("G1", Pt.ofDia(s.z, s.xDia))
+                move("G0", Pt.ofDia(s.z, xr))
             }
             val f = listOf(finish.segs.first().start) + finish.segs.map { it.end }
-            move("G00", f[0])
-            f.drop(1).forEach { move("G01", it) }
+            move("G0", f[0])
+            f.drop(1).forEach { move("G1", it) }
         }.lines
         val drawing = Contour.polyline(Pt.ofDia(z0, od), Pt.ofDia(z0, d), Pt.ofDia(z0 - w, d), Pt.ofDia(z0 - w, od))
         return GrooveResult(GrooveSolution(steps, pitch, xr, nc, drawing, finish), emptyList())

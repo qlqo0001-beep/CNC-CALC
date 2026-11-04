@@ -3,9 +3,8 @@ package com.bmt.nosecalc.calc
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
-import kotlin.math.ceil
-import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.math.tan
 
@@ -217,13 +216,12 @@ data class TaperSolution(
      */
     val toEnd: Boolean,
     /**
-     * 기본 프로그램 — 도면 좌표에 G41/G42 를 걸어 기계가 보정한다. 첫 줄은 공구 보정 화면에 넣을 값 주석 `(R0.4 T3)`.
-     * (접근 줄 G00 —) G00 진입(G40 상태) → G41/G42 G01 시작점(진입 이동 ≥ 노즈R) → 형상(모서리 R 은 G02/G03 도면 R) → G40 G01 후퇴.
-     * 넣은 끝 요소를 노즈가 인선보다 앞서 깎아 끝나고 너머가 비었으면(뒤집어 부품 앞 끝으로 · 다른 팁) 공구 쪽 직각 취소의 교점이 끝 꼭짓점에 못 닿아
-     * 끝 블록 뒤에 이동 없는 `G40` 한 줄과 `G01` 후퇴(FANUC 은 끝 블록 법선에 서서 노즈 접점이 끝좌표 — FF 5.4.4 그림 5.4.4(e)).
-     * 너머가 막힌 끝(척 쪽 · 재료 쪽 단면)은 늘 직각 취소의 교점(노즈 끝이 끝좌표에서 멈춤) — 다른 팁이면 그 앞에 보정 중 직각 후퇴 `G01` 한 줄.
-     * 띄운 진입의 lead 는 노즈R 보다 0.01 더 앞(다음 줄의 보정 이동이 0 이 되지 않게), 넣은 단면 시작은 너머가 비었으면 직접 보정과 같은 노즈 자리의 lead 에 직각으로.
-     * 외경 단면을 중심(X0)까지 깎아 끝나면 그 단면을 X −2r 까지 쓰고 Z 로 빼며 취소(제어기의 안쪽 모서리 교점이 노즈 중심을 중심선에)
+     * 기본 프로그램 — 도면 좌표에 G41/G42 를 걸어 기계가 보정한다. 회사 꼴(계획 단계 4, 사용자 결정 2026-10-29 — `CompFrame`):
+     * `G42`(혼자 줄) / `G0X…Z20.` / (`X…` — 바깥에서 X 를 맞출 때) / `Z…`(진입점 — 첫 깎는 점에서 c) / `G1 … F.1`(첫 깎는 점) / 형상(모서리 R 은 G2/G3 도면 R) /
+     * 빼는 줄 `… F.3`(보정 켠 채 공기로 — 막힌 끝은 벽을 따라 공구 쪽, 빈 끝은 끝 좌표 너머로 곧게, 끝을 비우면 끝 요소를 따라 c, G40 자리 둘레에 도면이 있으면
+     * 한 줄 더, +Z 물러남이 도면에 닿으면 바깥으로 X 를 맞추는 줄 더) / `G40`(혼자 줄) / `G0Z200.`. 보정 줄이 이동 없는 혼자 줄이라 깎는 줄의 노즈는
+     * 보정 시작 · 취소 형식(A · B · C)과 팁 번호에 상관없다. 공구 보정 값(노즈 R · 팁)은 글에 넣지 않는다(화면에만).
+     * 외경 단면을 중심(X0)까지 깎아 끝나면 그 단면을 X −2r 까지 쓰고 공구 쪽으로 빼는 줄(제어기의 안쪽 모서리 교점이 노즈 중심을 중심선에)
      */
     val ncG41G42: List<String>,
     /**
@@ -253,20 +251,6 @@ object TaperCalc {
 
     /** 다섯 값을 다 넣었을 때 각도가 점과 이만큼(°)까지 달라도 받아 준다 — 각도를 소수 셋째 자리로 반올림해 넣어도 되게 */
     private const val ANGLE_TOL = 1e-3
-
-    /** G41/G42 시작 블록의 곧은 노즈 경로를 도면과 잴 때 나누는 수와 허용(mm) — NC 0.001 반올림 안 */
-    private const val START_SAMPLES = 400
-    private const val START_TOL = 5e-4
-
-    /**
-     * 띄운 진입의 lead 를 노즈R 보다 이만큼(mm) 더 앞에 둔다. lead 다음 `G01` 은 보정 노즈 이동이 설계상 0 이 되는 자리라
-     * 0.001 반올림으로 거꾸로 가면 FANUC 보정 간섭 검사(FF 5.4.6 210쪽 — 지령과 보정 경로 방향이 90~270° 다르면 알람)에 걸린다(검증 2026-10-29)
-     */
-    private const val LEAD_PAST = 0.01
-
-    /** NC 좌표 v(Z 또는 X 직경)를 0.001 격자에서 dir 쪽으로 v 바로 너머(0 < 차이 ≤ 0.001)의 값으로 */
-    private fun gridPast(v: Double, dir: Double): Double =
-        if (dir > 0) (floor(v * 1000 + 1e-6) + 1) / 1000 else (ceil(v * 1000 - 1e-6) - 1) / 1000
 
     fun calc(input: TaperInput): TaperResult = guarded {
         // 뒤집으면 칸의 T1 이 그림 왼쪽 점이다 — 그림 순서(T1 = 오른쪽)로 바꿔 놓고 풀고, 가공만 반대 끝부터(solve)
@@ -356,37 +340,31 @@ object TaperCalc {
         // 진입·후퇴 거리. G41/G42 시작 이동이 노즈R 보다 짧으면 안 된다
         val c = max(zClear, r)
 
-        // G41/G42 프로그램의 G00 점은 G40 상태라 인선이 그 점에 있다(노즈 중심 = 점 − 팁 벡터). 공구 쪽 법선 n 인 선 위의 점이면
-        // 노즈가 선에서 −(n·팁 벡터) 떨어진다. 표준 팁이 제 쪽 요소를 따라가면 r 이상(접하거나 떨어짐)이고, 바이트 반대쪽 요소
-        // (AGAINST_TOOL)나 다른 팁이면 r 보다 가까워 선을 넘는다 — 그만큼(lift) 공구 쪽으로 띄워야 한다
-        fun lift(n: Pt) = max(0.0, r + (n dot tv))
-        // 띄운 G00 점에서 시작 요소 선에 직각으로 들어가 선 위의 lead 로 가면, 그 이동 끝에서 노즈는 교점 규칙대로 lead 보다 r 만큼
-        // 선을 따라 앞에 선다. lead 를 그만큼 뒤에 두어 그때의 인선이 직접 보정의 진입점(entry)과 같게 한다
-        fun leadFor(entry: Pt) = foot(entry - tv, first.start, uF) - uF * r
         // 꺾임 k(경로 점 path[k])가 날카로운 볼록 모서리인가 — 공구가 재료 모서리 바깥을 돈다
         fun convexAt(k: Int, corner: Int) =
             filleted.arc[corner] == null && (((path[k] - path[k - 1]) cross (path[k + 1] - path[k])) > 0) == (side == Side.G42)
 
-        // 끝. 좌표를 넣었으면 인선(프로그램 점)이 끝점 좌표에 오게 — 끝 요소의 보정선 위에서 끝점에 내린 발. 공구가 끝좌표를 넘지 않는다
+        // 끝(직접 보정). 좌표를 넣었으면 인선(프로그램 점)이 끝점 좌표에 오게 — 끝 요소의 보정선 위에서 끝점에 내린 발. 공구가 끝좌표를 넘지 않는다
         // (Haas 워크북 56쪽 O00055 `N14 Z-2.375`, 53쪽 O00052 처럼). 후퇴: 끝 요소가 수평이면 공구 쪽으로 직각,
-        // 단면이면 바깥으로 이어서(직각으로 빼면 G41/G42 제어기가 안쪽 모서리 교점을 잡아 단면 끝 r 을 덜 깎는다) — 다만 단면을
-        // 재료 쪽(외경은 중심 쪽, 내경은 바깥)으로 깎아 끝나면(뒤집기·계산기 역방향의 앞 단면) 끝 X 너머도 같은 단면이나 보스라
-        // 공구 쪽으로 직각(이어 가면 G00 이 끝 X 너머를 급송으로 깎는다). 그 단면을 중심(X0)까지 깎으면 노즈 중심이 중심선에 닿는
-        // 데까지 간 뒤 공구 쪽으로 직각(안 그러면 중심에 살이 남는다 — 위 toAxis).
+        // 단면이면 바깥으로 이어서 — 다만 단면을 재료 쪽(외경은 중심 쪽, 내경은 바깥)으로 깎아 끝나면(뒤집기·계산기 역방향의 앞 단면) 끝 X 너머도
+        // 같은 단면이나 보스라 공구 쪽으로 직각(이어 가면 G00 이 끝 X 너머를 급송으로 깎는다). 그 단면을 중심(X0)까지 깎으면 노즈 중심이 중심선에 닿는
+        // 데까지 간 뒤 공구 쪽으로 직각(안 그러면 중심에 살이 남는다 — 아래 toAxis).
         // 비우면 그 요소는 깎지 않는다(그림·재료만): 마지막 꺾임점(모서리 R 이면 그 끝)′ 에서 끝 요소의 공구 쪽으로 c 빠진다.
-        // G41/G42 는 시작과 거울로 — 날카로운 볼록이면 경사를 그대로 늘여, 아니면 끝 요소 선을 따라 보정을 푼다(안쪽 모서리 교점).
-        // 바이트 반대쪽 모양이면 인선이 노즈 중심보다 꺾임 쪽에 있어, 노즈가 꺾임을 벗어나게 경사 쪽은 lift, 끝 요소 쪽은
-        // 직접 보정의 마지막 점이 꺾임에서 끝 요소를 따라 간 만큼 더 간다
+        // G41/G42(회사 꼴 — CompFrame)의 첫 빼는 줄: 막힌 끝(척 · 구멍 바닥 쪽 수평, 재료 쪽 단면 — 보스)은 벽을 따라 공구 쪽으로(안쪽 꺾임이라 제어기가
+        // 두 보정선의 교점에 세워 노즈가 끝 요소와 끝좌표의 법선에 함께 닿는다 — 끝좌표를 넘지 않음), 너머가 빈 끝은 끝 좌표 너머로 곧게(노즈 접점이
+        // 끝좌표 너머까지 — 사용자 결정 2026-10-29 ③), 끝을 비우면 끝 요소를 따라 c(날카로운 볼록이면 경사를 늘여 — 너머가 공기, 아니면 끝 요소 선 위)
         val nB = toolNormal(uB, side)
-        // 화면 역방향(그림을 Z 로 거울해 푼다 — approach = false)은 계산기 +Z 가 실제 척 쪽이다([TaperInput.approach]). 넣은 좌표 너머가 막혔는지를 볼 때만 쓴다
+        // 화면 역방향(그림을 Z 로 거울해 푼다 — approach = false)은 계산기 +Z 가 실제 척 쪽이다([TaperInput.approach]). 넣은 좌표 너머가 막혔는지 ·
+        // G41/G42 의 진입 · 물러남 쪽(부품 앞)을 볼 때 쓴다
         val mirror = !approach
         val exit: Pt
-        val exitD: Pt // G41/G42 프로그램의 후퇴점(도면 좌표)
         var endD = last.end // G41/G42 프로그램의 마지막 형상 점(도면 좌표)
-        // G41/G42 를 이동 없는 G40 한 줄로 끄고 다음 G01 로 빠지나(공구 쪽 직각 · lift 를 섞은 취소가 끝 꼭짓점에 닿지 못할 때)
-        var cancelAlone = false
-        var skimD: Pt? = null // 끝점을 비운 바이트 반대쪽 끝: G40 앞에 끝 요소 선을 따라 한 블록 더(도면 좌표)
-        var wallUp: Pt? = null // 너머가 막힌 끝 · 팁 벡터·u < r: 취소 앞에 공구 쪽 직각으로 한 블록 더(보정 중 — 노즈가 벽을 따라 올라감, 도면 좌표)
+        val x1D: Pt // G41/G42 첫 빼는 줄 끝(도면 좌표)
+        val awayD: Pt // 그 끝 둘레(G40 자리)에 도면이 있을 때 더 갈 방향
+        var blockedEnd = false
+        var freeEnd = false
+        var toAxisEnd = false // 외경 단면을 중심(X0)까지 — 축 너머 같은 면을 늘인 반직선으로 본다
+        var skipLast = false // G41/G42 가 짧은 막힌 끝 요소를 빼고 앞 요소 끝에서 빠지나
         if (cutLast) {
             var e0 = foot(last.end, segs.last().start, uB)
             // 인선이 끝좌표에 왔을 때 노즈가 끝 요소에 한 번도 닿지 않으면(요소가 노즈R 쯤보다 짧다) 그 요소는 깎이지 않는다
@@ -395,90 +373,84 @@ object TaperCalc {
             val inward = face && (uB.x < 0) != inner
             val leave = if (!face || inward) nB else uB
             // 외경 단면을 중심(X0)까지: 노즈 중심이 중심선에 닿아야 중심에 살이 안 남는다. 직접 보정은 인선을 그만큼(T3 이면 X−2r) 더,
-            // G41/G42 는 단면을 중심 너머 r(X−2r)까지 쓰고 Z 로 빼며 취소한다 — 안쪽 모서리라 제어기가 교점(노즈 중심 = 중심선)을 잡는다
-            // (이동 없는 G40 이면 끝 법선이라 단면을 X0 까지만).
+            // G41/G42 는 단면을 중심 너머 r(X−2r)까지 쓰고 공구 쪽(Z)으로 빼는 줄 — 안쪽 꺾임이라 제어기가 교점(노즈 중심 = 중심선)을 잡는다.
             // 너머는 이미 깎은 같은 면이지만 급송은 단면에서 떨어지는 Z 로만(검증 2026-10-27, 현장 안전)
             val toAxis = inward && !inner && last.end.x <= EPS
+            // 내경 바닥 단면을 중심(X0)까지(너머가 빈 끝이지만 축 너머는 같은 면): G41/G42 도 외경처럼 단면을 X −2r 까지 쓰고 공구 쪽으로(노즈 중심이 축에)
+            val axisIn = face && inner && uB.x < 0 && last.end.x <= EPS
             // 넣은 끝좌표 너머가 막힌 쪽인가 — 척 · 구멍 바닥 쪽으로 깎아 끝난 수평 끝(거울이면 계산기 +Z 쪽), 재료 쪽으로 깎아 끝난 단면 끝(보스 — 외경 X0 은 빼고).
             // calc-design '넣은 시작·끝점 너머로 넘지 않기'
             val wall = if (face) inward && !toAxis else if (mirror) uB.z > 0 else uB.z < 0
-            // 공구 쪽 직각 후퇴는 마지막 블록과 안쪽 모서리라 FANUC 은 두 보정선의 교점 E + nB·r − uB·r 에 노즈를 세운다(형식 A·B 같음 —
-            // FF 5.4.4 그림 5.4.4(a) 200쪽, 표 5.4.1(a) 173쪽 'inner side … single type only', F0 14.3.4 227쪽). 노즈가 끝 요소와 끝좌표의 법선(벽)에
-            // 함께 닿는 자리라 노즈 끝이 끝좌표를 넘지 않는다. 직접 보정의 끝 노즈 E + nB·r − uB·(팁 벡터·uB) 와 같은 것은 팁 벡터·uB = r 일 때뿐이다
-            // (표준 팁이 척 쪽 · 구멍 바닥 쪽으로 깎아 끝남).
-            // - 너머가 막힌 끝은 늘 이 교점 — 팁 벡터·uB < r(팁 5~9 · 0 · 고른 역바이트 팁)이면 직접 보정은 노즈가 끝좌표 너머로 r 까지 가지만
-            //   G41/G42 는 벽에서 멈춘다(끝 꼭짓점은 안쪽 모서리라 노즈R 의 0.41 배가 남는 자리 — 검증 2026-10-29, 설계 13.7). 다만 그 교점에서 바로
-            //   G40 상태 자리(후퇴점 − 팁 벡터)로 가면 노즈가 끝 요소 방향으로 r − 팁 벡터·uB 만큼 밀려 벽으로 들어가므로, 보정 중에 공구 쪽 직각
-            //   후퇴점까지 한 블록 더(노즈는 끝좌표의 법선 — 벽 — 을 따라 올라감) 간 뒤, 취소 블록을 그만큼 척 반대쪽으로 비켜 c 더 뺀다(G40 상태 노즈도 벽 위).
-            // - 너머가 빈 끝(뒤집어 부품 앞 끝으로 깎아 끝남 · 화면 역방향의 앞 끝)에서 팁 벡터·uB < r 이면 교점이 끝 꼭짓점에 닿지 못해 r 쯤 남는다
-            //   (검증 2026-10-28). 그때는 끝 블록 뒤에 이동 없는 G40 한 줄 — FANUC 은 앞 블록 끝에 법선 벡터를 남겨 노즈 접점이 끝좌표에 서고
-            //   다음 이동에서 벡터를 지운다(FF 5.4.4 그림 5.4.4(e) 204쪽 형식 A·B, F0 14.3.4 228쪽). 끝좌표 너머로 가는 좌표는 쓰지 않는다.
-            // 바깥으로 이어 빼는 단면(너머가 빈 끝)도 바이트 반대쪽(lift > 0)이면 lift 를 섞은 후퇴점이 단면과 한 직선이 아니라 안쪽 모서리 교점(끝 법선보다 앞)에
-            // 서므로 같은 꼴 — 그 뒤 노즈는 단면 보정선을 따라 바깥으로 간다
-            val drift = r - (tv dot uB)
-            // 막힌 끝인데 끝 요소가 짧아(노즈R 쯤) 교점이 그 요소의 보정 시작보다 앞이면 끝 블록의 보정 이동이 거꾸로 가 간섭 알람이다(FF 5.4.6) —
-            // 그때는 직접 보정과 같은 끝 법선(이동 없는 G40)으로 둔다(노즈가 직접 보정처럼 끝좌표 너머로 감 — 그 요소를 벽 앞에서 깎을 길이 없다)
-            val wallStop = wall && (drift <= EPS || (((last.end - uB * r) - (segs.last().start - tv)) dot uB) > LEAD_PAST)
-            cancelAlone = if (leave == nB) !wallStop && drift > EPS else lift(nB) > EPS
-            if (toAxis) {
-                e0 += uB * max(0.0, tv dot uB)
-                if (!cancelAlone) endD = last.end + uB * r
-            }
+            // 끝 요소가 짧아(노즈R 쯤) 직각 빼는 줄과의 교점이 그 요소의 보정 시작보다 앞이면 끝 블록이 거꾸로 가 간섭 알람이다(FF 5.4.6).
+            // 막힌 끝이면 그 요소는 노즈가 벽 앞에서 닿을 길이 없다 — G41/G42 는 그 요소를 빼고 앞 요소 끝에서 벽을 따라 공구 쪽으로 뺀다(노즈가 끝좌표
+            // 너머 벽 · 보스로 가지 않음 — 전에는 빈 끝처럼 곧게 빼 벽 속으로 c 와 G40 옮김만큼 갔다, 검증 2026-11-04). 직접 보정은 그대로
+            val shortEnd = (((last.end + nB * r - uB * r) - (segs.last().start - tv)) dot uB) < CompFrame.MIN_MOVE
+            // 그 요소를 빼려면 앞 요소가 직선이고 그 노즈 길 위에 직각 빼기 교점이 MIN_MOVE 이상 남아야 한다(`CompFrame.roomOn` — 짧은 경사 뒤면 그 블록도 거꾸로) —
+            // 아니면(앞이 모서리 R 등) 전처럼 곧게 뺀다(알려진 한계 — 노즈가 끝좌표 너머로 감)
+            val skipOk = wall && shortEnd && drawing.segs.size > 1 &&
+                CompFrame.roomOn(segs[segs.size - 2].shifted(tv * -1.0), true, last.start, nB, side, r)
+            if (toAxis) e0 += uB * max(0.0, tv dot uB)
+            if (toAxis || axisIn) endD = last.end + uB * r
+            toAxisEnd = toAxis
             segs[segs.lastIndex] = Line(segs.last().start, e0)
             exit = e0 + leave * c
-            val back = endD + leave * c + nB * lift(nB)
-            if (wallStop && drift > EPS) {
-                // 직각 한 줄은 직각 후퇴점보다 r 더(c + lift + r) — 그 줄의 노즈는 끝 블록과의 교점(높이 r)에서 비킨 취소와의 교점(높이 − r·tan(θ/2),
-                // tan(θ/2) ≤ 0.62)까지 가는데, 높이가 c + lift 뿐이면 거꾸로 가 간섭이 된다(c = r 일 때)
-                wallUp = back + nB * r
-                exitD = back + nB * (r + c) - uB * drift
-            } else {
-                exitD = back
+            when {
+                toAxis || axisIn -> {
+                    x1D = endD + nB * c
+                    awayD = nB
+                }
+                wall && !shortEnd -> {
+                    x1D = endD + nB * c
+                    awayD = uB * -1.0
+                    blockedEnd = true
+                }
+                skipOk -> {
+                    skipLast = true
+                    endD = last.start
+                    x1D = endD + nB * c
+                    awayD = uB * -1.0
+                    blockedEnd = true
+                }
+                else -> {
+                    // 내경 단면을 중심 쪽으로 깎아 끝나면 축을 넘지 않게(넘으면 맞은편 벽) — 모자라면 공구 쪽으로
+                    val room = if (face && inner && uB.x < 0) endD.x else Double.MAX_VALUE
+                    x1D = endD + uB * min(c, room)
+                    // 축까지 G40 자리 규칙 반지름도 안 남으면(가운데 작은 구멍 — 맞은편 끝과 사이가 그 두 배보다 좁다) 축 쪽으로 더 가도 못 맞추니
+                    // 공구 쪽(구멍 입구 쪽)으로 비킨다(검증 2026-11-04: 축 너머 맞은편 벽 속까지 갔다)
+                    awayD = if (room < max(c, CompFrame.g40Radius(r))) nB else uB
+                    freeEnd = true
+                }
             }
         } else {
-            val tl = segs.last().start
-            exit = tl + nB * c
-            if (convexAt(path.size - 2, cr.lastIndex)) {
+            exit = segs.last().start + nB * c
+            x1D = if (convexAt(path.size - 2, cr.lastIndex)) {
                 val ahead = path[path.size - 2] - path[path.size - 3]
-                val nS = toolNormal(ahead.unit(), side)
-                exitD = last.start + ahead * (c / abs(ahead.z)) + nS * lift(nS)
-                // 바이트 반대쪽이면 lift 를 섞은 후퇴점이 경사 연장선과 한 직선이 아니라 공구 쪽으로 꺾는 취소(안쪽 모서리 교점)가 경사 끝을
-                // 덜 깎는다 — 이동 없는 G40 으로 경사 끝 법선(노즈 접점 = 꺾임점)에 세우고 G01 로 빠진다. 노즈는 경사 보정선을 늘인 위로 간다
-                cancelAlone = lift(nS) > EPS
-            } else if (lift(nB) > EPS) {
-                // 오목 · 모서리 R 의 끝 요소 쪽 lift(바이트 반대쪽 팁): 끝 요소 선을 따라 빼야 제어기가 꺾임에서 교점(= 직접 보정의 마지막 노즈)을
-                // 잡는데, 그러면 G40 상태의 노즈가 끝 요소 속으로 들어가고, lift 를 섞으면 교점이 짧아져 꺾임에 살이 남는다(검증 2026-10-28 —
-                // 0.508 mm). 그래서 끝 요소 선을 따라 직접 보정의 마지막 노즈 자리까지 한 블록 더(보정 중 — 노즈는 교점에서 그 선을 따라 거의
-                // 그대로) 간 뒤 이동 없는 G40(끝 법선 — FF 5.4.4 그림 5.4.4(e))으로 서고 직접 보정의 후퇴점으로 G01. 노즈 끝 자리가 직접 보정과 같다
-                // 그 블록 끝 = 끝 요소 선 위 직접 보정의 마지막 노즈 접점 바로 너머(NC 0.001 격자 한 칸 안) — 반올림으로 보정 경로가 거꾸로 가지 않게.
-                // 모서리 R 이 끝 요소에 접해 끝나면 그 끝 법선이 이미 그 자리라(접점 = R 끝) 한 블록 더 갈 것 없이 이동 없는 G40
-                val s0 = ((tl - tv) - last.start) dot uB
-                if (s0 > EPS) {
-                    val raw = last.start + uB * s0
-                    skimD = if (isHorizontal(uB)) Pt(gridPast(raw.z, uB.z), raw.x) else Pt.ofDia(raw.z, gridPast(raw.xDia, uB.x))
-                }
-                cancelAlone = true
-                exitD = exit
+                // 경사를 늘여 큰 축으로 c(가파른 경사를 Z 로 c 늘이면 X 가 크게 간다)
+                last.start + ahead * (c / max(abs(ahead.z), abs(ahead.x)))
             } else {
-                exitD = last.start + uB * (c + max(0.0, (tl - last.start) dot uB)) + nB * lift(nB)
+                last.start + uB * c
             }
+            awayD = nB
         }
 
         // 시작. 좌표를 넣었으면 끝과 같이 인선을 그 좌표에 두고, 시작 요소가 수평이면 그 연장선, 단면이면 공구 쪽에서 Z 로 들어간다.
         // 다만 뒤집어 수평 시작 요소를 팁의 Z 와 반대로 깎으면(외경·구멍을 척 쪽·구멍 바닥 쪽 끝부터 Z+ 로) 시작 좌표 너머는 날 앞쪽 —
         // 척·구멍 바닥이라 연장선으로 넘어 들어가지 않고 공구 쪽에서 시작 좌표에 직각으로(X 로 c) 들어간다(단면 시작과 같은 꼴).
         // 비우면 그 요소는 깎지 않는다(그림·재료만). 진입은 첫 깎는 점에서 Z 로 c 바깥: 첫 꺾임이 날카로운 볼록이면 경사선을 늘인 점
-        // (경사각을 따라가 X 가 정확하다), 아니면 시작 요소가 수평이면 그 보정선을 늘인 점, 단면이면 공구 쪽 점
+        // (경사각을 따라가 X 가 정확하다), 아니면 시작 요소가 수평이면 그 보정선을 늘인 점, 단면이면 공구 쪽 점.
+        // G41/G42 진입점(도면 좌표)도 첫 깎는 점에서 c 지만 노즈는 보정선 위라 팁과 상관없다: 넣은 시작 좌표 너머가 막혔으면(뒤집어 척 쪽 · 구멍 바닥 쪽에서
+        // 시작하는 수평, 바깥으로 깎기 시작하는 단면 — 보스, 외경 X0 은 빼고) 공구 쪽에서 직각으로(안쪽 꺾임 — 노즈가 시작 요소와 시작 좌표의 법선에 함께 닿는다),
+        // 아니면 첫 깎는 요소와 한 직선으로 너머(공기)에서. 비운 시작은 볼록이면 경사 연장선(큰 축으로 c), 아니면 시작 요소 선 위(노즈가 그 선을 타고 꺾임의 교점 · R 시작에 선다)
         val entry: Pt
-        var entryD: Pt // G41/G42 프로그램의 진입점(도면 좌표)
-        var leadD: Pt? = null // 띄운 진입점에서 직각으로 들어간 뒤 선을 따라 startD 로 갈 점
-        var convexLead = false // 볼록 첫 꺾임 연장선 진입을 띄운 lead 꼴로 썼나(G00 이 부품 앞 끝면 뒤일 수 있다)
-        val startD: Pt // G41/G42 보정 시작 이동의 끝
+        val e0D: Pt
+        val startD: Pt // G41/G42 첫 깎는 줄의 끝(첫 깎는 점, 도면 좌표)
         val fromSeg: Int // 직접 보정에서 진입 뒤 따라갈 첫 요소
         var s0: Pt? = null
         val nF = toolNormal(uF, side)
         // 넣은 시작점: 수평 시작 요소의 연장선을 따라 들어가나(뒤집어 팁의 Z 와 반대로 깎는 것은 빼고 — 그때와 단면은 공구 쪽에서 직각으로)
         val along = isHorizontal(uF) && !(flip && uF.z * tv1.z <= 0)
+        var blockedStart = false
+        var skipFirst = false // G41/G42 가 짧은 막힌 시작 요소를 빼고 다음 요소 처음으로 들어가나
         if (cutFirst) {
             val p = foot(first.start, segs.first().start, uF)
             if (((segs.first().end - p) dot uF) < -EPS || ((first.end - (p - tv)) dot uF) < -EPS) stop(TaperWarning.BAD_LEG)
@@ -486,92 +458,48 @@ object TaperCalc {
             val inDir = if (along) uF * -1.0 else nF
             s0 = p
             entry = p + inDir * c
-            if (along) {
-                entryD = first.start + inDir * c
-                // 띄운 진입: lead 를 시작 좌표에서 c(직접 보정 진입점과 같은 거리)만큼만 연장선 쪽에 — 그 너머가 척 쪽일 수 있다(화면 역방향).
-                // 노즈는 교점(lead 보다 r 앞)에서 선을 따라 시작점으로 온다. c = r 이면 그 이동이 0 이라 LEAD_PAST 만큼 더(검증 2026-10-29)
-                if (lift(nF) > EPS) {
-                    leadD = first.start - uF * max(c, r + LEAD_PAST)
-                    entryD = leadD + nF * (c + lift(nF))
-                }
-            } else {
-                entryD = first.start + nF * (c + lift(nF))
-                // 시작 좌표에 공구 쪽에서 직각으로 들어가면 다음 블록과 안쪽 모서리라 제어기 노즈는 교점 F + r(n + u) 에 선다. 직접 보정의 첫 노즈
-                // F + r·n − u(팁 벡터·u) 와 같은 것은 팁 벡터·u = −r 일 때뿐이다(검증 2026-10-29 — 뒤집기 외경 · 내경 형상 2·4 의 단면 시작에 표준 팁이면
-                // 팁 벡터·u = +r 라 G41/G42 노즈가 2r 늦게 닿아 어깨 바깥 끝에 0.3 mm(0.8R) 고리가 남았다). 너머가 빈 시작(재료 쪽으로 깎기 시작하는 단면,
-                // 화면 역방향 뒤집기의 수평 시작)이면 lead = F − u(r + 팁 벡터·u) 에 직각으로 들어가 선을 따라 F — 노즈가 직접 보정과 같은 자리에서 같은
-                // 선을 탄다(팁 벡터·u = 0 이면 그 이동이 0 이라 LEAD_PAST 만큼 더). 너머가 막힌 시작(바깥으로 깎기 시작하는 단면 — 보스, 뒤집어 척 쪽 ·
-                // 구멍 바닥 쪽에서 시작하는 수평)은 그대로: 노즈가 시작 요소와 시작 좌표의 법선(벽)에 함께 닿아 시작 좌표를 넘지 않는다(직접 보정은 다른 팁이면 넘는다)
-                val wall = if (isHorizontal(uF)) (if (mirror) uF.z < 0 else uF.z > 0) && uF.z * tv1.z <= 0
-                else (uF.x > 0) != inner && !(!inner && first.start.x <= EPS)
-                val tu = tv dot uF
-                // (막힌 시작인데 다른 팁(팁 벡터·u > −r)이고 시작 요소가 노즈R 쯤보다 짧으면 교점이 그 요소의 보정 끝보다 뒤라 간섭 알람 — 고치기 전과 같다.
-                // lead 꼴로 비키면 G00 이 시작 좌표 너머(벽 속)로 가서 쓰지 않는다 — 설계 13.9 남은 것)
-                if (!wall && tu > -r + EPS) {
-                    leadD = first.start - uF * (r + max(tu, LEAD_PAST))
-                    entryD = leadD + nF * (c + lift(nF))
-                }
-            }
-            startD = first.start
+            blockedStart = if (isHorizontal(uF)) (if (mirror) uF.z < 0 else uF.z > 0) else (uF.x > 0) != inner && !(!inner && first.start.x <= EPS)
+            // 시작 요소가 짧아(노즈R 쯤) 직각 진입의 교점이 그 요소의 보정 끝보다 뒤면 간섭 알람 — 막힌 시작이면 그 요소는 노즈가 벽 앞에서 닿을 길이 없어
+            // G41/G42 는 그 요소를 빼고 다음 요소 처음으로 공구 쪽에서 직각으로 들어간다(전에는 한 직선으로 시작 좌표 너머 벽 속에서 들어왔다, 검증 2026-11-04)
+            val shortStart = blockedStart && drawing.segs.size > 1 && ((segs[0].end - tv - (first.start + nF * r + uF * r)) dot uF) < CompFrame.MIN_MOVE
+            skipFirst = shortStart && CompFrame.roomOn(segs[1].shifted(tv * -1.0), false, first.end, nF * -1.0, side, r)
+            // 다음 요소가 모서리 R 이거나 자리가 없으면(짧은 경사) 전처럼 첫 깎는 요소와 한 직선으로(노즈가 시작 좌표 너머로 감 — 알려진 한계)
+            if (shortStart && !skipFirst) blockedStart = false
+            e0D = if (skipFirst) first.end + nF * c else if (blockedStart) first.start + nF * c else first.start - uF * c
+            startD = if (skipFirst) first.end else first.start
             fromSeg = 0
         } else {
             if (convexAt(1, 0)) {
                 val back = path[1] - path[2]
                 entry = segs[0].end + back * (c / abs(back.z))
-                // 경사 연장선은 재료가 아니라(볼록 모서리 바깥) 띄우지 않는다. 다만 바이트 반대쪽 팁(lift > 0)이면 그 G00 점의 노즈가
-                // 깎지 않는 시작 요소 선을 넘을 수 있다 — 노즈가 그 선에서 r 떨어질 때까지 연장선을 따라 더 나간다(표준 팁은 그대로)
-                entryD = path[1] + back * (c / abs(back.z))
-                val k = back.unit() dot nF
-                if (lift(nF) > EPS && k > EPS && lift(nF) / k > (entryD - path[1]).length) entryD = path[1] + back.unit() * (lift(nF) / k)
-                // FANUC 시작 블록의 노즈는 G40 노즈(G00 점 − 팁 벡터)에서 형식 A 벡터점 E + nS·r 까지 곧게 간다(FF 5.4.2 175~179쪽 · F0 14.3.2
-                // 213쪽). 바이트 반대쪽 팁이면 G40 노즈가 경사 보정선 안쪽이라 그 곧은 선이 깎지 않는 시작 요소의 모서리를 자를 수 있다(검증
-                // 2026-10-28, 설계 13.7 — 0.147 mm). 그 선이 도면(깎지 않는 앞뒤 요소 포함)에 노즈R 보다 가까우면 단면 진입과 같은 꼴로:
-                // 경사 연장선 위 lead = E − u·(r + LEAD_PAST) 에 공구 쪽으로 c + lift 띄운 G00 에서 직각으로 들어가(안쪽 모서리 — 교점) 선을 따라 E 로.
-                // 노즈는 교점(lead 보다 r 앞) = E + nS·r − u·LEAD_PAST(볼록 바깥 공중, 노즈 접점이 첫 깎는 점 바로 앞)에 서고 `G01 E` 에서 LEAD_PAST 만큼
-                // 앞으로 간다(0 이면 0.001 반올림으로 거꾸로 가 간섭 검사에 걸림). 이때 G00 은 Z 여유가 아니라 경사에서 띄운 점이라 역테이퍼면 부품 앞
-                // 끝면 뒤일 수 있다 — 그러면 그 앞에 접근 줄(아래 approachTo — 앞 끝면 바깥에서 X 를 맞추고 Z 로)
-                val uS = back.unit() * -1.0
-                val nS = toolNormal(uS, side)
-                val from = entryD - tv
-                val to = path[1] + nS * r
-                val clear = (0..START_SAMPLES).all { q ->
-                    val pq = from + (to - from) * (q.toDouble() / START_SAMPLES)
-                    drawing.segs.minOf { distTo(it, pq) } >= r - START_TOL
-                }
-                if (!clear) {
-                    leadD = path[1] - uS * (r + LEAD_PAST)
-                    entryD = leadD + nS * (c + lift(nS))
-                    convexLead = true
-                }
+                // G41/G42 는 끝 쪽처럼 경사를 늘여 큰 축으로 c(가파른 경사를 Z 로 c 늘이면 X 가 축 너머 수백 mm 까지 간다 — 검증 2026-11-04:
+                // 내경 89° 경사에서 `G0X-243.627Z20.` 이 축 너머 맞은편 벽을 지났다)
+                e0D = path[1] + back * (c / max(abs(back.z), abs(back.x)))
             } else if (isHorizontal(uF)) {
                 entry = segs[0].end - uF * c
-                // 도면 꼭짓점에서 c. 다만 첫 보정점이 꼭짓점보다 뒤에 있으면(뒤집어 인선이 노즈 뒤에 끌려가는 팁 — 노즈 중심이 인선보다
-                // 앞) 직접 보정 진입점과 같은 자리까지 물러난다. 아니면 G40 상태의 노즈가 다음 요소(경사)에 박힌다
-                entryD = first.end - uF * (c + max(0.0, (first.end - segs[0].end) dot uF))
-                if (lift(nF) > EPS) leadD = leadFor(entry).also { entryD = it + nF * (c + lift(nF)) }
+                e0D = first.end - uF * c
             } else {
-                // 단면: 공구 쪽에서 Z 로. G41/G42 는 단면 선 위 lead 에 직각으로 들어간 뒤 선을 따라 간다 — 노즈는 교점 규칙대로
-                // lead 보다 r 앞, 곧 직접 보정의 첫 깎는 점 바로 앞(LEAD_PAST — 깎지 않는 단면을 그만큼 탄다)에 선다. 꼭 그 점이면 다음 `G01` 의
-                // 보정 이동이 0 이라 다음 작은 모서리 R 의 0.001 반올림만으로 거꾸로 가 간섭이 된다(검증 2026-10-29)
                 entry = segs[0].end + nF * c
-                leadD = (leadFor(segs[0].end) - uF * LEAD_PAST).also { entryD = it + nF * (c + lift(nF)) }
+                e0D = first.end - uF * c
             }
             startD = first.end
             fromSeg = 1
         }
         val program = Contour(segs)
         val toSeg = if (cutLast) segs.size else segs.size - 1 // 깎는 요소의 끝(끝 요소를 깎지 않으면 빼고)
+        // G41/G42 가 깎는 요소(짧은 막힌 시작 · 끝 요소는 빼고)
+        val fromSegG4 = if (skipFirst) 1 else fromSeg
+        val toSegG4 = if (skipLast) toSeg - 1 else toSeg
 
-        // 접근 줄: 뒤집어 그림 왼쪽(척 쪽 · 구멍 안)에서 시작하면 진입 G00 점이 부품 앞 끝면(넣은 앞 요소 끝이나 T 점 가운데 가장 오른쪽)보다
+        // 접근 줄(직접 보정): 뒤집어 그림 왼쪽(척 쪽 · 구멍 안)에서 시작하면 진입 G00 점이 부품 앞 끝면(넣은 앞 요소 끝이나 T 점 가운데 가장 오른쪽)보다
         // 척 쪽이다. G00 은 X · Z 가 따로 움직일 수 있어(dog-leg) 앞 위치에서 바로 오면 입구 단면 · 면취나 부품 앞을 지날 수 있으므로
         // 먼저 앞 끝면 바깥(Z + c)에서 X 를 맞추고 Z 로만 들어간다(검증 2026-10-27, 현장 안전). 그 X 로 Z 를 따라 오는 동안 노즈가 지나는
         // 도면(진입점에서 노즈 왼쪽 끝부터 오른쪽)보다 바깥이어야 한다 — 아니면(역테이퍼 꼴 · 겹테이퍼 산 너머) 그 바깥 X(+ c)로 Z 를 맞춘 뒤
         // X 로 진입점에 간다. 안 뒤집은 것 · 계산기 역방향은 지금 그대로. 그림의 꺾은선(모서리 R 전)이 모서리 R 윤곽을 바깥에서 감싼다.
-        // 안 뒤집은 것도 G41/G42 의 볼록 첫 꺾임 띄운 진입(convexLead — 역테이퍼면 G00 이 경사에서 공구 쪽으로 띄운 점이라 앞 끝면 뒤 · 내경 입구 안)은
-        // 같은 접근 줄을 넣는다(검증 2026-10-29). 직접 보정의 진입은 Z 여유 앞이라 해당 없다
+        // (G41/G42 는 CompFrame 이 Z20. 에서 같은 일을 한다 — 진입 Z 줄이 도면에 닿으면 바깥 X 에서 Z 를 맞추고 X 로)
         val zFront = (if (start != null) drawn else drawn.drop(1)).maxOf { it.z }
-        fun approachTo(e: Pt, lead: Boolean = false): List<Pt> {
-            if (!approach || !(flip || lead) || reverse || e.z >= zFront - EPS) return emptyList()
+        fun approachTo(e: Pt): List<Pt> {
+            if (!approach || !flip || reverse || e.z >= zFront - EPS) return emptyList()
             val from = e.z - tv.z - r
             val xs = path.zipWithNext().flatMap { (a, b) ->
                 listOfNotNull(
@@ -586,7 +514,28 @@ object TaperCalc {
             return listOf(Pt(zFront + c, xa), Pt(e.z, xa))
         }
         val approachG40 = approachTo(entry)
-        val approachG4 = approachTo(entryD, convexLead)
+
+        // G41/G42(회사 꼴): 공기 이동을 잴 소재 = 도면 + 앞뒤 요소를 늘인 반직선(너머가 빈 끝은 공기라 빼고) + 넣은 시작 · 끝 좌표 너머가 막힌 쪽 + 내경은 축 거울
+        // 반직선은 수평 요소만(외경 · 구멍이 이어진다) — 단면 요소는 그림 5 mm 너머가 어디까지인지 모르고, 늘이면 막힌 벽이 되어 뒤집기 진입을 막는다.
+        // 외경 단면을 중심까지 깎는 끝은 축 너머 같은 면을 늘인다
+        val mSegs = drawing.segs + listOfNotNull(
+            if (isHorizontal(uF) && first.start.x > EPS) FrameMaterial.ray(first.start, uF * -1.0) else null,
+            if (!freeEnd && (toAxisEnd || isHorizontal(uB))) FrameMaterial.ray(last.end, uB) else null,
+        )
+        val mat = FrameMaterial(
+            if (inner) mSegs + mSegs.map(FrameMaterial::mirror) else mSegs,
+            listOfNotNull(if (blockedStart) first.start to uF * -1.0 else null, if (blockedEnd) last.end to uB else null),
+        )
+        val front = if (mirror) -1.0 else 1.0
+        val outward = if (inner) -1.0 else 1.0
+        val ends = drawing.segs.flatMap { listOf(it.start, it.end) }
+        val approachG4 = CompFrame.entry(
+            mat, side, r, outward, e0D, startD, CompFrame.startDir(drawing.segs[fromSegG4]),
+            if (mirror) ends.minOf { it.z } else ends.maxOf { it.z }, front,
+        )
+        val exitsG4 = CompFrame.exit(
+            mat, side, r, outward, if (cutLast) endD else last.start, CompFrame.endDir(drawing.segs[toSegG4 - 1]), x1D, awayD, front,
+        )
 
         val warnings = mutableListOf<TaperWarning>()
         // 꺾임 k(경로 점 path[k])가 오목이고 모서리 R < r — 그 자리에 R 대신 r 이 남는다(볼록 끝은 다 깎인다)
@@ -597,41 +546,22 @@ object TaperCalc {
         // 공구가 원 안쪽(오목): G41 이면 반시계, G42 면 시계 원호
         if (drawing.segs.any { it is Arc && (side == Side.G41) != it.cw && it.radius - r <= EPS }) warnings += TaperWarning.CONCAVE_R_LE_NOSE
         if (tip in 1..4 && againstTool(drawing, drawing.segs.subList(fromSeg, toSeg), side, tip)) warnings += TaperWarning.AGAINST_TOOL
-        if ((listOf(entry, exit, entryD, exitD) + approachG40 + approachG4).any { it.x < -EPS }) warnings += TaperWarning.ENTRY_PAST_AXIS
+        if ((listOf(entry, exit, endD) + approachG40 + approachG4 + exitsG4).any { it.x < -EPS }) warnings += TaperWarning.ENTRY_PAST_AXIS
 
         val ncG40 = NcLines().apply {
-            for (p in approachG40) move("G00", p)
-            move("G00", entry)
+            for (p in approachG40) move("G0", p)
+            move("G0", entry)
             // 시작점을 넣었으면 시작점′(시작 요소가 수평이면 진입점·시작점′ 이 그 보정선 위라 한 줄로 간다), 비웠으면 첫 꺾임점′
-            if (s0 == null) move("G01", segs[0].end) else if (!along) move("G01", s0)
-            for (s in segs.subList(fromSeg, toSeg)) if (s is Arc) arc(s) else move("G01", s.end)
-            move("G00", exit)
+            if (s0 == null) move("G1", segs[0].end) else if (!along) move("G1", s0)
+            for (s in segs.subList(fromSeg, toSeg)) if (s is Arc) arc(s) else move("G1", s.end)
+            move("G0", exit)
         }.lines
-        val ncG41G42 = listOf("(R${Fmt.nc(r).removeSuffix(".")} T$tip)") + NcLines().apply {
-            for (p in approachG4) move("G00", p)
-            move("G00", entryD)
-            // 보정 시작·취소는 직선 이동(G00/G01)에서, 원호 블록은 안 된다 — Haas ST/TL 워크북 62쪽 APPROACH·DEPARTURE MOVES.
-            // 시작 이동 끝에서 보정이 다 걸린다(같은 쪽). 시작 이동 길이 ≥ c ≥ r, 취소 이동 ≥ r(66쪽 "twice the tool radius" 는 직경값).
-            // 시작 이동은 첫 형상 요소와 한 직선이거나, 그 선에 공구 쪽에서 직각으로 들어간다(안쪽 모서리 = 두 보정선의 교점)
-            if (leadD != null) {
-                move("$side G01", leadD)
-                move("G01", startD)
-            } else {
-                move("$side G01", startD)
-            }
-            for (s in drawing.segs.subList(fromSeg, toSeg)) if (s is Arc) arc(s) else move("G01", if (s === last) endD else s.end)
-            // 취소 뒤 G40 상태의 인선 = 후퇴점. 진입과 같이 노즈가 끝 요소 선을 넘지 않게 lift 만큼 공구 쪽으로.
-            // 취소 블록은 G01: G00 은 FANUC 매개변수 No.1401#1 LRP = 0 이면 축마다 따로 급송해(FF 부록 A 364쪽, F0 4.1 41쪽) 보정된
-            // 끝점 사이를 꺾여 가며 깎지 않는 요소 · 꺾임을 지날 수 있다(검증 2026-10-28, 설계 13.7 — 0.19 mm). 끝점이 같아 모서리 종류와
-            // 끝 노즈는 G00 일 때와 같고 경로만 곧다
-            skimD?.let { move("G01", it) }
-            wallUp?.let { move("G01", it) }
-            if (cancelAlone) {
-                lines += "G40"
-                move("G01", exitD)
-            } else {
-                move("G40 G01", exitD)
-            }
+        // 회사 꼴(CompFrame): G41/G42 혼자 → G0 X…Z20. → (X 맞춤) → Z 진입점 → G1 첫 깎는 점 F.1 → 형상(도면 좌표, 모서리 R 은 G2/G3 도면 R) →
+        // 빼는 줄 F.3 → G40 혼자 → G0Z200.
+        val ncG41G42 = NcLines().apply {
+            CompFrame.write(this, side, approachG4, startD, {
+                for (s in drawing.segs.subList(fromSegG4, toSegG4)) if (s is Arc) arc(s) else move("G1", if (s === last) endD else s.end)
+            }, exitsG4, front = front)
         }.lines
 
         // 꼭짓점 결과: 가공 순서의 k번 모서리. 칸 순서는 그림 순서를 뒤집기만큼, 가공 순서는 그림 순서를 leftFirst 만큼 뒤집은 것이라

@@ -25,6 +25,7 @@ import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperPoint
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
+import com.bmt.nosecalc.calc.ncWords
 import kotlin.math.abs
 import kotlin.math.round
 
@@ -385,26 +386,25 @@ internal object Mirror {
         },
     )
 
-    private val zWord = Regex("""Z(-?)(\d+\.\d*)""")
-
     private val tipWord = Regex("""T(\d)\)""")
-    private val swap = mapOf("G02" to "G03", "G03" to "G02", "G41" to "G42", "G42" to "G41")
+    private val swap = mapOf("G2" to "G3", "G3" to "G2", "G41" to "G42", "G42" to "G41")
 
     /**
-     * NC 줄 뒤집기: Z 부호, 원호 방향(G02↔G03), 보정 쪽(G41↔G42), 주석 `(R0.4 T3)` 의 팁 번호.
-     * Fmt.nc 는 절댓값을 반올림하고 부호를 붙이므로(0 은 부호 없음) 글에서 부호를 바꾼 것이 뒤집은 점을 Fmt.nc 로 쓴 것과 같다.
-     * 앞 줄과 같은 값을 빼는 규칙도 글끼리의 같음이라 그대로 맞는다.
+     * NC 줄 뒤집기(회사 표기 — 낱말 붙여 씀): Z 부호, 원호 방향(G2↔G3), 보정 쪽(G41↔G42), 주석 `(R0.4 T3)` 의 팁 번호.
+     * Fmt.word 는 절댓값을 반올림하고 부호를 붙이므로(0 은 부호 없음) 글에서 부호를 바꾼 것이 뒤집은 점을 Fmt.word 로 쓴 것과 같다.
+     * 앞 줄과 같은 값 · 이동 G 를 빼는 규칙도 글끼리의 같음이라 그대로 맞는다(G2↔G3 를 모든 줄에서 바꾸므로 빠진 G 도 바뀐 쪽).
      */
     fun nc(line: String): String {
         if (line.startsWith("(")) return line.replace(tipWord) { "T${tip(it.groupValues[1].toInt())})" }
-        return line.replace(zWord) { m ->
-            val (minus, num) = m.destructured
+        return ncWords(line).joinToString("") { w ->
             when {
-                minus.isNotEmpty() -> "Z$num"
-                num.all { it == '0' || it == '.' } -> "Z$num"
-                else -> "Z-$num"
+                w in swap -> swap.getValue(w)
+                !w.startsWith("Z") -> w
+                w.startsWith("Z-") -> "Z" + w.substring(2)
+                w.drop(1).all { it == '0' || it == '.' } -> w
+                else -> "Z-" + w.substring(1)
             }
-        }.split(' ').joinToString(" ") { swap[it] ?: it }
+        }
     }
 
     fun solution(s: TaperSolution) = s.copy(
@@ -466,11 +466,17 @@ internal fun taperWarningText(w: TaperWarning, f: SlopeForm): String = when (w) 
             "형상 일부가 바이트 방향과 반대입니다(역테이퍼 꼴·반대쪽 단면). 실제 바이트의 끝날 여유각이 맞아야 깎입니다. 정/역방향을 확인하세요."
         }
     // 끝 단면을 중심(X0)까지 깎으면 노즈가 중심에 닿게 인선이 일부러 중심 너머 X −2r 까지 간 뒤 Z 로 빠진다(calc: 중심에 살이 안 남게) —
-    // Z 여유를 줄이라는 말은 맞지 않는다
+    // Z 여유를 줄이라는 말은 맞지 않는다. 내경 바닥 단면은 G41/G42 만 X −2r 뒤 Z 로 빼고, 직접 보정은 그 단면을 이어서 c 더 간다(calc '진입점과 NC' 후퇴)
     TaperWarning.ENTRY_PAST_AXIS ->
         if (legsVertical(f.kind, f.type, f.flip).second && f.end == 0.0) {
-            "단면을 중심(X0)까지 깎아 인선이 중심 너머 X−${Fmt.nc(2 * f.noseR)} 까지 간 뒤 Z 로 빠집니다(노즈 끝이 중심을 다 깎게 — 중심에 살이 남지 않습니다). " +
-                "기계가 X− 로 그만큼 갈 수 있는지 확인하세요."
+            if (f.kind.inner) {
+                "바닥 단면을 중심(X0)까지 깎아 공구가 중심 너머로 갑니다(노즈 끝이 중심을 다 깎게 — 중심에 살이 남지 않습니다). " +
+                    "기계 보정(G41/G42)은 X−${Fmt.nc(2 * f.noseR)} 까지 간 뒤 Z 로 빠지고, 직접 보정(G40)은 같은 높이로 중심 너머까지 Z 여유(노즈R 보다 작으면 노즈R)만큼 이어서 갑니다. " +
+                    "기계가 X− 로 그만큼 갈 수 있는지 확인하세요."
+            } else {
+                "단면을 중심(X0)까지 깎아 인선이 중심 너머 X−${Fmt.nc(2 * f.noseR)} 까지 간 뒤 Z 로 빠집니다(노즈 끝이 중심을 다 깎게 — 중심에 살이 남지 않습니다). " +
+                    "기계가 X− 로 그만큼 갈 수 있는지 확인하세요."
+            }
         } else {
             "진입점이나 후퇴점이 중심(X0)을 넘습니다. Z 여유를 줄이세요."
         }

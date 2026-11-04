@@ -31,7 +31,7 @@ class GrooveCalcTest {
                 // 벽·바닥 정삭: 오른쪽 벽을 타고 내려가 바닥을 지나 왼쪽 벽을 타고 올라온다
                 "G00 Z-13.", "G01 X30.", "G01 Z-18.", "G01 X42.",
             ),
-            s.nc,
+            s.nc.legacy,
         )
         assertEquals(
             listOf(Pt.ofDia(-13.0, 42.0), Pt.ofDia(-13.0, 30.0), Pt.ofDia(-18.0, 30.0), Pt.ofDia(-18.0, 42.0)),
@@ -82,7 +82,7 @@ class GrooveCalcTest {
     fun grooveAsWideAsInsert() {
         val s = ok(GrooveCalc.calc(base.copy(width = 3.0)))
         assertEquals(listOf(-13.0), s.steps.map { it.z })
-        assertEquals(listOf("G00 X42. Z-13.", "G01 X30.", "G00 X42.", "G01 X30.", "G01 X42."), s.nc)
+        assertEquals(listOf("G00 X42. Z-13.", "G01 X30.", "G00 X42.", "G01 X30.", "G01 X42."), s.nc.legacy)
     }
 
     /** 피치로 딱 나눠떨어지면 단을 하나 더 만들지 않는다 */

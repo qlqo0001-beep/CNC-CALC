@@ -145,8 +145,15 @@ data class G76Solution(
     val passes: List<G76Pass>,
     /** G76 두 줄 */
     val nc: List<String>,
-    /** (G97 S…) · G00 시작점 · G76 두 줄 */
+    /** (G97S…) · G0 시작점 · G76 두 줄(회사 표기 — 낱말 붙여 씀 · 앞 0 뺌) */
     val program: List<String>,
+    /**
+     * G92 다회 글(회사 흐름): (G97S…) · `G0X(시작 X)Z20.` · `Z(시작 Z)` · `M23` · `G92X(1회)Z(끝 Z)F(리드)` · `X(2회)` … · `M24` · `G0Z200.` —
+     * X 줄은 [passes] 의 X 그대로, M23 · M24 = 나사 끝 빼기 켬 · 끔
+     */
+    val g92: List<String>,
+    /** G92 다듬질 블록: 같은 꼴(M23 · M24 포함)에 마지막 X 두 번(스프링 패스 — 외경 버를 없앤 뒤 다른 공구 블록 다음에 따로) */
+    val g92Finish: List<String>,
     /** 분당 이송 = 회전수 × 리드(회전수를 넣었을 때) */
     val feedPerMin: Double?,
 )
@@ -228,12 +235,14 @@ object G76Calc {
         }
         val nc = blocks(m, r, a, minUm, d, xNc, i.zEnd, kUm, firstUm, spec.pitch)
         val program = listOfNotNull(
-            i.rpm?.let { "G97 S${it.roundToLong()}" },
-            "G00 X${Fmt.nc(startX)} Z${Fmt.nc(i.zStart)}",
+            i.rpm?.let { "G97S${it.roundToLong()}" },
+            "G0X${Fmt.word(startX)}Z${Fmt.word(i.zStart)}",
         ) + nc
+        val g92 = g92(i.rpm, startX, i.zStart, i.zEnd, passes.map { it.xDia }, spec.pitch)
+        val g92Finish = g92(i.rpm, startX, i.zStart, i.zEnd, List(2) { passes.last().xDia }, spec.pitch)
         val sol = G76Solution(
             lim, target, tipR, pd, crest, x, k, spec.pitch, startX, m, r, a, minUm / 1000.0, d, firstUm / 1000.0,
-            passes, nc, program, i.rpm?.let { it * spec.pitch },
+            passes, nc, program, g92, g92Finish, i.rpm?.let { it * spec.pitch },
         )
         return G76Result(sol, warnings)
     }
@@ -281,16 +290,36 @@ object G76Calc {
     }
 
     /**
-     * G76 두 줄 글. [minCutUm] · [heightUm] · [firstCutUm] 는 최소 지령 단위(μm) 정수, [finish] · [x] · [z] 는 mm(0.001 로 씀),
-     * [lead] 는 0.0001 까지. 곧은 나사라 둘째 줄 R(i) 는 쓰지 않는다(매뉴얼 예처럼)
+     * G76 두 줄 글(회사 표기 `G76P021060Q35R.02`). [minCutUm] · [heightUm] · [firstCutUm] 는 최소 지령 단위(μm) 정수, [finish] · [x] · [z] 는
+     * mm(0.001 로 씀), [lead] 는 0.0001 까지. 곧은 나사라 둘째 줄 R(i) 는 쓰지 않는다(매뉴얼 예처럼)
      */
     internal fun blocks(
         m: Int, chamfer: Int, angle: Int, minCutUm: Long, finish: Double,
         x: Double, z: Double, heightUm: Long, firstCutUm: Long, lead: Double,
     ): List<String> = listOf(
-        "G76 P${two(m)}${two(chamfer)}${two(angle)} Q$minCutUm R${Fmt.nc(finish)}",
-        "G76 X${Fmt.nc(x)} Z${Fmt.nc(z)} P$heightUm Q$firstCutUm F${lead4(lead)}",
+        "G76P${two(m)}${two(chamfer)}${two(angle)}Q${minCutUm}R${Fmt.word(finish)}",
+        "G76X${Fmt.word(x)}Z${Fmt.word(z)}P${heightUm}Q${firstCutUm}F${lead4(lead)}",
     )
+
+    /**
+     * G92 다회 글(회사 흐름, 계획 단계 6): (`G97S…`) · `G0X(시작 X)Z(진입 Z)` · `Z(시작 Z)` · `M23` · `G92X(x₁)Z(끝 Z)F(리드)` · `X(x₂)` … · `M24` · `G0Z(물러남)`.
+     * G92 는 모달이라 둘째 회부터 X 만 쓰고, 같은 X 를 또 써도 그 줄에서 한 번 더 깎는다(정삭 · 스프링 패스). 사이클은 회마다 시작점으로 돌아온다.
+     * 진입 · 물러남은 G41/G42 글과 같은 상수(`CompFrame`) — 공구를 바꾼 뒤 Z20. 에서 X 를 맞추고 Z 로 들어가며(꺾인 G00 이어도 공기), 끝나면 Z 만 물러난다.
+     * M23 · M24 = 나사 끝 빼기 켬 · 끔(흔한 FANUC 계열 기계 M 정의 — 기계마다 다를 수 있음, 사용자 결정 11-04). G92 바로 앞 · 마지막 X 바로 뒤에 혼자 줄로 둔다
+     * (사이클 블록에 M 을 같이 쓰면 오류 — S 4-93). M24 줄은 G92 모드 안이라 제어기는 그 줄에서 마지막 X 를 한 번 더 돈 뒤 끝 빼기를 끈다(FF 4.1.6).
+     * 안 쓰는 것: 주축 M03/M04 · 공구 호출. 나사산 각도 a · 면취량 r 은 G76 만의 낱말이다(G92 는 X 로 곧게 절입)
+     */
+    internal fun g92(rpm: Double?, startX: Double, zStart: Double, zEnd: Double, xs: List<Double>, lead: Double): List<String> {
+        val zApp = CompFrame.approachZ(max(zStart, zEnd))
+        return listOfNotNull(rpm?.let { "G97S${it.roundToLong()}" }) +
+            "G0X${Fmt.word(startX)}Z${Fmt.word(zApp)}" +
+            "Z${Fmt.word(zStart)}" +
+            "M23" +
+            "G92X${Fmt.word(xs.first())}Z${Fmt.word(zEnd)}F${lead4(lead)}" +
+            xs.drop(1).map { "X${Fmt.word(it)}" } +
+            "M24" +
+            "G0Z${Fmt.word(max(CompFrame.RETRACT_Z, zApp))}"
+    }
 
     private fun two(v: Int) = v.toString().padStart(2, '0')
 
@@ -300,10 +329,10 @@ object G76Calc {
     /** 찍히는 0.001 값 그대로 */
     private fun r3(v: Double): Double = Fmt.nc(v).toDouble()
 
-    /** 리드 F: 0.0001 까지, 끝 0 지움, 소수점은 꼭(1.5 → "1.5", 6 → "6.", 25.4/13 → "1.9538") */
+    /** 리드 F: 0.0001 까지, 끝 0 지움, 소수점은 꼭, 앞 0 뺌(1.5 → "1.5", 6 → "6.", 25.4/13 → "1.9538", 25.4/40 → ".635") */
     private fun lead4(v: Double): String {
         val q = floor(v * 10_000 + 0.5 + 1e-6).toLong()
-        return "${q / 10_000}.${(q % 10_000).toString().padStart(4, '0').trimEnd('0')}"
+        return Fmt.shortLead("${q / 10_000}.${(q % 10_000).toString().padStart(4, '0').trimEnd('0')}")
     }
 
     private fun stop(w: G76Warning) = G76Result(null, listOf(w))

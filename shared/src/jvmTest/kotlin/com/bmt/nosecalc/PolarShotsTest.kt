@@ -75,9 +75,9 @@ class PolarShotsTest {
      */
     @Test
     fun simulation() {
-        shot("polar-sim", Shots.HEIGHT_DP, direct = true, sim = simAt(polarOriginal12(), true, "G01 X-36.95")) { polarOriginal12() }
+        shot("polar-sim", Shots.HEIGHT_DP, direct = true, sim = simAt(polarOriginal12(), true, "G1X-36.95")) { polarOriginal12() }
         // 기계 보정(G41 — 제어기 보정 흉내 경로)
-        shot("polar-sim-g41", Shots.HEIGHT_DP, sim = simAt(polarOriginal12(), false, "G01 X-36.95")) { polarOriginal12() }
+        shot("polar-sim-g41", Shots.HEIGHT_DP, sim = simAt(polarOriginal12(), false, "G1X-36.95")) { polarOriginal12() }
         // 싱글 블록 켬 · 줄 끝에서 멈춤
         val n = PolarG12.calc(polarOriginal12().input()).solution!!.ncG41G42.blocks.size
         shot("polar-sim-single", Shots.HEIGHT_DP, sim = simAt(polarOriginal12(), false, at = n * 2 / 3, frac = 1.0, single = true)) { polarOriginal12() }
@@ -87,7 +87,7 @@ class PolarShotsTest {
         // 시작 전(공구 없음 · 띠 없음)
         shot("polar-sim-start", Shots.HEIGHT_DP, sim = SimStart(-1, 0.0)) { polarOriginal12() }
         // 짧은 PC 창(412 × 640)
-        shot("polar-sim-pc-short", 640, direct = true, sim = simAt(polarOriginal12(), true, "G01 X-36.95")) { polarOriginal12() }
+        shot("polar-sim-pc-short", 640, direct = true, sim = simAt(polarOriginal12(), true, "G1X-36.95")) { polarOriginal12() }
     }
 
     /** 도형 시트 · 키패드 · 아래 결과 띠 */
@@ -104,7 +104,7 @@ class PolarShotsTest {
     @Test
     fun narrow() {
         shot("polar-w360-fs130", 3600, widthDp = 360, fontScale = 1.3f) { polarOriginal12() }
-        shot("polar-sim-w360-fs130", Shots.HEIGHT_DP, widthDp = 360, fontScale = 1.3f, direct = true, sim = simAt(polarOriginal12(), true, "G01 X-36.95")) { polarOriginal12() }
+        shot("polar-sim-w360-fs130", Shots.HEIGHT_DP, widthDp = 360, fontScale = 1.3f, direct = true, sim = simAt(polarOriginal12(), true, "G1X-36.95")) { polarOriginal12() }
     }
 
     /** 도움말: 묶음 다섯 + 끝의 '장갑을 끼고 쓸 때' */
