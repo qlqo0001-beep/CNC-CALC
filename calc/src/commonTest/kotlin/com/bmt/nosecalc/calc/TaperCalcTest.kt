@@ -1083,7 +1083,8 @@ class TaperCalcTest {
     /**
      * u 를 뒤집은 것이 f: 꼭짓점 보정점(가상 인선)은 같은 점이고 순서만 반대, 보정 쪽은 반대, 팁은 같다.
      * 모서리 R 은 같은 원호를 반대로 지난다(G02 ↔ G03, 보정 R 같음). 도면·노즈 중심·직접 보정 경로도 거꾸로 같다.
-     * 경고는 모양에서 오는 것은 같고, 진행 방향(AGAINST_TOOL)·진입 자리(ENTRY_PAST_AXIS)를 따르는 것만 다를 수 있다
+     * 경고는 모양에서 오는 것은 같고, 진행 방향(AGAINST_TOOL)·진입 자리(ENTRY_PAST_AXIS)·G41/G42 진입 · 빼기(SHORT_END_PAST · SHORT_END_SKIPPED · ENTRY_NOT_FOUND ·
+     * EXIT_NOT_FOUND)를 따르는 것만 다를 수 있다
      */
     private fun assertFlipped(u: TaperResult, f: TaperResult, tag: String) {
         val a = u.solution
@@ -1094,7 +1095,11 @@ class TaperCalcTest {
             return
         }
         assertNotNull(b, "$tag 뒤집으면 멈춘다 ${f.warnings}")
-        val byDirection = setOf(TaperWarning.AGAINST_TOOL, TaperWarning.ENTRY_PAST_AXIS)
+        // G41/G42 글의 진입 · 빼기 경고(짧은 막힌 끝 · 시작을 뺌 · 못 뺌, 진입 · 빼는 길 못 찾음)도 진행 방향을 따른다 — 뒤집으면 끝이 시작이 되고 진입 · 빼기 규칙이 다르다
+        val byDirection = setOf(
+            TaperWarning.AGAINST_TOOL, TaperWarning.ENTRY_PAST_AXIS, TaperWarning.SHORT_END_PAST, TaperWarning.SHORT_END_SKIPPED, TaperWarning.ENTRY_NOT_FOUND,
+            TaperWarning.EXIT_NOT_FOUND,
+        )
         assertEquals(u.warnings - byDirection, f.warnings - byDirection, tag)
         assertEquals(a.tip, b.tip, tag)
         assertTrue(a.side != b.side, "$tag 보정 쪽 ${a.side} ${b.side}")

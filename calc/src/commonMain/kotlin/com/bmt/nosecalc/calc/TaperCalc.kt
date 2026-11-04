@@ -11,7 +11,7 @@ import kotlin.math.tan
 /**
  * 테이퍼 경고. 화면이 한국어 문구를 고른다.
  * 위 여덟 개는 계산을 멈춘다 — [TaperResult.solution] 이 null 이고 경고는 그 하나뿐(틀린 숫자를 내지 않으려고).
- * 아래 넷은 숫자와 함께 나온다.
+ * 아래 여덟은 숫자와 함께 나온다.
  */
 enum class TaperWarning {
     /** 값이 모자람. 한 경사는 X1·Z1·X2·Z2·각도 가운데 넷, 겹테이퍼는 세 점의 X·Z 모두 */
@@ -72,6 +72,31 @@ enum class TaperWarning {
      * 외경 끝 단면을 중심(X0)까지 깎으면 노즈 중심이 중심선에 닿게 인선이 일부러 중심 너머(X −2r)까지 가서도 난다(그 뒤 Z 로 빠진다. 화면 글이 둘을 나눈다)
      */
     ENTRY_PAST_AXIS,
+
+    /**
+     * G41/G42 프로그램: 막힌 끝 · 시작 요소(척 · 구멍 바닥 · 보스 쪽)가 노즈R 쯤보다 짧은데 그 요소를 뺄 수 없다 — 앞(뒤) 요소의 노즈 길 위에 벽을 따라
+     * 빼는(들어가는) 줄의 교점이 남지 않는다(노즈R 보다 짧은 경사 · 오목 R 뒤 등). 그래서 그 요소를 깎을 때처럼 곧게 빼거나 들어가 노즈가 끝 · 시작
+     * 좌표 너머(벽 · 보스 속)로 간다. 직접 보정 프로그램은 인선이 그 좌표에서 멈춘다
+     */
+    SHORT_END_PAST,
+
+    /**
+     * G41/G42 프로그램: 진입 길(Z20. 자리 → 진입점)을 도면에 닿지 않게 짜지 못했다 — 곧장 내려간 길의 노즈가 도면에 닿거나 판다(노즈보다 좁은 구멍 ·
+     * 그 Z 구간을 도면이 막음 등), 또는 직각 진입의 두 축 G0 이 급송 속도 비에 따라(LRP=0) 꺾여 닿는다. 글의 진입 줄을 손으로 고쳐야 한다
+     */
+    ENTRY_NOT_FOUND,
+
+    /**
+     * G41/G42 프로그램: 빼는 길(빼는 줄 → G40 → G0Z200.)을 G40 자리 규칙 · 물러남 띠 · 빼는 줄 노즈 길(도면에서 r) · 바깥 90° 이하 꺾임에 맞게 짜지 못했다
+     * (노즈에 비해 좁은 구멍 등). 팁 번호 · 보정 형식에 따라 빼는 줄 · G40 · 물러남이 도면에 닿을 수 있다 — 빼는 줄을 손으로 고쳐야 한다
+     */
+    EXIT_NOT_FOUND,
+
+    /**
+     * G41/G42 프로그램: 막힌 끝 · 시작 요소가 노즈R 쯤보다 짧아 그 요소(와 이웃 모서리 R)를 빼고 앞(뒤) 요소에서 벽을 따라 빼거나 들어갔다 — 노즈가 벽 너머로
+     * 가지 않는 대신 뺀 요소는 깎이지 않는다(벽 앞에 살이 남음)
+     */
+    SHORT_END_SKIPPED,
 }
 
 /**
@@ -364,7 +389,8 @@ object TaperCalc {
         var blockedEnd = false
         var freeEnd = false
         var toAxisEnd = false // 외경 단면을 중심(X0)까지 — 축 너머 같은 면을 늘인 반직선으로 본다
-        var skipLast = false // G41/G42 가 짧은 막힌 끝 요소를 빼고 앞 요소 끝에서 빠지나
+        var keepLast: Int? = null // G41/G42 가 짧은 막힌 끝 요소(와 그 앞 모서리 R)를 빼고 남길 요소 수 — null 이면 빼지 않음
+        var shortPast = false // 짧은 막힌 끝 · 시작 요소를 뺄 수 없어 곧게 빼거나 들어감(SHORT_END_PAST)
         if (cutLast) {
             var e0 = foot(last.end, segs.last().start, uB)
             // 인선이 끝좌표에 왔을 때 노즈가 끝 요소에 한 번도 닿지 않으면(요소가 노즈R 쯤보다 짧다) 그 요소는 깎이지 않는다
@@ -385,10 +411,12 @@ object TaperCalc {
             // 막힌 끝이면 그 요소는 노즈가 벽 앞에서 닿을 길이 없다 — G41/G42 는 그 요소를 빼고 앞 요소 끝에서 벽을 따라 공구 쪽으로 뺀다(노즈가 끝좌표
             // 너머 벽 · 보스로 가지 않음 — 전에는 빈 끝처럼 곧게 빼 벽 속으로 c 와 G40 옮김만큼 갔다, 검증 2026-11-04). 직접 보정은 그대로
             val shortEnd = (((last.end + nB * r - uB * r) - (segs.last().start - tv)) dot uB) < CompFrame.MIN_MOVE
-            // 그 요소를 빼려면 앞 요소가 직선이고 그 노즈 길 위에 직각 빼기 교점이 MIN_MOVE 이상 남아야 한다(`CompFrame.roomOn` — 짧은 경사 뒤면 그 블록도 거꾸로) —
-            // 아니면(앞이 모서리 R 등) 전처럼 곧게 뺀다(알려진 한계 — 노즈가 끝좌표 너머로 감)
-            val skipOk = wall && shortEnd && drawing.segs.size > 1 &&
-                CompFrame.roomOn(segs[segs.size - 2].shifted(tv * -1.0), true, last.start, nB, side, r)
+            // 그 요소를 빼려면 앞 요소의 노즈 길 위에 직각 빼기 교점이 MIN_MOVE 이상 남아야 한다(`CompFrame.keepBeforeShortEnd` — 직선은 그 교점, 모서리 R 은 노즈 원과의
+            // 정확한 교점. 교점이 R 앞이면 R 도 빼고 그 앞 요소에서). 못 맞추면(짧은 경사 뒤 등) 전처럼 곧게 빼고 SHORT_END_PAST 로 알린다(노즈가 끝좌표 너머로 감)
+            if (wall && shortEnd && drawing.segs.size > 1) {
+                keepLast = CompFrame.keepBeforeShortEnd(drawing.segs, segs.map { it.shifted(tv * -1.0) }, uB, nB, side, r, if (cutFirst) 1 else 2)
+                shortPast = keepLast == null
+            }
             if (toAxis) e0 += uB * max(0.0, tv dot uB)
             if (toAxis || axisIn) endD = last.end + uB * r
             toAxisEnd = toAxis
@@ -399,15 +427,15 @@ object TaperCalc {
                     x1D = endD + nB * c
                     awayD = nB
                 }
+                // 막힌 끝의 첫 빼는 줄은 벽을 따라 공구 쪽으로 c — 내경은 축까지만(`CompFrame.untilAxis` — 구멍 반지름보다 c 가 길면 맞은편 벽)
                 wall && !shortEnd -> {
-                    x1D = endD + nB * c
+                    x1D = CompFrame.untilAxis(endD, nB, c, inner)
                     awayD = uB * -1.0
                     blockedEnd = true
                 }
-                skipOk -> {
-                    skipLast = true
-                    endD = last.start
-                    x1D = endD + nB * c
+                keepLast != null -> {
+                    endD = drawing.segs[keepLast - 1].end
+                    x1D = CompFrame.untilAxis(endD, nB, c, inner)
                     awayD = uB * -1.0
                     blockedEnd = true
                 }
@@ -425,8 +453,10 @@ object TaperCalc {
             exit = segs.last().start + nB * c
             x1D = if (convexAt(path.size - 2, cr.lastIndex)) {
                 val ahead = path[path.size - 2] - path[path.size - 3]
-                // 경사를 늘여 큰 축으로 c(가파른 경사를 Z 로 c 늘이면 X 가 크게 간다)
-                last.start + ahead * (c / max(abs(ahead.z), abs(ahead.x)))
+                // 경사를 늘여 큰 축으로 c(가파른 경사를 Z 로 c 늘이면 X 가 크게 간다). 내경은 축까지만 — 넘으면 맞은편 벽이고, 물러남 띠를 맞추러
+                // 되돌아오는 줄이 바깥으로 90° 넘게 꺾여 간섭 알람이다(검증 2026-11-04: 내경 경사가 X1.718 까지 내려가 `X-4.282Z-13.301` → `X-.713`)
+                val k = c / max(abs(ahead.z), abs(ahead.x))
+                last.start + ahead * (if (inner && ahead.x < 0) min(k, last.start.x / -ahead.x) else k)
             } else {
                 last.start + uB * c
             }
@@ -450,7 +480,7 @@ object TaperCalc {
         // 넣은 시작점: 수평 시작 요소의 연장선을 따라 들어가나(뒤집어 팁의 Z 와 반대로 깎는 것은 빼고 — 그때와 단면은 공구 쪽에서 직각으로)
         val along = isHorizontal(uF) && !(flip && uF.z * tv1.z <= 0)
         var blockedStart = false
-        var skipFirst = false // G41/G42 가 짧은 막힌 시작 요소를 빼고 다음 요소 처음으로 들어가나
+        var dropFirst: Int? = null // G41/G42 가 짧은 막힌 시작 요소(와 그 뒤 모서리 R)를 빼고 들어갈 요소 번호 — null 이면 빼지 않음
         if (cutFirst) {
             val p = foot(first.start, segs.first().start, uF)
             if (((segs.first().end - p) dot uF) < -EPS || ((first.end - (p - tv)) dot uF) < -EPS) stop(TaperWarning.BAD_LEG)
@@ -462,11 +492,18 @@ object TaperCalc {
             // 시작 요소가 짧아(노즈R 쯤) 직각 진입의 교점이 그 요소의 보정 끝보다 뒤면 간섭 알람 — 막힌 시작이면 그 요소는 노즈가 벽 앞에서 닿을 길이 없어
             // G41/G42 는 그 요소를 빼고 다음 요소 처음으로 공구 쪽에서 직각으로 들어간다(전에는 한 직선으로 시작 좌표 너머 벽 속에서 들어왔다, 검증 2026-11-04)
             val shortStart = blockedStart && drawing.segs.size > 1 && ((segs[0].end - tv - (first.start + nF * r + uF * r)) dot uF) < CompFrame.MIN_MOVE
-            skipFirst = shortStart && CompFrame.roomOn(segs[1].shifted(tv * -1.0), false, first.end, nF * -1.0, side, r)
-            // 다음 요소가 모서리 R 이거나 자리가 없으면(짧은 경사) 전처럼 첫 깎는 요소와 한 직선으로(노즈가 시작 좌표 너머로 감 — 알려진 한계)
-            if (shortStart && !skipFirst) blockedStart = false
-            e0D = if (skipFirst) first.end + nF * c else if (blockedStart) first.start + nF * c else first.start - uF * c
-            startD = if (skipFirst) first.end else first.start
+            // 다음 요소의 노즈 길 위에 직각 진입 교점이 남아야 한다(`CompFrame.dropBeforeShortStart` — 모서리 R 은 노즈 원과의 정확한 교점, R 뒤면 R 도 빼고).
+            // 남길 깎는 요소가 하나는 있어야 한다(끝 쪽에서 뺀 것 빼고)
+            val endKeep = keepLast ?: if (cutLast) drawing.segs.size else drawing.segs.size - 1
+            if (shortStart) dropFirst = CompFrame.dropBeforeShortStart(drawing.segs, segs.map { it.shifted(tv * -1.0) }, uF, nF * -1.0, side, r, endKeep - 1)
+            // 자리가 없으면(짧은 경사 등) 전처럼 첫 깎는 요소와 한 직선으로 — 노즈가 시작 좌표 너머로 가서 SHORT_END_PAST 로 알린다
+            if (shortStart && dropFirst == null) {
+                blockedStart = false
+                shortPast = true
+            }
+            val from = dropFirst?.let { drawing.segs[it].start }
+            e0D = if (from != null) from + nF * c else if (blockedStart) first.start + nF * c else first.start - uF * c
+            startD = from ?: first.start
             fromSeg = 0
         } else {
             if (convexAt(1, 0)) {
@@ -488,8 +525,8 @@ object TaperCalc {
         val program = Contour(segs)
         val toSeg = if (cutLast) segs.size else segs.size - 1 // 깎는 요소의 끝(끝 요소를 깎지 않으면 빼고)
         // G41/G42 가 깎는 요소(짧은 막힌 시작 · 끝 요소는 빼고)
-        val fromSegG4 = if (skipFirst) 1 else fromSeg
-        val toSegG4 = if (skipLast) toSeg - 1 else toSeg
+        val fromSegG4 = dropFirst ?: fromSeg
+        val toSegG4 = keepLast ?: toSeg
 
         // 접근 줄(직접 보정): 뒤집어 그림 왼쪽(척 쪽 · 구멍 안)에서 시작하면 진입 G00 점이 부품 앞 끝면(넣은 앞 요소 끝이나 T 점 가운데 가장 오른쪽)보다
         // 척 쪽이다. G00 은 X · Z 가 따로 움직일 수 있어(dog-leg) 앞 위치에서 바로 오면 입구 단면 · 면취나 부품 앞을 지날 수 있으므로
@@ -531,11 +568,13 @@ object TaperCalc {
         val ends = drawing.segs.flatMap { listOf(it.start, it.end) }
         val approachG4 = CompFrame.entry(
             mat, side, r, outward, e0D, startD, CompFrame.startDir(drawing.segs[fromSegG4]),
-            if (mirror) ends.minOf { it.z } else ends.maxOf { it.z }, front,
+            if (mirror) ends.minOf { it.z } else ends.maxOf { it.z }, front, drawing.segs[fromSegG4] as? Arc,
         )
-        val exitsG4 = CompFrame.exit(
+        val outG4 = CompFrame.exit(
             mat, side, r, outward, if (cutLast) endD else last.start, CompFrame.endDir(drawing.segs[toSegG4 - 1]), x1D, awayD, front,
+            lastArc = drawing.segs[toSegG4 - 1] as? Arc,
         )
+        val exitsG4 = outG4.points
 
         val warnings = mutableListOf<TaperWarning>()
         // 꺾임 k(경로 점 path[k])가 오목이고 모서리 R < r — 그 자리에 R 대신 r 이 남는다(볼록 끝은 다 깎인다)
@@ -546,7 +585,16 @@ object TaperCalc {
         // 공구가 원 안쪽(오목): G41 이면 반시계, G42 면 시계 원호
         if (drawing.segs.any { it is Arc && (side == Side.G41) != it.cw && it.radius - r <= EPS }) warnings += TaperWarning.CONCAVE_R_LE_NOSE
         if (tip in 1..4 && againstTool(drawing, drawing.segs.subList(fromSeg, toSeg), side, tip)) warnings += TaperWarning.AGAINST_TOOL
-        if ((listOf(entry, exit, endD) + approachG40 + approachG4 + exitsG4).any { it.x < -EPS }) warnings += TaperWarning.ENTRY_PAST_AXIS
+        // G41/G42 진입 Z 줄은 노즈 중심이 축에 서는 X(`CompFrame.axisLow` — 보정 쪽에 따라 축 너머 r)까지 찾는다 — 그 안은 노즈가 축을 넘지 않아 알리지 않는다
+        // (검증 2026-11-05: 내경 역방향 겹테이퍼의 `G0X-1.874Z20.` 이 노즈 중심 반경 0.163 인데 'Z 여유를 줄이세요' 가 떴다)
+        val axisG4 = CompFrame.axisLow(side, r, front)
+        if ((listOf(entry, exit, endD) + approachG40 + exitsG4).any { it.x < -EPS } || approachG4.points.any { it.x < axisG4 - EPS }) {
+            warnings += TaperWarning.ENTRY_PAST_AXIS
+        }
+        if (shortPast) warnings += TaperWarning.SHORT_END_PAST
+        if (keepLast != null || dropFirst != null) warnings += TaperWarning.SHORT_END_SKIPPED
+        if (!approachG4.found) warnings += TaperWarning.ENTRY_NOT_FOUND
+        if (!outG4.found) warnings += TaperWarning.EXIT_NOT_FOUND
 
         val ncG40 = NcLines().apply {
             for (p in approachG40) move("G0", p)
@@ -559,7 +607,7 @@ object TaperCalc {
         // 회사 꼴(CompFrame): G41/G42 혼자 → G0 X…Z20. → (X 맞춤) → Z 진입점 → G1 첫 깎는 점 F.1 → 형상(도면 좌표, 모서리 R 은 G2/G3 도면 R) →
         // 빼는 줄 F.3 → G40 혼자 → G0Z200.
         val ncG41G42 = NcLines().apply {
-            CompFrame.write(this, side, approachG4, startD, {
+            CompFrame.write(this, side, approachG4.points, startD, {
                 for (s in drawing.segs.subList(fromSegG4, toSegG4)) if (s is Arc) arc(s) else move("G1", if (s === last) endD else s.end)
             }, exitsG4, front = front)
         }.lines

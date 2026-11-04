@@ -100,11 +100,12 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
     val tip = s.tip ?: standard
     val result = remember(input) { RoundCalc.calc(input) }
     // 기계 보정 프로그램 = 도면 좌표(기계 보정의 NC · 뷰어 경로) — G00 만 노즈R · 팁에 맞게 띄운다(사용자 결정 2026-10-28)
-    val drawn = remember(input) { RoundCalc.machine(input).solution }
+    val machine = remember(input) { RoundCalc.machine(input) }
+    val drawn = machine.solution
     val sol = result.solution
     val holder = holderOf(s, sol, drawn, input.noseR, inner, faceAtStart = true)
     val blanks = blankable(type)
-    val warnings = shownWarnings(result)
+    val warnings = shownWarnings(result, machine = machine)
     val flagged = warnings.flatMap { roundWarningFields(it, type) }.toSet()
     val missing = RoundWarning.MISSING_INPUT in warnings
     // 아직 안 넣은 칸(빈칸 · 0). 비울 수 있는 칸이면 계산이 채운 값을 칸 · 그림에 보인다
@@ -251,9 +252,10 @@ internal fun ManualScreen(s: RoundState) {
     val comp = LocalAppState.current.compMode == CompMode.DIRECT
     val input = s.arc3()
     val result = remember(input) { RoundCalc.arc3(input) }
-    val drawn = remember(input) { RoundCalc.machine(input).solution }
+    val machine = remember(input) { RoundCalc.machine(input) }
+    val drawn = machine.solution
     val sol = result.solution
-    val warnings = shownWarnings(result, input)
+    val warnings = shownWarnings(result, input, machine)
     val standard = s.manualStandardTip()
     val tip = s.manualTip ?: standard
     val reverse = s.manualReverse()

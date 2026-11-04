@@ -1433,9 +1433,15 @@ private fun emG00(log: EmLog, name: String, m: RoundResult, std: RoundResult, d:
     val stdNc = std.solution?.nc
     log.ratio("④ 글이 팁 번호와 상관없음(팁을 비운 풀이와 같은 글)", stdNc == ms.nc)
     if (stdNc != ms.nc) log.bad("④ 글이 팁 번호에 따라 바뀜", "$name: ${ms.nc} / ${stdNc}")
-    // 형상 줄이 노즈R 0 풀이와 같다 — 옛 꼴(줄마다 G)로 견준다. 끝 요소가 직선이면 축 너머로 늘일 수 있어 뺀다
+    // 형상 줄이 노즈R 0 풀이와 같다 — 옛 꼴(줄마다 G)로 견준다. 끝 요소가 직선이면 축 너머로 늘일 수 있어 뺀다.
+    // 짧은 막힌 끝 직선을 빼며 그 앞 원호(모서리 R · 주 원호)도 함께 뺄 수 있다(calc-design 라운드 '기계 보정 프로그램' 2026-11-04) — 뺀 것은 끝 직선 앞 원호뿐이어야 한다
     val zs = z0.solution ?: return log.count("④ 노즈R 0 풀이 없음")
-    val upTo = if (last is EmLn) drawing.size - 1 else drawing.size
+    val kept = (ms.ncRefs.filter { it.element in drawing.indices }.maxOfOrNull { it.element } ?: -1) + 1
+    if (last is EmLn && kept < drawing.size - 1) {
+        log.count("④ 짧은 막힌 끝과 함께 원호를 뺌")
+        if (ms.drawing.segs.subList(kept, drawing.size - 1).any { it !is com.bmt.nosecalc.calc.Arc }) log.bad("④ 짧은 막힌 끝과 함께 직선을 뺌", "$name: ${ms.nc}")
+    }
+    val upTo = min(if (last is EmLn) drawing.size - 1 else drawing.size, kept)
     fun shape(sol: RoundSolution) = sol.nc.legacy.filterIndexed { i, _ -> sol.ncRefs[i].element in 0 until upTo }
     val mShape = shape(ms)
     val zShape = shape(zs)

@@ -253,12 +253,17 @@ internal fun RoundInput.dim(key: String): Double? = when (key) {
  * 화면에 보일 경고(오목 R ≤ 노즈R 을 맨 앞에). 3점호의 세 점 가운데 둘이 같은 자리면(예전 처음 값 0 · 0 그대로 등)
  * 계산기의 모양 불일치 대신 값 부족 — 아직 덜 넣은 것이라 빨강이 아닌 안내로 보인다
  */
-internal fun shownWarnings(r: RoundResult, arc3: Arc3Input? = null): List<RoundWarning> {
+internal fun shownWarnings(r: RoundResult, arc3: Arc3Input? = null, machine: RoundResult? = null): List<RoundWarning> {
     val overlap = arc3 != null && listOf(arc3.x1 to arc3.z1, arc3.x2 to arc3.z2, arc3.x3 to arc3.z3).distinct().size < 3
-    return r.warnings
+    // 기계 보정 프로그램([RoundCalc.machine])만 내는 경고(짧은 막힌 끝을 뺌 · 못 뺌, 진입 · 빼는 길 못 찾음)도 함께 — 나머지는 같은 입력의 직접 보정 풀이와 같다
+    val own = machine?.warnings.orEmpty().filter { it in MACHINE_ONLY }
+    return (r.warnings + own)
         .map { if (it == RoundWarning.SHAPE_MISMATCH && overlap) RoundWarning.MISSING_INPUT else it }
         .sortedBy { it != RoundWarning.CONCAVE_R_LE_NOSE }
 }
+
+/** 기계 보정 프로그램만 내는 경고 */
+private val MACHINE_ONLY = setOf(RoundWarning.SHORT_END_PAST, RoundWarning.SHORT_END_SKIPPED, RoundWarning.ENTRY_NOT_FOUND, RoundWarning.EXIT_NOT_FOUND)
 
 /** 경고가 가리키는 치수 칸(빨간 테두리). 값 부족은 안내라 칸을 붉히지 않는다 */
 internal fun roundWarningFields(w: RoundWarning, type: Int): Set<String> = when (w) {
@@ -301,7 +306,7 @@ internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = e
         }
         RoundWarning.CORNER_R_TOO_BIG -> "모서리 R 이 너무 커서 이웃 요소를 다 먹습니다(닿을 자리가 없음). 모서리 R 을 줄이세요."
         RoundWarning.NOSE_UNREACHABLE ->
-            if (type == MANUAL) "오목 원호의 R 이 노즈R 보다 작아 공구가 들어가지 못합니다. 노즈R 을 줄이세요."
+            if (type == MANUAL) "오목 원호의 R 이 노즈R 보다 작아 공구가 들어가지 못하거나, 축 가까이에서 노즈 중심이 축을 넘어 부품 반대쪽을 팝니다. 노즈R 을 줄이세요."
             else "노즈R 에 비해 요소가 너무 짧거나 좁아 공구가 닿지 못합니다. 도면 형상이 안 나옵니다 — 노즈R 을 줄이세요."
         RoundWarning.CONCAVE_R_LE_NOSE ->
             "오목 R 이 노즈R 이하입니다(R − r ≤ 0). 그 자리의 보정 원호가 없어집니다. R = r 이면 정확하지만, R < r 이면 도면보다 큰 R(= 노즈R)이 남습니다."
@@ -310,6 +315,20 @@ internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = e
         } else {
             "형상 일부가 바이트 방향과 반대입니다(왼쪽 면 · 공의 뒤쪽 등 척 쪽을 향한 면). 그 부분은 35° 인서트 · 역바이트 · 절단 등으로 깎이는지 따로 확인하세요."
         }
+        // 짧은 막힌 끝을 뺄 수 없는 꼴(calc 라운드 '기계 보정 프로그램' — 앞 요소에 직각 빼기 교점이 남지 않음)
+        RoundWarning.SHORT_END_PAST ->
+            "끝 직선(척 · 구멍 바닥 쪽으로 깎아 끝나는 직선)이 노즈R 보다 짧은데, 그 앞 요소에 벽을 따라 뺄 자리가 없어 기계 보정(G41/G42) 프로그램이 그 요소를 뺄 수 없습니다. " +
+                "끝 접선으로 곧게 빼므로 노즈가 끝 좌표 너머(벽 속)로 갑니다. 직접 보정 프로그램을 쓰거나 노즈R 을 줄이세요."
+        RoundWarning.ENTRY_NOT_FOUND ->
+            "기계 보정(G41/G42) 프로그램의 진입 길을 도면에 닿지 않게 짜지 못했습니다(Z20. 에서 내려오는 길이 도면에 닿거나, 두 축으로 가는 진입 G0 이 급송 속도 비에 따라 꺾여 닿습니다). 진입 줄을 손으로 고치거나 직접 보정 프로그램을 쓰세요."
+        // 빼는 길 못 찾음(calc 라운드 '기계 보정 프로그램' — G40 자리 규칙 · 물러남 띠 · 빼는 줄 노즈 길 · 바깥 90° 이하 꺾임을 함께 못 맞춤)
+        RoundWarning.EXIT_NOT_FOUND ->
+            "기계 보정(G41/G42) 프로그램의 빼는 길(빼는 줄 · G40 · G0Z200.)을 도면에서 넉넉히 떨어지게 짜지 못했습니다(노즈에 비해 좁은 구멍 · 깊은 언더컷 등). " +
+                "팁 번호 · 보정 형식에 따라 빼는 줄이나 G40 · G0Z200. 이 도면에 닿을 수 있으니 빼는 줄을 손으로 고치거나 직접 보정 프로그램을 쓰세요."
+        // 짧은 막힌 끝을 뺀 꼴 — 노즈가 벽을 넘지 않는 대신 그 직선은 깎지 않음
+        RoundWarning.SHORT_END_SKIPPED ->
+            "끝 직선(척 · 구멍 바닥 쪽으로 깎아 끝나는 직선)이 노즈R 보다 짧아, 기계 보정(G41/G42) 프로그램은 그 직선(과 앞 모서리 R)을 깎지 않고 앞 요소 끝에서 벽을 따라 뺍니다. " +
+                "노즈가 벽 너머로 가지 않는 대신 그 자리에 살이 남으니, 따로 다듬거나 노즈R 을 줄이세요."
     }
 }
 

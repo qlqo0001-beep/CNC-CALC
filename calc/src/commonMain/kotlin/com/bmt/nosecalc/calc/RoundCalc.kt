@@ -11,7 +11,7 @@ import kotlin.math.sqrt
 /**
  * 라운드 경고. 화면이 한국어 문구를 고른다.
  * 위 여섯 개는 계산을 멈춘다 — [RoundResult.solution] 이 null 이고 경고는 그 하나뿐.
- * 아래 둘은 숫자와 함께 나온다.
+ * 아래 여섯은 숫자와 함께 나온다(뒤 넷은 기계 보정 프로그램 [RoundCalc.machine] 만).
  */
 enum class RoundWarning {
     /** 값이 모자람. 비울 수 있는 값(구 중심이 축 위라 나머지로 정해지는 것)은 하나까지 */
@@ -29,7 +29,10 @@ enum class RoundWarning {
     /** 모서리 R 이 너무 커서 이웃 요소를 다 먹거나 닿을 자리가 없다 */
     CORNER_R_TOO_BIG,
 
-    /** 노즈R 에 비해 요소가 짧거나 좁아 공구가 닿지 못한다 — 도면 형상이 안 나온다. 내경은 구멍이 좁아(지름 < 2r) 노즈 중심이 축을 넘을 때도 */
+    /**
+     * 노즈R 에 비해 요소가 짧거나 좁아 공구가 닿지 못한다 — 도면 형상이 안 나온다. 내경은 구멍이 좁아(지름 < 2r) 노즈 중심이 축을 넘을 때도,
+     * 외경은 노즈 중심이 축을 넘어 부품 반대쪽(축 거울)을 팔 때도(축 가까이에서 끝나는 3점호 등)
+     */
     NOSE_UNREACHABLE,
 
     /**
@@ -40,6 +43,30 @@ enum class RoundWarning {
 
     /** 형상 일부가 바이트 방향과 반대다(노즈 접점이 팁 쪽 사분면 밖, 예: 공의 뒤쪽·왼쪽 면) — 끝날·여유각 확인 */
     AGAINST_TOOL,
+
+    /**
+     * 기계 보정 프로그램: 막힌 끝 직선(척 · 구멍 바닥 쪽)이 노즈R 쯤보다 짧은데 그 요소를 뺄 수 없다 — 앞 요소의 노즈 길 위에 벽을 따라 빼는 줄의 교점이
+     * 남지 않는다. 그래서 끝 접선으로 곧게 빼 노즈가 끝 좌표 너머(벽 속)로 간다
+     */
+    SHORT_END_PAST,
+
+    /**
+     * 기계 보정 프로그램: 진입 길(Z20. 자리 → 진입점)을 도면에 닿지 않게 짜지 못했다 — 곧장 내려간 길의 노즈가 도면에 닿거나 판다(또는 직각 진입의 두 축 G0 이
+     * 급송 속도 비에 따라 꺾여 닿는다). 진입 줄을 손으로 고칠 것
+     */
+    ENTRY_NOT_FOUND,
+
+    /**
+     * 기계 보정 프로그램: 빼는 길(빼는 줄 → G40 → G0Z200.)을 G40 자리 규칙 · 물러남 띠 · 빼는 줄 노즈 길(도면에서 r) · 바깥 90° 이하 꺾임에 맞게 짜지 못했다
+     * (노즈에 비해 좁은 구멍 · 깊은 언더컷 등). 팁 번호 · 보정 형식에 따라 빼는 줄 · G40 · 물러남이 도면에 닿을 수 있다 — 빼는 줄을 손으로 고칠 것
+     */
+    EXIT_NOT_FOUND,
+
+    /**
+     * 기계 보정 프로그램: 막힌 끝 직선이 노즈R 쯤보다 짧아 그 요소(와 앞 모서리 R)를 빼고 앞 요소 끝에서 벽을 따라 뺐다 — 노즈가 벽 너머로 가지 않는 대신
+     * 뺀 요소는 깎이지 않는다(벽 앞에 살이 남음)
+     */
+    SHORT_END_SKIPPED,
 }
 
 /** TYPE 2 의 L2 를 어디서 재나. A = 왼쪽 이음점 ~ 오른쪽 끝(= L1 + B), B = 두 이음점 사이 */
@@ -499,6 +526,10 @@ object RoundCalc {
         if (center.warnings.any { it is CompWarning.Unreachable }) stop(RoundWarning.NOSE_UNREACHABLE)
         // 내경: 노즈 중심이 축을 넘으면 노즈가 맞은편 벽을 판다(구멍 지름 < 2r)
         if (inner && center.path.segs.any { lowestX(it) < -EPS }) stop(RoundWarning.NOSE_UNREACHABLE)
+        // 외경: 노즈 중심이 축을 넘어 축 거울(부품 반대쪽 — 회전체라 그 자리에도 소재) 도면을 0.001 넘게 파면 도면 형상이 안 나온다. 축에서 끝나는 끝 면 · 돔은
+        // 노즈 중심이 축에서 멈춰(거울 도면에서 꼭 r) 걸리지 않는다(검증 2026-11-05: 축에서 0.55 떨어져 끝나는 역방향 3점호 — 형상 줄이 축 거울을 0.653 팠는데
+        // 경고가 없었다. 같은 노즈 길이라 기계 보정도 같다)
+        if (!inner && center.path.segs.any { lowestX(it) < -EPS } && mirrorGouge(center.path.segs, drawing.segs, r)) stop(RoundWarning.NOSE_UNREACHABLE)
         val program = NoseComp.tipPath(drawing, r, side, tip).path
 
         val warnings = mutableListOf<RoundWarning>()
@@ -531,7 +562,7 @@ object RoundCalc {
                 }
             }
         } else {
-            val (lines, app) = machineFrame(drawing, side, machineR, entryShift.length, inner)
+            val (lines, app) = machineFrame(drawing, side, machineR, entryShift.length, inner, warnings)
             nc = lines
             approach = app
             entry = app.last()
@@ -563,9 +594,10 @@ object RoundCalc {
      * 끝(라운드는 끝에도 빼는 줄 — 사용자 결정 2026-10-29 ①): 척 · 구멍 바닥 쪽으로 깎아 끝난 직선(외경 끝 직선 · 플랜지 윗면 · 내경 공 뒤 구멍 · 관통 구멍)은
      * 막힌 끝 — 공구 쪽으로 직각(노즈가 끝 점의 법선에 닿아 멈춤), 축(X0)에서 끝나는 끝 면 · 바닥 면은 그 면을 축 너머 r(X −2r)까지 쓰고 공구 쪽으로 직각
      * (제어기의 안쪽 모서리 교점이 노즈 중심을 축에), 축에서 끝나는 원호(내경 돔 · 공 바닥)는 끝 접선으로 축 너머 r + [AXIS_PAST] 뒤 공구 쪽으로(원호 뒤에 바로
-     * G40 을 두지 않는다 — G02/G03 모드의 취소는 FANUC 알람 PS0034), 그 밖(3점호)은 끝 접선으로 곧게
+     * G40 을 두지 않는다 — G02/G03 모드의 취소는 FANUC 알람 PS0034), 그 밖(3점호)은 끝 접선으로 곧게.
+     * 짧은 막힌 끝을 뺐거나(SHORT_END_SKIPPED) 빼지 못하거나(SHORT_END_PAST), 진입 · 빼는 길을 못 찾으면(ENTRY_NOT_FOUND · EXIT_NOT_FOUND) [warnings] 에 더한다
      */
-    private fun machineFrame(drawing: Contour, side: Side, r: Double, c: Double, inner: Boolean): Pair<NcLines, List<Pt>> {
+    private fun machineFrame(drawing: Contour, side: Side, r: Double, c: Double, inner: Boolean, warnings: MutableList<RoundWarning>): Pair<NcLines, List<Pt>> {
         val segs = drawing.segs
         val first = segs.first()
         val last = segs.last()
@@ -585,19 +617,22 @@ object RoundCalc {
         val shortEnd = noses?.last()?.start?.let { ((p + nE * r - uE * r - it) dot uE) < CompFrame.MIN_MOVE } ?: false
         val wallEnd = last is Line && abs(uE.z) > abs(uE.x) && uE.z < 0
         val blocked = wallEnd && !shortEnd
-        // 빼려면 앞 요소가 직선이고 그 노즈 길 위에 직각 빼기 교점이 MIN_MOVE 이상 남아야 한다(`CompFrame.roomOn`) — 아니면(앞이 모서리 R 등) 전처럼 곧게(알려진 한계)
-        val skipLast = wallEnd && shortEnd && segs.size > 1 && noses != null && noses.size == segs.size &&
-            CompFrame.roomOn(noses[segs.size - 2], true, last.start, nE, side, r)
+        // 빼려면 앞 요소의 노즈 길 위에 직각 빼기 교점이 MIN_MOVE 이상 남아야 한다(`CompFrame.keepBeforeShortEnd` — 모서리 R · 주 원호는 노즈 원과의 정확한 교점,
+        // 교점이 모서리 R 앞이면 그 R 도 빼고 그 앞 요소에서). 못 맞추면 전처럼 곧게 빼고 SHORT_END_PAST 로 알린다(노즈가 끝 좌표 너머로 감)
+        val keep = if (wallEnd && shortEnd && segs.size > 1 && noses != null && noses.size == segs.size) CompFrame.keepBeforeShortEnd(segs, noses, uE, nE, side, r) else null
+        val skipLast = keep != null
+        if (wallEnd && shortEnd) warnings += if (keep == null) RoundWarning.SHORT_END_PAST else RoundWarning.SHORT_END_SKIPPED
         val x1: Pt
         val away: Pt
+        // 막힌 끝의 첫 빼는 줄은 벽을 따라 공구 쪽으로 c — 내경은 축까지만(`CompFrame.untilAxis` — 구멍 반지름보다 c 가 길면 맞은편 벽)
         when {
             blocked -> {
-                x1 = p + nE * c
+                x1 = CompFrame.untilAxis(p, nE, c, inner)
                 away = uE * -1.0
             }
-            skipLast -> {
-                endPt = last.start
-                x1 = endPt + nE * c
+            keep != null -> {
+                endPt = segs[keep - 1].end
+                x1 = CompFrame.untilAxis(endPt, nE, c, inner)
                 away = uE * -1.0
             }
             last is Line && atAxis -> {
@@ -631,9 +666,15 @@ object RoundCalc {
         // (외경 축 거울은 도면만 — 축에서 시작 · 끝나는 면을 늘인 반직선은 축 너머로 가므로 그 거울은 부품 앞을 막는 끝없는 벽이 된다)
         val mat = FrameMaterial(mSegs + (if (inner) mSegs else segs).map(FrameMaterial::mirror), if (blocked || skipLast) listOf(p to uE) else emptyList(), fill)
         val zTop = segs.maxOf { maxOf(it.start.z, it.end.z) }
-        val approach = CompFrame.entry(mat, side, r, outward, s0 - t0 * c, s0, t0, zTop)
-        val shape = if (skipLast) segs.dropLast(1) else segs
-        val exits = CompFrame.exit(mat, side, r, outward, endPt, CompFrame.endDir(shape.last()), x1, away, minFirst = minFirst, stretch = stretch, checkFirst = true)
+        val app = CompFrame.entry(mat, side, r, outward, s0 - t0 * c, s0, t0, zTop, firstArc = first as? Arc)
+        if (!app.found) warnings += RoundWarning.ENTRY_NOT_FOUND
+        val approach = app.points
+        val shape = if (keep != null) segs.take(keep) else segs
+        val out = CompFrame.exit(
+            mat, side, r, outward, endPt, CompFrame.endDir(shape.last()), x1, away, minFirst = minFirst, stretch = stretch, checkFirst = true, lastArc = shape.last() as? Arc,
+        )
+        if (!out.found) warnings += RoundWarning.EXIT_NOT_FOUND
+        val exits = out.points
         val nc = NcLines()
         CompFrame.write(nc, side, approach, s0, {
             for ((k, s) in shape.withIndex()) {
@@ -642,6 +683,31 @@ object RoundCalc {
             }
         }, exits, refExit = segs.size)
         return nc to approach
+    }
+
+    /** 노즈 중심 길 [noses] 가운데 축 너머로 간 요소가 축 거울 도면에서 r 안으로 0.001 넘게 들어가나 */
+    private fun mirrorGouge(noses: List<Seg>, drawing: List<Seg>, r: Double): Boolean {
+        val mirrored = drawing.map(FrameMaterial::mirror)
+        return noses.filter { lowestX(it) < -EPS }.any { n -> mirrored.any { m -> gap(n, m) < r - 1e-3 } }
+    }
+
+    /** 두 요소 사이 가장 짧은 거리(만나면 0) */
+    private fun gap(a: Seg, b: Seg): Double = when {
+        a is Line -> segGap(a, b).first
+        b is Line -> segGap(b, a).first
+        else -> arcGap(a as Arc, b as Arc)
+    }
+
+    /** 두 원호 사이 가장 짧은 거리 — 만나면 0, 아니면 한쪽 끝점에서 다른 원호까지거나 두 중심을 잇는 선 위의 점(두 원호 안쪽끼리) */
+    private fun arcGap(a: Arc, b: Arc): Double {
+        if (Intersect.circleCircle(a.center, a.radius, b.center, b.radius).any { onArc(a, it) && onArc(b, it) }) return 0.0
+        var best = minOf(distTo(b, a.start), distTo(b, a.end), distTo(a, b.start), distTo(a, b.end))
+        val d = b.center - a.center
+        if (d.length > EPS) {
+            val u = d.unit()
+            for (q in listOf(a.center + u * a.radius, a.center - u * a.radius)) if (onArc(a, q)) best = min(best, distTo(b, q))
+        }
+        return best
     }
 
     /** 요소의 가장 낮은 x. 원호는 맨 아래(−X 쪽)를 지나면 중심 − R */

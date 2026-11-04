@@ -63,6 +63,9 @@ import kotlin.test.assertTrue
  *    M23/M24 를 뺀 옛 글은 설정대로 늘 끝 빼기
  * ④ 표기: 따로 짠 옛 표기 되돌리기와 경로가 같음
  * 알려진 한계(도면 알람 · 좁은 구멍 · 짧은 막힌 끝 · 역방향/부푼 3점호)는 빼지 않고 꼬리표로 따로 센다. 단언은 꼬리표 '기본' 의 실패(SOFT_ 빼고) 0.
+ * 더해(2026-11-04 짧은 막힌 끝 · 시작 고침): 어느 꼬리표든 노즈가 막힌 끝 · 시작 너머로 간 글(BLOCKED_PAST · START_PAST)은 앱이 SHORT_END_PAST 경고를 낸 것뿐이어야 한다.
+ * 더해(2026-11-05): 도면 알람 · 좁은 구멍 밖의 꼬리표(짧은 막힌 끝 · 시작, 역방향 · 부푼 3점호)도 빼는 줄 · G40 · 물러남의 실패(SOFT_ 빼고)는 앱이 EXIT_NOT_FOUND
+ * 경고를 낸 것뿐이어야 한다(전에는 '기본' 밖 꼬리표의 빼는 길 파먹음을 실패로 치지 않아, 짧은 막힌 끝의 첫 빼는 줄이 축을 넘어 맞은편을 파도 통과했을 것이다)
  * 형상 줄의 바깥 꺾임 90° 넘음 멈춤(COMP_ACUTE_OUTER)은 도면 모양이라 시뮬레이터 한계로 센다(FANUC 은 토막을 끼워 돈다)
  */
 class VerifyCompanyFlowTest {
@@ -87,6 +90,12 @@ class VerifyCompanyFlowTest {
         val kinds = linkedMapOf<String, Int>()
         val first = linkedMapOf<String, String>()
         var mainFails = 0
+
+        /** 막힌 끝 · 시작 너머로 간 글 가운데 SHORT_END_PAST 경고가 없는 것(꼬리표 상관없이) */
+        var silentPast = 0
+
+        /** 빼는 줄 · G40 · 물러남이 실패한 글 가운데 EXIT_NOT_FOUND 경고가 없는 것(도면 알람 · 좁은 구멍 빼고) */
+        var silentExit = 0
         var simLimit = 0
         var devMax = 0.0
         var devCases = 0
@@ -304,7 +313,11 @@ class VerifyCompanyFlowTest {
         t.labels[c.label] = (t.labels[c.label] ?: 0) + 1
         val seen = mutableSetOf<String>()
         fun bad(kind: String, msg: String) {
-            if (seen.add(kind)) t.fail(c.label, "${c.group}:$kind", "[${c.group} · ${c.label}] $kind: ${c.tag}\n  $msg\n  G41/G42: ${c.frame.joinToString(" / ")}")
+            if (!seen.add(kind)) return
+            t.fail(c.label, "${c.group}:$kind", "[${c.group} · ${c.label}] $kind: ${c.tag}\n  $msg\n  G41/G42: ${c.frame.joinToString(" / ")}")
+            if ((kind == "BLOCKED_PAST" || kind == "START_PAST") && "SHORT_END_PAST" !in c.tag) t.silentPast++
+            val role = kind.substringAfter('@', "").substringBefore('_')
+            if ("SOFT_" !in kind && role in listOf("빼는 줄", "G40", "물러남") && c.label != "도면 알람" && c.label != "좁은 구멍" && "EXIT_NOT_FOUND" !in c.tag) t.silentExit++
         }
         val f = c.frame
         val iCut = f.indexOfFirst { it.endsWith("F.1") }
@@ -778,6 +791,8 @@ class VerifyCompanyFlowTest {
     private fun finish(t: Tally) {
         println(t.report())
         assertEquals(0, t.mainFails, t.report())
+        assertEquals(0, t.silentPast, "막힌 끝 · 시작 너머로 가는데 SHORT_END_PAST 경고가 없는 글\n" + t.report())
+        assertEquals(0, t.silentExit, "빼는 줄 · G40 · 물러남이 실패하는데 EXIT_NOT_FOUND 경고가 없는 글(도면 알람 · 좁은 구멍 빼고)\n" + t.report())
     }
 
     @Test

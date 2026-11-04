@@ -521,7 +521,11 @@ class VerifyG4xHandTest {
                 s.drawing != h.drawing || s.center != h.center || s.program != h.program || s.tip != h.tip || s.side != h.side ||
                 s.fromStart != h.fromStart || s.toEnd != h.toEnd || s.anglesDeg != h.anglesDeg
             ) t.add("직접 보정 글 · 보정점이 HEAD 와 다름", 0.0, cs.tag)
-            if (cs.new.warnings != cs.head.warnings) t.add("[$grp] 경고가 HEAD 와 다름 ${cs.head.warnings} → ${cs.new.warnings}", 0.0, tag)
+            // HEAD 뒤에 더한 G41/G42 글만의 경고(2026-11-04 — 짧은 막힌 끝 · 시작을 못 뺌 · 진입 길 못 찾음, 2026-11-05 — 짧은 요소를 뺌 · 빼는 길 못 찾음)는
+            // 따로 센다(HEAD 에는 없던 알림이라 견주지 않는다)
+            val added = setOf(TaperWarning.SHORT_END_PAST, TaperWarning.ENTRY_NOT_FOUND, TaperWarning.SHORT_END_SKIPPED, TaperWarning.EXIT_NOT_FOUND)
+            if (cs.new.warnings - added != cs.head.warnings) t.add("[$grp] 경고가 HEAD 와 다름 ${cs.head.warnings} → ${cs.new.warnings}", 0.0, tag)
+            for (w in cs.new.warnings.filter { it in added }) t.add("[$grp] HEAD 뒤에 더한 경고 $w · ${cs.new.warnings}", 0.0, tag)
             // --- 글 모양 분류(회사 꼴: 진입 G0 줄 수 · 빼는 줄 수)
             val g4 = s.ncG41G42.legacy
             val hg = h.ncG41G42.legacy

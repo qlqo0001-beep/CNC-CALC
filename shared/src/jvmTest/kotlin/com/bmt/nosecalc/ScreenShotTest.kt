@@ -186,12 +186,14 @@ class ScreenShotTest {
                 TaperWarning.MISSING_INPUT -> listOf(taperWarningText(w, f), taperWarningText(w, double)).map { it to WarnLevel.Info }
                 TaperWarning.SHAPE_MISMATCH -> listOf(f, back, back.copy(reverse = true, z = listOf(-30.0, -35.0))).map { taperWarningText(w, it) to WarnLevel.Error }
                 TaperWarning.AGAINST_TOOL -> listOf(taperWarningText(w, f) to WarnLevel.Info)
-                TaperWarning.NOSE_GT_SLOPE, TaperWarning.CONCAVE_R_LE_NOSE, TaperWarning.ENTRY_PAST_AXIS -> listOf(taperWarningText(w, f) to WarnLevel.Warn)
+                TaperWarning.NOSE_GT_SLOPE, TaperWarning.CONCAVE_R_LE_NOSE, TaperWarning.ENTRY_PAST_AXIS, TaperWarning.SHORT_END_PAST, TaperWarning.ENTRY_NOT_FOUND,
+                TaperWarning.EXIT_NOT_FOUND, TaperWarning.SHORT_END_SKIPPED ->
+                    listOf(taperWarningText(w, f) to WarnLevel.Warn)
                 else -> listOf(taperWarningText(w, f) to WarnLevel.Error)
             }
         }
         val groove = GrooveWarning.entries.map { grooveWarningText(it) to if (it == GrooveWarning.MISSING_INPUT) WarnLevel.Info else WarnLevel.Error }
-        Shots.both("texts-warn-taper", heightDp = 2080, frames = 12) { AppHost(it) { Texts(listOf("테이퍼" to taper, "외경 홈" to groove)) } }
+        Shots.both("texts-warn-taper", heightDp = 2800, frames = 12) { AppHost(it) { Texts(listOf("테이퍼" to taper, "외경 홈" to groove)) } }
 
         val types = (1..6) + MANUAL
         // 처음 화면처럼 치수를 다 비운 값 부족 글(모서리 R 은 비우면 0 이라 빠진 칸이 아니다)
@@ -200,10 +202,11 @@ class ScreenShotTest {
             listOf(RoundWarning.BAD_INPUT, RoundWarning.CONTRADICTION, RoundWarning.CORNER_R_TOO_BIG).map { roundWarningText(it, 5) to WarnLevel.Error } +
             listOf(roundWarningText(RoundWarning.BAD_INPUT, 3, inner = true) to WarnLevel.Error) +
             listOf(1, MANUAL).map { roundWarningText(RoundWarning.NOSE_UNREACHABLE, it) to WarnLevel.Error } +
-            listOf(roundWarningText(RoundWarning.CONCAVE_R_LE_NOSE, 2) to WarnLevel.Warn) +
+            listOf(RoundWarning.CONCAVE_R_LE_NOSE, RoundWarning.SHORT_END_PAST, RoundWarning.SHORT_END_SKIPPED, RoundWarning.ENTRY_NOT_FOUND, RoundWarning.EXIT_NOT_FOUND)
+                .map { roundWarningText(it, 2) to WarnLevel.Warn } +
             listOf(false, true).map { roundWarningText(RoundWarning.AGAINST_TOOL, 2, inner = it) to WarnLevel.Info }
         val triangle = TriangleWarning.entries.map { triangleWarningText(it) to if (it == TriangleWarning.MISSING_INPUT) WarnLevel.Info else WarnLevel.Error }
-        Shots.both("texts-warn-round", heightDp = 2800, frames = 12) { AppHost(it) { Texts(listOf("라운드 R" to round, "직각삼각형" to triangle)) } }
+        Shots.both("texts-warn-round", heightDp = 3500, frames = 12) { AppHost(it) { Texts(listOf("라운드 R" to round, "직각삼각형" to triangle)) } }
     }
 
     /**

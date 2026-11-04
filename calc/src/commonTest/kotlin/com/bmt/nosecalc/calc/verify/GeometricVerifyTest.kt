@@ -549,8 +549,15 @@ class GeometricVerifyTest {
             ((cornerNose(firstD.b, uSt, drawing0[1].tangent(0.0)) - (firstD.a + toolN(uSt) * r + uSt * r)) dot uSt) < 0.05
         val skippedEnd = shortEnd && ncPts.none { (it - lastD.b).len <= NC_TOL }
         val skippedStart = shortStart && ncPts.none { (it - firstD.a).len <= NC_TOL }
+        // 짧은 요소를 뺐으면 그 이웃 모서리 R(원호)도 함께 뺄 수 있다(노즈 원과의 교점이 그 R 앞 · 뒤면 — calc-design '진입점과 NC' 2026-11-04). 뺀 것은
+        // 끝 쪽은 NC 의 마지막 형상 점 뒤, 시작 쪽은 첫 깎는 점 앞의 요소들 — 짧은 요소 말고는 원호만이어야 한다(직선을 빼면 도면이 덜 깎인다)
+        val keepEnd = if (!skippedEnd) drawing0.size else (drawing0.size - 1 downTo 1).firstOrNull { k -> (drawing0[k - 1].b - shape.last().b).len <= NC_TOL } ?: (drawing0.size - 1)
+        val dropStart = if (!skippedStart) 0 else (1 until drawing0.size).firstOrNull { k -> (drawing0[k].a - firstEl.b).len <= NC_TOL } ?: 0
+        if (skippedEnd && drawing0.subList(keepEnd, drawing0.size - 1).any { it !is Ac }) rep.bad(id, "G41/G42", "짧은 막힌 끝과 함께 직선을 뺐다  NC=$nc")
+        if (skippedStart && drawing0.subList(1, dropStart.coerceAtLeast(1)).any { it !is Ac }) rep.bad(id, "G41/G42", "짧은 막힌 시작과 함께 직선을 뺐다  NC=$nc")
         // 시작·끝점을 비웠으면 그 요소는 프로그램에 없다
-        val cut = drawing.drop(if (fromStart) 0 else 1).dropLast(if (toEnd && !skippedEnd) 0 else 1)
+        val cut = drawing.subList(0, if (skippedEnd) keepEnd else drawing.size).drop(if (skippedStart) dropStart else if (fromStart) 0 else 1)
+            .dropLast(if (!toEnd && !skippedEnd) 1 else 0)
         for (q in (if (fromStart && !skippedStart) listOf(d0.a) else emptyList()) + cut.map { it.b }) {
             if (ncPts.none { (it - q).len <= NC_TOL }) rep.bad(id, "G41/G42", "도면 꼭짓점 $q 가 NC 에 없다  NC=$nc")
         }
@@ -570,11 +577,50 @@ class GeometricVerifyTest {
             if (abs(den) < 1e-9) return c + b * r
             return c + a * r + uA * ((((b - a) * r) cross uB) / den)
         }
+        // 원호 ↔ 직선 꺾임(첫 깎는 줄 → 모서리 R, 모서리 R → 첫 빼는 줄)은 직선 보정선과 원호의 보정 원(같은 중심, 공구가 원 밖이면 R + r · 안이면 R − r)의
+        // 교점 가운데 c + (nA + nB)·r/2 에 가까운 것(FANUC 보정 중 규칙 — 원호 접선으로 어림하면 짧은 막힌 끝을 빼고 모서리 R 끝에서 직각으로 뺄 때 노즈를
+        // 틀리게 본다). 거의 접해서 이어지면(0.001 반올림 자국쯤) 법선. 교점이 없으면(보정선끼리 못 만남 — 제어기 간섭 알람 꼴) 그 자체로 실패로 적고, 두 법선의
+        // 가운데로 어림해 아래 검사를 이어 간다(전에는 어림만 하고 거리 검사에 맡겨 교점 없음을 잡지 못했다 — 검증 2026-11-05). 오목 R ≤ r(알람 꼴)은 빼고,
+        // 앱이 그 쪽 길을 못 찾았다고 알린 글(진입 ENTRY_NOT_FOUND · 빼기 EXIT_NOT_FOUND)은 경고가 덮는다
+        var noMeet: String? = null
+        var noMeetExit = false
+        fun arcNose(c: V, uA: V, uB: V, arc: Ac, arcFirst: Boolean): V {
+            val a = sideN(uA)
+            val b = sideN(uB)
+            if (abs(uA cross uB) < min(1e-3, 5e-4 / r) && (uA dot uB) > 0) return c + a * r
+            val n = if (arcFirst) a else b
+            val rho = if ((n dot (arc.c - c)) > 0) arc.r - r else arc.r + r
+            val p = c + (if (arcFirst) b else a) * r
+            val d = if (arcFirst) uB else uA
+            val guess = c + (a + b) * (r / 2)
+            val w = p - arc.c
+            val bq = w dot d
+            val disc = bq * bq - ((w dot w) - rho * rho)
+            if (disc < 0) {
+                if (noMeet == null) {
+                    noMeet = "${if (arcFirst) "원호 → 첫 빼는 줄" else "첫 깎는 줄 → 원호"} 꺾임 $c"
+                    noMeetExit = arcFirst
+                }
+                return guess
+            }
+            return listOf(-bq - sqrt(disc), -bq + sqrt(disc)).map { p + d * it }.minBy { (it - guess).len }
+        }
         val inLines = approach + firstEl
+        val shape0 = shape.first()
+        val shape1 = shape.last()
         val inNoses = listOf(inLines.first().a + sideN(inLines.first().tangent(0.0)) * r) +
-            inLines.indices.map { k -> nose(inLines[k].b, inLines[k].tangent(1.0), if (k + 1 < inLines.size) inLines[k + 1].tangent(0.0) else shape.first().tangent(0.0)) }
-        val outNoses = listOf(nose(exits.first().a, shape.last().tangent(1.0), exits.first().tangent(0.0))) +
+            inLines.indices.map { k ->
+                if (k + 1 < inLines.size) nose(inLines[k].b, inLines[k].tangent(1.0), inLines[k + 1].tangent(0.0))
+                else if (shape0 is Ac) arcNose(inLines[k].b, inLines[k].tangent(1.0), shape0.tangent(0.0), shape0, arcFirst = false)
+                else nose(inLines[k].b, inLines[k].tangent(1.0), shape0.tangent(0.0))
+            }
+        val outNoses = listOf(
+            if (shape1 is Ac) arcNose(exits.first().a, shape1.tangent(1.0), exits.first().tangent(0.0), shape1, arcFirst = true)
+            else nose(exits.first().a, shape1.tangent(1.0), exits.first().tangent(0.0)),
+        ) +
             exits.indices.map { k -> if (k + 1 < exits.size) nose(exits[k].b, exits[k].tangent(1.0), exits[k + 1].tangent(0.0)) else exits[k].b + sideN(exits[k].tangent(1.0)) * r }
+        val meetWarned = if (noMeetExit) "EXIT_NOT_FOUND" in id else "ENTRY_NOT_FOUND" in id
+        if (!alarm && !meetWarned) noMeet?.let { rep.bad(id, "G41/G42", "$it 에 보정선 교점이 없다(제어기 간섭 알람)  NC=$nc") }
         if (!alarm) for ((what, ns) in listOf("진입" to inNoses, "빼는 줄" to outNoses)) {
             val (cl, at) = clearance(ns.zipWithNext { a, b -> Ln(a, b) }, V(0.0, 0.0), r, reg)
             if (cl < -NC_TOL) rep.bad(id, "G41/G42", "$what 노즈 원이 재료로 ${fmt(-cl)} mm 들어감, 노즈 중심 $at  NC=$nc")
