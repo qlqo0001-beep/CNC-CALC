@@ -30,7 +30,8 @@ import kotlin.math.sqrt
  *
  * UN(ASME B1.1) 공차 — 인치, p = 1/산수:
  *   피치경 공차 = C·(0.0015·∛D + 0.0015·√Le + 0.015·∛p²), C: 1A 1.5 · 2A 1.0 · 3A 0.75 · 1B 1.95 · 2B 1.30 · 3B 0.975,
- *   Le(물림 길이) = D (UNC · UNF 표의 가정).  허용차(allowance, es) = 0.3 × (C = 1 의 값), 1A · 2A 만(3A · 암나사는 0).
+ *   Le(물림 길이) = 계열마다 — UNC · UNF 는 D, UNEF · 20UN 은 9P ([ThreadTol.engagement]).
+ *   허용차(allowance, es) = 0.3 × (C = 1 의 값), 1A · 2A 만(3A · 암나사는 0). UNEF · UN 에는 1A · 1B 가 없다([ThreadClass.choices]).
  *   바깥지름 공차 1A 0.090·∛p², 2A · 3A 0.060·∛p².  암나사 안지름 공차는 표 2.20(크기 · 산수에 따른 식과 상·하한).
  *   출처: NBS Handbook H28 (1969) Part I(미국 정부 간행물) 5절 · 6.1 · 6.2 · 표 2.20 · 7절,
  *   https://nvlpubs.nist.gov/nistpubs/Legacy/hb/nbshandbook28-1969p1.pdf  ·  ASME B1.1 목차 표 15 의 같은 식
@@ -43,7 +44,7 @@ enum class ThreadKind {
     /** 미터 나사 M (ISO 261/262 · 공차 ISO 965-1) */
     METRIC,
 
-    /** 유니파이 UN (ASME B1.1 — UNC · UNF) */
+    /** 유니파이 UN (ASME B1.1 — UNC · UNF · UNEF · 일정 피치 20UN) */
     UN,
 }
 
@@ -56,6 +57,23 @@ enum class ThreadSeries(val kind: ThreadKind) {
     M_FINE(ThreadKind.METRIC),
     UNC(ThreadKind.UN),
     UNF(ThreadKind.UN),
+
+    /** 특별 가는 나사 #12 ~ 1-11/16 */
+    UNEF(ThreadKind.UN),
+
+    /** 일정 피치(constant-pitch) — 이 앱은 20UN 크기 가운데 UNC · UNF · UNEF 와 겹치지 않는 것만("3/8-20 UN") */
+    UN(ThreadKind.UN),
+}
+
+/**
+ * UN 계열 묶음(화면의 계열 고르기). [UN20] = 20UN 크기마다 산수 20 인 줄 — UNC · UNF · UNEF 와 겹치는 8 크기는 그 계열 줄을 같이 쓴다
+ * (NBS Handbook H28 (1969) Part I 3.6 p. 2.05: 겹치면 그 계열의 기호 · 공차 · 한계 치수). 그래서 [ThreadTable.UN] 에는 (사이즈, 산수)마다 한 줄뿐이다
+ */
+enum class UnGroup(val label: String) {
+    UNC("UNC"),
+    UNF("UNF"),
+    UNEF("UNEF"),
+    UN20("20UN"),
 }
 
 /**
@@ -71,9 +89,12 @@ data class ThreadSpec(
 ) {
     val kind: ThreadKind get() = series.kind
 
-    /** "M10×1.5" · "1/4-20 UNC" */
+    /** "M10×1.5" · "1/4-20 UNC" · "3/4-20 UNEF" · "3/8-20 UN" */
     val label: String
-        get() = if (kind == ThreadKind.METRIC) "$size×${Fmt.nc(pitch).trimEnd('.')}" else "$size-$tpi ${series.name}"
+        get() = when (kind) {
+            ThreadKind.METRIC -> "$size×${Fmt.nc(pitch).trimEnd('.')}"
+            ThreadKind.UN -> "$size-$tpi ${series.name}"
+        }
 }
 
 /** 규격 사이즈 목록(드롭다운 자료). 사이즈 → 피치만 적었다 — 한계 치수는 [ThreadTol] 이 식으로 낸다 */
@@ -105,8 +126,26 @@ object ThreadTable {
     }
 
     /**
-     * UNC · UNF #0~1-1/2. 번호 사이즈 지름 = 0.060 + 0.013·N 인치, 나머지는 분수 그대로.
-     * 산수 출처: Wikipedia "Unified Thread Standard" 의 UNC/UNF 표(2026-10 확인). #0 은 UNC 가 없다.
+     * 20UN(일정 피치 20산) 크기 — 이름, 인치 지름. NBS Handbook H28 (1969) Part I 표 2.16 (p. 2.15), 37 크기(1순위 22 · 2순위 15).
+     * 자료 원본(출처 대조 끝남): docs/research/unified-extra.json 의 series.UN20. [UN] 보다 먼저 둔다(초기화 차례)
+     */
+    private val UN20_SIZES = listOf(
+        "1/4" to 0.25, "5/16" to 0.3125, "3/8" to 0.375, "7/16" to 0.4375, "1/2" to 0.5, "9/16" to 0.5625, "5/8" to 0.625,
+        "11/16" to 0.6875, "3/4" to 0.75, "13/16" to 0.8125, "7/8" to 0.875, "15/16" to 0.9375, "1" to 1.0, "1-1/16" to 1.0625,
+        "1-1/8" to 1.125, "1-3/16" to 1.1875, "1-1/4" to 1.25, "1-5/16" to 1.3125, "1-3/8" to 1.375, "1-7/16" to 1.4375,
+        "1-1/2" to 1.5, "1-9/16" to 1.5625, "1-5/8" to 1.625, "1-11/16" to 1.6875, "1-3/4" to 1.75, "1-13/16" to 1.8125,
+        "1-7/8" to 1.875, "1-15/16" to 1.9375, "2" to 2.0, "2-1/8" to 2.125, "2-1/4" to 2.25, "2-3/8" to 2.375, "2-1/2" to 2.5,
+        "2-5/8" to 2.625, "2-3/4" to 2.75, "2-7/8" to 2.875, "3" to 3.0,
+    )
+
+    /**
+     * UN 목록 — 사이즈(지름) 순, 한 사이즈 안은 UNC · UNF · UNEF · UN 순. (사이즈, 산수)마다 한 줄.
+     *  - UNC · UNF #0~1-1/2: 산수 출처 Wikipedia "Unified Thread Standard" 의 UNC/UNF 표(2026-10 확인). #0 은 UNC 가 없다.
+     *  - UNEF #12~1-11/16(25): H28 (1969) Part I 표 2.10 (p. 2.10) — docs/research/unified-extra.json 의 series.UNEF.
+     *  - 20UN([UN20_SIZES]): 같은 지름 · 20산 줄이 UNC · UNF · UNEF 에 있으면(1/4 UNC · 7/16 · 1/2 UNF · 3/4 · 13/16 · 7/8 · 15/16 · 1 UNEF)
+     *    그 줄을 쓰고(H28 3.6 p. 2.05 "Whenever a thread in a constant-pitch series also appears in the UNC, UNF, or UNEF series, the symbols,
+     *    tolerances, and limits of size of those standard series are applicable." · 표 2.16 각주 a), 나머지 29 크기만 계열 [ThreadSeries.UN].
+     * 번호 사이즈 지름 = 0.060 + 0.013·N 인치, 나머지는 분수 그대로.
      */
     val UN: List<ThreadSpec> = buildList {
         // 이름, 인치 지름, UNC 산수(없으면 null), UNF 산수
@@ -125,15 +164,45 @@ object ThreadTable {
             if (c != null) add(ThreadSpec(ThreadSeries.UNC, name, inch * MM_PER_INCH, MM_PER_INCH / c, c))
             add(ThreadSpec(ThreadSeries.UNF, name, inch * MM_PER_INCH, MM_PER_INCH / f, f))
         }
+        // UNEF: 이름, 인치 지름, 산수 — H28 (1969) Part I 표 2.10 (p. 2.10)
+        val unef = listOf(
+            Triple("#12", 0.216, 32), Triple("1/4", 0.25, 32), Triple("5/16", 0.3125, 32), Triple("3/8", 0.375, 32),
+            Triple("7/16", 0.4375, 28), Triple("1/2", 0.5, 28), Triple("9/16", 0.5625, 24), Triple("5/8", 0.625, 24),
+            Triple("11/16", 0.6875, 24), Triple("3/4", 0.75, 20), Triple("13/16", 0.8125, 20), Triple("7/8", 0.875, 20),
+            Triple("15/16", 0.9375, 20), Triple("1", 1.0, 20), Triple("1-1/16", 1.0625, 18), Triple("1-1/8", 1.125, 18),
+            Triple("1-3/16", 1.1875, 18), Triple("1-1/4", 1.25, 18), Triple("1-5/16", 1.3125, 18), Triple("1-3/8", 1.375, 18),
+            Triple("1-7/16", 1.4375, 18), Triple("1-1/2", 1.5, 18), Triple("1-9/16", 1.5625, 18), Triple("1-5/8", 1.625, 18),
+            Triple("1-11/16", 1.6875, 18),
+        )
+        for ((name, inch, tpi) in unef) add(ThreadSpec(ThreadSeries.UNEF, name, inch * MM_PER_INCH, MM_PER_INCH / tpi, tpi))
+        // 20UN 가운데 위 계열과 겹치지 않는 크기만 새 줄
+        for ((name, inch) in UN20_SIZES) {
+            if (none { it.size == name && it.tpi == 20 }) add(ThreadSpec(ThreadSeries.UN, name, inch * MM_PER_INCH, MM_PER_INCH / 20, 20))
+        }
+        sortBy { it.d } // 안정 정렬 — 한 사이즈 안은 넣은 차례(UNC · UNF · UNEF · UN) 그대로
     }
 
-    fun of(kind: ThreadKind): List<ThreadSpec> = if (kind == ThreadKind.METRIC) METRIC else UN
+    fun of(kind: ThreadKind): List<ThreadSpec> = when (kind) {
+        ThreadKind.METRIC -> METRIC
+        ThreadKind.UN -> UN
+    }
 
     /** 사이즈 이름(작은 것부터, 겹치지 않게) */
     fun sizes(kind: ThreadKind): List<String> = of(kind).map { it.size }.distinct()
 
-    /** 한 사이즈의 피치들(보통 · UNC 먼저) */
+    /** 한 사이즈의 피치들(보통 먼저 · UN 은 UNC · UNF · UNEF · UN 순) */
     fun pitches(kind: ThreadKind, size: String): List<ThreadSpec> = of(kind).filter { it.size == size }
+
+    /** UN 계열 묶음의 줄(지름 순). [UnGroup.UN20] 은 겹치는 크기에서 UNC · UNF · UNEF 줄 그대로(같은 인스턴스) */
+    fun group(g: UnGroup): List<ThreadSpec> = when (g) {
+        UnGroup.UNC -> UN.filter { it.series == ThreadSeries.UNC }
+        UnGroup.UNF -> UN.filter { it.series == ThreadSeries.UNF }
+        UnGroup.UNEF -> UN.filter { it.series == ThreadSeries.UNEF }
+        UnGroup.UN20 -> UN.filter(::inUn20)
+    }
+
+    /** 20UN 묶음의 줄인가 — 20UN 크기의 산수 20 줄(계열은 UNC · UNF · UNEF · UN 가운데 하나) */
+    fun inUn20(spec: ThreadSpec): Boolean = spec.kind == ThreadKind.UN && spec.tpi == 20 && UN20_SIZES.any { it.first == spec.size }
 }
 
 internal const val MM_PER_INCH = 25.4
@@ -156,6 +225,17 @@ enum class ThreadClass(val kind: ThreadKind, val internal: Boolean, val label: S
 
     companion object {
         fun choices(kind: ThreadKind, internal: Boolean): List<ThreadClass> = entries.filter { it.kind == kind && it.internal == internal }
+
+        /**
+         * 그 계열에 규격이 정한 급수 — UNEF · UN 은 2A · 3A · 2B · 3B 뿐. H28 (1969) Part I 표 2.21 의 1A · 1B 줄은 UNC · UNF 표기에만 있다
+         * (docs/research/unified-extra.json 의 classes)
+         */
+        fun choices(series: ThreadSeries, internal: Boolean): List<ThreadClass> = choices(series.kind, internal).filter { c ->
+            when (series) {
+                ThreadSeries.M_COARSE, ThreadSeries.M_FINE, ThreadSeries.UNC, ThreadSeries.UNF -> true
+                ThreadSeries.UNEF, ThreadSeries.UN -> c != UN1A && c != UN1B
+            }
+        }
 
         /**
          * 기본 급수: 미터 6g/6H (FED-STD-H28/21B 5.1.1 "Standard M profile screw threads shall be tolerance class 6g for
@@ -270,7 +350,23 @@ object ThreadTol {
 
     fun limits(spec: ThreadSpec, cls: ThreadClass): ThreadLimits {
         require(cls.kind == spec.kind) { "규격과 급수의 나사 종류가 다르다: ${spec.label} ${cls.label}" }
-        return if (spec.kind == ThreadKind.METRIC) metric(spec, cls) else unified(spec, cls)
+        require(cls in ThreadClass.choices(spec.series, cls.internal)) { "그 계열에 없는 급수다: ${spec.label} ${cls.label}" }
+        return when (spec.kind) {
+            ThreadKind.METRIC -> metric(spec, cls)
+            ThreadKind.UN -> unified(spec, cls)
+        }
+    }
+
+    /**
+     * UN 피치경 공차식의 물림 길이 LE(인치). H28 (1969) Part I 6.1 (p. 2.20) "The length of thread engagement (Le) used in the formula is
+     * 1 D (diameter) or 9 pitches, depending on the series." · 7절 (p. 2.21): UNC · UNF(· 4 · 6 · 8UN)는 호칭 지름 D,
+     * UNEF(· 12 · 16 · 20 · 28 · 32UN)는 9 피치. 이 앱의 UN 계열은 20UN 뿐이라 9P(4 · 6 · 8UN 을 넣으면 D).
+     * 판별 줄: 3/4-20 UNEF-2A 피치경 최소 — 표 2.21 0.7118 = 9P 식 0.71180, D 식이면 0.71142 (docs/research/unified-extra.json engagement.check)
+     */
+    internal fun engagement(spec: ThreadSpec): Double = when (spec.series) {
+        ThreadSeries.UNC, ThreadSeries.UNF -> spec.d / MM_PER_INCH
+        ThreadSeries.UNEF, ThreadSeries.UN -> 9 * spec.pitch / MM_PER_INCH
+        ThreadSeries.M_COARSE, ThreadSeries.M_FINE -> throw IllegalArgumentException("미터 공차는 ISO 965 표 — 물림 길이 식을 안 쓴다: ${spec.label}")
     }
 
     private fun basics(spec: ThreadSpec) = Triple(
@@ -336,7 +432,7 @@ object ThreadTol {
         val dIn = spec.d / MM_PER_INCH
         val p = spec.pitch / MM_PER_INCH
         val (h, d2, d1) = basics(spec)
-        val base = (0.0015 * cbrt(dIn) + 0.0015 * sqrt(dIn) + 0.015 * cbrt(p * p)) * MM_PER_INCH // Le = D
+        val base = (0.0015 * cbrt(dIn) + 0.0015 * sqrt(engagement(spec)) + 0.015 * cbrt(p * p)) * MM_PER_INCH
         return when (cls) {
             ThreadClass.UN1A, ThreadClass.UN2A, ThreadClass.UN3A -> {
                 val es = if (cls == ThreadClass.UN3A) 0.0 else -0.3 * base

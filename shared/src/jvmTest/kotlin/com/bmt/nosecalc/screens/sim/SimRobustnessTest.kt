@@ -313,7 +313,7 @@ class SimRobustnessTest {
         else -> "O1234 (무작위)\nT0101\nG97 S1000 M03\nG99\n" + (0 until rnd.nextInt(40)).joinToString("\n") { (0..rnd.nextInt(4)).joinToString(" ") { word(rnd) } } + "\nM30"
     }
 
-    /** 공구 설정 창이 받는 범위(노즈 R 0~50 · 팁 0~9 · κr 0~180 · 홈 폭 0~100 · 나사 각 0~180)와 빈칸 */
+    /** 공구 설정 창이 받는 범위(노즈 R 0~50 · 팁 0~9 · κr 0~180 · 홈 폭 0~100 · 나사 각 0~180 · 다이스 지름 0~200 · 다이스 피치 0~20)와 빈칸 */
     private fun randomTools(rnd: Random): Map<Int, ToolOffset> = (1..rnd.nextInt(1, 6)).associate { rnd.nextInt(0, 13) to tool(rnd) }
 
     private fun tool(rnd: Random): ToolOffset = ToolOffset(
@@ -324,6 +324,8 @@ class SimRobustnessTest {
         kappaDeg = listOf(null, 0.1, 45.0, 93.0, 95.0, 107.5, 179.9).random(rnd),
         width = listOf(null, 0.01, 2.0, 3.0, 100.0).random(rnd),
         threadDeg = listOf(null, 0.1, 29.0, 55.0, 60.0, 179.9).random(rnd),
+        dieDia = listOf(null, 0.001, 12.0, 200.0).random(rnd),
+        diePitch = listOf(null, 0.01, 1.27, 1.75, 20.0).random(rnd),
     )
 
     private val fieldNums = listOf("", "", "", "0", "-5", "0.001", "10", "18", "30", "60", "68", "90", "200", "10000", "10000.001", "-10000", "1.", ".", "-", "99999999")

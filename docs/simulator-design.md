@@ -1,6 +1,6 @@
 # G코드 시뮬레이터 설계 (`calc.sim` · `screens/sim`)
 
-4단계(가지 `stage4-simulator`) 설계 문서. **해석기 1**(파서 · 모달 · G00~G03 · `,C` `,R` · G04 · G28 · G50 S · G96/97 · G98/99 · M · T · S · F · G40/41/42 · M98/M99 · 시간)은 구현했다 — 바뀐 것 · 정한 것은 **11절**. **해석기 2**(고정 사이클 1.6 — G90/G92/G94 · G70~G76)도 구현했다 — **12절**. **화면 1**(편집기 · CNC 키패드 · 프로그램 저장 · 예제 — 7.1~7.3)도 만들었다 — **14절**. **화면 2**(궤적 창 2D · 재생 · 재료 제거 · 설정 창 — 5 · 7.4~7.8)도 만들었다 — **15절**. **화면 3**(3D — 남은 소재 몸체 · 1/4 절개 · 회전 · 자유 — 6)도 만들었다 — **16절**. **회사 기계 꼴 받기**(G50 S 블록의 M · G92 모드의 M 만 줄 · G30 · 없는 부프로그램 · 짝 없는 `)` · 줄끝 `LF CR CR`, 보정 시작 · 취소 형식 C)와 회사 꼴 예제는 **18절**. 계산은 `calc/src/commonMain/kotlin/com/bmt/nosecalc/calc/sim/`,
+4단계(가지 `stage4-simulator`) 설계 문서. **해석기 1**(파서 · 모달 · G00~G03 · `,C` `,R` · G04 · G28 · G50 S · G96/97 · G98/99 · M · T · S · F · G40/41/42 · M98/M99 · 시간)은 구현했다 — 바뀐 것 · 정한 것은 **11절**. **해석기 2**(고정 사이클 1.6 — G90/G92/G94 · G70~G76)도 구현했다 — **12절**. **화면 1**(편집기 · CNC 키패드 · 프로그램 저장 · 예제 — 7.1~7.3)도 만들었다 — **14절**. **화면 2**(궤적 창 2D · 재생 · 재료 제거 · 설정 창 — 5 · 7.4~7.8)도 만들었다 — **15절**. **화면 3**(3D — 남은 소재 몸체 · 1/4 절개 · 회전 · 자유 — 6)도 만들었다 — **16절**. **회사 기계 꼴 받기**(G50 S 블록의 M · G92 모드의 M 만 줄 · G30 · 없는 부프로그램 · 짝 없는 `)` · 줄끝 `LF CR CR`, 보정 시작 · 취소 형식 C)와 회사 꼴 예제는 **18절**. **다이스 헤드**(DIE 공구 — 제어기 동작은 정확, 나사 모양은 모형)와 예제 ⑮ 다이스 · ⑯ 관용 테이퍼 G92 I 는 **19절**. 계산은 `calc/src/commonMain/kotlin/com/bmt/nosecalc/calc/sim/`,
 화면은 `shared/src/commonMain/kotlin/com/bmt/nosecalc/screens/sim/` 에 **새 파일로만** 만든다(아래 0.3).
 좌표 약속 · 보정 모형 · 글 표기는 `calc-design.md`, 화면 부품 · 색 · 글꼴은 `ui-design.md`, 원본 사진 글은 `screens.md` 3.4 · 부록 05 · 06 · 09 · 10 을 따른다.
 
@@ -84,7 +84,7 @@
 | G | 그룹 | 뜻 | 등급 · 출처 | 메모 |
 |---|---|---|---|---|
 | G00 | 01 | 급송 | 정확 · H 32, S 2-23~2-24 | 축마다 제 급송 속도로 따로 움직여 **꺾인 경로**(설정으로 '직선' 도). 4.2 |
-| G01 | 01 | 직선 이송 | 정확 · H 33 | F 필수(모달) |
+| G01 | 01 | 직선 이송 | 정확 · H 33 | F 필수(모달). 다이스 헤드(DIE 공구)는 X0. 에서 −Z 로만 — 나사 모양은 모형(19절) |
 | G02 / G03 | 01 | 원호(시계/반시계 — 이 그림에서 G02 = 시계) | 정확 · H 41~46, S 2-27~2-30 | R(+ ≤ 180°, − > 180°) 또는 I·K. 1.9 |
 | G04 | 00 | 드웰 | 정확 · S 3-72, H 47 | `X`/`U` = 초(소수), `P` = ms(정수, 소수점이면 오류 — H 47 은 P 를 초로 쓰고 설명 글과 예가 서로 어긋나 S 3-72 를 따름). 다른 명령과 한 블록 금지 |
 | G18 | 16 | ZX 평면 | 처음 상태 | G17 · G19 지원 안 함 |
@@ -161,6 +161,11 @@ M 은 블록 이동이 끝난 뒤 실행(H 133: M 코드는 블록 끝에 실행
 | `TOOL_DATA_MISSING` | STOP | G41/G42 인데 그 보정 번호의 노즈 R · 팁이 공구 설정에 빈칸 | "T0101 의 노즈 R · 팁 번호를 공구 설정에 넣어 주세요" + '공구 설정' 단추 |
 | `RAPID_CUT` | WARN | 급송이 소재를 깎음(5.5) | "34줄 G00 이 소재를 지납니다(Z-2.1 X41.3)" |
 | `CHUCK_HIT` | STOP | 공구가 척에 닿음(5.5) | 재생도 그 자리에서 멈춤 |
+| `DIE_PATH` | STOP | 다이스 헤드(DIE 공구)의 이송이 X0. 에서 −Z 로 곧게가 아님 — X ≠ 0 · +Z · 원호 · 모서리 `,C` `,R`(19절) | "X2.: 다이스 헤드(DIE 공구)의 이송은 X0. 에서 −Z 로 곧게만 — X 이동 · +Z · 원호 · 모서리는 지원하지 않습니다" |
+| `DIE_NOT_PER_REV` | STOP | DIE 공구의 이송이 분당 이송(G98) | "다이스 헤드는 회전당 이송(G99)으로 피치에 맞춥니다 — 분당 이송(G98)은 지원하지 않습니다" |
+| `DIE_IN_CYCLE` | STOP | DIE 공구로 G70~G76 둘째 줄 · G90 · G92 · G94(첫 줄 모달 값은 받음) | "다이스 헤드(DIE 공구)로 G92 사이클은 지원하지 않습니다 — X0. 에서 G01 한 번(−Z)으로 씁니다" |
+| `DIE_DATA_MISSING` | WARN | 공구 설정의 다이스 지름 · 피치가 비었거나 나사 각이 60° · 55° 가 아님 — 경로만 그리고 나사 모양은 없음 | "T0505 — 다이스 지름 · 피치가 비었거나 나사 각이 60° · 55° 가 아닙니다. 경로만 그리고 …" |
+| `DIE_FEED_OVER_PITCH` | WARN | 이송 F > 다이스 피치 P(계산기 `RATIO_OVER_ONE` 과 같은 까닭 — 당겨 여는 머리는 끝에서 안 열릴 수 있음) | "이송 F1.8 이 다이스 피치 1.75 mm 보다 큽니다 — …" |
 
 ### 1.6 사이클 (FANUC 2줄 형식 — S 체계 A)
 (구현하며 정한 세부 · 바꾼 것은 **12절** — 이 절과 다르면 12절이 맞다.)
@@ -483,6 +488,7 @@ ParsedProgram(units[], issues[])            // issues = 문법(STOP) · NO_POINT
 | 홈(GROOVE) | 폭 w 직사각형 + 아래 두 모서리 노즈 R. 팁 3 = 왼쪽 모서리 기준, 팁 4 = 오른쪽 | `GrooveRef` · H 76 |
 | 나사(THREAD) | 끝각 a(빈칸 60°)의 V, 끝 R | G76 a 가 있으면 그 각 |
 | 둥근(ROUND) | 지름 2r 원 | |
+| 다이스(DIE) | 없음 — 래스터를 깎지 않는다 | 19절. 나사 모양은 공구 설정의 다이스 지름 · 피치 · 각으로 `StockSim` 이 그린다(모형) |
 - 홀더 몸통은 보지 않는다(인서트만). 노즈는 현 8~16 개로(현 높이 ≤ 0.001 mm).
 
 ### 5.4 깎기
@@ -490,6 +496,7 @@ ParsedProgram(units[], issues[])            // issues = 문법(STOP) · NO_POINT
 - 열마다 그 영역의 반경 범위를 빼고, 뺀 넓이(mm²)와 처음 닿은 점을 돌려준다.
 - **나사 패스는 래스터를 깎지 않는다** — 나선은 회전체가 아니라 한 열에서 한 각도만 깎으므로, 회전체로 빼면 산까지 다 없어진다. 대신 마지막 패스 깊이로
   `ThreadFeature(z0, z1, 리드, 각 a, 골 반경, 산 반경, 바깥/안, 시작 위상)` 를 남기고, 2D 단면(θ = 0)은 톱니, 3D 는 r(z, θ) 로 그린다(6.2).
+  다이스 헤드 깎기(`StepSrc.DIE_CUT`)도 래스터를 깎지 않고 공구 설정의 d · P · 각으로 같은 특징을 남긴다(19절).
 - 정밀 · 속도 목표: 반경 오차 1e-6 mm · Z 오차 dz/2. 09.jpg 같은 G71 · G70 프로그램 전체 깎기 **폰 300 ms 이하**(PC 50 ms). 되감기는 이동 500 개마다 저장점(열 배열 복사, 합 30 MB 이하)에서 다시 깎는다.
 
 ### 5.5 충돌 · 급송 검사
@@ -566,7 +573,7 @@ ParsedProgram(units[], issues[])            // issues = 문법(STOP) · NO_POINT
 - 저장소 = `KeyValueStore`(키 `sim/prog/<번호>` = 글, `sim/progs` = 목록, `sim/draft` = 임시 글). 한 프로그램 10만 자 · 200개까지.
   **프로그램과 함께 그 공구표 · 소재 설정을 저장**(`sim/prog/<번호>/tools` · `/stock`). 기계 설정은 앱 전체 하나(`sim/machine`). → 사용자 확인 항목(10절, C10 과의 관계).
 - 예제(calc `SimExamples` — 문자열 + 출처 주석, 모두 오류 0 이어야 함 — 9.3 `ExamplesTest`): ① 외경 G71/G70 + `,C` `,R`(09 비슷한 우리 글) ② S 4-109 G71 ③ S 4-110 G72 ④ S 4-111 G73 ⑤ S 4-92 G90 ⑥ S 4-95 G92(체계 A 로)
-  ⑦ S 4-116 G76 ⑧ G75 홈 ⑨ G74 드릴 ⑩ 내경 06 꼴(G41 면취) ⑪ M98 부프로그램 ⑫~⑭ 회사 꼴 외경 · 내경 · 나사(18.5).
+  ⑦ S 4-116 G76 ⑧ G75 홈 ⑨ G74 드릴 ⑩ 내경 06 꼴(G41 면취) ⑪ M98 부프로그램 ⑫~⑭ 회사 꼴 외경 · 내경 · 나사(18.5) ⑮ 회사 꼴 다이스 헤드 ⑯ 회사 꼴 관용 테이퍼 G92 I(19절).
 
 ### 7.4 궤적 창 화면 B (05 · 06 · 10)
 위에서 아래로(412 × 915dp 기준 높이):
@@ -630,8 +637,9 @@ ParsedProgram(units[], issues[])            // issues = 문법(STOP) · NO_POINT
 - [홀더 (선택)](10-29 — 회사 사용 홀더, 칸에는 품번 · '고르기 ⌄', 아랫줄 묶음 · 제조사 · 까닭, 고친 뒤엔 이름 옆 '수정됨') → 누르면 '홀더 고르기' 시트
   (고르지 않음 → 외경 바이트 · 나사 · 보링바 · 소경 보링 20 줄). 고르면 종류, 바이트면 인서트 모양 · κr 을 카탈로그 값으로 채운다(출처에 없거나
   기준이 다른 κr — 정면 이송 기준인 DCKNL — 은 빈칸 = 가정). 노즈 R · 팁 · 폭 · 나사 각은 그대로. 자세한 것은 `ui-design.md` '홀더 고르기'.
-- 종류 `Segmented` 바이트 · 홈 · 나사 · 둥근 → [노즈 R (공구 반경, mm)] [팁 번호](테이퍼의 팁 번호 시트 · 그림을 그대로 부름 — 고치지 않음)
-  → 바이트: 인서트 모양 칩 C · D · V · T + [절입각 κr]('자동' 95° …) / 홈: [폭] / 나사: [각도](자동 60°).
+- 종류 `Segmented` 바이트 · 홈 · 나사 · 둥근 · 다이스(이름은 `toolKindLabel` — 순서 번호에 기대지 않음) → [노즈 R (공구 반경, mm)] [팁 번호](테이퍼의 팁 번호 시트 · 그림을 그대로 부름 — 고치지 않음)
+  → 바이트: 인서트 모양 칩 C · D · V · T + [절입각 κr]('자동' 95° …) / 홈: [폭] / 나사: [각도](자동 60°) /
+  다이스: [다이스 지름] [다이스 피치] [나사 각도](자동 60°) — 노즈 R · 팁은 G41/G42 를 쓰는 번호일 때만 보이고, 카드 아래 안내 한 줄(19절).
 - G41/G42 를 쓰는 번호인데 노즈 R · 팁이 빈칸이면 카드에 빨간 테 + '보정에 필요합니다'(`TOOL_DATA_MISSING`). 보정을 안 쓰면 빈 노즈 R 은 0 으로 깎는 모양만 그림(INFO).
 
 ### 7.9 색 (`screens/sim/SimColors.kt` — `AppTheme.colors.dark` 로 고름)
@@ -718,10 +726,11 @@ data class MachineSetup(
     val home2: Pt? = null,                                          // G30 제2 원점(null = home)
     val compStartup: CompStartup = CompStartup.C)                   // 이동 없는 G41/G42 · G40 블록: AB = 형식 A · B, C = 형식 C(18절)
 enum class CompStartup { AB, C }
-enum class ToolKind { TURN, GROOVE, THREAD, ROUND }
+enum class ToolKind { TURN, GROOVE, THREAD, ROUND, DIE }                // DIE(다이스 헤드 — 19절)는 맨 끝(순서 번호 유지, 저장은 이름)
 data class ToolOffset(val noseR: Double? = null, val tip: Int? = null, val kind: ToolKind = ToolKind.TURN,
     val insert: InsertShape = InsertShape.C, val kappaDeg: Double? = null /*null = 모양별 가정*/,
-    val width: Double? = null /*홈*/, val threadDeg: Double? = null /*null = 60*/)
+    val width: Double? = null /*홈*/, val threadDeg: Double? = null /*null = 60 — 다이스도 이 각*/,
+    val dieDia: Double? = null /*다이스 호칭 지름 d*/, val diePitch: Double? = null /*다이스 피치 P*/)
 data class StockSpec(val dia: Double, val length: Double /*척 면 ~ 끝면*/, val faceZ: Double /*기장여유*/,
     val boreDia: Double = 0.0, val chuckDia: Double)
 data class SimInput(val text: String, val machine: MachineSetup = MachineSetup(), val tools: Map<Int /*보정 번호*/, ToolOffset> = emptyMap())
@@ -731,8 +740,10 @@ data class SimInput(val text: String, val machine: MachineSetup = MachineSetup()
 (걸음 · 고스트 · `SimRun` 은 `SimRun.kt`, 실행기는 `GSim.kt`. 아래는 구현한 꼴 — 11절에 바뀐 것을 모았다.)
 ```kotlin
 enum class MoveKind { RAPID, FEED, THREAD }
-enum class StepSrc { BLOCK, CORNER, CYCLE_APPROACH, CYCLE_CUT, CYCLE_RETRACT, CYCLE_RETURN, CYCLE_FINISH, G28_VIA, G28_HOME }
+enum class StepSrc { BLOCK, CORNER, CYCLE_APPROACH, CYCLE_CUT, CYCLE_RETRACT, CYCLE_RETURN, CYCLE_FINISH, G28_VIA, G28_HOME,
+    SHIFT_START, SHIFT_CANCEL /*형식 C 의 이동 없는 G41/G42 · G40 옮김 — 18절*/, DIE_CUT /*다이스 헤드 G01 — 19절*/ }
 enum class SpindleDir { STOP, CW, CCW }
+data class DieCut(val dia: Double, val pitch: Double, val angleDeg: Double)   // 다이스 깎기의 나사(공구 설정 — 모형, 19절)
 
 sealed interface SimStep { val line: Int; val unit: Int; val t0: Double; val t1: Double }
 data class MoveStep(override val line: Int, override val unit: Int, override val t0: Double, override val t1: Double,
@@ -740,7 +751,7 @@ data class MoveStep(override val line: Int, override val unit: Int, override val
     val src: StepSrc, val pass: Int? /*사이클 층*/, val model: Boolean /*모형 이동*/,
     val tool: Int?, val offset: Int?, val r: Double, val tipNo: Int,
     val feed: Double? /*급송 null*/, val perRev: Boolean, val css: Double? /*G96 Vc*/, val sCmd: Double? /*마지막 S*/,
-    val rpm0: Double, val rpm1: Double) : SimStep   // cmd = 그 블록(또는 끼운 모서리) 경로 전체 — 꺾인 급송 두 토막이 같은 cmd
+    val rpm0: Double, val rpm1: Double, val die: DieCut? = null /*DIE_CUT 의 나사 — d · P 가 비면 null*/) : SimStep   // cmd = 그 블록(또는 끼운 모서리) 경로 전체 — 꺾인 급송 두 토막이 같은 cmd
 data class DwellStep(/* line, unit, t0, t1 */ val sec: Double) : SimStep
 data class ToolStep(/* … */ val fromTool: Int?, val toTool: Int, val offset: Int) : SimStep
 data class StopStep(/* … */ val optional: Boolean) : SimStep
@@ -914,9 +925,10 @@ calc `calc/src/commonTest/kotlin/com/bmt/nosecalc/calc/sim/`, shared `shared/src
 | `CycleTest` | 9.1 의 G90 · G92 · G94 · G70~G76 전부(이동 순서 · 점 · src · pass · model), 사이클 뒤 모달, 다음 블록(Q 다음), 첫 줄 없음 · 형식 II · 부호 · 바닥 도피 · d < 2 오류 — 구현 결과는 12.10 |
 | `SubTest` | M98 P · P 앞 반복 · L, 겹침 4/5, M99 P, 주 M99, 고리 → `EXEC_LIMIT` |
 | `TimeTest` | 9.2 시간 줄 + 이송 시간 식을 따로 짠 수치 적분(토막 1e-4 mm)과 1e-6 상대 — 직선 · 원호 · 축 넘음 · 자름 경계 |
-| `StockTest` | 9.2 소재 줄, 따로 짠 표본 깎기(0.005 mm 격자에 공구 다각형 찍기)와 반경 0.01 안, `RAPID_CUT`(닿은 점 · 줄), 형식 C G40 옮김 `CANCEL_CUT`(18절), `CHUCK_HIT`, 나사 특징(깊이 · 각), 되감기 = 처음부터 깎은 것 |
+| `StockTest` | 9.2 소재 줄, 따로 짠 표본 깎기(0.005 mm 격자에 공구 다각형 찍기)와 반경 0.01 안, `RAPID_CUT`(닿은 점 · 줄), 형식 C G40 옮김 `CANCEL_CUT`(18절), `CHUCK_HIT`, 나사 특징(깊이 · 각), 되감기 = 처음부터 깎은 것, 다이스 나사 모양 · 자동 소재(19절) |
+| `DieHeadSimTest` | 다이스 헤드(19절): 예제 ⑮ 의 G1 · G4 · G0 과 시간 손 계산, 예제 글 = 계산기 글, 나사 특징(리드 = P · 골 반경 · Z), 멈춤 꼴 다섯 · 알림 둘 |
 | `MeshTest` | 삼각형 수 ≤ TRI_DRAG/IDLE(예제 전부), 1/4 단면 두 면, 법선 바깥, 나사 구간 r(z, θ) |
-| `ExamplesTest` | `SimExamples` 전부 `stop == null` · STOP 문제 0 · M30 · M99 로 끝, 회사 꼴 예제는 형식 A · B 와 C 의 깎는 줄 노즈가 같음(18.5) |
+| `ExamplesTest` | `SimExamples` 전부(16개) `stop == null` · STOP 문제 0 · M30 · M99 로 끝, 회사 꼴 예제는 형식 A · B 와 C 의 깎는 줄 노즈가 같음(18.5), ⑯ 의 나사 이동 기울기 1/32 · 글 = 계산기 글(19절) |
 | `InteropTest` | **테이퍼 · 라운드 NC 를 시뮬레이터로**: `TaperCalc` 외경/내경 × TYPE 1~5 × 정/역 × 뒤집기 × 3각 × r 2가지 × 모서리 R 4가지 × 시작 · 끝점, 겹테이퍼 — `ncG41G42` 를 넣은 실제 인선 블록 끝 = `ncG40` 의 점(±0.001 — 시작 · 끝 블록은 빼고, 끝 노즈는 `SimVerifyTest` · `g41g42ProgramCompensatesToDirectProgram` 이 제어기 모형으로 본다, 13.7). 테이퍼에서 `COMP_*` 오류가 나오면 실패.<br>`RoundCalc` TYPE · 내경: 노즈R 0 풀이 NC(도면 좌표)의 첫 G01 에 G42/G41, 끝에 `G40 G00` 후퇴를 붙여(`HolderStop` 의 '기계 보정' 과 같은 꼴) 형상 블록 끝 = `RoundSolution.nc` 의 점. 라운드에서 `COMP_ACUTE_OUTER` 가 나오는 사례는 목록으로 남긴다(실패 아님).<br>둘 다 앞에 `G00 T0101`, `G97 S1000 M03`, `G99 F0.2` 를 붙인다 |
 
 - 일부러 틀린 식(검증 때 테스트가 잡는지 본다): 증분 U 를 반경으로, I 를 직경으로, R 음수 무시, 소수점 규칙 반대, 형식 A 대신 B, 안쪽/바깥 판정 반대, G71 여유를 법선 오프셋으로,
@@ -1537,9 +1549,10 @@ GSim 형식 A(급송 직선 · 꺾임) · 따로 짠 형식 A · B 모형으로,
   빼는 줄은 SR12.5 구면 연장 안에 둔다(끝 Z-13.4 — 돔이 중심까지 이어지는 도면이어도 공기. Z-13.5 면 끝이 구면 밖으로 0.03 나간다).
 - ③ 나사(O9022, T03): 골든 `thread`(1/4-20 UNC 바깥, 시작 X5.76 · 골 X4.688 · 리드 1.27 · Z-25) — 거친 패스 간격은 새로 나눔.
 - 자동 소재에서 세 예제 모두 '닿음' 없음(① Ø58 · ② Ø21 구멍 Ø10 · ③ Ø10). ① 은 끝면을 소재 지름 X58 에서 시작해 자동 소재가 어깨 위로 빼는 줄 끝(X60)을 공기로 둔다.
-- 넣지 않은 것: 나사 앞뒤 기계 M(그때는 뜻 확인 전 — 2026-11-04 사용자가 M23 = 끝 빼기 켬 · M24 = 끔을 확인했다(18.8). ③ 에 넣을지는 남은 일), 테이퍼 나사의 `I`(골든에 테이퍼 나사가 없다 — 관용 테이퍼 나사 단계에서. ③ 에 둘째 나사를 더하면 그 시작점이
-  공작물 속이 된다 — 나사 패스는 2D 소재를 깎지 않아(5.4) 앞 나사 자리도 소재로 남고, 사이클의 급송 다가감이 급송 깎음 헛경보를 낸다).
-- 시험: `ExamplesTest`(14개 · M30 · M99 끝 · `companyStyleCutsSameInTypeAAndC` — 형식 A · B 와 C 의 이송 블록 노즈가 1e-9 안에서 같음, ① 은 형식 A · B 가 멈추는 'G40 바로 G41' 앞까지),
+- 넣지 않은 것: 나사 앞뒤 기계 M(그때는 뜻 확인 전 — 2026-11-04 사용자가 M23 = 끝 빼기 켬 · M24 = 끔을 확인했다(18.8). ③ 에 넣을지는 남은 일).
+  테이퍼 나사의 `I` 는 ③ 에 둘째 나사로 더하지 않고(그 시작점이 공작물 속이 된다 — 나사 패스는 2D 소재를 깎지 않아(5.4) 앞 나사 자리도 소재로 남고, 사이클의 급송 다가감이 급송 깎음 헛경보를 낸다)
+  관용 테이퍼 나사 단계에서 따로 예제 ⑯(O9024 — `G92X…Z…I…F…`, 19.5)으로 넣었다.
+- 시험: `ExamplesTest`(14개 — 19절에서 16개 · M30 · M99 끝 · `companyStyleCutsSameInTypeAAndC` — 형식 A · B 와 C 의 이송 블록 노즈가 1e-9 안에서 같음, ① 은 형식 A · B 가 멈추는 'G40 바로 G41' 앞까지),
   골든 `sim-editor-examples` · `sim-trajectory` · `sim-3d`, 스크린샷 `SimShotsTest.programsExamples`(목록 시트를 길게 — `sim-programs-examples`).
 
 ### 18.6 앱 NC 글 회사 표기 (2026-11, 계획 단계 5)
@@ -1618,3 +1631,69 @@ GSim 형식 A(급송 직선 · 꺾임) · 따로 짠 형식 A · B 모형으로,
   분석표 회차 수 + 1(M24 줄)이다 — 화면 G92 카드 설명에 'M24 줄에서 마지막 X 를 한 번 더 지남' 을 적었다. 예제 ⑭(나사)는 그대로 둔다(M23 · M24 없음).
 - 시험: `G92ThreadTest`(앱 G92 글 · 다듬질 블록 — 멈춤 · 문제 0, 회 수 = 분석표 + 1, 회마다 X, 마지막 X = G76 X / `threadPullOutM23M24` — 설정 1 리드에서 M 없음 = 켬,
   M24 뒤 끔 · M23 뒤 켬, 모드 안 M 줄은 돈 뒤 바꿈, G76 의 r 도 같은 모달 — 손 계산 토막 끝 Z-23.73 · X + 2.54), `CycleTest.haas130G92`(H 130 의 M23 에 '기계 M' 알림 없음).
+
+## 19. 다이스 헤드 (모형) — 구현 기록 (2026-11-05, 나사 확장 단계 S4)
+고정형 자동 열림 다이스 헤드(공작물이 돌고 머리는 터렛에 서서 X0. 에서 −Z 로 들어간다 — 체이서 넷이 둘레를 한 번에 깎고, 끝에서 머리가 열린다)를
+시뮬레이터에 넣었다. 사용자 결정(2026-11-05): 나사 화면의 '다이스 헤드' 가공 방식, M · UN 숫나사만, 이송 = 피치 × 0.96 · 끝 멈춤 1초 · 물러남 Z150(처음 값),
+다이스 블록 꼴 `G97S…` / `T…M03` / `G0X0.Z20.` / `Z…` / `G1Z…F…` / `G4U1.` / `G0Z150.`. 계산기 쪽(`DieHeadCalc`)은 `calc-design.md` '다이스 헤드'.
+
+### 19.1 등급 — 정확과 모형
+- **정확**: 제어기 동작. `G1` 은 보통 이송이다(시간 = 길이 / (F · n), 4.3) · `G4U1.` 드웰(4.4) · `G0` 급송(4.2). 시뮬레이터는 NC 글의 F 값으로 잰다
+  (계산기 `DieSolution.feed` 는 반올림 전 0.96 × P — 예제 ⑮ 는 1.68 이 딱 떨어져 같다).
+- **모형**: 나사 모양. 실제 나사는 체이서가 만들고 그 리드는 체이서 피치 P 다(이송 F 가 아님 — F < P 면 머리가 앞으로 끌린다). 그래서 모양은 공구 설정의
+  다이스 지름 d · 피치 P · 나사 각으로 그린다: 골 = 수평선 반경 d/2 − k(60° k = 0.613435P — 미터 · 유니파이 숫나사 골 깊이, 55° k = 0.640327P),
+  Z 는 그 G1 의 시작 ~ 끝, 바깥 나사, 리드 P. 산봉우리는 소재 반경에서 자른다(바이트가 미리 깎은 지름).
+- **그리지 않는 것**: 머리가 열리며 끌려 나가는 길이(당김 = (1 − F/P) × 길이 — 계산기 결과 칸) · 열리는 순간 · 체이서 목의 불완전 나사 · 머리 몸통과 척 · 소재의 충돌.
+  다이스 공구는 모양이 없어(`ToolShape` 빈 목록) 래스터를 깎지 않고 급송 깎음 · 척 닿음도 보지 않는다.
+
+### 19.2 규칙 (`GSim.move` → `dieCut`, `singleCycle` · `fixedCycle`)
+그 보정 번호의 공구 종류가 '다이스'(`ToolKind.DIE`, 보정 번호 00 이면 아님)일 때:
+
+| 꼴 | 시뮬레이터 |
+|---|---|
+| G01 — X0. 에서 −Z 로 곧게(시작 · 끝 반경 ≤ 0.0005) | 이송(`FEED`) · `StepSrc.DIE_CUT` · `MoveStep.die = DieCut(d, P, 각)` |
+| G01 의 X ≠ 0 · 끝 Z ≥ 시작 Z · G02/G03 · `,C` `,R` | `DIE_PATH` 멈춤(낱말이 있으면 그 낱말에 밑줄) |
+| 분당 이송 G98 | `DIE_NOT_PER_REV` 멈춤 |
+| G70~G76 둘째 줄 · G90 · G92 · G94 | `DIE_IN_CYCLE` 멈춤(G71~G76 첫 줄 — 모달 값만 — 은 받음) |
+| 다이스 지름 · 피치가 비었거나 0 이하, 나사 각이 60° · 55° 가 아님 | `DIE_DATA_MISSING` 알림 — 경로만 그리고 나사 모양은 없음(`die = null`) |
+| F > P | `DIE_FEED_OVER_PITCH` 알림 — 계산기 `RATIO_OVER_ONE` 과 같은 까닭(당겨 여는 머리는 끝에서 안 열릴 수 있음, Wagner 고장표: 물릴 때 이송이 크면 두 줄 나사) |
+| G0 · G4 · M · G41/G42 | 지금 그대로(다이스 공구의 급송은 보통 `BLOCK` 급송, 보정은 3절 규칙) |
+
+- 검사 순서는 원호 · X · Z · 모서리 → G98 → 보정(3절) 이고, 두 알림은 경로 검사 뒤에 낸다. 마른 실행(G71~G73 윤곽)에는 다이스 규칙을 쓰지 않는다 — 사이클 줄에서 먼저 멈춘다.
+- `StockSim.threadGroups` 가 `DIE_CUT` 마다 나사 특징 하나(골 선 · 리드 P · 각 · 바깥)를 만든다. `sweep` 은 `DIE_CUT` 과 그 바로 뒤 급송을 나사처럼 건너뛴다.
+  2D 톱니 · 3D 나선(5.4 · 6.2)은 나사와 같은 그림이다. 2D 경로는 나사 패스처럼 회색 가는 선(사이클 · 나사 이동)으로 그린다.
+- 자동 소재(5.1 · `StockAuto`): 다이스 이송은 나사처럼 본다 — 다른 이송이 있으면 넣지 않고(X0 에서 끝면 밖부터 들어가 끝면을 시작 Z 로 잡지 않게), 다이스만 있으면
+  지름 = 다이스 지름/2 를 1 mm 단위로 올림 · 끝면 = 시작 Z − 3P.
+
+### 19.3 예제 ⑮ ⑯ (7.3, O9023 · O9024)
+치수는 새로 지었다. 공구 주석 · 품번은 넣지 않았다.
+- ⑮ 다이스 헤드(O9023): T01(R0.4 팁 3)으로 끝면 · Ø11.8 외경 · 면취 1.5 → T05 다이스(d 12 · P 1.75 · 60°)로 `G97S230` / `T0505M03` / `G0X0.Z20.` / `Z6.` / `G1Z-20.F1.68` / `G4U1.` / `G0Z150.`.
+  다이스 줄은 계산기 글 그대로(M12×1.75 · 230 rpm · Z6 → −20 · 처음 값 — 공구 줄만 끼움). 자동 소재 Ø18 · 끝면 Z3 · 돌출 37(18.5 ① 과 같은 공기 점 규칙), 닿음 없음.
+  G1 시간 = 60 × 26 / (1.68 × 230) = 4.0373 초, 드웰 1 초.
+- ⑯ 관용 테이퍼 G92 I(O9024): 나사 화면 계산기(`PipeThreadCalc`)가 낸 R 1/2 숫나사 글 그대로(기준면 Z0 · Z4 → −16 · Δd 0.35 · 560 rpm — 공구 줄만 끼움):
+  `M23` / `G92X20.746Z-16.I-.625F1.8143` / `X20.456` … `X19.122` 두 번(13회) / `M24`. T03 나사 55° · 보정 없음. 나사 이동은 시작 Z 쪽이 가늘고 반경 기울기 0.625/20 = 1/32,
+  깎는 회 = 13 + 1(M24 줄 — 18.8). 이 예제로 18.5 의 '테이퍼 나사의 I 는 넣지 않음' 이 풀렸다.
+
+### 19.4 화면
+- 공구 설정 카드: 종류 `Segmented` 에 '다이스'(이름은 새 `toolKindLabel` — 순서 번호에 기대던 공구 시트 · 홀더 시트 줄 두 곳을 when 함수로) → [다이스 지름] [다이스 피치]
+  [나사 각도](자동 60°). 다섯 칸이 되어 종류 글꼴을 14 → 13 으로 줄였다(360dp · 글꼴 1.3 에서 '바이트' · '다이스' 가 '바…' · '다…' 로 줄었다 — 스크린샷으로 확인). 노즈 R · 팁은 G41/G42 를 쓰는 번호일 때만 보인다. 카드 아래 한 줄: 지름 · 피치가 비면 '넣으면 나사 모양을 그립니다 — 비면 경로만',
+  있으면 '소재를 깎지 않고 지름 · 피치 · 각으로 나사 모양(모형)만 … G01 은 X0. 에서 −Z 로만'.
+- 공구표 저장 글(`SimState.encodeTools`)은 10칸(`… 나사각 | 다이스 지름 | 다이스 피치`) — 다이스 칸이 없던 옛 8칸 글도 읽는다.
+- 문제 글 다섯(`simIssueText` — 1.5 표), 도움말 '시뮬레이션 · 공구 설정' 에 다이스 한 줄 · '소재 · 충돌 검사의 한계' 에 다이스 톱니, '저장 · 목록 · 예제' 의 예제 수 16.
+
+### 19.5 시험
+- calc `DieHeadSimTest`: ⑮ 멈춤 0(문제는 M99 안내뿐) · G1 = FEED · DIE_CUT · F1.68 회전당 · 230 rpm · `DieCut(12, 1.75, 60)` · X0 Z6 → Z−20, 시간 손 계산(60 × 26 / 386.4),
+  바로 뒤 드웰 1 초 · 합 5.0373 초 · G0Z150. 은 X0 에서 Z 로만, ⑮ 다이스 줄 = `DieHeadCalc` 글, 나사 특징(리드 1.75 — F 1.68 이 아님 · 60° · 바깥 · 골 반경 4.92648875 ·
+  Z6 ~ −20 · 바이트가 깎은 반경 5.9 그대로 · G1 전에는 없음), 멈춤 꼴 다섯(X ≠ 0 시작 · 끝, +Z, 원호 · 모서리, G98, G92 · G74 둘째 줄), 다이스 규칙은 DIE 공구만(나사 공구 · 보정 00 은 보통 G01),
+  알림 둘(지름 · 피치 빔 · 각 29° → `DIE_DATA_MISSING` 과 나사 특징 없음, 55° 는 받음, F1.8 > P1.75 → `DIE_FEED_OVER_PITCH`, F = P 는 없음).
+- calc `StockTest`: `dieThreadFeature`(다이스만 · Ø10 봉재 — 래스터 그대로, 골 = 5 − 0.640327 × 1.5(55°) · 5 − 0.613435 × 1.5(60°)), `dieAutoStock`(다이스만 → Ø13 · 끝면 0.75 · 돌출 30.75,
+  ⑮ → Ø18 · 끝면 3 · 돌출 37), `toolShapes`(DIE 는 모양 없음). `ExamplesTest`(16개 · 회사 꼴 다섯 · ⑯ 기울기 1/32 · 회 14 · ⑯ 글 = `PipeThreadCalc` 글). `NotationTest` 는 새 예제도 돈다.
+- shared `SimStateTest.toolsRoundTrip`(다이스 칸 왕복 · 10칸 글 · 옛 8칸 글), `SimGoldenTest`(골든 `sim-editor-examples` 에 예제 둘, `sim-issue-texts` 에 새 코드 다섯 + 다이스 경로 낱말 없는 갈래),
+  `TrajGoldenTest` · `Traj3DGoldenTest`(골든 `sim-trajectory` · `sim-3d` 에 예제 둘), `TrajShotsTest.dieHead`(`sim-tools-die` · `sim-tools-die-fs130-w360` · `sim-2d-die` · `sim-2d-pipe`),
+  `SimRobustnessTest`(무작위 공구표에 다이스 칸), 몽키 `SimMonkeyTest.toolSheet` 의 종류 차례에 다이스(BMT_MONKEY 일 때).
+- 일부러 틀린 식으로 시험이 잡는지 확인했다(확인 뒤 되돌림): 나사 특징의 리드를 F 로(`threadFeatureFromToolSettings` · `dieThreadFeature`), +Z 검사를 뺌(`stopForms`),
+  자동 소재가 다이스 이송을 보통 이송으로(`dieAutoStock`), 60° · 55° 골 깊이를 서로 바꿈(`threadFeatureFromToolSettings` · `dieThreadFeature`).
+
+### 19.6 남긴 것
+- 왼나사 다이스(+Z) · 회전 공구 다이스 · 다이스로 PT/NPT(사용자 결정 — 바이트 G92 만) · 머리 열림 당김과 체이서 목의 그림.
+- G70 의 P~Q 안에서 T 로 다이스 공구로 바꾼 뒤의 G01 은 사이클로 막지 않고 위 규칙대로 그린다(드문 꼴이라 따로 막지 않음).

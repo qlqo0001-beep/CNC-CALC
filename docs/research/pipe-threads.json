@@ -1,0 +1,2493 @@
+{
+ "title": "관용 테이퍼 나사 PT(JIS B 0203 · ISO 7-1, R · Rc · Rp) 와 NPT(NBS H28 1957 Part II = ANSI B2.1 계열) — 규격 값과 출처",
+ "researchedAt": "2026-11-05",
+ "rules": [
+  "값은 원문 쪽 그림을 눈으로 읽어 옮겼다(NPT: NBS H28 1957 Part II 2 · 3 · 4 · 5 · 6 · 7 · 14쪽, PT: JIS B 0203:1999 付表1 · 附属書1付表1, ISO 7-1:1994 Table 1 은 같은 글인 IS 554:1999 3쪽). OCR 글은 쪽 찾기와 교차 확인에만 썼다.",
+  "원문 단위 그대로다: PT 는 mm, NPT 는 in. ISO 원문의 소수점 쉼표(0,907)는 점(0.907)으로만 바꿨다.",
+  "JSON 파일 글자에는 원문 자리 수를 그대로 적었다(0.160 · 0.28750). 다만 JSON 을 수로 읽으면 끝 0 이 사라지므로 자리 수가 필요하면 fields 의 칸 설명 끝에 적은 'n자리' 를 본다.",
+  "'산(turns)' 처럼 원문이 분수로 적은 칸(1 1/4 · 2 3/4)은 글자 그대로 문자열로 두었다.",
+  "확인 못 한 칸은 null 로 두고 notFound 에 까닭을 적었다. 기억으로 채운 값은 없다. 표 사이 관계식(예 E1 = E0 + 0.0625·L1)은 원문 값을 검산하는 데만 쓰고 빈칸을 채우지 않았다.",
+  "규격 원문 · 정부 간행물 · 국가 규격 · 제조사 PDF 를 1순위로 했다. 판매처 · 해설 사이트(engineersedge · Wikipedia)는 sourceType secondary 로 두고 대조에만 썼다.",
+  "읽기 방법: WebFetch 가 그림 · PDF 를 받을 때 도구가 스스로 tool-results 폴더에 둔 사본을 Read 로 보았다. 따로 파일을 내려받지 않았다. NBK PDF 는 그 사본에서 py 로 글자만 뽑았다(research-tools/pdf_text.py)."
+ ],
+ "sources": [
+  {
+   "id": "H28_1957_P2",
+   "sourceType": "official",
+   "title": "Screw-Thread Standards for Federal Services 1957, NBS Handbook H28 (1957) Part II — Section VII American Standard Pipe Threads",
+   "publisher": "National Bureau of Standards (미국 정부 간행물, 퍼블릭 도메인)",
+   "edition": "1957 Part II, 발행 1959-11-16 (archive.org 스캔은 NIST Research Library 소장본)",
+   "url": "https://nvlpubs.nist.gov/nistpubs/Legacy/hb/nbshandbook28supp1957pt2.pdf",
+   "readVia": "https://archive.org/details/screwthreadstan2819unit_2 (NIST 원본 PDF 는 10 MB 가 넘어 WebFetch 가 거부 — 같은 책 스캔의 쪽 그림 n11~n16 · n23 을 읽음)",
+   "pages": "2쪽 VII-2 나사 모양 · VII-3 NPT 1~5항(E0 · E1 · L2 식) / 3쪽 그림 VII.1 · 기호 / 4쪽 L2 식 · 6 · 7 · 8항 · 표 VII.1 / 5쪽 표 VII.2 1~11열 / 6쪽 표 VII.2 12~22열 · 각주 / 7쪽 표 VII.3 / 14쪽 8-4 · 8-5 게이지 검사",
+   "note": "할 일 글의 'NBS H28 (1969) Part II' 는 없다 — H28_1969_P1 머리말 참조. 1957 Part II 가 H28 의 마지막 관 나사 판이다"
+  },
+  {
+   "id": "H28_1957_P2_R1962",
+   "sourceType": "official",
+   "title": "같은 책의 1962-04 정정 재인쇄본 (DTIC ADA280082)",
+   "url": "https://archive.org/details/DTIC_ADA280082",
+   "readVia": "djvu OCR 글만 (그림은 안 봄)",
+   "note": "표 VII.2 의 OCR 을 H28_1957_P2 OCR 과 견주는 데만 씀. 5↔6 · 0↔6 오독이 많아 값으로 쓰지 않음. 14 OD L2 산수도 18.90 으로 읽힘"
+  },
+  {
+   "id": "H28_1969_P1",
+   "sourceType": "official",
+   "title": "Screw-Thread Standards for Federal Services, NBS Handbook H28 (1969) Part I",
+   "url": "https://nvlpubs.nist.gov/nistpubs/Legacy/hb/nbshandbook28-1969p1.pdf",
+   "readVia": "https://archive.org/details/screwthreadstand2811unit (djvu OCR 글)",
+   "pages": "Foreword iii",
+   "note": "'At this time, the latest issues of Parts II and III are those of 1957' — 1969 판은 Part I 만 새로 냄"
+  },
+  {
+   "id": "FED_STD_H28_7A",
+   "sourceType": "official",
+   "title": "FED-STD-H28/7A Section 7 Pipe Threads, General Purpose (1984-10-25)",
+   "url": "https://everyspec.com/FED-STD/FED-STD-H28-7A_23379/",
+   "note": "PDF 가 CCITT 그림 스캔이라 WebFetch 로 글을 못 읽음 — 값에 쓰지 않음"
+  },
+  {
+   "id": "ASME_B1_20_1",
+   "sourceType": "official",
+   "title": "ASME B1.20.1-2013 (R2018) Pipe Threads, General Purpose (Inch)",
+   "url": "https://www.asme.org/codes-standards/find-codes-standards/b1201-pipe-threads-general-purpose-inch",
+   "note": "현행 규격. 유료. ASME 미리보기 PDF(https://www.asme.org/getmedia/1a201f23-e83c-42f6-bb4f-90b94e25960c/35257.pdf)는 압축 PDF 라 WebFetch 로 못 읽었고 ANSI 미리보기는 403 — 값에 쓰지 않음"
+  },
+  {
+   "id": "EE_NPT_A",
+   "sourceType": "secondary",
+   "title": "Engineers Edge — National Standard Taper Pipe Threads Size NPT Chart (ANSI/ASME B1.20.1-1983 (R1992) 인용)",
+   "url": "https://www.engineersedge.com/hardware/taper-pipe-threads.htm",
+   "note": "D · n · p · E0 · L1 · E1 · L2 · E2 가 H28_1957_P2 표 VII.2 와 24줄 모두 같음(산수 칸은 없음)"
+  },
+  {
+   "id": "EE_NPT_B",
+   "sourceType": "secondary",
+   "title": "Engineers Edge — Standard Taper Pipe Threads NPT (ANSI/ASME B1.20.1-1983 (R2006) 인용)",
+   "url": "https://www.engineersedge.com/hardware/standard_taper_pipe_threads_npt_15544.htm",
+   "note": "L3 · E3 · V · L4 · L5 · E5 · h · K0 가 H28_1957_P2 표 VII.2 12~22열과 24줄 모두 같음. 각주 c(L3 = 2 in 이하 3산 · 그 위 2산) · d(MIL-P-7105) 도 같음"
+  },
+  {
+   "id": "JIS_B0203_1999",
+   "sourceType": "secondary",
+   "title": "JIS B 0203:1999 管用テーパねじ (ISO 7-1:1994 대응)",
+   "url": "https://kikakurui.com/b0/B0203-1999-01.html",
+   "readVia": "kikakurui.com 의 규격 쪽 그림 page-5.png (付表1 기준 산형 · 식) · page-6.png (付表1 표) · page-9.png (附属書1付表1) 와 본문 글",
+   "edition": "1999 개정판 (JIS B 0203-1982 대체). JSA 2023 핸드북 목록에 'JIS B 0203:1999 · ISO 7-1:1994 (MOD)' 로 실림(검색 결과 발췌, JSA_LIST)",
+   "note": "규격 원문 쪽을 옮겨 실은 비공식 사이트라 secondary 로 둠. JISC 공식 열람은 가입 · 그림 뷰어라 WebFetch 로 못 읽음. 지름 · P · h 는 ISO 표(IS554_ISO7_1, official)와 같고, a · b · c · l · l' · t 는 본문 5.2~5.4 의 규칙과 검산이 모두 맞음(verification)"
+  },
+  {
+   "id": "IS554_ISO7_1",
+   "sourceType": "official",
+   "title": "IS 554 : 1999 Pipe Threads Where Pressure-Tight Joints are Made on the Threads — Dimensions, Tolerances and Designation (= ISO 7-1 : 1994)",
+   "publisher": "Bureau of Indian Standards (인도 국가 규격 — 머리말: 'identical with ISO 7-1 : 1994', 'without deviations')",
+   "url": "https://archive.org/details/gov.in.is.554.1999",
+   "readVia": "archive.org (Public.Resource.Org) 쪽 그림 n6~n11 (원문 2~7쪽)",
+   "pages": "2쪽 3.6~3.11 · 4 기호(d2 · d1 식) / 3쪽 Table 1 · 주 / 4쪽 7.1 그림 1 · 2 (H · h · r) / 5쪽 7.2 · 그림 3 / 6쪽 그림 5 (암나사 기준면 0.5P)",
+   "note": "ISO 7-1 원본 견본(ISO7_1_SAMPLE)과 iso.org 를 못 읽어 같은 글인 IS 554 로 읽음. ISO 7-1:1994 는 3판이 지금도 현행(ISO_STATUS). IS 554:1999 는 ISO 7-1:1994/Cor 1:2007 보다 앞선 글이다 — Cor 1 은 검색 발췌로는 6쪽 그림 5 교체만 보이고 Table 1 을 바꿨다는 기록은 못 찾음(ISO7_1_COR1)"
+  },
+  {
+   "id": "ISO7_1_SAMPLE",
+   "sourceType": "official",
+   "title": "ISO 7-1:1994 견본 PDF (iTeh)",
+   "url": "https://cdn.standards.iteh.ai/samples/20819/7860e4c71b9647f68baf76cd62d6e320/ISO-7-1-1994.pdf",
+   "note": "CCITT 그림 스캔이라 WebFetch 로 못 읽음 — 값에 쓰지 않음"
+  },
+  {
+   "id": "ISO_STATUS",
+   "sourceType": "secondary",
+   "title": "ISO 7-1 현행 여부 (BSI Knowledge · Document Center · ISME 프로젝트 쪽 — 검색 결과)",
+   "url": "https://isme.me/en/project/show/iso:proj:20819",
+   "note": "BSI · Document Center 가 1994 3판을 Current 로 표시, ISME 는 단계 90.93(확인) 2026-04. 새 판 · DIS 는 못 찾음. iso.org 는 403. ISME 쪽에 정오표 ISO 7-1:1994/Cor 1:2007 도 Published 로 실려 있음(R2 대조 때 다시 열어 확인)"
+  },
+  {
+   "id": "ISO7_1_COR1",
+   "sourceType": "secondary",
+   "title": "ISO 7-1:1994/Cor 1:2007 Technical Corrigendum 1 (2007-08) — 있다는 것과 내용 요약만, 검색 결과 발췌",
+   "url": "https://webdesk.jsa.or.jp/link/Cor/ISO/ISO_7-1_1994_Cor_1_2007(E)-Character_PDF_document.pdf",
+   "readVia": "검색 결과 발췌만 (JSA 웹데스크는 R2 대조 때 점검 화면, iso.org/standard/46479.html 은 403)",
+   "note": "발췌: 6쪽 그림 5(암나사 · 숫나사 기준면 · 참조면 · 유효 나사 그림)를 새 그림으로 바꿈. 바뀐 그림 내용과 다른 변경 여부는 원문을 못 읽어 모름"
+  },
+  {
+   "id": "WIKI_BSP",
+   "sourceType": "secondary",
+   "title": "Wikipedia — British Standard Pipe",
+   "url": "https://en.wikipedia.org/wiki/British_Standard_Pipe",
+   "note": "게이지 길이 mm(4.0 · 4.0 · 6.0 · 6.4 · 8.2 · 9.5 · 10.4 · 12.7 · 12.7 · 15.9 · 17.5 · 20.6 · 25.4 · 28.6 · 28.6)와 바깥 · 골 지름이 ISO 표와 같음. 3 1/2 줄(100.330 · 97.372 · 22.2)은 JIS 附属書1 PT 3 1/2 의 d · d1 · a(22.23) 와 맞음. 대조만"
+  },
+  {
+   "id": "WERMAC_SGP",
+   "sourceType": "secondary",
+   "title": "Wermac — JIS G 3452 Carbon steel pipes for ordinary piping (SGP) 치수표",
+   "url": "https://www.wermac.org/societies/jis_g3452.html",
+   "note": "R2 대조 때 JIS 付表1 · 附属書1付表1 의 '配管用炭素鋼鋼管の寸法(参考)' 칸(pipeOD · pipeWall)의 둘째 출처로 씀. 6A ~ 150A (1/8 ~ 6) 15 크기의 바깥지름 · 두께가 모두 같음(원문은 34 · 2 · 5 처럼 끝 0 없이 적음). 제조사 표(日本製鉄 핸드북 4-11 · 丸一鋼管 PDF)는 암호 · 그림 PDF 라 못 읽음"
+  },
+  {
+   "id": "NBK_TAPER",
+   "sourceType": "manufacturer",
+   "title": "鍋屋バイテック(NBK) 기술 자료 — 管用テーパねじ",
+   "url": "https://alb02.internal.nbk1560.com/images/ja-JP/product/technical_data/tapernezi_NBK/tapernezi_NBK_1.pdf",
+   "readVia": "WebFetch 가 둔 PDF 사본에서 글자만 뽑음",
+   "note": "P = 25.4/n, H = 0.960237P, h = 0.640327P, r = 0.137278P 글이 JIS 와 같음. 표 숫자는 글자로 뽑히지 않아 못 봄 — 검색 결과 발췌에는 R1/4 줄 13.157 · 12.301 · 11.445 · 6.01 · ±1.34 · ±1.67 이 보임"
+  },
+  {
+   "id": "NAGANO_TECH",
+   "sourceType": "manufacturer",
+   "title": "長野計器 기술 자료 — JIS B 0203 (ISO 7-1) 管用テーパねじ (抜粋)",
+   "url": "https://products.naganokeiki.co.jp/userfiles/files/technology_document/Technical080402.pdf",
+   "readVia": "검색 결과 발췌만 (PDF 본문은 WebFetch 로 못 읽음)",
+   "note": "발췌의 R1/2 줄 20.955 · 19.793 · 18.631 · 8.16 · ±1.81 · ±2.27 이 JIS 표와 같음"
+  },
+  {
+   "id": "JSA_LIST",
+   "sourceType": "official",
+   "title": "日本規格協会 JIS ハンドブック 2023 목록",
+   "url": "https://webdesk.jsa.or.jp/link/lib/jis2023/index/jishb23-04-1.pdf",
+   "readVia": "검색 결과 발췌만 (WebFetch 때 점검 화면이 나옴)",
+   "note": "'JIS B 0203:1999 管用テーパねじ · ISO 7-1:1994 (MOD)'"
+  }
+ ],
+ "fields": {
+  "PT.jis": {
+   "unit": "mm",
+   "P": "피치 (참고) — 소수 4자리",
+   "h": "산의 높이 — 3자리",
+   "r": "산봉우리 · 골 둥글기 r (평행 암나사는 r') — 2자리",
+   "d": "기준경의 위치에서 숫나사 바깥지름 = 암나사 골지름 D — 3자리",
+   "d2": "유효지름 = D2 — 3자리",
+   "d1": "숫나사 골지름 = 암나사 안지름 D1 — 3자리",
+   "a": "기준 길이: 관 끝에서 기준경 위치까지 (숫나사) — 2자리",
+   "b": "a 의 축 방향 허용차 ± — 2자리",
+   "c": "암나사: 관 끝 쪽(管端部) 기준경 위치의 축 방향 허용차 ± — 2자리",
+   "parallelInternalTol": "평행 암나사(Rp)의 D · D2 · D1 허용차 ± — 3자리",
+   "f": "숫나사 유효 나사부 최소 길이: 기준경 위치에서 큰 지름 쪽으로 (= ISO 접합 여유 fittingAllowance 와 같은 값) — 1자리",
+   "l": "암나사(불완전 나사부 있음) 테이퍼 암나사 유효 나사부 최소 길이: 기준경 위치에서 작은 지름 쪽으로 — 1자리",
+   "lPrime": "암나사(불완전 나사부 있음) 평행 암나사 유효 나사부 최소 길이: 관 · 이음쇠 끝에서 — 1자리 (附属書1 표는 '(참고)')",
+   "t": "암나사(불완전 나사부 없음 = 도피 있음) 테이퍼 · 평행 암나사 유효 나사부 최소 길이 — 1자리",
+   "pipeOD": "배관용 탄소강 강관 바깥지름 (참고) — 1자리 (R1 은 본체 표 '34', 附属書1 표 '34.0')",
+   "pipeWall": "같은 강관 두께 (참고) — 1자리"
+  },
+  "PT.iso": {
+   "unit": "mm",
+   "P": "피치 — 3자리",
+   "h": "나사 높이 — 3자리",
+   "d": "기준면(gauge plane) 바깥지름 = 게이지 지름 — 3자리",
+   "d2": "기준면 유효지름 — 3자리",
+   "d1": "기준면 골지름 — 3자리",
+   "gaugeLength": "숫나사 게이지 길이 Nominal (8열) — 1자리, 1/16 · 1/8 · 1/4 은 원문이 정수 '4' · '4' · '6'",
+   "T1half": "게이지 길이 허용차 ±T1/2 mm (9열, 참고값)",
+   "T1halfTurns": "같은 허용차의 산 수 (10열, 규정값)",
+   "gaugeLengthMax": "게이지 길이 max (11열)",
+   "gaugeLengthMin": "게이지 길이 min (12열)",
+   "T2half": "암나사 기준면 위치 허용차 ±T2/2 mm (13열, 참고값)",
+   "T2halfTurns": "같은 허용차의 산 수 (14열, 규정값)",
+   "usefulThreadForNominal": "숫나사 유효 나사 길이 최소 — nominal 게이지 길이일 때 (15열)",
+   "usefulThreadForMax": "같은 것 — max 게이지 길이일 때 (16열, 암나사는 이 길이의 숫나사를 받아야 함 7.2.2) — 1/4 · 1/2 은 원문이 '11' · '15'",
+   "usefulThreadForMin": "같은 것 — min 게이지 길이일 때 (17열, 도피 있는 암나사 최소 길이는 이 값의 80 % 이상 7.2.2)",
+   "fittingAllowance": "접합 여유 mm (18열, 참고값)",
+   "fittingAllowanceTurns": "접합 여유 산 수 (19열, 규정값)",
+   "parallelInternalTol": "평행 암나사 지름 허용차 ± (20열, 주 1: 14열 × P × 1/16)"
+  },
+  "NPT": {
+   "unit": "in",
+   "D": "관 바깥지름 (2열) — 3자리, 1/16 만 4자리 0.3125",
+   "tpi": "인치당 산수 n (3열) — 11½ 은 11.5 로 적음",
+   "p": "피치 (4열) — 5자리",
+   "E0": "숫나사 시작(관 끝)의 피치경 (5열) — 5자리",
+   "L1": "손 조임 물림 길이 (6열) — 원문 3자리(1/8 · 1/4 만 4자리 .1615 · .2278). 각주 b: 얇은 링 게이지 길이 · 플러그 게이지 노치에서 작은 끝까지 길이",
+   "L1Thds": "L1 의 산 수 (7열) — 2자리",
+   "E1": "손 조임 면(게이지 노치)의 피치경 (8열) — 5자리",
+   "L2": "숫나사 유효 나사 길이 (9열) — 4자리, 각주 d: 플러그 게이지 길이",
+   "L2Thds": "L2 의 산 수 (10열) — 2자리",
+   "E2": "L2 끝의 피치경 (11열) — 5자리",
+   "L3": "암나사 렌치 조임 길이 (12열) — 4자리",
+   "L3Thds": "L3 의 산 수 (13열)",
+   "E3": "L3 끝 피치경 (14열) — 5자리",
+   "V": "불완전(소멸) 나사 길이 (15열) — 4자리",
+   "VThds": "V 의 산 수 (16열) = 3.47",
+   "L4": "숫나사 전체 길이 (17열) — 4자리",
+   "L5": "완전 나사 길이 (18열, 각주 e: L5 = L2 − 2p) — 4자리",
+   "E5": "L5 끝 피치경 (19열) — 5자리",
+   "h": "나사 높이 (20열) = 0.8p — 5자리",
+   "diaIncreasePerThread": "한 산당 지름 증가 0.0625/n (21열) — 5자리 (= ±1산 허용차의 지름 환산)",
+   "K0": "관 끝의 기본 골지름 (22열, 각주 f: 탭 드릴 고를 때 참고) — 4자리"
+  }
+ },
+ "constants": {
+  "PT": {
+   "standards": "JIS B 0203:1999 (본체는 ISO 7-1:1994 의 기술 내용을 '암나사 기준경의 위치 규정을 빼고' 바꾸지 않음 — 序文 · まえがき) · ISO 7-1:1994",
+   "pitch": {
+    "formula": "P = 25.4 / n",
+    "sourceRefs": [
+     {
+      "sourceId": "JIS_B0203_1999",
+      "page": "付表1 그림 (원문 4쪽, kikakurui page-5)"
+     },
+     {
+      "sourceId": "NBK_TAPER",
+      "page": "1쪽"
+     }
+    ]
+   },
+   "angle": {
+    "value": 55,
+    "unit": "deg",
+    "half": "27.5° (JIS 그림) · 27°30′ (ISO 그림 1 · 2)",
+    "sourceRefs": [
+     {
+      "sourceId": "JIS_B0203_1999",
+      "page": "付表1 그림 (원문 4쪽)"
+     },
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "4쪽 7.1.1 · 7.1.2"
+     }
+    ]
+   },
+   "bisectorPerpendicularToAxis": {
+    "value": true,
+    "text": "JIS 付表1 備考1 'ねじ山は中心軸線に直角とし，ピッチは中心軸線に沿って測る' · 그림의 90° (나사 축선) / ISO 7.1.2 'the flanks making equal angles with the axis' · 그림 2 의 90°",
+    "sourceRefs": [
+     {
+      "sourceId": "JIS_B0203_1999",
+      "page": "付表1 備考1 · 그림"
+     },
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "4쪽 7.1.2 · 그림 2"
+     }
+    ]
+   },
+   "taper": {
+    "value": "1:16",
+    "on": "지름",
+    "text": "ISO 7.1.2 'The taper is 1 to 16, measured on the diameter' · JIS 그림의 16 : 1",
+    "sourceRefs": [
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "4쪽 7.1.2"
+     },
+     {
+      "sourceId": "JIS_B0203_1999",
+      "page": "付表1 그림"
+     }
+    ]
+   },
+   "taperThreadProfile": {
+    "appliesTo": "R · Rc (테이퍼 숫나사 · 테이퍼 암나사)",
+    "H": 0.960237,
+    "h": 0.640327,
+    "r": 0.137278,
+    "unit": "× P",
+    "sourceRefs": [
+     {
+      "sourceId": "JIS_B0203_1999",
+      "page": "付表1 그림 (원문 4쪽)"
+     },
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "4쪽 그림 2"
+     },
+     {
+      "sourceId": "NBK_TAPER",
+      "page": "1쪽"
+     }
+    ]
+   },
+   "parallelInternalProfile": {
+    "appliesTo": "Rp (평행 암나사)",
+    "H": 0.960491,
+    "h": 0.640327,
+    "r": 0.137329,
+    "unit": "× P",
+    "text": "ISO 7.1.2: 테이퍼 나사도 평행 나사와 같은 h 가 되게 둥글린다",
+    "sourceRefs": [
+     {
+      "sourceId": "JIS_B0203_1999",
+      "page": "付表1 그림 (원문 4쪽, H' · r')"
+     },
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "4쪽 그림 1"
+     }
+    ]
+   },
+   "diameters": {
+    "text": "D2 = d2 = d − 0.640327P, D1 = d1 = d − 1.280654P (기준면에서)",
+    "sourceRefs": [
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "2쪽 4 Symbols"
+     }
+    ]
+   },
+   "isoTableNote": {
+    "text": "ISO Table 1 주: 주요 치수는 1 in = 25.4 mm 로 산수 → P, h = 0.640327P, 기준면 바깥지름을 먼저 환산하고, 유효 · 골지름은 h 를 한 번 · 두 번 빼서 냈다. 게이지 길이 · 허용차 · 접합 여유는 바로 계산, 나머지 길이는 그것들을 더하고 뺐다. 주 2: mm 허용차는 규정값(산 수) × P 를 0.1 mm 로 반올림한 참고값",
+    "sourceRefs": [
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "3쪽 Table 1 주"
+     }
+    ]
+   },
+   "gaugePlaneInternal": {
+    "iso": "암나사 기준면은 나사 낸 부분 끝면에서 반 피치(0.5P) 안쪽 — 정의 3.3 의 NOTE 4 (1쪽, 모따기로 없어진 나사 시작을 감안) · 그림 5 (6쪽). 그림 5 는 ISO 7-1:1994/Cor 1:2007 에서 새 그림으로 바뀌었고(IS 554:1999 는 그 전 글) 새 그림은 보지 못함 — 0.5P 의 근거는 Cor 1 이 손대지 않은 것으로 보이는 본문 NOTE 4 다(ISO7_1_COR1)",
+    "jis": "암나사 기준경 위치는 관 끝 쪽(管端部) — 付表1 열 머리 '基準径の位置 めねじ 管端部 軸線方向の許容差 c'. JIS 前書き: '今回の改正では，めねじ基準径の位置を除き，改正された国際規格との整合を図った'",
+    "sourceRefs": [
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "1쪽 3.3 NOTE 4 · 6쪽 그림 5 (1994 원판 그림)"
+     },
+     {
+      "sourceId": "ISO7_1_COR1",
+      "page": "그림 5 교체 (검색 발췌)"
+     },
+     {
+      "sourceId": "JIS_B0203_1999",
+      "page": "まえがき · 付表1 열 머리"
+     }
+    ]
+   },
+   "tolerancesInTurns": {
+    "externalGaugeLength": "±1산 (1/16 ~ 2), ±1 1/2산 (2 1/2 ~ 6) — ISO 10열",
+    "internalGaugePlane": "±1 1/4산 (1/16 ~ 2), ±1 1/2산 (2 1/2 ~ 6) — ISO 14열",
+    "fittingAllowance": "2 3/4산 (1/16 ~ 1 1/2), 3 1/4 (2), 4 (2 1/2 · 3), 4 1/2 (4), 5 (5 · 6) — ISO 19열",
+    "jisNote": "JIS b · c 값도 같은 산 수 × P 를 0.01 mm 로 둥근 값과 맞음(검산)",
+    "sourceRefs": [
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "3쪽 Table 1"
+     }
+    ]
+   },
+   "lengthRules": {
+    "iso": "7.2.1 숫나사 유효 나사 최소 길이 = 최소 게이지 길이 + 접합 여유. 7.2.2 암나사 부품은 16열 길이의 숫나사를 받을 수 있게, 도피(free run-out)가 있으면 유효 나사 최소 길이 ≥ 17열 값의 80 %",
+    "jis": "5.2 숫나사 유효 나사부 ≥ 기준 길이 최소값 + 接合しろ. 5.3 테이퍼 암나사는 기준면에서 ≥ 기준 길이 최대값 + 工具締めしろ 의 숫나사 길이, 평행 암나사는 끝면에서 ≥ 기준 길이 최대값 + 接合しろ. 5.4 도피 있는 암나사 ≥ 기준 길이 최소값 + 接合しろ 의 80 %",
+    "sourceRefs": [
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "5쪽 7.2"
+     },
+     {
+      "sourceId": "JIS_B0203_1999",
+      "page": "본문 5.2 ~ 5.4"
+     }
+    ]
+   },
+   "definitions": {
+    "jis": "基準径 = 기준면의 숫나사 바깥지름 · 암나사 골지름, 基準長さ = 숫나사 기준면에서 작은 지름 끝까지, 接合しろ = 허용차 상한 암나사와 맞물리기 위한 숫나사 기준면 너머 유효 나사 길이, 工具締めしろ = 接合しろ − 암나사 기준면 위치 허용차 상한, 有効ねじ部 = 완전 + 불완전 나사부(切上げ 빼고)",
+    "iso": "3.10 fitting allowance, 3.11 wrenching allowance(손 조임 위치를 넘어 공구로 조이는 움직임을 받는 길이 — 표에 값 없음), 3.9 useful thread = complete + incomplete (washout 빼고)",
+    "sourceRefs": [
+     {
+      "sourceId": "JIS_B0203_1999",
+      "page": "본문 3. 定義"
+     },
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "2쪽 3.6 ~ 3.11"
+     }
+    ]
+   },
+   "designation": {
+    "iso": "Pipe thread ISO 7 - Rp 1 1/2 · Rc 1 1/2 · R 1 1/2, 왼나사는 LH",
+    "jis": "R · Rc · Rp (付表1 주 4). 옛 PT · PS 는 附属書1 의 PT 3 1/2 · PT 7 ~ 12 · PS 3 1/2 · PS 7 ~ 12 에만 규정으로 남음. 附属書1付表1 에는 PT 1/8 ~ PT 6 줄도 음영으로 실려 있으나, 備考5 가 '음영 부분은 이 附属書의 규정 밖이고 내용은 본체 R 1/8 ~ R 3 · R 4 ~ R 6 과 같으며, 호칭이 달라 ISO 와 맞추려면 쓰지 않는 것이 좋다' 고 적음",
+    "sourceRefs": [
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "4쪽 6.3 · 6.4"
+     },
+     {
+      "sourceId": "JIS_B0203_1999",
+      "page": "付表1 주 4 · 본문 1. · 附属書1付表1 (원문 8쪽, page-9 그림의 음영 줄) · 備考5 (원문 10쪽)"
+     }
+    ]
+   },
+   "inspection": {
+    "jis": "JIS B 0253 테이퍼 나사 게이지 (본문 7.)",
+    "iso": "ISO 7-2 플러그 · 링 게이지, 기준(reference) 면 기준 (8)",
+    "sourceRefs": [
+     {
+      "sourceId": "JIS_B0203_1999",
+      "page": "본문 7."
+     },
+     {
+      "sourceId": "IS554_ISO7_1",
+      "page": "5쪽 8"
+     }
+    ]
+   }
+  },
+  "NPT": {
+   "standard": "NBS H28 (1957) Part II Section VII 3 'Specifications for taper pipe threads for general use, NPT' (같은 값이 ANSI/ASME B1.20.1-1983 — EE_NPT_A · B 로 대조)",
+   "angle": {
+    "value": 60,
+    "unit": "deg",
+    "text": "VII-2-1 'The angle between the sides of the thread is 60° when measured in an axial plane. The line bisecting this angle is perpendicular to the axis.'",
+    "bisectorPerpendicularToAxis": true,
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "2쪽 VII-2-1"
+     }
+    ]
+   },
+   "H": {
+    "formula": "H = 0.866025p = 0.866025/n",
+    "note": "그림 VII.1 주: 테이퍼 나사의 정확한 값은 0.865743p 이나 차이(8산에서 0.000035 in)가 작아 0.866025p 를 쓴다",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "2쪽 VII-2-2 · 3쪽 그림 VII.1 주"
+     }
+    ]
+   },
+   "h": {
+    "formula": "h = 0.800p = 0.800/n",
+    "isEightTenthsP": true,
+    "text": "기본 최대 깊이(the basic maximum depth of the truncated thread). 표 VII.2 20열 값이 0.8p 와 모두 맞음",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "2쪽 VII-2-2 · 3쪽 기호 'h=0.800000p'"
+     }
+    ]
+   },
+   "truncationMin": {
+    "formula": "0.033p",
+    "text": "산봉우리 · 골은 최소 0.033p 깎는다. 각주 3: 피치선에 나란히 또는 축에 나란히 깎아도 됨. 최대는 표 VII.1",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "2쪽 VII-2-2 · 각주 3"
+     }
+    ]
+   },
+   "taper": {
+    "value": "1 in 16",
+    "inPerFt": 0.75,
+    "on": "지름, 축을 따라",
+    "halfAngle": "1°47′ (그림 VII.1)",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "2쪽 VII-3-3 · 3쪽 그림 VII.1"
+     }
+    ]
+   },
+   "E0": {
+    "formula": "E0 = D − (0.05D + 1.1) 1/n = D − (0.05D + 1.1)p",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "2쪽 VII-3-4"
+     }
+    ]
+   },
+   "E1": {
+    "formula": "E1 = E0 + 0.0625 L1",
+    "note": "각주 4: 1/8-27 · 1/4-18 은 E1 ≈ D − (0.05D + 0.827)p. L1 은 식이 없고 표 VII.2 6열 값(6항: 게이지의 구조와 사용으로 정해짐)",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "2쪽 VII-3-4 · 각주 4 · 4쪽 6항"
+     }
+    ]
+   },
+   "L2": {
+    "formula": "L2 = (0.80D + 6.8) 1/n = (0.80D + 6.8)p",
+    "text": "이 길이에는 산봉우리가 조금 불완전한 쓸 수 있는 2산이 들어 있다",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "2 · 4쪽 VII-3-5"
+     }
+    ]
+   },
+   "L5": {
+    "formula": "L5 = L2 − 2p",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "6쪽 표 VII.2 각주 e"
+     }
+    ]
+   },
+   "V": {
+    "value": "3.47 산",
+    "text": "다이 모따기 때문의 불완전 나사(표 머리 그림). L4 = L2 + V 는 표 값으로 맞음(식 글은 없음)",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "5쪽 그림 · 6쪽 15 · 16열"
+     }
+    ]
+   },
+   "L3": {
+    "value": "3산 (2 in 이하), 2산 (2 1/2 in 이상)",
+    "note": "각주 g: MIL-P-7105 는 3 in 이하를 3산",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "6쪽 12 · 13열 · 각주 g"
+     }
+    ]
+   },
+   "productTolerance": {
+    "value": "±1산 (게이지)",
+    "text": "8항: 'The maximum allowable variation in the commercial product is 1 turn of the inspection (working) gage large or small from the basic dimensions'. 8-4 · 8-5: 링 게이지 면 · 플러그 게이지 노치가 나사 끝과 flush 에서 1산 안. 8-6: 모따기 · 카운터싱크 암나사는 노치를 모따기 바닥(대략 끝면에서 p/2)에 맞춤",
+    "diametralEquivalent": "표 VII.2 21열 0.0625/n (= 한 산의 지름 증가)",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "4쪽 8항 · 14쪽 8-4 · 8-5 · 8-6"
+     }
+    ]
+   },
+   "elementTolerances": {
+    "title": "표 VII.3 강 제품과 강 · 연철 · 황동 관(맞대기 용접관 제외)의 테이퍼 · 리드 · 각 허용차 — 탭 · 다이 · 체이서 한계의 지침, 제품에 요구될 수 있음",
+    "rows": [
+     {
+      "sizes": "1/16, 1/8",
+      "tpi": 27,
+      "taperMaxInPerFt": "7/8",
+      "taperMinInPerFt": "11/16",
+      "leadPlusMinus": 0.003,
+      "angle60PlusMinusDeg": "2 1/2"
+     },
+     {
+      "sizes": "1/4, 3/8",
+      "tpi": 18,
+      "taperMaxInPerFt": "7/8",
+      "taperMinInPerFt": "11/16",
+      "leadPlusMinus": 0.003,
+      "angle60PlusMinusDeg": "2"
+     },
+     {
+      "sizes": "1/2, 3/4",
+      "tpi": 14,
+      "taperMaxInPerFt": "7/8",
+      "taperMinInPerFt": "11/16",
+      "leadPlusMinus": 0.003,
+      "leadFootnote": "a",
+      "angle60PlusMinusDeg": "2"
+     },
+     {
+      "sizes": "1, 1 1/4, 1 1/2, 2",
+      "tpi": 11.5,
+      "taperMaxInPerFt": "7/8",
+      "taperMinInPerFt": "11/16",
+      "leadPlusMinus": 0.003,
+      "leadFootnote": "a",
+      "angle60PlusMinusDeg": "1 1/2"
+     },
+     {
+      "sizes": "2 1/2 이상",
+      "tpi": 8,
+      "taperMaxInPerFt": "7/8",
+      "taperMinInPerFt": "11/16",
+      "leadPlusMinus": 0.003,
+      "leadFootnote": "a",
+      "angle60PlusMinusDeg": "1 1/2"
+     }
+    ],
+    "footnoteA": "리드 허용차는 유효 나사 길이가 1 in 를 넘는 크기에서 ±0.003 in./in.",
+    "note": "리드 칸 단위는 in (유효 나사 길이 안에서). 테이퍼 7/8 · 11/16 in./ft = 기본 3/4 in./ft 에서 +1/8 · −1/16. 깊이 허용차는 표 VII.1, 피치경 허용차는 8항",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "7쪽 표 VII.3"
+     }
+    ]
+   },
+   "truncation": {
+    "title": "표 VII.1 NPT 숫나사 · 암나사의 산봉우리 · 골 깎임 한계 (in) — 2열 H, 3 · 4열 h max · min, 5~9열 깎임 f (최소 · 최대 · 공차), 10~14열 같은 폭의 평탄부 F (최소 · 최대 · 공차)",
+    "rows": [
+     {
+      "tpi": 27,
+      "H": 0.03208,
+      "hMax": 0.02963,
+      "hMin": 0.02496,
+      "fMinFormula": "0.033p",
+      "fMin": 0.0012,
+      "fMaxFormula": "0.096p",
+      "fMax": 0.0036,
+      "fTol": 0.0024,
+      "FMinFormula": "0.038p",
+      "FMin": 0.0014,
+      "FMaxFormula": "0.111p",
+      "FMax": 0.0041,
+      "FTol": 0.0027
+     },
+     {
+      "tpi": 18,
+      "H": 0.04811,
+      "hMax": 0.04444,
+      "hMin": 0.03833,
+      "fMinFormula": "0.033p",
+      "fMin": 0.0018,
+      "fMaxFormula": "0.088p",
+      "fMax": 0.0049,
+      "fTol": 0.0031,
+      "FMinFormula": "0.038p",
+      "FMin": 0.0021,
+      "FMaxFormula": "0.102p",
+      "FMax": 0.0057,
+      "FTol": 0.0036
+     },
+     {
+      "tpi": 14,
+      "H": 0.06186,
+      "hMax": 0.05714,
+      "hMin": 0.05071,
+      "fMinFormula": "0.033p",
+      "fMin": 0.0024,
+      "fMaxFormula": "0.078p",
+      "fMax": 0.0056,
+      "fTol": 0.0032,
+      "FMinFormula": "0.038p",
+      "FMin": 0.0027,
+      "FMaxFormula": "0.090p",
+      "FMax": 0.0064,
+      "FTol": 0.0037
+     },
+     {
+      "tpi": 11.5,
+      "H": 0.07531,
+      "hMax": 0.06957,
+      "hMin": 0.06261,
+      "fMinFormula": "0.033p",
+      "fMin": 0.0029,
+      "fMaxFormula": "0.073p",
+      "fMax": 0.0063,
+      "fTol": 0.0034,
+      "FMinFormula": "0.038p",
+      "FMin": 0.0033,
+      "FMaxFormula": "0.084p",
+      "FMax": 0.0073,
+      "FTol": 0.0040
+     },
+     {
+      "tpi": 8,
+      "H": 0.10825,
+      "hMax": 0.10000,
+      "hMin": 0.09275,
+      "fMinFormula": "0.033p",
+      "fMin": 0.0041,
+      "fMaxFormula": "0.062p",
+      "fMax": 0.0078,
+      "fTol": 0.0037,
+      "FMinFormula": "0.038p",
+      "FMin": 0.0048,
+      "FMaxFormula": "0.072p",
+      "FMax": 0.0090,
+      "FTol": 0.0042
+     }
+    ],
+    "footnoteB": "평탄 테이퍼 플러그 · 링 게이지처럼 최대 · 최소 깎임(5~8열)에 따른 게이지 치수는 3 · 4열 나사 높이를 E0 또는 E1 에 적용해 정한다. 공차 노치 단계값은 (3열 − 4열) × 16",
+    "note": "표 각주 a: 이 한계는 탭 · 다이 · 체이서 한계의 지침이며 제품에 요구될 수 있다. 2-2항: 제품 나사는 공구 산봉우리 · 골이 이 한계 안이면 받아들인다",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "4쪽 표 VII.1 · 2쪽 VII-2-2"
+     }
+    ]
+   },
+   "designation": {
+    "example": "3/8—18NPT",
+    "sourceRefs": [
+     {
+      "sourceId": "H28_1957_P2",
+      "page": "2쪽 VII-3-1"
+     }
+    ]
+   }
+  }
+ },
+ "PT": [
+  {
+   "size": "1/16",
+   "designation": {
+    "taperExternal": "R 1/16",
+    "taperInternal": "Rc 1/16",
+    "parallelInternal": "Rp 1/16",
+    "iso": "Pipe thread ISO 7 - R 1/16 (Rc · Rp)"
+   },
+   "tpi": 28,
+   "jis": {
+    "P": 0.9071,
+    "h": 0.581,
+    "r": 0.12,
+    "d": 7.723,
+    "d2": 7.142,
+    "d1": 6.561,
+    "a": 3.97,
+    "b": 0.91,
+    "c": 1.13,
+    "parallelInternalTol": 0.071,
+    "f": 2.5,
+    "l": 6.2,
+    "lPrime": 7.4,
+    "t": 4.4,
+    "pipeOD": null,
+    "pipeWall": null,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 0.907,
+    "h": 0.581,
+    "d": 7.723,
+    "d2": 7.142,
+    "d1": 6.561,
+    "gaugeLength": 4,
+    "T1half": 0.9,
+    "T1halfTurns": "1",
+    "gaugeLengthMax": 4.9,
+    "gaugeLengthMin": 3.1,
+    "T2half": 1.1,
+    "T2halfTurns": "1 1/4",
+    "usefulThreadForNominal": 6.5,
+    "usefulThreadForMax": 7.4,
+    "usefulThreadForMin": 5.6,
+    "fittingAllowance": 2.5,
+    "fittingAllowanceTurns": "2 3/4",
+    "parallelInternalTol": 0.071,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 3.97 ↔ ISO 4",
+    "숫나사 축 방향 허용차: JIS ±0.91 ↔ ISO ±0.9 (1산)",
+    "암나사 기준면 허용차: JIS ±1.13 ↔ ISO ±1.1 (1 1/4산)",
+    "피치 P: JIS 0.9071 ↔ ISO 0.907 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "1/8",
+   "designation": {
+    "taperExternal": "R 1/8",
+    "taperInternal": "Rc 1/8",
+    "parallelInternal": "Rp 1/8",
+    "iso": "Pipe thread ISO 7 - R 1/8 (Rc · Rp)"
+   },
+   "tpi": 28,
+   "jis": {
+    "P": 0.9071,
+    "h": 0.581,
+    "r": 0.12,
+    "d": 9.728,
+    "d2": 9.147,
+    "d1": 8.566,
+    "a": 3.97,
+    "b": 0.91,
+    "c": 1.13,
+    "parallelInternalTol": 0.071,
+    "f": 2.5,
+    "l": 6.2,
+    "lPrime": 7.4,
+    "t": 4.4,
+    "pipeOD": 10.5,
+    "pipeWall": 2.0,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 0.907,
+    "h": 0.581,
+    "d": 9.728,
+    "d2": 9.147,
+    "d1": 8.566,
+    "gaugeLength": 4,
+    "T1half": 0.9,
+    "T1halfTurns": "1",
+    "gaugeLengthMax": 4.9,
+    "gaugeLengthMin": 3.1,
+    "T2half": 1.1,
+    "T2halfTurns": "1 1/4",
+    "usefulThreadForNominal": 6.5,
+    "usefulThreadForMax": 7.4,
+    "usefulThreadForMin": 5.6,
+    "fittingAllowance": 2.5,
+    "fittingAllowanceTurns": "2 3/4",
+    "parallelInternalTol": 0.071,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 3.97 ↔ ISO 4",
+    "숫나사 축 방향 허용차: JIS ±0.91 ↔ ISO ±0.9 (1산)",
+    "암나사 기준면 허용차: JIS ±1.13 ↔ ISO ±1.1 (1 1/4산)",
+    "피치 P: JIS 0.9071 ↔ ISO 0.907 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "1/4",
+   "designation": {
+    "taperExternal": "R 1/4",
+    "taperInternal": "Rc 1/4",
+    "parallelInternal": "Rp 1/4",
+    "iso": "Pipe thread ISO 7 - R 1/4 (Rc · Rp)"
+   },
+   "tpi": 19,
+   "jis": {
+    "P": 1.3368,
+    "h": 0.856,
+    "r": 0.18,
+    "d": 13.157,
+    "d2": 12.301,
+    "d1": 11.445,
+    "a": 6.01,
+    "b": 1.34,
+    "c": 1.67,
+    "parallelInternalTol": 0.104,
+    "f": 3.7,
+    "l": 9.4,
+    "lPrime": 11.0,
+    "t": 6.7,
+    "pipeOD": 13.8,
+    "pipeWall": 2.3,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)",
+    "checkedWith": [
+     "NBK_TAPER"
+    ]
+   },
+   "iso": {
+    "P": 1.337,
+    "h": 0.856,
+    "d": 13.157,
+    "d2": 12.301,
+    "d1": 11.445,
+    "gaugeLength": 6,
+    "T1half": 1.3,
+    "T1halfTurns": "1",
+    "gaugeLengthMax": 7.3,
+    "gaugeLengthMin": 4.7,
+    "T2half": 1.7,
+    "T2halfTurns": "1 1/4",
+    "usefulThreadForNominal": 9.7,
+    "usefulThreadForMax": 11,
+    "usefulThreadForMin": 8.4,
+    "fittingAllowance": 3.7,
+    "fittingAllowanceTurns": "2 3/4",
+    "parallelInternalTol": 0.104,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 6.01 ↔ ISO 6",
+    "숫나사 축 방향 허용차: JIS ±1.34 ↔ ISO ±1.3 (1산)",
+    "암나사 기준면 허용차: JIS ±1.67 ↔ ISO ±1.7 (1 1/4산)",
+    "피치 P: JIS 1.3368 ↔ ISO 1.337 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "3/8",
+   "designation": {
+    "taperExternal": "R 3/8",
+    "taperInternal": "Rc 3/8",
+    "parallelInternal": "Rp 3/8",
+    "iso": "Pipe thread ISO 7 - R 3/8 (Rc · Rp)"
+   },
+   "tpi": 19,
+   "jis": {
+    "P": 1.3368,
+    "h": 0.856,
+    "r": 0.18,
+    "d": 16.662,
+    "d2": 15.806,
+    "d1": 14.950,
+    "a": 6.35,
+    "b": 1.34,
+    "c": 1.67,
+    "parallelInternalTol": 0.104,
+    "f": 3.7,
+    "l": 9.7,
+    "lPrime": 11.4,
+    "t": 7.0,
+    "pipeOD": 17.3,
+    "pipeWall": 2.3,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 1.337,
+    "h": 0.856,
+    "d": 16.662,
+    "d2": 15.806,
+    "d1": 14.950,
+    "gaugeLength": 6.4,
+    "T1half": 1.3,
+    "T1halfTurns": "1",
+    "gaugeLengthMax": 7.7,
+    "gaugeLengthMin": 5.1,
+    "T2half": 1.7,
+    "T2halfTurns": "1 1/4",
+    "usefulThreadForNominal": 10.1,
+    "usefulThreadForMax": 11.4,
+    "usefulThreadForMin": 8.8,
+    "fittingAllowance": 3.7,
+    "fittingAllowanceTurns": "2 3/4",
+    "parallelInternalTol": 0.104,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 6.35 ↔ ISO 6.4",
+    "숫나사 축 방향 허용차: JIS ±1.34 ↔ ISO ±1.3 (1산)",
+    "암나사 기준면 허용차: JIS ±1.67 ↔ ISO ±1.7 (1 1/4산)",
+    "피치 P: JIS 1.3368 ↔ ISO 1.337 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "1/2",
+   "designation": {
+    "taperExternal": "R 1/2",
+    "taperInternal": "Rc 1/2",
+    "parallelInternal": "Rp 1/2",
+    "iso": "Pipe thread ISO 7 - R 1/2 (Rc · Rp)"
+   },
+   "tpi": 14,
+   "jis": {
+    "P": 1.8143,
+    "h": 1.162,
+    "r": 0.25,
+    "d": 20.955,
+    "d2": 19.793,
+    "d1": 18.631,
+    "a": 8.16,
+    "b": 1.81,
+    "c": 2.27,
+    "parallelInternalTol": 0.142,
+    "f": 5.0,
+    "l": 12.7,
+    "lPrime": 15.0,
+    "t": 9.1,
+    "pipeOD": 21.7,
+    "pipeWall": 2.8,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)",
+    "checkedWith": [
+     "NAGANO_TECH"
+    ]
+   },
+   "iso": {
+    "P": 1.814,
+    "h": 1.162,
+    "d": 20.955,
+    "d2": 19.793,
+    "d1": 18.631,
+    "gaugeLength": 8.2,
+    "T1half": 1.8,
+    "T1halfTurns": "1",
+    "gaugeLengthMax": 10.0,
+    "gaugeLengthMin": 6.4,
+    "T2half": 2.3,
+    "T2halfTurns": "1 1/4",
+    "usefulThreadForNominal": 13.2,
+    "usefulThreadForMax": 15,
+    "usefulThreadForMin": 11.4,
+    "fittingAllowance": 5.0,
+    "fittingAllowanceTurns": "2 3/4",
+    "parallelInternalTol": 0.142,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 8.16 ↔ ISO 8.2",
+    "숫나사 축 방향 허용차: JIS ±1.81 ↔ ISO ±1.8 (1산)",
+    "암나사 기준면 허용차: JIS ±2.27 ↔ ISO ±2.3 (1 1/4산)",
+    "피치 P: JIS 1.8143 ↔ ISO 1.814 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "3/4",
+   "designation": {
+    "taperExternal": "R 3/4",
+    "taperInternal": "Rc 3/4",
+    "parallelInternal": "Rp 3/4",
+    "iso": "Pipe thread ISO 7 - R 3/4 (Rc · Rp)"
+   },
+   "tpi": 14,
+   "jis": {
+    "P": 1.8143,
+    "h": 1.162,
+    "r": 0.25,
+    "d": 26.441,
+    "d2": 25.279,
+    "d1": 24.117,
+    "a": 9.53,
+    "b": 1.81,
+    "c": 2.27,
+    "parallelInternalTol": 0.142,
+    "f": 5.0,
+    "l": 14.1,
+    "lPrime": 16.3,
+    "t": 10.2,
+    "pipeOD": 27.2,
+    "pipeWall": 2.8,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 1.814,
+    "h": 1.162,
+    "d": 26.441,
+    "d2": 25.279,
+    "d1": 24.117,
+    "gaugeLength": 9.5,
+    "T1half": 1.8,
+    "T1halfTurns": "1",
+    "gaugeLengthMax": 11.3,
+    "gaugeLengthMin": 7.7,
+    "T2half": 2.3,
+    "T2halfTurns": "1 1/4",
+    "usefulThreadForNominal": 14.5,
+    "usefulThreadForMax": 16.3,
+    "usefulThreadForMin": 12.7,
+    "fittingAllowance": 5.0,
+    "fittingAllowanceTurns": "2 3/4",
+    "parallelInternalTol": 0.142,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 9.53 ↔ ISO 9.5",
+    "숫나사 축 방향 허용차: JIS ±1.81 ↔ ISO ±1.8 (1산)",
+    "암나사 기준면 허용차: JIS ±2.27 ↔ ISO ±2.3 (1 1/4산)",
+    "피치 P: JIS 1.8143 ↔ ISO 1.814 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "1",
+   "designation": {
+    "taperExternal": "R 1",
+    "taperInternal": "Rc 1",
+    "parallelInternal": "Rp 1",
+    "iso": "Pipe thread ISO 7 - R 1 (Rc · Rp)"
+   },
+   "tpi": 11,
+   "jis": {
+    "P": 2.3091,
+    "h": 1.479,
+    "r": 0.32,
+    "d": 33.249,
+    "d2": 31.770,
+    "d1": 30.291,
+    "a": 10.39,
+    "b": 2.31,
+    "c": 2.89,
+    "parallelInternalTol": 0.181,
+    "f": 6.4,
+    "l": 16.2,
+    "lPrime": 19.1,
+    "t": 11.6,
+    "pipeOD": 34,
+    "pipeWall": 3.2,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 2.309,
+    "h": 1.479,
+    "d": 33.249,
+    "d2": 31.770,
+    "d1": 30.291,
+    "gaugeLength": 10.4,
+    "T1half": 2.3,
+    "T1halfTurns": "1",
+    "gaugeLengthMax": 12.7,
+    "gaugeLengthMin": 8.1,
+    "T2half": 2.9,
+    "T2halfTurns": "1 1/4",
+    "usefulThreadForNominal": 16.8,
+    "usefulThreadForMax": 19.1,
+    "usefulThreadForMin": 14.5,
+    "fittingAllowance": 6.4,
+    "fittingAllowanceTurns": "2 3/4",
+    "parallelInternalTol": 0.180,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 10.39 ↔ ISO 10.4",
+    "숫나사 축 방향 허용차: JIS ±2.31 ↔ ISO ±2.3 (1산)",
+    "암나사 기준면 허용차: JIS ±2.89 ↔ ISO ±2.9 (1 1/4산)",
+    "평행 암나사 지름 허용차: JIS ±0.181 ↔ ISO ±0.180",
+    "피치 P: JIS 2.3091 ↔ ISO 2.309 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "1 1/4",
+   "designation": {
+    "taperExternal": "R 1 1/4",
+    "taperInternal": "Rc 1 1/4",
+    "parallelInternal": "Rp 1 1/4",
+    "iso": "Pipe thread ISO 7 - R 1 1/4 (Rc · Rp)"
+   },
+   "tpi": 11,
+   "jis": {
+    "P": 2.3091,
+    "h": 1.479,
+    "r": 0.32,
+    "d": 41.910,
+    "d2": 40.431,
+    "d1": 38.952,
+    "a": 12.70,
+    "b": 2.31,
+    "c": 2.89,
+    "parallelInternalTol": 0.181,
+    "f": 6.4,
+    "l": 18.5,
+    "lPrime": 21.4,
+    "t": 13.4,
+    "pipeOD": 42.7,
+    "pipeWall": 3.5,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 2.309,
+    "h": 1.479,
+    "d": 41.910,
+    "d2": 40.431,
+    "d1": 38.952,
+    "gaugeLength": 12.7,
+    "T1half": 2.3,
+    "T1halfTurns": "1",
+    "gaugeLengthMax": 15.0,
+    "gaugeLengthMin": 10.4,
+    "T2half": 2.9,
+    "T2halfTurns": "1 1/4",
+    "usefulThreadForNominal": 19.1,
+    "usefulThreadForMax": 21.4,
+    "usefulThreadForMin": 16.8,
+    "fittingAllowance": 6.4,
+    "fittingAllowanceTurns": "2 3/4",
+    "parallelInternalTol": 0.180,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 12.70 ↔ ISO 12.7",
+    "숫나사 축 방향 허용차: JIS ±2.31 ↔ ISO ±2.3 (1산)",
+    "암나사 기준면 허용차: JIS ±2.89 ↔ ISO ±2.9 (1 1/4산)",
+    "평행 암나사 지름 허용차: JIS ±0.181 ↔ ISO ±0.180",
+    "피치 P: JIS 2.3091 ↔ ISO 2.309 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "1 1/2",
+   "designation": {
+    "taperExternal": "R 1 1/2",
+    "taperInternal": "Rc 1 1/2",
+    "parallelInternal": "Rp 1 1/2",
+    "iso": "Pipe thread ISO 7 - R 1 1/2 (Rc · Rp)"
+   },
+   "tpi": 11,
+   "jis": {
+    "P": 2.3091,
+    "h": 1.479,
+    "r": 0.32,
+    "d": 47.803,
+    "d2": 46.324,
+    "d1": 44.845,
+    "a": 12.70,
+    "b": 2.31,
+    "c": 2.89,
+    "parallelInternalTol": 0.181,
+    "f": 6.4,
+    "l": 18.5,
+    "lPrime": 21.4,
+    "t": 13.4,
+    "pipeOD": 48.6,
+    "pipeWall": 3.5,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 2.309,
+    "h": 1.479,
+    "d": 47.803,
+    "d2": 46.324,
+    "d1": 44.845,
+    "gaugeLength": 12.7,
+    "T1half": 2.3,
+    "T1halfTurns": "1",
+    "gaugeLengthMax": 15.0,
+    "gaugeLengthMin": 10.4,
+    "T2half": 2.9,
+    "T2halfTurns": "1 1/4",
+    "usefulThreadForNominal": 19.1,
+    "usefulThreadForMax": 21.4,
+    "usefulThreadForMin": 16.8,
+    "fittingAllowance": 6.4,
+    "fittingAllowanceTurns": "2 3/4",
+    "parallelInternalTol": 0.180,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 12.70 ↔ ISO 12.7",
+    "숫나사 축 방향 허용차: JIS ±2.31 ↔ ISO ±2.3 (1산)",
+    "암나사 기준면 허용차: JIS ±2.89 ↔ ISO ±2.9 (1 1/4산)",
+    "평행 암나사 지름 허용차: JIS ±0.181 ↔ ISO ±0.180",
+    "피치 P: JIS 2.3091 ↔ ISO 2.309 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "2",
+   "designation": {
+    "taperExternal": "R 2",
+    "taperInternal": "Rc 2",
+    "parallelInternal": "Rp 2",
+    "iso": "Pipe thread ISO 7 - R 2 (Rc · Rp)"
+   },
+   "tpi": 11,
+   "jis": {
+    "P": 2.3091,
+    "h": 1.479,
+    "r": 0.32,
+    "d": 59.614,
+    "d2": 58.135,
+    "d1": 56.656,
+    "a": 15.88,
+    "b": 2.31,
+    "c": 2.89,
+    "parallelInternalTol": 0.181,
+    "f": 7.5,
+    "l": 22.8,
+    "lPrime": 25.7,
+    "t": 16.9,
+    "pipeOD": 60.5,
+    "pipeWall": 3.8,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 2.309,
+    "h": 1.479,
+    "d": 59.614,
+    "d2": 58.135,
+    "d1": 56.656,
+    "gaugeLength": 15.9,
+    "T1half": 2.3,
+    "T1halfTurns": "1",
+    "gaugeLengthMax": 18.2,
+    "gaugeLengthMin": 13.6,
+    "T2half": 2.9,
+    "T2halfTurns": "1 1/4",
+    "usefulThreadForNominal": 23.4,
+    "usefulThreadForMax": 25.7,
+    "usefulThreadForMin": 21.1,
+    "fittingAllowance": 7.5,
+    "fittingAllowanceTurns": "3 1/4",
+    "parallelInternalTol": 0.180,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 15.88 ↔ ISO 15.9",
+    "숫나사 축 방향 허용차: JIS ±2.31 ↔ ISO ±2.3 (1산)",
+    "암나사 기준면 허용차: JIS ±2.89 ↔ ISO ±2.9 (1 1/4산)",
+    "평행 암나사 지름 허용차: JIS ±0.181 ↔ ISO ±0.180",
+    "피치 P: JIS 2.3091 ↔ ISO 2.309 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "2 1/2",
+   "designation": {
+    "taperExternal": "R 2 1/2",
+    "taperInternal": "Rc 2 1/2",
+    "parallelInternal": "Rp 2 1/2",
+    "iso": "Pipe thread ISO 7 - R 2 1/2 (Rc · Rp)"
+   },
+   "tpi": 11,
+   "jis": {
+    "P": 2.3091,
+    "h": 1.479,
+    "r": 0.32,
+    "d": 75.184,
+    "d2": 73.705,
+    "d1": 72.226,
+    "a": 17.46,
+    "b": 3.46,
+    "c": 3.46,
+    "parallelInternalTol": 0.216,
+    "f": 9.2,
+    "l": 26.7,
+    "lPrime": 30.1,
+    "t": 18.6,
+    "pipeOD": 76.3,
+    "pipeWall": 4.2,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 2.309,
+    "h": 1.479,
+    "d": 75.184,
+    "d2": 73.705,
+    "d1": 72.226,
+    "gaugeLength": 17.5,
+    "T1half": 3.5,
+    "T1halfTurns": "1 1/2",
+    "gaugeLengthMax": 21.0,
+    "gaugeLengthMin": 14.0,
+    "T2half": 3.5,
+    "T2halfTurns": "1 1/2",
+    "usefulThreadForNominal": 26.7,
+    "usefulThreadForMax": 30.2,
+    "usefulThreadForMin": 23.2,
+    "fittingAllowance": 9.2,
+    "fittingAllowanceTurns": "4",
+    "parallelInternalTol": 0.216,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 17.46 ↔ ISO 17.5",
+    "숫나사 축 방향 허용차: JIS ±3.46 ↔ ISO ±3.5 (1 1/2산)",
+    "암나사 기준면 허용차: JIS ±3.46 ↔ ISO ±3.5 (1 1/2산)",
+    "평행 암나사가 받아야 할 길이: JIS l' 30.1 ↔ ISO 16열 30.2",
+    "피치 P: JIS 2.3091 ↔ ISO 2.309 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "3",
+   "designation": {
+    "taperExternal": "R 3",
+    "taperInternal": "Rc 3",
+    "parallelInternal": "Rp 3",
+    "iso": "Pipe thread ISO 7 - R 3 (Rc · Rp)"
+   },
+   "tpi": 11,
+   "jis": {
+    "P": 2.3091,
+    "h": 1.479,
+    "r": 0.32,
+    "d": 87.884,
+    "d2": 86.405,
+    "d1": 84.926,
+    "a": 20.64,
+    "b": 3.46,
+    "c": 3.46,
+    "parallelInternalTol": 0.216,
+    "f": 9.2,
+    "l": 29.8,
+    "lPrime": 33.3,
+    "t": 21.1,
+    "pipeOD": 89.1,
+    "pipeWall": 4.2,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 2.309,
+    "h": 1.479,
+    "d": 87.884,
+    "d2": 86.405,
+    "d1": 84.926,
+    "gaugeLength": 20.6,
+    "T1half": 3.5,
+    "T1halfTurns": "1 1/2",
+    "gaugeLengthMax": 24.1,
+    "gaugeLengthMin": 17.1,
+    "T2half": 3.5,
+    "T2halfTurns": "1 1/2",
+    "usefulThreadForNominal": 29.8,
+    "usefulThreadForMax": 33.3,
+    "usefulThreadForMin": 26.3,
+    "fittingAllowance": 9.2,
+    "fittingAllowanceTurns": "4",
+    "parallelInternalTol": 0.216,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 20.64 ↔ ISO 20.6",
+    "숫나사 축 방향 허용차: JIS ±3.46 ↔ ISO ±3.5 (1 1/2산)",
+    "암나사 기준면 허용차: JIS ±3.46 ↔ ISO ±3.5 (1 1/2산)",
+    "피치 P: JIS 2.3091 ↔ ISO 2.309 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "3 1/2",
+   "designation": {
+    "jisAnnex": "PT 3 1/2 (테이퍼 숫나사 · 암나사), PS 3 1/2 (평행 암나사)"
+   },
+   "tpi": 11,
+   "jis": {
+    "P": 2.3091,
+    "h": 1.479,
+    "r": 0.32,
+    "d": 100.330,
+    "d2": 98.851,
+    "d1": 97.372,
+    "a": 22.23,
+    "b": 3.46,
+    "c": 3.46,
+    "parallelInternalTol": 0.216,
+    "f": 9.2,
+    "l": 31.4,
+    "lPrime": 34.9,
+    "t": 22.4,
+    "pipeOD": 101.6,
+    "pipeWall": 4.2,
+    "sourceId": "JIS_B0203_1999",
+    "page": "附属書1付表1 (원문 8쪽 — kikakurui page-9 그림)"
+   },
+   "iso": null,
+   "note": "ISO 7-1 에 없는 크기. JIS B 0203 본체 1. 적용 범위가 PT 3 1/2 · PT 7~PT 12 를 附属書1(규정)로 돌리고, 附属書1 의 1. 適用範囲 끝에 '이 附属書의 나사는 다음 개정 때 폐지 연한을 밝힌다' 고 적음(원문 7쪽, kikakurui 본문 글). 표 값은 본체와 같은 식으로 맞음(검산). 둘째 출처: d · d1 · 기준 길이(22.2)는 WIKI_BSP, 강관 101.6 · 4.2 는 WERMAC_SGP 와 같음"
+  },
+  {
+   "size": "4",
+   "designation": {
+    "taperExternal": "R 4",
+    "taperInternal": "Rc 4",
+    "parallelInternal": "Rp 4",
+    "iso": "Pipe thread ISO 7 - R 4 (Rc · Rp)"
+   },
+   "tpi": 11,
+   "jis": {
+    "P": 2.3091,
+    "h": 1.479,
+    "r": 0.32,
+    "d": 113.030,
+    "d2": 111.551,
+    "d1": 110.072,
+    "a": 25.40,
+    "b": 3.46,
+    "c": 3.46,
+    "parallelInternalTol": 0.216,
+    "f": 10.4,
+    "l": 35.8,
+    "lPrime": 39.3,
+    "t": 25.9,
+    "pipeOD": 114.3,
+    "pipeWall": 4.5,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 2.309,
+    "h": 1.479,
+    "d": 113.030,
+    "d2": 111.551,
+    "d1": 110.072,
+    "gaugeLength": 25.4,
+    "T1half": 3.5,
+    "T1halfTurns": "1 1/2",
+    "gaugeLengthMax": 28.9,
+    "gaugeLengthMin": 21.9,
+    "T2half": 3.5,
+    "T2halfTurns": "1 1/2",
+    "usefulThreadForNominal": 35.8,
+    "usefulThreadForMax": 39.3,
+    "usefulThreadForMin": 32.3,
+    "fittingAllowance": 10.4,
+    "fittingAllowanceTurns": "4 1/2",
+    "parallelInternalTol": 0.216,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 25.40 ↔ ISO 25.4",
+    "숫나사 축 방향 허용차: JIS ±3.46 ↔ ISO ±3.5 (1 1/2산)",
+    "암나사 기준면 허용차: JIS ±3.46 ↔ ISO ±3.5 (1 1/2산)",
+    "피치 P: JIS 2.3091 ↔ ISO 2.309 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "5",
+   "designation": {
+    "taperExternal": "R 5",
+    "taperInternal": "Rc 5",
+    "parallelInternal": "Rp 5",
+    "iso": "Pipe thread ISO 7 - R 5 (Rc · Rp)"
+   },
+   "tpi": 11,
+   "jis": {
+    "P": 2.3091,
+    "h": 1.479,
+    "r": 0.32,
+    "d": 138.430,
+    "d2": 136.951,
+    "d1": 135.472,
+    "a": 28.58,
+    "b": 3.46,
+    "c": 3.46,
+    "parallelInternalTol": 0.216,
+    "f": 11.5,
+    "l": 40.1,
+    "lPrime": 43.5,
+    "t": 29.3,
+    "pipeOD": 139.8,
+    "pipeWall": 4.5,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 2.309,
+    "h": 1.479,
+    "d": 138.430,
+    "d2": 136.951,
+    "d1": 135.472,
+    "gaugeLength": 28.6,
+    "T1half": 3.5,
+    "T1halfTurns": "1 1/2",
+    "gaugeLengthMax": 32.1,
+    "gaugeLengthMin": 25.1,
+    "T2half": 3.5,
+    "T2halfTurns": "1 1/2",
+    "usefulThreadForNominal": 40.1,
+    "usefulThreadForMax": 43.6,
+    "usefulThreadForMin": 36.6,
+    "fittingAllowance": 11.5,
+    "fittingAllowanceTurns": "5",
+    "parallelInternalTol": 0.216,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 28.58 ↔ ISO 28.6",
+    "숫나사 축 방향 허용차: JIS ±3.46 ↔ ISO ±3.5 (1 1/2산)",
+    "암나사 기준면 허용차: JIS ±3.46 ↔ ISO ±3.5 (1 1/2산)",
+    "평행 암나사가 받아야 할 길이: JIS l' 43.5 ↔ ISO 16열 43.6",
+    "피치 P: JIS 2.3091 ↔ ISO 2.309 (자리 수만 다름)"
+   ]
+  },
+  {
+   "size": "6",
+   "designation": {
+    "taperExternal": "R 6",
+    "taperInternal": "Rc 6",
+    "parallelInternal": "Rp 6",
+    "iso": "Pipe thread ISO 7 - R 6 (Rc · Rp)"
+   },
+   "tpi": 11,
+   "jis": {
+    "P": 2.3091,
+    "h": 1.479,
+    "r": 0.32,
+    "d": 163.830,
+    "d2": 162.351,
+    "d1": 160.872,
+    "a": 28.58,
+    "b": 3.46,
+    "c": 3.46,
+    "parallelInternalTol": 0.216,
+    "f": 11.5,
+    "l": 40.1,
+    "lPrime": 43.5,
+    "t": 29.3,
+    "pipeOD": 165.2,
+    "pipeWall": 5.0,
+    "sourceId": "JIS_B0203_1999",
+    "page": "付表1 (원문 5쪽 — kikakurui page-6 그림)"
+   },
+   "iso": {
+    "P": 2.309,
+    "h": 1.479,
+    "d": 163.830,
+    "d2": 162.351,
+    "d1": 160.872,
+    "gaugeLength": 28.6,
+    "T1half": 3.5,
+    "T1halfTurns": "1 1/2",
+    "gaugeLengthMax": 32.1,
+    "gaugeLengthMin": 25.1,
+    "T2half": 3.5,
+    "T2halfTurns": "1 1/2",
+    "usefulThreadForNominal": 40.1,
+    "usefulThreadForMax": 43.6,
+    "usefulThreadForMin": 36.6,
+    "fittingAllowance": 11.5,
+    "fittingAllowanceTurns": "5",
+    "parallelInternalTol": 0.216,
+    "sourceId": "IS554_ISO7_1",
+    "page": "Table 1 (IS 554 : 1999 / ISO 7-1 : 1994 의 3쪽)",
+    "checkedWith": [
+     "WIKI_BSP"
+    ]
+   },
+   "jisIsoDiff": [
+    "기준 길이 a: JIS 28.58 ↔ ISO 28.6",
+    "숫나사 축 방향 허용차: JIS ±3.46 ↔ ISO ±3.5 (1 1/2산)",
+    "암나사 기준면 허용차: JIS ±3.46 ↔ ISO ±3.5 (1 1/2산)",
+    "평행 암나사가 받아야 할 길이: JIS l' 43.5 ↔ ISO 16열 43.6",
+    "피치 P: JIS 2.3091 ↔ ISO 2.309 (자리 수만 다름)"
+   ]
+  }
+ ],
+ "NPT": [
+  {
+   "size": "1/16",
+   "D": 0.3125,
+   "tpi": 27,
+   "p": 0.03704,
+   "E0": 0.27118,
+   "L1": 0.160,
+   "L1Thds": 4.32,
+   "E1": 0.28118,
+   "L2": 0.2611,
+   "L2Thds": 7.05,
+   "E2": 0.28750,
+   "L3": 0.1111,
+   "L3Thds": 3,
+   "E3": 0.26424,
+   "V": 0.1285,
+   "VThds": 3.47,
+   "L4": 0.3896,
+   "L5": 0.1870,
+   "E5": 0.28287,
+   "h": 0.02963,
+   "diaIncreasePerThread": 0.00231,
+   "K0": 0.2416,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "1/8",
+   "D": 0.405,
+   "tpi": 27,
+   "p": 0.03704,
+   "E0": 0.36351,
+   "L1": 0.1615,
+   "L1Thds": 4.36,
+   "E1": 0.37360,
+   "L2": 0.2639,
+   "L2Thds": 7.12,
+   "E2": 0.38000,
+   "L3": 0.1111,
+   "L3Thds": 3,
+   "E3": 0.35656,
+   "V": 0.1285,
+   "VThds": 3.47,
+   "L4": 0.3924,
+   "L5": 0.1898,
+   "E5": 0.37537,
+   "h": 0.02963,
+   "diaIncreasePerThread": 0.00231,
+   "K0": 0.3339,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "1/4",
+   "D": 0.540,
+   "tpi": 18,
+   "p": 0.05556,
+   "E0": 0.47739,
+   "L1": 0.2278,
+   "L1Thds": 4.10,
+   "E1": 0.49163,
+   "L2": 0.4018,
+   "L2Thds": 7.23,
+   "E2": 0.50250,
+   "L3": 0.1667,
+   "L3Thds": 3,
+   "E3": 0.46697,
+   "V": 0.1928,
+   "VThds": 3.47,
+   "L4": 0.5946,
+   "L5": 0.2907,
+   "E5": 0.49556,
+   "h": 0.04444,
+   "diaIncreasePerThread": 0.00347,
+   "K0": 0.4329,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "3/8",
+   "D": 0.675,
+   "tpi": 18,
+   "p": 0.05556,
+   "E0": 0.61201,
+   "L1": 0.240,
+   "L1Thds": 4.32,
+   "E1": 0.62701,
+   "L2": 0.4078,
+   "L2Thds": 7.34,
+   "E2": 0.63750,
+   "L3": 0.1667,
+   "L3Thds": 3,
+   "E3": 0.60160,
+   "V": 0.1928,
+   "VThds": 3.47,
+   "L4": 0.6006,
+   "L5": 0.2967,
+   "E5": 0.63056,
+   "h": 0.04444,
+   "diaIncreasePerThread": 0.00347,
+   "K0": 0.5676,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "1/2",
+   "D": 0.840,
+   "tpi": 14,
+   "p": 0.07143,
+   "E0": 0.75843,
+   "L1": 0.320,
+   "L1Thds": 4.48,
+   "E1": 0.77843,
+   "L2": 0.5337,
+   "L2Thds": 7.47,
+   "E2": 0.79179,
+   "L3": 0.2143,
+   "L3Thds": 3,
+   "E3": 0.74504,
+   "V": 0.2478,
+   "VThds": 3.47,
+   "L4": 0.7815,
+   "L5": 0.3909,
+   "E5": 0.78286,
+   "h": 0.05714,
+   "diaIncreasePerThread": 0.00446,
+   "K0": 0.7013,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "3/4",
+   "D": 1.050,
+   "tpi": 14,
+   "p": 0.07143,
+   "E0": 0.96768,
+   "L1": 0.339,
+   "L1Thds": 4.75,
+   "E1": 0.98887,
+   "L2": 0.5457,
+   "L2Thds": 7.64,
+   "E2": 1.00179,
+   "L3": 0.2143,
+   "L3Thds": 3,
+   "E3": 0.95429,
+   "V": 0.2478,
+   "VThds": 3.47,
+   "L4": 0.7935,
+   "L5": 0.4029,
+   "E5": 0.99286,
+   "h": 0.05714,
+   "diaIncreasePerThread": 0.00446,
+   "K0": 0.9105,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "1",
+   "D": 1.315,
+   "tpi": 11.5,
+   "p": 0.08696,
+   "E0": 1.21363,
+   "L1": 0.400,
+   "L1Thds": 4.60,
+   "E1": 1.23863,
+   "L2": 0.6828,
+   "L2Thds": 7.85,
+   "E2": 1.25630,
+   "L3": 0.2609,
+   "L3Thds": 3,
+   "E3": 1.19733,
+   "V": 0.3017,
+   "VThds": 3.47,
+   "L4": 0.9845,
+   "L5": 0.5089,
+   "E5": 1.24543,
+   "h": 0.06957,
+   "diaIncreasePerThread": 0.00543,
+   "K0": 1.1441,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "1 1/4",
+   "D": 1.660,
+   "tpi": 11.5,
+   "p": 0.08696,
+   "E0": 1.55713,
+   "L1": 0.420,
+   "L1Thds": 4.83,
+   "E1": 1.58338,
+   "L2": 0.7068,
+   "L2Thds": 8.13,
+   "E2": 1.60130,
+   "L3": 0.2609,
+   "L3Thds": 3,
+   "E3": 1.54083,
+   "V": 0.3017,
+   "VThds": 3.47,
+   "L4": 1.0085,
+   "L5": 0.5329,
+   "E5": 1.59043,
+   "h": 0.06957,
+   "diaIncreasePerThread": 0.00543,
+   "K0": 1.4876,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "1 1/2",
+   "D": 1.900,
+   "tpi": 11.5,
+   "p": 0.08696,
+   "E0": 1.79609,
+   "L1": 0.420,
+   "L1Thds": 4.83,
+   "E1": 1.82234,
+   "L2": 0.7235,
+   "L2Thds": 8.32,
+   "E2": 1.84130,
+   "L3": 0.2609,
+   "L3Thds": 3,
+   "E3": 1.77978,
+   "V": 0.3017,
+   "VThds": 3.47,
+   "L4": 1.0252,
+   "L5": 0.5496,
+   "E5": 1.83043,
+   "h": 0.06957,
+   "diaIncreasePerThread": 0.00543,
+   "K0": 1.7265,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "2",
+   "D": 2.375,
+   "tpi": 11.5,
+   "p": 0.08696,
+   "E0": 2.26902,
+   "L1": 0.436,
+   "L1Thds": 5.01,
+   "E1": 2.29627,
+   "L2": 0.7565,
+   "L2Thds": 8.70,
+   "E2": 2.31630,
+   "L3": 0.2609,
+   "L3Thds": 3,
+   "E3": 2.25272,
+   "V": 0.3017,
+   "VThds": 3.47,
+   "L4": 1.0582,
+   "L5": 0.5826,
+   "E5": 2.30543,
+   "h": 0.06957,
+   "diaIncreasePerThread": 0.00543,
+   "K0": 2.1995,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "2 1/2",
+   "D": 2.875,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 2.71953,
+   "L1": 0.682,
+   "L1Thds": 5.46,
+   "E1": 2.76216,
+   "L2": 1.1375,
+   "L2Thds": 9.10,
+   "E2": 2.79062,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 2.70391,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 1.5712,
+   "L5": 0.8875,
+   "E5": 2.77500,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 2.6195,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ],
+   "L3Footnote": "각주 g: MIL-P-7105 는 3 in 이하의 렌치 조임을 3산으로 하고 E3 = 2.69609 (2 1/2) · 3.31719 (3) — 각주 글자는 'E5' 처럼 보이나 값은 E0 − 0.0625·3p 와 맞아 E3 로 읽음 (6쪽)"
+  },
+  {
+   "size": "3",
+   "D": 3.500,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 3.34062,
+   "L1": 0.766,
+   "L1Thds": 6.13,
+   "E1": 3.38850,
+   "L2": 1.2000,
+   "L2Thds": 9.60,
+   "E2": 3.41562,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 3.32500,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 1.6337,
+   "L5": 0.9500,
+   "E5": 3.40000,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 3.2406,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ],
+   "L3Footnote": "각주 g: MIL-P-7105 는 3 in 이하의 렌치 조임을 3산으로 하고 E3 = 2.69609 (2 1/2) · 3.31719 (3) — 각주 글자는 'E5' 처럼 보이나 값은 E0 − 0.0625·3p 와 맞아 E3 로 읽음 (6쪽)"
+  },
+  {
+   "size": "3 1/2",
+   "D": 4.000,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 3.83750,
+   "L1": 0.821,
+   "L1Thds": 6.57,
+   "E1": 3.88881,
+   "L2": 1.2500,
+   "L2Thds": 10.00,
+   "E2": 3.91562,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 3.82188,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 1.6837,
+   "L5": 1.0000,
+   "E5": 3.90000,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 3.7375,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "4",
+   "D": 4.500,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 4.33438,
+   "L1": 0.844,
+   "L1Thds": 6.75,
+   "E1": 4.38712,
+   "L2": 1.3000,
+   "L2Thds": 10.40,
+   "E2": 4.41562,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 4.31875,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 1.7337,
+   "L5": 1.0500,
+   "E5": 4.40000,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 4.2344,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "5",
+   "D": 5.563,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 5.39073,
+   "L1": 0.937,
+   "L1Thds": 7.50,
+   "E1": 5.44929,
+   "L2": 1.4063,
+   "L2Thds": 11.25,
+   "E2": 5.47862,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 5.37511,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 1.8400,
+   "L5": 1.1563,
+   "E5": 5.46300,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 5.2907,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "6",
+   "D": 6.625,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 6.44609,
+   "L1": 0.958,
+   "L1Thds": 7.66,
+   "E1": 6.50597,
+   "L2": 1.5125,
+   "L2Thds": 12.10,
+   "E2": 6.54062,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 6.43047,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 1.9462,
+   "L5": 1.2625,
+   "E5": 6.52500,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 6.3461,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "8",
+   "D": 8.625,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 8.43359,
+   "L1": 1.063,
+   "L1Thds": 8.50,
+   "E1": 8.50003,
+   "L2": 1.7125,
+   "L2Thds": 13.70,
+   "E2": 8.54062,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 8.41797,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 2.1462,
+   "L5": 1.4625,
+   "E5": 8.52500,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 8.3336,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "10",
+   "D": 10.750,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 10.54531,
+   "L1": 1.210,
+   "L1Thds": 9.68,
+   "E1": 10.62094,
+   "L2": 1.9250,
+   "L2Thds": 15.40,
+   "E2": 10.66562,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 10.52969,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 2.3587,
+   "L5": 1.6750,
+   "E5": 10.65000,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 10.4453,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "12",
+   "D": 12.750,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 12.53281,
+   "L1": 1.360,
+   "L1Thds": 10.88,
+   "E1": 12.61781,
+   "L2": 2.1250,
+   "L2Thds": 17.00,
+   "E2": 12.66562,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 12.51719,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 2.5587,
+   "L5": 1.8750,
+   "E5": 12.65000,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 12.4328,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "14 OD",
+   "D": 14.000,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 13.77500,
+   "L1": 1.562,
+   "L1Thds": 12.50,
+   "E1": 13.87262,
+   "L2": 2.2500,
+   "L2Thds": null,
+   "E2": 13.91562,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 13.75938,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 2.6837,
+   "L5": 2.0000,
+   "E5": 13.90000,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 13.6750,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ],
+   "printedL2Thds": "18.90",
+   "note": "L2 산수 칸은 원문 인쇄(5쪽 그림)도 두 OCR 판도 18.90 이다. L2 2.2500 in ÷ p 0.12500 in = 18.00 이라 오식으로 보고 비웠다. 같은 책 14쪽 표 VII.9 15열(완전 링 게이지 두께 = L2)도 2.25000 이라 L2 값 자체는 맞고 산수 칸만 틀린 것으로 본다. engineersedge 표(EE_NPT_A)에는 산수 칸이 없어 대조 못 함"
+  },
+  {
+   "size": "16 OD",
+   "D": 16.000,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 15.76250,
+   "L1": 1.812,
+   "L1Thds": 14.50,
+   "E1": 15.87575,
+   "L2": 2.4500,
+   "L2Thds": 19.60,
+   "E2": 15.91562,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 15.74688,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 2.8837,
+   "L5": 2.2000,
+   "E5": 15.90000,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 15.6625,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "18 OD",
+   "D": 18.000,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 17.75000,
+   "L1": 2.000,
+   "L1Thds": 16.00,
+   "E1": 17.87500,
+   "L2": 2.6500,
+   "L2Thds": 21.20,
+   "E2": 17.91562,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 17.73438,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 3.0837,
+   "L5": 2.4000,
+   "E5": 17.90000,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 17.6500,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "20 OD",
+   "D": 20.000,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 19.73750,
+   "L1": 2.125,
+   "L1Thds": 17.00,
+   "E1": 19.87031,
+   "L2": 2.8500,
+   "L2Thds": 22.80,
+   "E2": 19.91562,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 19.72188,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 3.2837,
+   "L5": 2.6000,
+   "E5": 19.90000,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 19.6375,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  },
+  {
+   "size": "24 OD",
+   "D": 24.000,
+   "tpi": 8,
+   "p": 0.12500,
+   "E0": 23.71250,
+   "L1": 2.375,
+   "L1Thds": 19.00,
+   "E1": 23.86094,
+   "L2": 3.2500,
+   "L2Thds": 26.00,
+   "E2": 23.91562,
+   "L3": 0.2500,
+   "L3Thds": 2,
+   "E3": 23.69688,
+   "V": 0.4337,
+   "VThds": 3.47,
+   "L4": 3.6837,
+   "L5": 3.0000,
+   "E5": 23.90000,
+   "h": 0.10000,
+   "diaIncreasePerThread": 0.00781,
+   "K0": 23.6125,
+   "sourceId": "H28_1957_P2",
+   "page": "표 VII.2 (5쪽 1~11열 · 6쪽 12~22열)",
+   "checkedWith": [
+    "EE_NPT_A",
+    "EE_NPT_B"
+   ]
+  }
+ ],
+ "notFound": [
+  "NBS H28 (1969) Part II: 없다. 1969 판은 Part I 만 새로 냈고 머리말(H28_1969_P1 iii)에 'the latest issues of Parts II and III are those of 1957' — 그래서 1957 Part II(H28_1957_P2)를 1순위로 썼다.",
+  "ASME B1.20.1-2013 (R2018) 원문 값: 유료이고 공개 미리보기(ASME 35257.pdf)는 압축 PDF 라 WebFetch 로 못 읽음, ANSI 미리보기는 403. 현행판이 1957 판 · 1983 판과 같은지 원문으로 확인 못 함 — engineersedge(1983 판 인용, secondary)는 모든 칸이 1957 판과 같다.",
+  "NPT 14 OD 의 L2 산수: 원문 18.90 이 L2 ÷ p = 18.00 과 어긋나 null.",
+  "NPT 게이지 치수(표 VII.9, 14쪽) · 게이지 공차(표 VII.10, 15쪽 — 피치경 · 리드 · 반각 · 테이퍼): 게이지 제작용이라 옮기지 않았다. 표 VII.10 은 쪽 그림을 보지 않았고 OCR 열 짝이 불확실하다.",
+  "NPT 암나사 최소 나사 길이 식: 1957 판 본문에 없다(표의 L1 · L3 만).",
+  "FED-STD-H28/7A (1984): PDF 가 그림 스캔이라 못 읽음 — 1957 판 뒤에 값이 바뀌었는지 이 판으로는 확인 못 함.",
+  "JIS B 0203 의 JISC 공식 열람 · 최신 확인년도: JISC 열람은 가입 · 그림 뷰어라 못 읽음. JSA 2023 핸드북 목록 발췌에 1999 판이 실려 있다는 것까지만 확인.",
+  "ISO 7-1 원본(iTeh 견본 · iso.org): 견본은 그림 스캔, iso.org 는 403 — 같은 글인 IS 554:1999 로 읽었다.",
+  "PT 나사의 지름 공차(숫나사 · 테이퍼 암나사): JIS · ISO 모두 지름 공차 칸이 없고 기준면 위치(±b · ±c, ±T1/2 · ±T2/2)로만 관리한다. 지름 칸은 평행 암나사 Rp 것뿐.",
+  "PT 둥글기 r 의 허용차: JIS · ISO 표에 칸 없음. ISO 표에는 r 값 칸 자체가 없다(식 0.137278P 만).",
+  "ISO wrenching allowance · JIS 工具締めしろ 의 값: 정의와 그림만 있고 표 칸이 없다.",
+  "'관 끝 여유' 라는 이름의 칸: JIS · ISO 표에 없다. 가장 가까운 것은 숫나사 기준면 너머 길이인 접합 여유(JIS f = ISO 18열)와 값 없는 wrenching allowance 다.",
+  "JIS 附属書2(참고 — 기밀성 향상용 테이퍼 숫나사의 기준 치수 · 정밀도 1종 · 2종): 이번 할 일 범위 밖이라 읽지 않았다.",
+  "JIS 附属書1 의 PT 7 ~ PT 12: 할 일 범위(1/16 ~ 6) 밖이라 옮기지 않았다(쪽 그림 page-9 에 있음).",
+  "제조사 공식 카탈로그로 PT 표 전체를 대조하지 못함: NBK · 長野計器 PDF 는 표 숫자가 글자로 안 뽑히거나 WebFetch 로 못 읽어 검색 결과 발췌(R1/4 · R1/2 줄)만 맞춰 봄.",
+  "ISO 7-1:1994/Cor 1:2007 원문(R2 대조 때 찾음): JSA 웹데스크는 점검 화면, iso.org 는 403. 검색 발췌로 그림 5 교체만 알고, 새 그림 내용과 Table 1 변경 여부는 원문으로 확인 못 함 — IS 554:1999 는 Cor 1 전 글이다.",
+  "JIS 강관 치수 칸(配管用炭素鋼鋼管の寸法, 参考)의 제조사 출처: 日本製鉄 핸드북 PDF 는 AES 암호, 丸一鋼管 PDF 는 글자 뽑기 안 됨 — 둘째 출처는 WERMAC_SGP(secondary) 로만 맞춤."
+ ],
+ "removed": [
+  "표 VII.2 의 OCR 값은 하나도 그대로 쓰지 않았다 — 모두 5 · 6쪽 그림으로 다시 읽었다(OCR 오독 예: 2 1/2 · 3 의 L3 '.2600' · '.2300' → 인쇄 '.2500ᵍ', 1 in E2 '1.25636' → 1.25630)."
+ ],
+ "corrected": [
+  "할 일 글의 'NBS H28 (1969) Part II' → 1957 Part II (1969 Part II 는 나오지 않음, H28_1969_P1 머리말).",
+  "NPT 14 OD L2Thds: 원문 18.90 → null (printedL2Thds 에 원문 값을 남김).",
+  "PT 의 할 일 글 상수 'r = 0.137278P' 는 테이퍼(R · Rc) 것이다. 평행 암나사 Rp 는 H' = 0.960491P · r' = 0.137329P 로 다르다(h 는 같음) — constants.PT.parallelInternalProfile.",
+  {
+   "path": "PT[size=3 1/2].note",
+   "was": "…序文에 '이 附属書의 나사는 다음 개정 때 폐지 연한을 밝힌다' 고 적음(kikakurui 본문 글)…",
+   "now": "…附属書1 의 1. 適用範囲 끝에 '…폐지 연한을 밝힌다' 고 적음(원문 7쪽, kikakurui 본문 글)… + 둘째 출처(WIKI_BSP · WERMAC_SGP)",
+   "reason": "쪽 위치 어긋남: 그 문장은 附属書1 의 1. 適用範囲 에 있고 附属書1 에는 序文이 따로 없다(kikakurui 본문을 다시 열어 확인). 값은 그대로",
+   "by": "R2 대조 2026-11-05"
+  },
+  {
+   "path": "constants.PT.gaugePlaneInternal.iso · sourceRefs",
+   "was": "그림 5 (6쪽), 정의 3.3 의 Note / sourceRefs IS554_ISO7_1 '6쪽 그림 5'",
+   "now": "정의 3.3 NOTE 4 (1쪽) 를 주 근거로 하고, 그림 5 는 ISO 7-1:1994/Cor 1:2007 로 바뀐 1994 원판 그림이라고 밝힘 / sourceRefs '1쪽 3.3 NOTE 4 · 6쪽 그림 5 (1994 원판 그림)' + ISO7_1_COR1",
+   "reason": "ISME(ISO_STATUS) 를 다시 열어 Cor 1:2007 이 있음을 봄. 검색 발췌로는 Cor 1 이 그림 5 를 바꿈. IS 554:1999 는 그 전 글이라 그림 5 를 근거로 쓰면 안 되고, 0.5P 는 1쪽 NOTE 4 글(쪽 그림으로 확인)로 뒷받침됨. 0.5P 값은 그대로",
+   "by": "R2 대조 2026-11-05"
+  },
+  {
+   "path": "constants.PT.designation.jis · sourceRefs",
+   "was": "옛 PT · PS 는 附属書1 의 PT 3 1/2 · PT 7 ~ 12 · PS 3 1/2 · PS 7 ~ 12 에만 남음",
+   "now": "…에만 '규정으로' 남음 + 附属書1付表1 에 PT 1/8 ~ PT 6 이 음영 줄로 실려 있고 備考5 가 규정 밖 · 본체 R 과 같은 내용 · ISO 와 맞추려면 쓰지 말 것이라고 적음",
+   "reason": "page-9 그림을 다시 보니 附属書1付表1 에 PT 1/8 ~ PT 6 줄이 있다. 빠뜨리면 'PT 1/2 같은 호칭은 JIS 어디에도 없다' 로 읽힐 수 있어 보완",
+   "by": "R2 대조 2026-11-05"
+  },
+  {
+   "path": "NPT[size=14 OD].note",
+   "was": "(표 VII.9 언급 없음)",
+   "now": "14쪽 표 VII.9 15열 L2 = 2.25000 을 근거로 덧붙임",
+   "reason": "L2Thds null(원문 18.90 오식)은 그대로 둔다(판정: 의도된 null). 같은 책 게이지 표가 L2 2.2500 을 따로 찍고 있어 '산수 칸만 틀림' 의 근거를 보완. 1962 정정 재인쇄 OCR 도 18. 90 임을 다시 봄",
+   "by": "R2 대조 2026-11-05"
+  },
+  {
+   "path": "sources (+ISO7_1_COR1, +WERMAC_SGP) · IS554_ISO7_1.note · ISO_STATUS.note · WIKI_BSP.note",
+   "was": "Cor 1:2007 언급 없음, 강관 치수 칸의 둘째 출처 없음",
+   "now": "정오표 출처와 SGP 치수표 출처를 더하고 관련 note 에 적음",
+   "reason": "JIS 전재(secondary)에만 있던 강관 바깥지름 · 두께를 독립된 둘째 출처로 맞춰 봄(15 크기 모두 같음). Cor 1 은 위 gaugePlaneInternal 참조",
+   "by": "R2 대조 2026-11-05"
+  }
+ ],
+ "confidence": "NPT 표 VII.1 · VII.2 · VII.3 과 NPT 식: 높음 — 1957 판 쪽 그림을 직접 읽었고, 표 VII.2 는 engineersedge(1983 판 인용) 두 쪽과 24줄 모든 칸이 같으며 표 사이 관계식 검산(E1 = E0 + L1/16 등 16가지)이 14 OD L2 산수 하나만 빼고 모두 맞는다. 다만 현행 ASME B1.20.1-2013 원문과는 대조 못 했다. PT 의 ISO 7-1 값: 높음 — 국가 규격(IS 554 = ISO 7-1 identical) 쪽 그림을 읽었고 열 사이 더하기 · 빼기가 모두 맞는다. PT 의 JIS 값: 중상 — 비공식 전재 사이트의 규격 쪽 그림이지만 지름 · P · h 가 ISO 와 같고, a · b · c · l · l' · t 가 본문 5.2~5.4 규칙 · 산 수 규칙과 모두 맞으며, 제조사 자료 발췌(R1/4 · R1/2)와도 같다.",
+ "verification": {
+  "checkedAt": "2026-11-05",
+  "method": "옮겨 적은 값을 research-tools/pipe_data.py 에 두고 check_pipe.py 로 검산: NPT 24줄 × 16식(p = 1/n, E0 식, L2 식, E1 · E2 · E3 · E5 = E0 ± L/16, 산수 = L/p, V = 3.47p, L4 = L2 + V, L5 = L2 − 2p, h = 0.8p, 0.0625/n, K0 = E0 − h), 표 VII.1 5줄 × 9식, JIS 16줄 × 11식(P = 25.4/n, h · r 식, d2 · d1, l' = a + b + f, l = a + b + f − c, t = 0.8(a − b + f), 평행 허용차 = c/16, b = 1 · 1.5산, c = 1.25 · 1.5산), ISO 15줄 × 7식, JIS 와 ISO 의 지름 · h · f 일치",
+  "result": "어긋난 칸은 NPT 14 OD L2 산수(18.90 ↔ 18.00) 하나. JIS l' 와 ISO 16열은 2 1/2 (30.1 ↔ 30.2) · 5 · 6 (43.5 ↔ 43.6) 에서 반올림만 다르다. JIS 표 길이들은 0.05 끝수를 짝수 쪽으로 둥근 것으로 맞는다(예 R1/4 l' = 6.01 + 1.34 + 3.7 = 11.05 → 11.0).",
+  "r2Review": {
+   "by": "조사자와 다른 에이전트 (R2 대조)",
+   "checkedAt": "2026-11-05",
+   "script": "scratchpad research-tools/r2_verify.py (조사자의 pipe_data.py 를 쓰지 않고 원문 쪽 그림에서 새로 옮긴 값을 안에 둠)",
+   "reopened": [
+    "H28_1957_P2: archive.org 쪽 그림 n11 (2쪽) · n12 (3쪽) · n13 (4쪽 표 VII.1) · n14 (5쪽 표 VII.2 1~11열) · n15 (6쪽 12~22열 · 각주) · n16 (7쪽 표 VII.3) · n23 (14쪽 8-4 ~ 8-6 · 표 VII.9), 표지 djvu 글 'Issued November 16, 1959'",
+    "H28_1957_P2_R1962: djvu 글 — 14 OD 산수 '18. 90', 'Reprinted April 1962 with corrections'",
+    "H28_1969_P1: djvu 글 — 머리말 'the latest issues of Parts II and III are those of 1957'",
+    "IS554_ISO7_1: archive.org 쪽 그림 n5 (1쪽 3.3 NOTE 4) · n6 (2쪽) · n7 (3쪽 Table 1) · n8 (4쪽 그림 1 · 2) · n9 (5쪽 7.2 · 8) · n10 (6쪽 그림 4 · 5), djvu 글 머리말 'identical with ISO 7-1 : 1994' · 'without deviations'",
+    "JIS_B0203_1999: kikakurui page-5 (원문 4쪽) · page-6 (5쪽 付表1) · page-9 (8쪽 附属書1付表1) 그림과 본문 글(まえがき · 序文 · 3. 定義 · 5.2 ~ 5.4 · 6 · 7 · 付表1 注 · 附属書1 1. ~ 5. · 備考1 ~ 5). 쪽 번호는 본문의 'n B 0203 : 1999' 표시로 맞춤",
+    "EE_NPT_A · EE_NPT_B · WIKI_BSP · ISO_STATUS: 다시 열어 24줄 · 15줄 · 현행 여부 확인",
+    "NBK_TAPER: PDF 사본 글자 뽑기로 P = 25.4/n · H 0.960237 · h 0.640327 · r 0.137278 확인. NAGANO_TECH · JSA_LIST: 검색 발췌 다시 확인"
+   ],
+   "cellVerdicts": {
+    "ok": 1155,
+    "mismatch": 0,
+    "unverifiable": 0,
+    "intendedNull": 1,
+    "scope": "NPT 24줄 × 21칸, JIS 16줄 × 17칸(tpi 포함), ISO 15줄 × 18칸, 표 VII.1 5줄 × 13칸, 표 VII.3 5줄 × 7칸, 상수 10개 — 값 · 단위 · 자리 수 · 크기 줄 짝까지 글자 그대로 비교",
+    "intendedNullDetail": "NPT 14 OD L2Thds: 원문 18.90, JSON null (printedL2Thds 에 원문 보존). 원문 오식으로 판정, 그대로 둠"
+   },
+   "crossChecks": [
+    "표 VII.9 (같은 책 14쪽) 7 · 8 · 9 · 14 · 15열 = E0 · E1 · E2 · L1 · L2 가 표 VII.2 의 24줄과 모두 맞음 (L2 는 5자리 → 4자리로 둥겨 비교)",
+    "JIS 에만 있는 칸의 둘째 출처: a 를 0.1 로 둥근 값 = ISO 8열, b · c = ISO 10 · 14열 산 수 × P 를 0.01 로 둥근 값, l' 과 ISO 16열 · l 과 ISO (11 + 18 − 13열) · t 와 ISO 7.2.2 의 0.8 × 17열이 모두 0.1 mm 안, r = 0.137278P 를 0.01 로 둥근 값, 강관 바깥지름 · 두께 = WERMAC_SGP, PT 3 1/2 의 d · d1 · a = WIKI_BSP — 141 검사 어긋남 0"
+   ],
+   "formulaChecksR2": {
+    "PT": "31 블록(JIS 16 + ISO 15): P = 25.4/n (표 자리 수의 반 단위 안), h = 0.640327P (±0.0005), d2 = d − h · d1 = d − 2h 를 표의 h 와 정확한 h 로 각각 ±0.001 mm — 실패 0",
+    "NPT": "24줄: E0 = D − (0.05D + 1.1)p (±0.000005, 표 5자리 반올림 안), E1 − E0 = L1/16 (±0.00001) — 실패 0. 4 in 줄은 0.05274 ↔ 0.05275 로 차이가 꼭 0.00001 (E0 4.334375 → 4.33438, E1 4.387125 → 4.38712 반올림 탓, 경계 통과). 덧붙여 p = 1/n · L2 식 · h = 0.8p 도 실패 0",
+    "sourceFields": "null 아닌 모든 값 블록(NPT 24 · JIS 16 · ISO 15)과 constants 의 모든 sourceRefs 에 sourceId(sources[] 에 있음) · page 가 있음, 모든 sources 에 url 있음 — 빠짐 0",
+    "notApplicable": "R1(ThreadSpec.kt unified() 한계 재현) · R3(메이커 2곳 · speeds) · R4(이름 규칙)는 이 파일(관용 나사)에 해당하지 않음"
+   },
+   "unresolved": 0
+  }
+ },
+ "notes": "[PT · JIS 와 ISO 의 차이] 지름(d · d2 · d1)과 h 는 같다. 다른 것은 (1) P 자리 수(JIS 0.9071 · ISO 0.907), (2) 기준 길이 a 를 JIS 는 0.01 mm(3.97 · 6.01 · 6.35 · 8.16 · 9.53 · 10.39 · 12.70 · 15.88 · 17.46 · 20.64 · 25.40 · 28.58), ISO 는 0.1 mm(4 · 6 · 6.4 · 8.2 · 9.5 · 10.4 · 12.7 · 15.9 · 17.5 · 20.6 · 25.4 · 28.6)로 적음, (3) 허용차도 JIS 0.01 mm(±0.91 · 1.34 · 1.81 · 2.31 · 3.46 / 암 ±1.13 · 1.67 · 2.27 · 2.89 · 3.46) · ISO 0.1 mm(±0.9 · 1.3 · 1.8 · 2.3 · 3.5 / 암 ±1.1 · 1.7 · 2.3 · 2.9 · 3.5)이고 ISO 는 산 수가 규정값 · mm 는 참고값, (4) 암나사 기준면을 JIS 는 관 끝 쪽(管端部), ISO 는 끝면에서 0.5P 안쪽에 둠 — JIS 가 밝힌 유일한 기술 차이, (5) 평행 암나사 지름 허용차 1 ~ 2 크기 JIS ±0.181 · ISO ±0.180, (6) 평행 암나사가 받아야 할 길이 JIS l' 30.1 · 43.5 ↔ ISO 16열 30.2 · 43.6 (2 1/2 · 5 · 6), (7) JIS 에만 l(테이퍼 암나사 · 기준경에서 작은 지름 쪽) · t(도피 있음) · 강관 치수(참고) 칸이 있고, ISO 는 유효 나사 길이를 게이지 길이 nominal · max · min 셋으로 줌. JIS f 와 ISO 접합 여유(18열)는 같은 값.\n[PT 3 1/2] JIS 附属書1 에만 있다(ISO 에 없음). 다음 개정 때 폐지 연한을 밝힌다고 적혀 있다.\n[NPT] 1957 판 표 VII.2 는 24 크기(1/16 ~ 24 OD)다. h = 0.8p 이고 산봉우리 · 골 깎임은 최소 0.033p, 최대는 산수별 표 VII.1. 제품 허용차는 게이지 ±1산이고 지름으로는 21열 0.0625/n. 표 VII.3 의 각 허용차는 60° 전체각 기준 ±(도) 칸이다.\n[앱에 옮길 때] PT 는 R · Rc 의 H · h · r 과 Rp 의 H' · r' 가 다르다. NPT 의 L1 은 식이 없어 표 값을 써야 한다(E0 · L2 · E1 은 식으로도 맞음)."
+}

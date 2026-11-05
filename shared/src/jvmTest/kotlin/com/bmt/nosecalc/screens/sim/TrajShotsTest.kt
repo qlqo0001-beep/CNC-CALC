@@ -4,6 +4,7 @@ import androidx.compose.runtime.remember
 import com.bmt.nosecalc.AppHost
 import com.bmt.nosecalc.Feature
 import com.bmt.nosecalc.Shots
+import com.bmt.nosecalc.calc.Pt
 import kotlin.test.Test
 
 /**
@@ -93,6 +94,27 @@ class TrajShotsTest {
         holderSheet("sim-holders-fs130-w360", 360, 1.3f)
         // 20 줄이 다 보이게(시트 높이는 화면의 85 %)
         holderSheet("sim-holders-all", heightDp = 2000)
+    }
+
+    /** 예제 ⑮ 다이스 헤드(설계 19절) — 끝까지 재생, 다이스 나사(골 반경 d/2 − 0.613435P) 둘레를 크게 */
+    private val die = TrajScene("sim-2d-die", { perform(Pending.Example(exampleList.indexOfFirst { it.text.startsWith("O9023") })) }) { run ->
+        lastT = run.totalSec
+        viewer.focus(Pt(-8.0, 4.0), 1.8f)
+    }
+
+    /** 예제 ⑯ 관용 테이퍼 G92 I(R 1/2) — 끝까지 재생, 1/16 테이퍼 톱니 */
+    private val pipe = TrajScene("sim-2d-pipe", { perform(Pending.Example(exampleList.indexOfFirst { it.text.startsWith("O9024") })) }) { run ->
+        lastT = run.totalSec
+        viewer.focus(Pt(-6.0, 9.0), 1.6f)
+    }
+
+    /** 다이스 헤드: 공구 설정 카드(외경 바이트 · 다이스 — 다이스 지름 · 피치 · 각도, 노즈 R · 팁 칸 없음) · 좁은 폰 큰 글꼴, 2D 톱니 · 관용 테이퍼 톱니 */
+    @Test
+    fun dieHead() {
+        shot(die, "sim-tools-die", heightDp = 1500, sheet = TrajSheet.TOOLS)
+        shot(die, "sim-tools-die-fs130-w360", widthDp = 360, heightDp = 1800, fontScale = 1.3f, sheet = TrajSheet.TOOLS)
+        shot(die)
+        shot(pipe)
     }
 
     /** 큰 글꼴 · 좁은 폰 · PC 넓은 창 · 낮은 창 */

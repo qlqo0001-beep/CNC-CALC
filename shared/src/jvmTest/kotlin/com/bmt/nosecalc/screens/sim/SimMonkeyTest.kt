@@ -1049,7 +1049,7 @@ class SimMonkeyTest {
         ),
     )
 
-    /** 공구 설정 시트: 공구표 빈 · 일부 · 극단 값 · 공구 넷, 그리고 종류 4 × 인서트 4 × 팁 시트의 모든 번호를 차례로(노즈 R · κr · 폭 · 각도 칸 끝 값) */
+    /** 공구 설정 시트: 공구표 빈 · 일부 · 극단 값 · 공구 넷, 그리고 종류 5 × 인서트 4 × 팁 시트의 모든 번호를 차례로(노즈 R · κr · 폭 · 각도 · 다이스 지름 칸 끝 값) */
     @Test
     fun toolSheet() = runPart(
         "tools",
@@ -1108,8 +1108,8 @@ class SimMonkeyTest {
     )
 
     /**
-     * 공구 카드 하나(T1212 · G42)에서 종류 4가지 × (바이트면 인서트 4) × 팁 시트의 모든 번호(1~8 · 0 · 표준 되돌리기)를 차례로 누르고,
-     * 노즈 R · κr · 폭 · 각도 칸에 끝 값을 넣은 뒤 시트를 닫아 2D · 3D 를 그리고 재생한다. 팁을 고를 때마다 시트 뒤의 궤적 창도 다시 그린다.
+     * 공구 카드 하나(T1212 · G42)에서 종류 5가지 × (바이트면 인서트 4) × 팁 시트의 모든 번호(1~8 · 0 · 표준 되돌리기)를 차례로 누르고,
+     * 노즈 R · κr · 폭 · 각도 · 다이스 지름 칸에 끝 값을 넣은 뒤(다이스도 G42 번호라 노즈 R · 팁이 보인다) 시트를 닫아 2D · 3D 를 그리고 재생한다. 팁을 고를 때마다 시트 뒤의 궤적 창도 다시 그린다.
      */
     private fun Part.toolMatrix(cfg: Cfg, until: Long, start: Start = TOOL_CARD) {
         val s = open(start, cfg, emptyList()) ?: return
@@ -1141,7 +1141,7 @@ class SimMonkeyTest {
             val tips = (1..8).map { "$it" } + listOf("0", "표준")
             val nose = listOf("0D", "0.0001D", "50D", "B", "-0.4D", "999999999999D")
             var ni = 0
-            outer@ for (kind in listOf("바이트", "홈", "나사", "둥근")) {
+            outer@ for (kind in listOf("바이트", "홈", "나사", "둥근", "다이스")) {
                 if (System.currentTimeMillis() > until) break
                 if (!go(tap { it.key == kind })) break
                 val inserts = if (kind == "바이트") InsertShape.entries.map { "${it.name} " } else listOf<String?>(null)
@@ -1165,6 +1165,7 @@ class SimMonkeyTest {
                         "바이트" -> "절입각 κr" to listOf("0.1D", "179.9D", "180D", "-D")
                         "홈" -> "홈 폭" to listOf("0.001D", "100D", "100.1D", "0D")
                         "나사" -> "나사 각도" to listOf("1D", "179.99D", "0D", "B")
+                        "다이스" -> "다이스 지름" to listOf("0.001D", "200D", "200.1D", "0D")
                         else -> null
                     }
                     if (extraField != null) {

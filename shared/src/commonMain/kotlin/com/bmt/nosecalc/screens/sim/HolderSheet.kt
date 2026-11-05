@@ -135,7 +135,7 @@ internal fun HolderSheet(current: CompanyHolder?, onPick: (CompanyHolder?) -> Un
 
 /** 시트 줄의 값: 채우는 것(종류 · 인서트 · κr)과 제조사(없으면 '제조사 확인 필요') */
 private fun holderSub(h: CompanyHolder, makers: Boolean): String = buildList {
-    add(listOf("바이트", "홈", "나사", "둥근")[h.kind.ordinal])
+    add(toolKindLabel(h.kind))
     if (h.kind == ToolKind.TURN) {
         add(h.insert?.let { "${it.name} ${it.epsDeg.toInt()}°" } ?: "인서트 직접")
         add(h.kappa?.let { "κr ${numText(it)}°" } ?: "κr 직접")

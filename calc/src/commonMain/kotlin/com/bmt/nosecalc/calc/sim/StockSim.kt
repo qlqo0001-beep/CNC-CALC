@@ -18,6 +18,8 @@ import kotlin.math.min
  * 나사 특징(설계 5.4). 나사 패스는 래스터를 깎지 않는다(나선은 회전체가 아니라 한 열에서 한 각도만 깎는다 — 회전체로 빼면 산까지 없어짐).
  * [root] = 지금까지 가장 깊은 패스의 골 선(가상 인선 경로 — 노즈 0 · 팁 0 나사 공구면 골 자리), [lead] = 리드,
  * [angleDeg] = 공구 설정의 나사 각(빈칸 60°), [outer] = 바깥 나사(후퇴가 +X), [line] = 처음 패스의 줄.
+ * 다이스 헤드([StepSrc.DIE_CUT] — 설계 19절, 모형)는 공구 설정에서: 골 = 수평선 반경 d/2 − k(60° 0.613435P · 55° 0.640327P), Z 는 그 G01 의 시작 ~ 끝,
+ * 리드 = 다이스 피치 P(F 가 아님), 바깥 나사.
  */
 data class ThreadFeature(val root: Line, val lead: Double, val angleDeg: Double, val outer: Boolean, val line: Int)
 
@@ -49,7 +51,7 @@ data class StockProfile(val pieces: List<StockPiece>, val threads: List<ThreadFe
  *
  * 이동마다 쓸고 간 영역 = 시작 · 끝 자세의 공구 다각형([ToolShape]) 볼록 껍질(직선). 원호는 현 높이 [ARC_SAG] 이하로 나눠 같은 방법.
  * 열 가운데 Z 에서 껍질의 x 범위를 재고, 축 아래(x < 0)는 |x| 로 접는다(회전체). 반경은 정확, Z 오차 ≤ 기울기 × dz/2.
- * 나사(THREAD) 이동은 깎지 않고 [ThreadFeature] 로 남긴다. 급송이 깎으면 [ContactKind.RAPID_CUT], 형식 C 의 G40 옮김이 앞 블록 면 쪽으로
+ * 나사(THREAD) · 다이스 헤드([StepSrc.DIE_CUT]) 이동은 깎지 않고 [ThreadFeature] 로 남긴다. 급송이 깎으면 [ContactKind.RAPID_CUT], 형식 C 의 G40 옮김이 앞 블록 면 쪽으로
  * 들어가며 깎으면([digsIn]) [ContactKind.CANCEL_CUT], 공구가 척(척 면 왼쪽, 반경 < 척 지름/2)에 들어가면 [ContactKind.CHUCK].
  *
  * [cutTo] 는 앞으로는 이어서, 뒤로는 저장점(이동 [saveEvery] 개마다 — 합 40개 이하)에서 다시 깎는다. 한 스레드에서만 쓴다.
@@ -148,9 +150,9 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
                 found[k * KINDS + ContactKind.CHUCK.ordinal] = Contact(ContactKind.CHUCK, moves[k], m.line, m.t0 + ff * (m.t1 - m.t0), at, 0.0)
             }
         }
-        if (m.kind == MoveKind.THREAD) return
+        if (threadLike(m)) return
         // 나사 패스 바로 뒤 급송(나사 골에서 빠짐)은 깎지 않는다 — 래스터에는 나사 골이 없어 헛경보가 된다
-        if (m.kind == MoveKind.RAPID && k > 0 && step(k - 1).kind == MoveKind.THREAD) return
+        if (m.kind == MoveKind.RAPID && k > 0 && threadLike(step(k - 1))) return
         val cancel = m.src == StepSrc.SHIFT_CANCEL && digsIn(m)
         if (record && (m.kind == MoveKind.RAPID || cancel)) {
             val dry = cutSeg(m.tip, 1.0, shape, arr, dry = true)
@@ -321,6 +323,9 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
 
     // ---------------------------------------------------------------- 나사
 
+    /** 래스터를 깎지 않는 나사 이동: 나사 패스(THREAD) · 다이스 헤드(DIE_CUT — 공구 모양도 없음) */
+    private fun threadLike(m: MoveStep) = m.kind == MoveKind.THREAD || m.src == StepSrc.DIE_CUT
+
     private class ThreadGroup(val line: Int, val lead: Double, val angle: Double, val outer: Boolean) {
         val passes = ArrayList<Pair<Double, Line>>()
         var z0 = Double.POSITIVE_INFINITY
@@ -333,6 +338,18 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
         for ((k, si) in moves.withIndex()) {
             val m = run.steps[si] as MoveStep
             if (m.kind == MoveKind.FEED) cur = null
+            if (m.src == StepSrc.DIE_CUT) {
+                // 다이스 헤드(설계 19절): 공구 설정의 d · P · 각으로 골 선(수평) — d · P 가 비면(DIE_DATA_MISSING) 모양 없음
+                val d = m.die ?: continue
+                val seg = m.tip as? Line ?: continue
+                val r = d.dia / 2 - dieDepth(d)
+                out += ThreadGroup(m.line, d.pitch, d.angleDeg, outer = true).also { g ->
+                    g.passes += m.t0 to Line(Pt(seg.start.z, r), Pt(seg.end.z, r))
+                    g.z0 = min(seg.start.z, seg.end.z)
+                    g.z1 = max(seg.start.z, seg.end.z)
+                }
+                continue
+            }
             if (m.kind != MoveKind.THREAD) continue
             // 한 패스의 이어진 나사 토막 가운데 첫 것만 골 선 — 뒤 토막은 끝 빼기(G92 · G76 r)
             if (k > 0 && step(k - 1).kind == MoveKind.THREAD) continue
@@ -350,6 +367,9 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
         }
         return out
     }
+
+    /** 다이스가 낸 숫나사의 골 깊이(반경) — 60° 미터 · 유니파이 숫나사 h3 = 0.613435P, 55° 관용 h = 0.640327P */
+    private fun dieDepth(d: DieCut): Double = (if (abs(d.angleDeg - 55) < 1e-9) 0.640327 else 0.613435) * d.pitch
 
     /** 나사 패스 뒤 첫 급송이 +X 로 빠지면 바깥 나사 */
     private fun outerAfter(k: Int, seg: Line): Boolean {
@@ -597,13 +617,14 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
  * - **구멍**: 안쪽 공구(팁 1 · 2 · 6)의 이송이 있으면 구멍 지름 = 그 이송의 가장 작은 X − 2 mm(내림) — 통짜 소재에 내경 바가 들어가면
  *   급송 후퇴가 모두 소재를 지나는 헛경보가 되어서(설계 5.5 가 말한 그 경보).
  * - 나사 이동은 넣지 않는다 — 나사 시작 Z 는 리드 몇 배 바깥(들어가는 여유)이다. 이송이 나사뿐이면 지름은 나사 이동의 가장 큰 X 로,
- *   끝면은 나사 시작 Z − 3 리드로 한다.
+ *   끝면은 나사 시작 Z − 3 리드로 한다. 다이스 헤드 이송([StepSrc.DIE_CUT] — X0 에서 끝면 밖부터 들어간다)도 나사와 같이 본다:
+ *   X 는 공구 설정의 다이스 지름/2(비면 경로 X), 리드는 다이스 피치(비면 F).
  */
 object StockAuto {
     fun of(run: SimRun): StockSpec? {
         val moves = run.steps.filterIsInstance<MoveStep>()
-        val feed = moves.filter { it.kind == MoveKind.FEED }
-        val threads = moves.filter { it.kind == MoveKind.THREAD }
+        val feed = moves.filter { it.kind == MoveKind.FEED && it.src != StepSrc.DIE_CUT }
+        val threads = moves.filter { it.kind == MoveKind.THREAD || it.src == StepSrc.DIE_CUT }
         val use = feed.ifEmpty { threads }
         if (use.isEmpty()) return null
         var xMax = Double.NEGATIVE_INFINITY
@@ -611,12 +632,12 @@ object StockAuto {
         var zMin = Double.POSITIVE_INFINITY
         for (s in use) {
             for (p in extremes(s.tip)) {
-                xMax = max(xMax, abs(p.x))
+                xMax = max(xMax, s.die?.let { it.dia / 2 } ?: abs(p.x))
                 zMax = max(zMax, p.z)
                 zMin = min(zMin, p.z)
             }
         }
-        if (feed.isEmpty()) zMax -= 3 * (threads.maxOf { it.feed ?: 0.0 })
+        if (feed.isEmpty()) zMax -= 3 * (threads.maxOf { it.die?.pitch ?: it.feed ?: 0.0 })
         var r = max(10.0, floor(2 * xMax + 1e-9) + 1) / 2
         var face = max(zMax, 0.0)
         // 공기 점: 첫 이송 앞 급송의 끝 · 사이클 시작점

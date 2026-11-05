@@ -12,9 +12,13 @@ enum class MoveKind { RAPID, FEED, THREAD }
 
 /**
  * 이동이 어디서 나왔나. 사이클 값은 고정 사이클 단계가 쓴다. G28_VIA · G28_HOME 은 G30(제2 원점)도.
- * SHIFT_START · SHIFT_CANCEL = 형식 C 의 이동 없는 G41/G42 · G40 블록에서 노즈를 보정값만큼 옮긴 이동(명령 경로는 그 자리 한 점 — [MachineSetup.compStartup])
+ * SHIFT_START · SHIFT_CANCEL = 형식 C 의 이동 없는 G41/G42 · G40 블록에서 노즈를 보정값만큼 옮긴 이동(명령 경로는 그 자리 한 점 — [MachineSetup.compStartup]).
+ * DIE_CUT = 다이스 헤드(DIE 공구)의 G01 — 이송(시간은 F)이지만 소재를 래스터로 깎지 않고 [MoveStep.die] 로 나사 모양을 남긴다(설계 19절)
  */
-enum class StepSrc { BLOCK, CORNER, CYCLE_APPROACH, CYCLE_CUT, CYCLE_RETRACT, CYCLE_RETURN, CYCLE_FINISH, G28_VIA, G28_HOME, SHIFT_START, SHIFT_CANCEL }
+enum class StepSrc { BLOCK, CORNER, CYCLE_APPROACH, CYCLE_CUT, CYCLE_RETRACT, CYCLE_RETURN, CYCLE_FINISH, G28_VIA, G28_HOME, SHIFT_START, SHIFT_CANCEL, DIE_CUT }
+
+/** 다이스 헤드 한 번 깎기의 나사(공구 설정에서 — 모형): 호칭 지름 [dia] · 피치 [pitch](리드) · 나사 각 [angleDeg](60 · 55) */
+data class DieCut(val dia: Double, val pitch: Double, val angleDeg: Double)
 
 enum class SpindleDir { STOP, CW, CCW }
 
@@ -31,6 +35,7 @@ sealed interface SimStep {
  * [cmd] = 보정 전 명령 경로 — 그 블록(또는 끼운 모서리)의 경로 전체라 꺾인 급송의 두 토막은 같은 [cmd] 를 가진다.
  * [feed] = mm/rev([perRev]) 또는 mm/min, 급송은 null. [css] = G96 Vc(m/min), [sCmd] = 마지막 S(G96 이면 Vc, G97 이면 rpm).
  * [rpm0] · [rpm1] = 처음 · 끝 회전수(주축 정지면 0, G96 급송은 끝점 X 로 정한 값 — S 3-82).
+ * [die] = 다이스 헤드 깎기([StepSrc.DIE_CUT])의 나사 — 공구 설정의 d · P 가 비었으면 null(경로만).
  */
 data class MoveStep(
     override val line: Int,
@@ -54,6 +59,7 @@ data class MoveStep(
     val sCmd: Double?,
     val rpm0: Double,
     val rpm1: Double,
+    val die: DieCut? = null,
 ) : SimStep
 
 data class DwellStep(override val line: Int, override val unit: Int, override val t0: Double, override val t1: Double, val sec: Double) : SimStep

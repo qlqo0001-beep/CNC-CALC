@@ -18,6 +18,9 @@ class ThreadSpecTest {
     private fun m(d: Double, p: Double) = ThreadTable.METRIC.single { it.d == d && it.pitch == p }
     private fun un(size: String, tpi: Int) = ThreadTable.UN.single { it.size == size && it.tpi == tpi }
 
+    /** 그 규격의 계열에 있는 급수 전부(숫 · 암) — UNEF · UN 에는 1A · 1B 가 없다 */
+    private fun classes(s: ThreadSpec) = ThreadClass.choices(s.series, false) + ThreadClass.choices(s.series, true)
+
     /** 기본 형상: H = 0.866025P, d2 = d − 0.649519P, d1 = d − 1.082532P (M10×1.5 → 9.026 · 8.376, ISO 724 표) */
     @Test
     fun basicProfile() {
@@ -193,7 +196,7 @@ class ThreadSpecTest {
             assertEquals(small || m8f, bigG.byFormula, "${s.label} 6G byFormula")
         }
         // UN 은 늘 식(ASME B1.1 이 식으로 정함) — 표 대체가 아니라 byFormula 는 false
-        assertTrue(ThreadTable.UN.none { s -> ThreadClass.entries.filter { it.kind == ThreadKind.UN }.any { ThreadTol.limits(s, it).byFormula } })
+        assertTrue(ThreadTable.UN.none { s -> classes(s).any { ThreadTol.limits(s, it).byFormula } })
     }
 
     /**
@@ -291,18 +294,26 @@ class ThreadSpecTest {
         near(0.1140 * 25.4, ThreadTol.limits(un("#6", 32), ThreadClass.UN2B).crest.max, 0.0002 * 25.4, "#6-32 2B")
     }
 
-    /** UN 급수 배수(H28 6.1 의 C): 1A 1.5 · 3A 0.75 · 1B 1.95 · 2B 1.30 · 3B 0.975, 허용차 0.3(1A · 2A), 바깥지름 1A 0.090 · 2A 3A 0.060 */
+    /**
+     * UN 급수 배수(H28 6.1 의 C): 1A 1.5 · 3A 0.75 · 1B 1.95 · 2B 1.30 · 3B 0.975, 허용차 0.3(1A · 2A), 바깥지름 1A 0.090 · 2A 3A 0.060.
+     * 1A · 1B 는 UNC · UNF 에만 있다(UNEF · UN 은 2A · 3A · 2B · 3B 넷 — H28 표 2.21)
+     */
     @Test
     fun unifiedClassFactors() {
         for (s in ThreadTable.UN) {
-            val l = ThreadClass.entries.filter { it.kind == ThreadKind.UN }.associateWith { ThreadTol.limits(s, it) }
+            val l = classes(s).associateWith { ThreadTol.limits(s, it) }
+            val withClass1 = s.series == ThreadSeries.UNC || s.series == ThreadSeries.UNF
+            assertEquals(if (withClass1) 6 else 4, l.size, "${s.label} 급수 수")
             val base = l.getValue(ThreadClass.UN2A).pitchDia.width
             for ((c, f) in listOf(ThreadClass.UN1A to 1.5, ThreadClass.UN3A to 0.75, ThreadClass.UN1B to 1.95, ThreadClass.UN2B to 1.30, ThreadClass.UN3B to 0.975)) {
+                if (!withClass1 && (c == ThreadClass.UN1A || c == ThreadClass.UN1B)) continue
                 near(f * base, l.getValue(c).pitchDia.width, 1e-12, "${s.label} ${c.label}")
             }
-            near(-0.3 * base, l.getValue(ThreadClass.UN1A).deviation, 1e-12, "${s.label} 1A 허용차")
             near(-0.3 * base, l.getValue(ThreadClass.UN2A).deviation, 1e-12, "${s.label} 2A 허용차")
-            near(1.5 * l.getValue(ThreadClass.UN2A).crest.width, l.getValue(ThreadClass.UN1A).crest.width, 1e-12, "${s.label} 1A Td")
+            if (withClass1) {
+                near(-0.3 * base, l.getValue(ThreadClass.UN1A).deviation, 1e-12, "${s.label} 1A 허용차")
+                near(1.5 * l.getValue(ThreadClass.UN2A).crest.width, l.getValue(ThreadClass.UN1A).crest.width, 1e-12, "${s.label} 1A Td")
+            }
             near(l.getValue(ThreadClass.UN2A).crest.width, l.getValue(ThreadClass.UN3A).crest.width, 1e-12, "${s.label} 3A Td")
             near(s.d, l.getValue(ThreadClass.UN3A).crest.max, 1e-12, "${s.label} 3A 바깥 최대 = 기본")
         }
@@ -312,7 +323,7 @@ class ThreadSpecTest {
     @Test
     fun dispositionForEverySpec() {
         for (s in ThreadTable.METRIC + ThreadTable.UN) {
-            for (c in ThreadClass.entries.filter { it.kind == s.kind }) {
+            for (c in classes(s)) {
                 val l = ThreadTol.limits(s, c)
                 val what = "${s.label} ${c.label}"
                 assertTrue(l.pitchDia.width > 0 && l.crest.width > 0, what)
@@ -332,7 +343,12 @@ class ThreadSpecTest {
         }
     }
 
-    /** 목록: ISO 262 보통 34 사이즈 M1~M64 + 가는 나사, UNC 23 · UNF 24(#0 은 UNF 만), 번호 사이즈 지름 0.060 + 0.013N */
+    /**
+     * 목록: ISO 262 보통 34 사이즈 M1~M64 + 가는 나사, UNC 23 · UNF 24(#0 은 UNF 만), UNEF 25(H28 표 2.10 — #12 ~ 1-11/16),
+     * UN 29(20UN 37 크기 − UNC · UNF · UNEF 와 겹치는 8), 번호 사이즈 지름 0.060 + 0.013N.
+     * UN 사이즈 47 = UNC · UNF 24 + UNEF 에만 있는 10(11/16 · 13/16 · 15/16 · 1-1/16 · 1-3/16 · 1-5/16 · 1-7/16 · 1-9/16 · 1-5/8 · 1-11/16)
+     * + 20UN 에만 있는 13(1-3/4 · 1-13/16 · 1-7/8 · 1-15/16 · 2 · 2-1/8 · 2-1/4 · 2-3/8 · 2-1/2 · 2-5/8 · 2-3/4 · 2-7/8 · 3)
+     */
     @Test
     fun tableContents() {
         val coarse = ThreadTable.METRIC.filter { it.series == ThreadSeries.M_COARSE }
@@ -343,18 +359,125 @@ class ThreadSpecTest {
         assertEquals("M10×1.25", ThreadTable.pitches(ThreadKind.METRIC, "M10")[1].label)
         assertEquals(23, ThreadTable.UN.count { it.series == ThreadSeries.UNC })
         assertEquals(24, ThreadTable.UN.count { it.series == ThreadSeries.UNF })
+        assertEquals(25, ThreadTable.UN.count { it.series == ThreadSeries.UNEF })
+        assertEquals(29, ThreadTable.UN.count { it.series == ThreadSeries.UN })
+        assertEquals(23 + 24 + 25 + 29, ThreadTable.UN.size)
         assertEquals(listOf(80), ThreadTable.pitches(ThreadKind.UN, "#0").map { it.tpi })
-        assertEquals(listOf(20, 28), ThreadTable.pitches(ThreadKind.UN, "1/4").map { it.tpi })
+        // 한 사이즈 안은 UNC · UNF · UNEF · UN 순
+        assertEquals(listOf(20, 28, 32), ThreadTable.pitches(ThreadKind.UN, "1/4").map { it.tpi })
+        assertEquals(listOf(16, 24, 32, 20), ThreadTable.pitches(ThreadKind.UN, "3/8").map { it.tpi })
+        assertEquals(listOf(ThreadSeries.UNEF, ThreadSeries.UN), ThreadTable.pitches(ThreadKind.UN, "11/16").map { it.series })
         assertEquals("1/4-20 UNC", un("1/4", 20).label)
+        assertEquals("3/4-20 UNEF", un("3/4", 20).label)
+        assertEquals("3/8-20 UN", un("3/8", 20).label)
         for (n in listOf(0, 1, 2, 3, 4, 5, 6, 8, 10, 12)) near((0.060 + 0.013 * n) * 25.4, ThreadTable.pitches(ThreadKind.UN, "#$n").first().d, 1e-9, "#$n")
         near(25.4 / 20, un("1/4", 20).pitch, 1e-12, "1/4-20 피치")
-        assertEquals(ThreadTable.sizes(ThreadKind.UN).size, 24)
+        assertEquals(47, ThreadTable.sizes(ThreadKind.UN).size)
+        assertEquals("3", ThreadTable.sizes(ThreadKind.UN).last())
         assertNull(ThreadTable.pitches(ThreadKind.METRIC, "M9").firstOrNull())
         // 급수 고르기 · 기본
         assertEquals(listOf("4h", "6g", "6h", "8g"), ThreadClass.choices(ThreadKind.METRIC, false).map { it.label })
         assertEquals(listOf("6H", "6G"), ThreadClass.choices(ThreadKind.METRIC, true).map { it.label })
+        assertEquals(listOf("4h", "6g", "6h", "8g"), ThreadClass.choices(ThreadSeries.M_FINE, false).map { it.label })
+        assertEquals(listOf("1A", "2A", "3A"), ThreadClass.choices(ThreadSeries.UNF, false).map { it.label })
+        assertEquals(listOf("2A", "3A"), ThreadClass.choices(ThreadSeries.UNEF, false).map { it.label })
+        assertEquals(listOf("2B", "3B"), ThreadClass.choices(ThreadSeries.UN, true).map { it.label })
         assertEquals(ThreadClass.UN2A, ThreadClass.default(ThreadKind.UN, false))
         assertEquals(ThreadClass.M6H, ThreadClass.default(ThreadKind.METRIC, true))
         assertFailsWith<IllegalArgumentException> { ThreadTol.limits(m(10.0, 1.5), ThreadClass.UN2A) }
+        // 계열에 없는 급수
+        assertFailsWith<IllegalArgumentException> { ThreadTol.limits(un("3/4", 20), ThreadClass.UN1A) }
+        assertFailsWith<IllegalArgumentException> { ThreadTol.limits(un("3/8", 20), ThreadClass.UN1B) }
     }
+
+    /**
+     * UNEF · 20UN 줄(H28 (1969) Part I 표 2.10 · 2.16 — docs/research/unified-extra.json 과 칸마다 맞추는 것은 jvmTest `UnifiedExtraJsonTest`).
+     * 여기서는 표 모양: (사이즈, 산수)가 겹치지 않음, 지름 순, 지름 = 이름을 분수로 읽은 인치 × 25.4(번호는 0.060 + 0.013N), 피치 = 25.4/산수,
+     * 20UN 묶음 = 표 2.16 의 37 크기 · 모두 20산, 겹치는 8 크기는 그 계열 줄(3.6 p. 2.05)이고 목록의 같은 인스턴스, 나머지는 계열 UN
+     */
+    @Test
+    fun unefAndUn20Rows() {
+        fun inch(name: String): Double {
+            if (name.startsWith("#")) return 0.060 + 0.013 * name.drop(1).toInt()
+            if ('/' !in name) return name.toDouble()
+            val whole = if ('-' in name) name.substringBefore('-').toInt() else 0
+            val (a, b) = name.substringAfter('-').split('/').map { it.toDouble() }
+            return whole + a / b
+        }
+        val keys = ThreadTable.UN.map { it.size to it.tpi }
+        assertEquals(keys.size, keys.toSet().size, "(사이즈, 산수)가 겹친다")
+        ThreadTable.UN.zipWithNext().forEach { (a, b) -> assertTrue(a.d <= b.d, "지름 순: ${a.label} → ${b.label}") }
+        for (s in ThreadTable.UN) {
+            near(inch(s.size) * 25.4, s.d, 1e-9, "${s.label} 지름")
+            near(25.4 / s.tpi!!, s.pitch, 1e-12, "${s.label} 피치")
+        }
+        val unef = ThreadTable.group(UnGroup.UNEF)
+        assertEquals(
+            listOf("#12-32", "1/4-32", "5/16-32", "3/8-32", "7/16-28", "1/2-28", "9/16-24", "5/8-24", "11/16-24", "3/4-20", "13/16-20",
+                "7/8-20", "15/16-20", "1-20", "1-1/16-18", "1-1/8-18", "1-3/16-18", "1-1/4-18", "1-5/16-18", "1-3/8-18", "1-7/16-18",
+                "1-1/2-18", "1-9/16-18", "1-5/8-18", "1-11/16-18"),
+            unef.map { "${it.size}-${it.tpi}" },
+        )
+        val un20 = ThreadTable.group(UnGroup.UN20)
+        assertEquals(
+            listOf("1/4", "5/16", "3/8", "7/16", "1/2", "9/16", "5/8", "11/16", "3/4", "13/16", "7/8", "15/16", "1", "1-1/16", "1-1/8",
+                "1-3/16", "1-1/4", "1-5/16", "1-3/8", "1-7/16", "1-1/2", "1-9/16", "1-5/8", "1-11/16", "1-3/4", "1-13/16", "1-7/8",
+                "1-15/16", "2", "2-1/8", "2-1/4", "2-3/8", "2-1/2", "2-5/8", "2-3/4", "2-7/8", "3"),
+            un20.map { it.size },
+        )
+        assertTrue(un20.all { it.tpi == 20 })
+        val coincide = mapOf(
+            "1/4" to ThreadSeries.UNC, "7/16" to ThreadSeries.UNF, "1/2" to ThreadSeries.UNF, "3/4" to ThreadSeries.UNEF,
+            "13/16" to ThreadSeries.UNEF, "7/8" to ThreadSeries.UNEF, "15/16" to ThreadSeries.UNEF, "1" to ThreadSeries.UNEF,
+        )
+        for (s in un20) {
+            assertEquals(coincide[s.size] ?: ThreadSeries.UN, s.series, "${s.size}-20 의 계열")
+            assertTrue(ThreadTable.UN.any { it === s }, "${s.label}: 목록의 같은 인스턴스")
+            assertTrue(ThreadTable.inUn20(s), s.label)
+        }
+        assertEquals(ThreadTable.UN.filter { it.series == ThreadSeries.UN }, un20.filter { it.series == ThreadSeries.UN })
+        assertEquals(ThreadTable.UN.filter { it.series == ThreadSeries.UNC }, ThreadTable.group(UnGroup.UNC))
+        assertEquals(ThreadTable.UN.filter { it.series == ThreadSeries.UNF }, ThreadTable.group(UnGroup.UNF))
+        // 묶음 밖: 1/4-28 UNF · 3/8-24 UNF · 20산이 아닌 UNEF · 미터
+        for (s in listOf(un("1/4", 28), un("3/8", 24), un("1-1/16", 18), m(10.0, 1.5))) assertTrue(!ThreadTable.inUn20(s), s.label)
+        assertEquals(listOf("UNC", "UNF", "UNEF", "20UN"), UnGroup.entries.map { it.label })
+    }
+
+    /**
+     * 물림 길이 LE 가 계열마다 맞는지(H28 7절 p. 2.21: UNC · UNF = D, UNEF · 20UN = 9P). 표 2.21 의 숫나사 2A 피치경 최소(인치)를
+     * 이 시험의 독립 식(H28 6.1 식에 LE 를 넣어 그대로 — 앱 코드를 안 부름)과 앱으로 본다. 일부러 LE 를 반대로 넣은 식은 표와 허용차(0.00015 인치 —
+     * unifiedMatchesPublishedTable 과 같음)를 넘게 어긋나야 한다 = 이 검사가 틀린 LE 를 잡는다(앱이 LE 를 바꾸면 앱 값도 그만큼 어긋난다).
+     * 손 계산(B = 0.0015∛D + 0.0015√LE + 0.015∛p², 최대 = D − 0.649519p − 0.3B, 최소 = 최대 − B):
+     *  - 1/4-20 UNC 0.2127: LE = D 0.25 → B 0.0009449 + 0.0007500 + 0.0020358 = 0.0037308, 최소 0.2126741 / LE = 9P 0.45 → B 0.0039870, 최소 0.2123410 (표와 0.00036)
+     *  - 3/4-20 UNEF 0.7118: LE = 9P → B 0.0013628 + 0.0010062 + 0.0020358 = 0.0044049, 최소 0.7117977 / LE = D → B 0.0046977, 최소 0.7114170 (0.00038)
+     *  - 2-20 UN 1.9611: LE = 9P → B 0.0018899 + 0.0010062 + 0.0020358 = 0.0049319, 최소 1.9611125 / LE = D → B 0.0060470, 최소 1.9596629 (0.0014)
+     * (3/8-20 UN 은 LE 9P 0.45 와 D 0.375 가 가까워 두 식이 0.0001 안이라 판별에 못 쓴다)
+     */
+    @Test
+    fun engagementBySeries() {
+        fun pitchMin2A(dIn: Double, tpi: Int, le: Double): Double {
+            val p = 1.0 / tpi
+            val b = 0.0015 * cbrt(dIn) + 0.0015 * sqrt(le) + 0.015 * cbrt(p * p)
+            return dIn - 0.649519 * p - 0.3 * b - b
+        }
+        val tol = 0.00015
+        // 규격, 인치 지름, 맞는 LE, 틀린 LE, 표 2.21 피치경 최소
+        for ((s, dIn, right, wrong, table) in listOf(
+            Row(un("1/4", 20), 0.25, 0.25, 9.0 / 20, 0.2127),
+            Row(un("3/4", 20), 0.75, 9.0 / 20, 0.75, 0.7118),
+            Row(un("2", 20), 2.0, 9.0 / 20, 2.0, 1.9611),
+        )) {
+            near(right, ThreadTol.engagement(s), 1e-12, "${s.label} LE")
+            near(table, pitchMin2A(dIn, 20, right), tol, "${s.label} 맞는 LE 의 식")
+            assertTrue(abs(pitchMin2A(dIn, 20, wrong) - table) > tol, "${s.label}: 틀린 LE 의 식이 표와 안 어긋난다 — 이 검사로는 LE 를 못 가린다")
+            near(table, ThreadTol.limits(s, ThreadClass.UN2A).pitchDia.min / 25.4, tol, "${s.label} 2A 피치경 최소(앱)")
+        }
+        // 계열마다 LE: UNC · UNF = D, UNEF · UN = 9P
+        near(0.5, ThreadTol.engagement(un("1/2", 20)), 1e-12, "1/2-20 UNF")
+        near(9.0 / 28, ThreadTol.engagement(un("1/2", 28)), 1e-12, "1/2-28 UNEF")
+        near(9.0 / 20, ThreadTol.engagement(un("3/8", 20)), 1e-12, "3/8-20 UN")
+        assertFailsWith<IllegalArgumentException> { ThreadTol.engagement(m(10.0, 1.5)) }
+    }
+
+    private data class Row(val s: ThreadSpec, val dIn: Double, val right: Double, val wrong: Double, val table: Double)
 }

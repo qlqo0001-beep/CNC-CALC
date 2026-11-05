@@ -93,6 +93,10 @@ class SimGoldenTest {
             for (a in listOf("G40", "11")) {
                 appendLine("${mark(IssueLevel.STOP)} COMP_SWITCH($a): ${simIssueText(SimIssue(IssueCode.COMP_SWITCH, 12, args = listOf(a)))}")
             }
+            // 다이스 경로 멈춤의 낱말 없는 갈래(앞 블록에서 X 를 옮긴 뒤 G01 — 이 블록에 X 가 없음)
+            val diePath = simIssueText(SimIssue(IssueCode.DIE_PATH, 12))
+            assertTrue(!diePath.startsWith(":") && "null" !in diePath, diePath)
+            appendLine("${mark(IssueLevel.STOP)} DIE_PATH(낱말 없음): $diePath")
         }
         golden("sim-issue-texts", text)
     }
@@ -131,6 +135,9 @@ class SimGoldenTest {
         IssueCode.DUP_PROGRAM -> "O1001"
         IssueCode.NUMBER_TOO_LONG, IssueCode.NUMBER_TOO_BIG -> "X1234567890"
         IssueCode.MID_BLOCK_SKIP -> "/"
+        IssueCode.DIE_PATH -> "X2."
+        IssueCode.DIE_IN_CYCLE -> "G92"
+        IssueCode.DIE_FEED_OVER_PITCH -> "F1.8"
         else -> null
     }
 
@@ -154,6 +161,9 @@ class SimGoldenTest {
         IssueCode.SUB_SKIPPED -> listOf("9000")
         IssueCode.SUB_NEST -> listOf("4")
         IssueCode.SUB_NO_M99 -> listOf("O2000")
+        IssueCode.DIE_IN_CYCLE -> listOf("G92")
+        IssueCode.DIE_DATA_MISSING -> listOf("5", "5")
+        IssueCode.DIE_FEED_OVER_PITCH -> listOf("1.8", "1.75")
         else -> emptyList()
     }
 }

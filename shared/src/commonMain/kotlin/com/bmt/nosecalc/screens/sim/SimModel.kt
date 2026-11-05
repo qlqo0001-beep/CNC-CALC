@@ -493,9 +493,12 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
             },
         )
 
-        /** 공구표 글: 보정 번호마다 `n|노즈R|팁|종류|인서트|κr|폭|나사각` 을 ; 로 잇는다(빈칸 = 없음) */
+        /**
+         * 공구표 글: 보정 번호마다 `n|노즈R|팁|종류|인서트|κr|폭|나사각|다이스 지름|다이스 피치` 를 ; 로 잇는다(빈칸 = 없음).
+         * 읽기는 다이스 칸이 없던 옛 8칸 글도 받는다(종류는 이름 — 모르는 이름은 바이트)
+         */
         fun encodeTools(t: Map<Int, ToolOffset>): String = t.entries.sortedBy { it.key }.joinToString(";") { (n, o) ->
-            listOf(n, o.noseR, o.tip, o.kind.name, o.insert.name, o.kappaDeg, o.width, o.threadDeg).joinToString("|") { it?.toString() ?: "" }
+            listOf(n, o.noseR, o.tip, o.kind.name, o.insert.name, o.kappaDeg, o.width, o.threadDeg, o.dieDia, o.diePitch).joinToString("|") { it?.toString() ?: "" }
         }
 
         fun decodeTools(s: String): Map<Int, ToolOffset> = s.split(';').filter { it.isNotBlank() }.mapNotNull { row ->
@@ -510,6 +513,8 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
                 kappaDeg = f[5].toDoubleOrNull(),
                 width = f[6].toDoubleOrNull(),
                 threadDeg = f[7].toDoubleOrNull(),
+                dieDia = f.getOrNull(8)?.toDoubleOrNull(),
+                diePitch = f.getOrNull(9)?.toDoubleOrNull(),
             )
         }.toMap()
     }

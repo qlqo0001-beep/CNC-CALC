@@ -260,8 +260,9 @@ private fun ToggleRow(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
 /**
  * 공구 설정(설계 7.8): 프로그램이 쓴 보정 번호마다 카드(머리 'T0101 · 보정 01', 프로그램에 없는 번호는 흐리게 아래).
  * [홀더 (선택)](회사 사용 홀더 — 고르면 종류 · 인서트 · κr 을 채움, [HolderBox]) →
- * 종류(바이트 · 홈 · 나사 · 둥근) → [노즈 R] [팁 번호](테이퍼의 팁 번호 시트를 그대로 부른다) → 바이트: 인서트 C · D · V · T + [절입각 κr] /
- * 홈: [폭] / 나사: [각도]. G41/G42 를 쓰는 번호인데 노즈 R · 팁이 빈칸이면 빨간 테 + '보정에 필요합니다'(TOOL_DATA_MISSING).
+ * 종류(바이트 · 홈 · 나사 · 둥근 · 다이스 — [toolKindLabel]) → [노즈 R] [팁 번호](테이퍼의 팁 번호 시트를 그대로 부른다) → 바이트: 인서트 C · D · V · T + [절입각 κr] /
+ * 홈: [폭] / 나사: [각도] / 다이스(설계 19절): [다이스 지름] [다이스 피치] [나사 각도] — 노즈 R · 팁은 G41/G42 를 쓰는 번호일 때만 보인다.
+ * G41/G42 를 쓰는 번호인데 노즈 R · 팁이 빈칸이면 빨간 테 + '보정에 필요합니다'(TOOL_DATA_MISSING).
  * 칸 글은 시트를 연 동안 쓴 그대로 두고, 고칠 때마다 숫자로 공구표에 넣는다(공구표는 앱을 켠 동안만 — 14.2-13).
  */
 @Composable
@@ -316,23 +317,27 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                             sim.pickHolder(n, h)
                         }
                         Spacer(Modifier.height(10.dp))
+                        // 다섯 칸 — 360dp · 글꼴 1.3 에서도 '바이트' · '다이스' 가 줄지 않게 13(자동으로 0.8 배까지 줄임)
                         Segmented(
-                            listOf("바이트", "홈", "나사", "둥근"), t.kind.ordinal,
+                            ToolKind.entries.map(::toolKindLabel), t.kind.ordinal,
                             { k -> update(n) { it.copy(kind = ToolKind.entries[k]) } },
-                            Modifier.fillMaxWidth(), height = 44.dp, fontSize = 14,
+                            Modifier.fillMaxWidth(), height = 44.dp, fontSize = 13,
                         )
-                        Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            NumberField(
-                                "노즈 R (공구 반경)", text(n, "r", t.noseR),
-                                { v ->
-                                    texts["$n.r"] = v
-                                    update(n) { it.copy(noseR = v.toDoubleOrNull()?.takeIf { r -> r >= 0 && r <= 50 }) }
-                                },
-                                Modifier.weight(1f), unit = "mm", error = missing && t.noseR == null,
-                                hint = "인서트 날끝 반경(기계 공구 보정 화면의 R)", blankable = true, id = "t$n.r",
-                            )
-                            TipBox(t.tip, missing && t.tip == null, Modifier.weight(1f)) { tip -> update(n) { it.copy(tip = tip) } }
+                        // 다이스는 노즈 R · 팁을 쓰지 않는다(경로는 X0. 의 지령점) — G41/G42 를 쓰는 번호면 보정 규칙대로 보인다
+                        if (t.kind != ToolKind.DIE || comp) {
+                            Spacer(Modifier.height(10.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                NumberField(
+                                    "노즈 R (공구 반경)", text(n, "r", t.noseR),
+                                    { v ->
+                                        texts["$n.r"] = v
+                                        update(n) { it.copy(noseR = v.toDoubleOrNull()?.takeIf { r -> r >= 0 && r <= 50 }) }
+                                    },
+                                    Modifier.weight(1f), unit = "mm", error = missing && t.noseR == null,
+                                    hint = "인서트 날끝 반경(기계 공구 보정 화면의 R)", blankable = true, id = "t$n.r",
+                                )
+                                TipBox(t.tip, missing && t.tip == null, Modifier.weight(1f)) { tip -> update(n) { it.copy(tip = tip) } }
+                            }
                         }
                         when (t.kind) {
                             ToolKind.TURN -> {
@@ -389,9 +394,53 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                                 }
                             }
                             ToolKind.ROUND -> {}
+                            ToolKind.DIE -> {
+                                Spacer(Modifier.height(10.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    NumberField(
+                                        "다이스 지름", text(n, "dd", t.dieDia),
+                                        { v ->
+                                            texts["$n.dd"] = v
+                                            update(n) { it.copy(dieDia = v.toDoubleOrNull()?.takeIf { d -> d > 0 && d <= 200 }) }
+                                        },
+                                        Modifier.weight(1f), unit = "mm", autoValue = "",
+                                        hint = "나사 호칭 지름 d(M12 = 12 · 1/2-20 UNF = 12.7). 나사 모양을 그리는 데만 씁니다", blankable = true, id = "t$n.dd",
+                                    )
+                                    NumberField(
+                                        "다이스 피치", text(n, "dp", t.diePitch),
+                                        { v ->
+                                            texts["$n.dp"] = v
+                                            update(n) { it.copy(diePitch = v.toDoubleOrNull()?.takeIf { p -> p > 0 && p <= 20 }) }
+                                        },
+                                        Modifier.weight(1f), unit = "mm", autoValue = "",
+                                        hint = "체이서 피치 P(20산 = 1.27) — 그린 나사의 리드. 프로그램의 이송 F 와 따로입니다", blankable = true, id = "t$n.dp",
+                                    )
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    NumberField(
+                                        "나사 각도", text(n, "a", t.threadDeg),
+                                        { v ->
+                                            texts["$n.a"] = v
+                                            update(n) { it.copy(threadDeg = v.toDoubleOrNull()?.takeIf { a -> a > 0 && a < 180 }) }
+                                        },
+                                        Modifier.weight(1f), unit = "°", autoValue = "60",
+                                        hint = "60°(미터 · 유니파이) 또는 55°(관용) — 그 밖의 각은 나사 모양을 그리지 않습니다", blankable = true, id = "t$n.a",
+                                    )
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
                         }
                         if (missing) {
                             Text("보정에 필요합니다 — G41/G42 를 쓰는 번호입니다", Modifier.padding(top = 8.dp), color = c.error.label, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        } else if (t.kind == ToolKind.DIE) {
+                            Text(
+                                keepWords(
+                                    if (t.dieDia == null || t.diePitch == null) "다이스 지름 · 피치를 넣으면 나사 모양을 그립니다 — 비면 경로만 그립니다"
+                                    else "다이스는 소재를 깎지 않고 지름 · 피치 · 각으로 나사 모양(모형)만 그립니다. G01 은 X0. 에서 −Z 로만 받습니다",
+                                ),
+                                Modifier.padding(top = 8.dp), color = c.textMuted, fontSize = 12.5.sp,
+                            )
                         } else if (ToolShape.outline(t.copy(noseR = t.noseR ?: 0.0, tip = t.tip ?: 0)).isEmpty()) {
                             Text(
                                 keepWords("깎는 모양이 없습니다(노즈 R · 팁 · 폭) — 소재를 깎지 않고 경로만 그립니다"),

@@ -19,7 +19,7 @@ enum class Feature(
     SIMULATOR("G코드 시뮬레이터", "FANUC G코드 경로 확인", "G코드 시뮬레이터", "FANUC 호환 G코드 사이클 시뮬레이터", ready = true),
     TRIANGLE("직각삼각형 계산", "아는 값 둘로 변 · 각 · X/Z", "직각삼각형 계산", "아는 값 둘로 나머지 변 · 각 · X/Z", ready = true),
     POLAR("턴밀 극좌표 다각가공", "G12.1 다각가공 프로그램", "턴밀 극좌표 다각가공", "턴밀 극좌표(G12.1) 다각가공 프로그램 생성", ready = true),
-    THREAD("나사 계산", "G92 다회 · G76 나사 프로그램 생성", "나사 계산", "G92 다회 · G76 나사 사이클 생성 & 분석", ready = true),
+    THREAD("나사 계산", "G92 · G76 · PT/NPT · 다이스 헤드", "나사 계산", "G92 · G76 · PT/NPT · 다이스 헤드", ready = true),
     ;
 
     companion object {

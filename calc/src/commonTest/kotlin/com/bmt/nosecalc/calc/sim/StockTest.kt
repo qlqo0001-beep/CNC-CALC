@@ -255,12 +255,16 @@ class StockTest {
         assertEquals(null, StockAuto.of(SimKit.ok(SimKit.PRE + listOf("G00 X40. Z2.", "M30"))))
     }
 
-    /** 공구 단면: 반시계 · 볼록 · 가상 인선이 X · Z 끝(팁 1~4), 홈 폭, 나사 꼭짓점 */
+    /** 공구 단면: 반시계 · 볼록 · 가상 인선이 X · Z 끝(팁 1~4), 홈 폭, 나사 꼭짓점. 다이스 헤드(DIE)는 모양 없음(래스터를 깎지 않음 — 설계 19절) */
     @Test
     fun toolShapes() {
         for (kind in ToolKind.entries) for (tip in 0..9) for (ins in InsertShape.entries) {
-            val t = ToolOffset(0.4, tip, kind, ins, width = 3.0)
+            val t = ToolOffset(0.4, tip, kind, ins, width = 3.0, dieDia = 12.0, diePitch = 1.75)
             val p = ToolShape.outline(t)
+            if (kind == ToolKind.DIE) {
+                assertTrue(p.isEmpty(), "$t")
+                continue
+            }
             assertTrue(p.size >= 3, "$t")
             assertTrue(ToolShape.area(p) > 0, "반시계 $t")
             for (i in p.indices) {
@@ -287,6 +291,59 @@ class StockTest {
         // 모양 없음: 노즈 0 · 팁 0 바이트, 폭 없는 홈
         assertTrue(ToolShape.outline(ToolOffset()).isEmpty())
         assertTrue(ToolShape.outline(ToolOffset(0.0, 3, ToolKind.GROOVE)).isEmpty())
+    }
+
+    /**
+     * 다이스 헤드 나사 모양(설계 19절 — 모형): 다이스만 있는 글(지은 치수 — d 10 · P 1.5 · 55°, S300 · F1.44 · Z5 → −16)을 Ø10 봉재에서.
+     * 래스터는 그대로(반경 5 — 다이스는 깎지 않음, 닿음 없음), 골 = 수평선 반경 d/2 − 0.640327P = 5 − 0.9604905 = 4.0395095 · Z5 ~ −16 · 리드 1.5(F 1.44 가 아님) · 55° · 바깥.
+     * 같은 글을 60° 로 하면 골 = 5 − 0.613435 × 1.5 = 5 − 0.9201525 = 4.0798475
+     */
+    @Test
+    fun dieThreadFeature() {
+        val text = listOf("T0505", "G97S300M03", "G0X0.Z20.", "Z5.", "G1Z-16.F1.44", "G4U1.", "G0Z150.", "M30")
+        val spec = StockSpec(10.0, 30.0, 0.0, 0.0, 100.0)
+        for ((deg, root) in listOf(55.0 to 4.0395095, 60.0 to 4.0798475)) {
+            val tools = mapOf(5 to ToolOffset(kind = ToolKind.DIE, threadDeg = deg, dieDia = 10.0, diePitch = 1.5))
+            val run = SimKit.ok(text, tools)
+            val s = StockSim(spec, run, tools)
+            s.cutTo(run.totalSec)
+            assertTrue(s.contacts.isEmpty(), "${s.contacts}")
+            for (i in 0 until s.columns) assertTrue(s.intervals(i).contentEquals(doubleArrayOf(0.0, 5.0)), "열 $i 는 그대로")
+            val th = s.profile().threads.single()
+            assertEquals(1.5, th.lead)
+            assertEquals(deg, th.angleDeg)
+            assertTrue(th.outer)
+            assertEquals(5, th.line)
+            assertEquals(5.0, th.root.start.z, 1e-12)
+            assertEquals(-16.0, th.root.end.z, 1e-12)
+            assertEquals(root, th.root.start.x, 1e-12)
+            assertEquals(root, th.root.end.x, 1e-12)
+        }
+    }
+
+    /**
+     * 자동 소재와 다이스 헤드(5.1 · 설계 19절): 다이스 이송은 나사처럼 본다.
+     * - 다이스만(d 12 · P 1.75, G1 Z6 → −20): 지름 = 다이스 지름/2 = 6 → floor(12) + 1 = 13, 끝면 = 시작 Z − 3P = 6 − 5.25 = 0.75,
+     *   돌출 = 0.75 − (−20) + 10 = 30.75, 척 = 2.5 × 13 = 32.5 → 100(아래 한도).
+     * - 예제 ⑮(바이트로 끝면 · 외경을 깎은 뒤 다이스): 다이스 이송(X0 · Z6 부터)은 넣지 않는다 — 이송 가장 큰 X 는 빼는 줄 X20 → 21 이지만
+     *   첫 이송 앞 급송 끝(Z0 · X18)이 소재 안이라 지름을 18 로 줄이고(18.5 절 ① 과 같은 규칙: 21/2 − 9 = 1.5 ≤ 끝면 3 − 0), 끝면 = 가장 큰 이송 Z = 면취 앞 G1 의 시작 Z3,
+     *   돌출 = 3 − (−24) + 10 = 37.
+     */
+    @Test
+    fun dieAutoStock() {
+        val tools = mapOf(5 to ToolOffset(kind = ToolKind.DIE, dieDia = 12.0, diePitch = 1.75))
+        val only = SimKit.ok(listOf("T0505", "G97S230M03", "G0X0.Z20.", "Z6.", "G1Z-20.F1.68", "G4U1.", "G0Z150.", "M30"), tools)
+        val a = assertNotNull(StockAuto.of(only))
+        assertEquals(13.0, a.dia)
+        assertEquals(0.75, a.faceZ, 1e-12)
+        assertEquals(30.75, a.length, 1e-12)
+        assertEquals(0.0, a.boreDia)
+        assertEquals(100.0, a.chuckDia)
+        val ex = SimExamples.all.single { it.text.startsWith("O9023") }
+        val b = assertNotNull(StockAuto.of(GSim.run(SimInput(ex.text, MachineSetup(), ex.tools))))
+        assertEquals(18.0, b.dia)
+        assertEquals(3.0, b.faceZ, 1e-12)
+        assertEquals(37.0, b.length, 1e-12)
     }
 
     /** 단면 조각: 홈 하나 — 위 · 아래로 갈라진 곳 없이, 테두리에 홈 벽이 들어 있다 */

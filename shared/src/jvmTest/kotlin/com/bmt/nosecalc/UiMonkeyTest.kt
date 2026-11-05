@@ -95,10 +95,19 @@ import com.bmt.nosecalc.screens.taper.TaperKind
 import com.bmt.nosecalc.screens.taper.TaperState
 import com.bmt.nosecalc.screens.taper.example
 import com.bmt.nosecalc.screens.taper.userAngleExample
+import com.bmt.nosecalc.screens.thread.Pick
 import com.bmt.nosecalc.screens.thread.ThreadState
+import com.bmt.nosecalc.screens.thread.thread20Un
 import com.bmt.nosecalc.screens.thread.threadBadWhileWaiting
+import com.bmt.nosecalc.screens.thread.threadDie
+import com.bmt.nosecalc.screens.thread.threadDieEmpty
+import com.bmt.nosecalc.screens.thread.threadDieStore
 import com.bmt.nosecalc.screens.thread.threadFormula
 import com.bmt.nosecalc.screens.thread.threadMetricInner
+import com.bmt.nosecalc.screens.thread.threadNptExt
+import com.bmt.nosecalc.screens.thread.threadNptInt
+import com.bmt.nosecalc.screens.thread.threadPtExt
+import com.bmt.nosecalc.screens.thread.threadPtInt
 import com.bmt.nosecalc.screens.thread.threadOriginal
 import com.bmt.nosecalc.screens.thread.threadReverse
 import com.bmt.nosecalc.screens.thread.threadWarn
@@ -1203,7 +1212,7 @@ class UiMonkeyTest {
         cfgShift = 1,
     )
 
-    /** 나사 G76(규격 · 급수 · 방향 · 고급 설정 접이 · 분석표) */
+    /** 나사 G76(규격 · 급수 · 방향 · 고급 설정 접이 · 분석표 · 관용 테이퍼 · 다이스 헤드 · 인서트) */
     @Test
     fun thread() = monkey(
         "thread",
@@ -1216,6 +1225,17 @@ class UiMonkeyTest {
             screen("나사 오류: Z 순서", Feature.THREAD) { ThreadScreen(threadZOrder()) } to shallow,
             screen("나사 역가공", Feature.THREAD) { ThreadScreen(threadReverse()) } to shallow,
             screen("나사 값 모자람 + 범위 밖", Feature.THREAD) { ThreadScreen(threadBadWhileWaiting()) } to shallow,
+            screen("나사 20UN 사이즈 시트", Feature.THREAD) { ThreadScreen(thread20Un(), sheet = Pick.SIZE) } to shallow,
+            screen("관용 나사 PT 숫", Feature.THREAD) { ThreadScreen(threadPtExt()) } to mid,
+            screen("관용 나사 PT 암 고급 펼침", Feature.THREAD) { ThreadScreen(threadPtInt()) } to shallow,
+            screen("관용 나사 NPT 숫 (짧은 나사)", Feature.THREAD) { ThreadScreen(threadNptExt()) } to shallow,
+            screen("관용 나사 NPT 암 (R)", Feature.THREAD) { ThreadScreen(threadNptInt()) } to shallow,
+            screen("다이스 헤드 M16", Feature.THREAD, setup = { a -> threadDieStore().forEach { (k, v) -> a.store.put(k, v) } }) {
+                ThreadScreen(threadDie())
+            } to mid,
+            screen("다이스 헤드 처음", Feature.THREAD) { ThreadScreen(threadDieEmpty()) } to shallow,
+            screen("다이스 카탈로그 시트", Feature.THREAD) { ThreadScreen(threadDie(), sheet = Pick.DIE_SPEED) } to shallow,
+            screen("인서트 시트", Feature.THREAD) { ThreadScreen(threadOriginal(), sheet = Pick.INSERT) } to shallow,
             screen("나사 극단", Feature.THREAD) {
                 ThreadScreen(
                     ThreadState(

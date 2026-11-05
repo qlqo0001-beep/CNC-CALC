@@ -153,10 +153,17 @@ class SimStateTest {
         val t = mapOf(
             1 to ToolOffset(0.4, 3),
             3 to ToolOffset(0.2, 3, ToolKind.GROOVE, InsertShape.D, 93.0, 3.0, null),
+            5 to ToolOffset(kind = ToolKind.DIE, threadDeg = 55.0, dieDia = 12.7, diePitch = 1.27),
             7 to ToolOffset(null, null, ToolKind.THREAD, threadDeg = 55.0),
         )
         assertEquals(t, SimState.decodeTools(SimState.encodeTools(t)))
         assertEquals(emptyMap(), SimState.decodeTools(""))
+        // 새 글은 10칸(… 나사각 | 다이스 지름 | 다이스 피치), 다이스 칸이 없던 옛 8칸 글도 읽는다(다이스 칸은 빈칸)
+        assertEquals("5|||DIE|C|||55.0|12.7|1.27", SimState.encodeTools(mapOf(5 to t.getValue(5))))
+        assertEquals(
+            mapOf(1 to ToolOffset(0.4, 3), 7 to ToolOffset(null, null, ToolKind.THREAD, threadDeg = 55.0)),
+            SimState.decodeTools("1|0.4|3|TURN|C|||;7|||THREAD|C|||55.0"),
+        )
     }
 
     @Test

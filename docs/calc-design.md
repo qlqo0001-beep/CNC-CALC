@@ -74,8 +74,8 @@
 
 ## 공개 API (구현됨 — 바꾸면 이 문서도 같이)
 패키지 `com.bmt.nosecalc.calc`. 파일: `Geom.kt`, `NoseComp.kt`, `Fmt.kt`, `NoseR.kt`(닫힌 식).
-계산기 `TaperCalc.kt`·`GrooveCalc.kt`·`RoundCalc.kt`·`Holder.kt`·`HolderStop.kt`·`RightTriangle.kt`·`ThreadSpec.kt`·`G76Calc.kt`·`PolarG12.kt`·
-`Cutting.kt`·`WorkMaterial.kt`·`DrillCatalog.kt` 는 아래 따로 절이 있다.
+계산기 `TaperCalc.kt`·`GrooveCalc.kt`·`RoundCalc.kt`·`Holder.kt`·`HolderStop.kt`·`RightTriangle.kt`·`ThreadSpec.kt`·`G76Calc.kt`·`PipeThread.kt`·`PolarG12.kt`·
+`DieHead.kt`·`DieHeadCatalog.kt`·`ThreadInserts.kt`·`Cutting.kt`·`WorkMaterial.kt`·`DrillCatalog.kt` 는 아래 따로 절이 있다.
 ```kotlin
 // Geom.kt
 data class Pt(val z: Double, val x: Double) {               // x = 반경. 점이자 벡터
@@ -1081,6 +1081,15 @@ object RoundCalc {
 - **목록** `ThreadTable`: 사이즈 → 피치만 적었다. ISO 262 보통 나사 M1~M64(34) + 가는 나사 M8~M64(ISO 262 의 것), UNC · UNF #0~1-1/2
   (#0 은 UNF 80 만). 출처: Wikipedia "ISO metric screw thread" 의 ISO 262 표 · "Unified Thread Standard" 의 UNC/UNF 표(2026-10 확인).
   번호 사이즈 지름 = 0.060 + 0.013·N 인치. UN 은 mm 로 바꿔 둔다(피치 = 25.4/산수).
+- **UNEF · 20UN**(2026-11-05): UNEF #12~1-11/16 25줄(NBS Handbook H28 (1969) Part I 표 2.10 p. 2.10), 20UN 1/4~3 37 크기(표 2.16 p. 2.15 —
+  1순위 22 · 2순위 15). `ThreadTable.UN` 은 (사이즈, 산수)마다 한 줄이고 사이즈(지름) 순, 한 사이즈 안은 UNC · UNF · UNEF · UN 차례다.
+  20UN 크기 가운데 UNC · UNF · UNEF 에 같은 지름 · 20산 줄이 있는 8개(1/4 UNC · 7/16 · 1/2 UNF · 3/4 · 13/16 · 7/8 · 15/16 · 1 UNEF)는
+  그 줄을 같이 쓰고(H28 3.6 p. 2.05 "Whenever a thread in a constant-pitch series also appears in the UNC, UNF, or UNEF series, the symbols,
+  tolerances, and limits of size of those standard series are applicable."), 나머지 29개만 계열 `UN`(일정 피치, "3/8-20 UN")이다.
+  그래서 UNC 23 · UNF 24 · UNEF 25 · UN 29 = 101줄, 사이즈 47. 20UN 은 계열이 아니라 묶음이다 — `UnGroup`(UNC · UNF · UNEF · 20UN) ·
+  `ThreadTable.group(g)`(20UN = 그 크기들의 20산 줄, 겹치면 같은 인스턴스) · `ThreadTable.inUn20(spec)`.
+  이름은 규격 이름 + 20UN(사용자 결정 2026-11-05): `ThreadSpec.label` 은 "3/4-20 UNEF" 그대로, 화면 피치 시트는 shared `specTitle` 로
+  "3/4-20 UNEF (20UN)"(겹치는 줄만 — 일정 피치 줄은 "3/8-20 UN"). 자료 원본(출처 대조 끝남): `docs/research/unified-extra.json`.
 - **기본 형상**(두 규격 같은 60° 형상): H = (√3/2)P = 0.866025P, 기본 피치경 d2 = d − 0.649519P, 기본 안지름(골지름) d1 = d − 1.082532P.
 - **미터 공차(ISO 965-1)** μm, P · d mm. 규격의 공차는 **표 값**이다 — 식 값을 둥근 수로 정했는데 반올림 규칙이 한결같지 않아
   (Td(6) P4 식 452 ↔ 표 475, 기초 편차 P2 식 37 ↔ 표 38) 식으로 다시 낼 수 없다. 그래서 표 값을 쓰고(`Iso965` 의 표), 표 자료가 없는
@@ -1102,7 +1111,11 @@ object RoundCalc {
   (FED-STD-H28/21B 5.1.1 "Standard M profile screw threads shall be tolerance class 6g ... and 6H"). ISO 965-1 5.2 는 M1.4 이하의 기본을
   5H · 6h 로 정하지만 이 앱은 크기와 상관없이 6g/6H 를 기본으로 둔다(5H 는 없음).
 - **UN 공차(ASME B1.1)** 인치, p = 1/산수: 피치경 공차 = C·(0.0015∛D + 0.0015√Le + 0.015∛p²), C = 1A 1.5 · 2A 1.0 · 3A 0.75 ·
-  1B 1.95 · 2B 1.30 · 3B 0.975, Le = D(UNC · UNF 표의 물림 길이). 허용차(es) = 0.3 × (C 1 의 값), 1A · 2A 만.
+  1B 1.95 · 2B 1.30 · 3B 0.975. **Le(물림 길이)는 계열마다**(`ThreadTol.engagement`): UNC · UNF 는 호칭 지름 D, UNEF · 20UN 은 9P
+  (H28 6.1 p. 2.20 "1 D (diameter) or 9 pitches, depending on the series", 7절 p. 2.21 — UNC · UNF · 4 · 6 · 8UN 은 D, UNEF · 12 · 16 · 20 ·
+  28 · 32UN 은 9 피치). 판별 줄: 3/4-20 UNEF-2A 피치경 최소 — 표 0.7118 = 9P 식 0.71180, D 식이면 0.71142.
+  허용차(es) = 0.3 × (C 1 의 값), 1A · 2A 만. **급수**: UNEF · UN 은 2A · 3A · 2B · 3B 뿐(H28 표 2.21 의 1A · 1B 줄은 UNC · UNF 표기에만) —
+  `ThreadClass.choices(series, internal)` 이 거르고, 계열에 없는 급수는 `ThreadTol.limits` 가 IllegalArgumentException · `G76Calc` 는 `BAD_INPUT`.
   바깥지름 공차 1A 0.090∛p² · 2A 3A 0.060∛p². 암나사 최소 = 기본(피치경 · 안지름 · 바깥지름). 안지름 공차는 표 2.20 의 식과 상 · 하한
   (1B · 2B: 0.25 인치 미만 0.05∛p² + 0.03p/D − 0.002 를 0.25p − 0.4p² ~ 0.394p 로 자름, 0.25 이상 0.25p − 0.4p² /
   3B: 0.05∛p² + 0.03p/D − 0.002 를 0.394p 아래, 80~13 산은 0.23p − 1.5p², 12 산 이하는 0.120p 위로).
@@ -1111,7 +1124,10 @@ object RoundCalc {
 - **표와의 차이**: 미터 6g · 6h · 6H · 6G 는 공개 한계 치수 표(ISO 965-2 · ASME B1.13M · amesweb.info, M1.6~M64)와 0.001 반올림 안(±0.0006)으로
   맞는다. (2026-10-28 전에는 식 값을 반올림 없이 써서 피치경 ≤ 9 μm · 바깥지름 최소 ≤ 24 μm · 안지름 최대 ≤ 14 μm 달랐고, 목표 100% 가 표의
   최소 실체 한계(NO-GO 게이지 값) 밖으로 최대 8 μm 나갔다 — 독립 검증에서 찾아 표 값으로 바꿈.) UN 은 표와 0.0001 인치 반올림 안
-  (2B 안지름은 0.001 인치). 화면은 `ThreadLimits.byFormula` 가 true 일 때만 "표 자료가 없어 식으로 계산 — 규격 표와 몇 μm 다를 수 있음" 을 적는다
+  (2B 안지름은 0.001 인치). H28 (1969) 표 2.21 의 98줄(UNEF · 20UN 88 · 1/4-20 UNC · 1/2-20 UNF)은 0.0001 자리 칸 ±0.00015 인치 ·
+  0.001 자리 칸 ±0.0006 인치 안이다 — 표는 공차식 증분(6자리) · 공차 · 허용차(4자리)를 반올림해 더했고 앱은 반올림 없이 더해서, UNC · UNF 를
+  포함한 약 절반 줄이 0.0001 다르다(JSON `tableVsFormula`, 잰 최대 0.000136 인치). 인쇄 오류로 보아 비운 두 칸(5/8-24 UNEF-3B 피치경 최소 ·
+  1-1/2-18 UNEF-2B 안지름 최대)은 견주지 않는다. 화면은 `ThreadLimits.byFormula` 가 true 일 때만 "표 자료가 없어 식으로 계산 — 규격 표와 몇 μm 다를 수 있음" 을 적는다
   (4h · 8g 와 위 몇 곳. 식 공차가 표보다 넓은 칸이면 목표 100% 가 표의 최소 실체 한계를 몇 μm 넘을 수 있다).
 - `ThreadLimits.rootLimit` = 골 쪽 한계: 숫나사 골지름 최대 d1 + es(평평한 골 — ASME B1.1 UN 의 최대 골지름, 미터 표의 "Max. minor diameter
   (flat form)"), 암나사 바깥지름 최소 D + EI. 숫나사 골지름 최소 · 암나사 바깥지름 최대는 규격이 정하지 않는다(날 끝이 정함).
@@ -1171,7 +1187,9 @@ object RoundCalc {
   - `G97S…` 줄은 회전수를 넣었을 때만(G76 과 같다).
 - **다듬질 블록** `g92Finish`: 같은 꼴(`M23` · `M24` 포함)에 마지막 X 두 번(`G92X(마지막)Z(끝)F(리드)` · `X(마지막)`). 외경(구멍 입구) 버를 없앤 뒤 다른 공구 블록 다음에 따로 넣는 스프링 패스.
 - **쓰지 않는 것**: M23 · M24 밖의 기계 M, 주축 M03/M04 · 공구 호출(G76 글과 같다). G92 는 X 로 곧게 절입해 나사산 각도 a · 면취량 r 은
-  G76 글에만 들어간다(G92 끝 빼기 길이는 기계 설정). G76 두 줄 글에는 M23 · M24 를 넣지 않는다(r 이 끝 빼기). 테이퍼 나사의 `I` 는 쓰지 않는다(곧은 나사만 — 관용 테이퍼 나사는 계획 단계 9).
+  G76 글에만 들어간다(G92 끝 빼기 길이는 기계 설정). G76 두 줄 글에는 M23 · M24 를 넣지 않는다(r 이 끝 빼기). 곧은 나사 글에는 테이퍼 낱말이 없다 —
+  관용 테이퍼 나사(아래 "관용 테이퍼 나사 PT · NPT")만 첫 G92 줄에 `I`(또는 `R`)를 넣는다. 같은 함수(`G76Calc.g92` 의 `taper` · `word` 인자)이고, 인자가 없으면
+  곧은 나사 글과 바이트까지 같다(기존 손 계산 · 골든이 지킨다).
 - 손 계산(원본 화면 1/4-20 UNC · 1821 rpm, `G76CalcTest.g92HandNumbers`): `G97S1821` `G0X8.322Z20.` `Z5.` `M23` `G92X5.756Z-25.F1.27`(1회 깊이 0.2 → 4.688 + 2 × 0.534)
   `X5.59` … `X4.728` `X4.688` `X4.688` `M24` `G0Z200.`(21줄), 다듬질 `G97S1821` `G0X8.322Z20.` `Z5.` `M23` `G92X4.688Z-25.F1.27` `X4.688` `M24` `G0Z200.`.
 
@@ -1185,27 +1203,34 @@ object RoundCalc {
 - 숫자와 함께: `ROOT_INTERFERES`(인선 R 이 커서 골이 `rootLimit` 을 넘음 — 목표 0% 에서 숫나사 R > H/4, 암나사 R > H/8. 기본 R 은 안 걸림),
   `ONE_ROUGH_PASS`(Δd ≥ k − d, 거친 절입 한 번).
 - 첫 절입 Δd 는 **기본값이 없다** — 공구 제조사 권장 절입 횟수를 출처로 확인하지 못했다. 분석표의 횟수를 보고 고친다(Haas 표처럼 Δd ≈ (k − d)/√횟수).
+- 관용 테이퍼(`PipeThreadCalc`)도 이 enum 을 쓴다. 그것만 내는 것: 멈춤 `START_INSIDE`(시작 Z 가 기준면 안), 숫자와 함께 `SHORT_THREAD`(나사 길이가 규격 최소보다 짧음).
+  `TIP_TOO_BIG` · `ROOT_INTERFERES` 는 곧은 나사만 낸다.
 
 ### API
 ```kotlin
 enum class ThreadKind { METRIC, UN }
-enum class ThreadSeries(val kind: ThreadKind) { M_COARSE, M_FINE, UNC, UNF }
+enum class ThreadSeries(val kind: ThreadKind) { M_COARSE, M_FINE, UNC, UNF, UNEF, UN /*일정 피치 — 이 앱은 20UN 만*/ }
+enum class UnGroup(val label: String) { UNC, UNF, UNEF, UN20 /*"20UN"*/ }
 data class ThreadSpec(val series: ThreadSeries, val size: String /*"M10" "1/4" "#10"*/, val d: Double, val pitch: Double /*mm*/,
-    val tpi: Int? = null) { val kind: ThreadKind; val label: String /*"M10×1.5" "1/4-20 UNC"*/ }
+    val tpi: Int? = null) { val kind: ThreadKind; val label: String /*"M10×1.5" "1/4-20 UNC" "3/8-20 UN"*/ }
 object ThreadTable { val METRIC: List<ThreadSpec>; val UN: List<ThreadSpec>; fun of(kind): List<ThreadSpec>
-    fun sizes(kind): List<String>; fun pitches(kind, size): List<ThreadSpec> /*보통 · UNC 먼저*/ }
+    fun sizes(kind): List<String>; fun pitches(kind, size): List<ThreadSpec> /*보통 먼저 · UNC · UNF · UNEF · UN 순*/
+    fun group(g: UnGroup): List<ThreadSpec>; fun inUn20(spec: ThreadSpec): Boolean }
 enum class ThreadClass(val kind: ThreadKind, val internal: Boolean, val label: String) {
     M4h, M6g, M6h, M8g, M6H, M6G, UN1A, UN2A, UN3A, UN1B, UN2B, UN3B
-    companion object { fun choices(kind, internal): List<ThreadClass>; fun default(kind, internal): ThreadClass /*6g 6H 2A 2B*/ } }
+    companion object { fun choices(kind, internal): List<ThreadClass>; fun choices(series, internal): List<ThreadClass> /*UNEF · UN 은 1A · 1B 없음*/
+        fun default(kind, internal): ThreadClass /*6g 6H 2A 2B*/ } }
 data class Span(val min: Double, val max: Double) { val width: Double }
 data class ThreadLimits(val spec: ThreadSpec, val cls: ThreadClass, val h: Double, val basicPitch: Double, val basicMinor: Double,
     val deviation: Double /*es ≤ 0 · EI ≥ 0*/, val pitchDia: Span, val crest: Span /*숫 바깥지름 · 암 안지름*/, val rootLimit: Double,
     val byFormula: Boolean = false /*표 자료가 없어 식으로 낸 공차가 있음*/)
-object ThreadTol { fun limits(spec: ThreadSpec, cls: ThreadClass): ThreadLimits }   // 종류가 다르면 IllegalArgumentException
+object ThreadTol { fun limits(spec: ThreadSpec, cls: ThreadClass): ThreadLimits   // 종류가 다르거나 계열에 없는 급수면 IllegalArgumentException
+    internal fun engagement(spec: ThreadSpec): Double /*UN 물림 길이 LE(인치) — UNC · UNF D, UNEF · UN 9P*/ }
 
 enum class ThreadDir { FORWARD /*Z−, 오른나사*/, REVERSE /*Z+, 왼나사*/ }
 enum class G76Warning { MISSING_INPUT, BAD_INPUT, Z_ORDER, TIP_TOO_BIG, FINISH_GE_HEIGHT, FIRST_CUT_LT_MIN, TOO_MANY_PASSES,
-                        CLEARANCE_TOO_BIG, /* ↑ 멈춤 · ↓ 숫자와 함께 */ ROOT_INTERFERES, ONE_ROUGH_PASS }
+                        CLEARANCE_TOO_BIG, START_INSIDE /*관용 테이퍼만*/, /* ↑ 멈춤 · ↓ 숫자와 함께 */ ROOT_INTERFERES, ONE_ROUGH_PASS,
+                        SHORT_THREAD /*관용 테이퍼만*/ }
 data class G76Input(val inner: Boolean = false, val spec: ThreadSpec? = null, val cls: ThreadClass? = null /*null = 기본*/,
     val dir: ThreadDir = ThreadDir.FORWARD, val zStart: Double? = null, val zEnd: Double? = null, val rpm: Double? = null,
     val angle: Int? = null /*60*/, val chamfer: Int? = null /*10 = 1.0L*/, val target: Double? = null /*80 %*/,
@@ -1230,22 +1255,246 @@ object G76Calc { val ANGLES: List<Int>; const val FINISH_COUNT_DEFAULT = 2; cons
 - 규격: 공개 표와 맞춤(미터 6g/6H 35~36 줄 — 모든 한계 ±0.0006(표 값), 표가 없는 칸의 식 = RoyMech 계산 표 ±1 μm, UN 2A/2B 12 사이즈 ·
   3A/3B 예 ±0.00015 인치), 급수 관계(6g = 6h 공차 · 6G = 6H 공차 · 기초 편차 표 1 · 4h 8g 식 배수 · byFormula 가 켜지는 곳),
   H28 표 2.20 의 상 · 하한(#0-80 0.394p, 1-8 3B 0.120p → 0.8797), 모든 규격 · 급수의 놓임, 목록 개수 · 번호 사이즈 지름.
+- UNEF · 20UN: `unefAndUn20Rows`(겹침 없음 · 지름 순 · 지름 = 이름의 분수 × 25.4 · 20UN 37 크기와 겹치는 8 크기의 계열 · 같은 인스턴스),
+  `engagementBySeries`(1/4-20 UNC · 3/4-20 UNEF · 2-20 UN 의 2A 피치경 최소를 시험 안의 독립 식으로 — 맞는 LE 는 표와 ±0.00015 인치 안,
+  일부러 반대로 넣은 LE 는 밖이라 이 검사가 틀린 LE 를 잡는다), jvmTest `UnifiedExtraJsonTest`(JSON 의 series 62줄 · engagement · classes ·
+  limits 98줄의 값 칸 636개 = 앱 — 허용차 근거는 그 파일 머리, 값이 있는데 견주지 않은 칸이 있으면 실패), `G76CalcTest.unefHandNumbers`
+  (3/4-20 UNEF 2A 80% 손 계산 → `G76X17.369Z-20.P741Q200F1.27`, 1A 는 `BAD_INPUT`).
 - G76: FANUC 매뉴얼 예 글 그대로 재현 · 같은 나사(M68×6 6h 0%)를 계산기로(X60.639 P3681 ≈ X60.64 P3680), 원본 첫 줄, 손 계산(위),
   목표 0% 의 기본 깊이 0.613435P · 0.541266P(모든 규격 · 급수, Haas K0.0383 · .0773), 목표 위치, 인선 R 이 X 를 옮기는 양(R ≤ H/3 의 2ΔR ·
   R = H/3 경계 · R > H/3 의 원호 식), 산봉우리를 깎는 큰 R 의 멈춤(`TIP_TOO_BIG`), 골 한계 경고,
   절입표(√n · Δdmin · k − d 자르기 · 정삭 m 회 · 한 번 · 너무 많음), 분석표 X, 방향, 리드 0.0001, 멈추는 입력,
   G92 다회 글 손 계산(`g92HandNumbers` — 바깥 · 안 · 역가공 · 진입 Z 올림 · 리드 넷째 자리 · M23 · M24 자리).
-- G92 를 시뮬레이터로(`sim/G92ThreadTest`): 대표 나사(1/4-20 UNC 바깥 · M10×1.5 6H 안 · M10×1.5 4h 바깥 · 역가공 · M3×0.5 안 · 1/2-13 UNC m 3)마다
+- G92 를 시뮬레이터로(`sim/G92ThreadTest`): 대표 나사(1/4-20 UNC 바깥 · M10×1.5 6H 안 · M10×1.5 4h 바깥 · 역가공 · M3×0.5 안 · 1/2-13 UNC m 3 ·
+  3/4-20 UNEF 바깥 · 3/8-20 UN 바깥 · 안 — 세 UNEF · 20UN 은 G92 글 전문을 손 계산으로도, `unefAndUn20HandNumbers`)마다
   G92 글을 GSim 에 넣어 멈춤 · 문제 0('기계 M' 알림 없음), M23 은 G92 바로 앞 · M24 는 마지막 X 바로 뒤, 깎는 회 수 = 분석표 회차 수 + 1(M24 줄 — FF 4.1.6),
   회마다 X = 분석표 X(M24 줄은 마지막 X) = 같은 나사의 G76 두 줄을 GSim 이 풀어 그린 회차 X(0.001 안), 마지막 X = G76 X, 깎는 줄이 시작 Z → 끝 Z,
   진입(Z20. → 시작 Z) · 물러남(→ Z200.)이 Z 로만, 다듬질 블록은 마지막 X 두 번 + M24 줄 한 번. 끝 빼기 켬 · 끔(`threadPullOutM23M24`)은 설정 1 리드에서 지은 글로
   M 없음 = 켬(전과 같음) · M24 뒤 끔 · M23 뒤 켬 · G92 모드의 M 줄은 한 번 더 돈 뒤 바꿈 · G76 의 r 도 같은 모달을 손 계산 토막 끝(Z-23.73 · X + 2.54)으로 본다.
 - 독립 검증(`verify/Stage3VerifyTest`): ISO 965-2 · ASME B1.13M · Optimas 표의 공차역 안(목표 0~100%), ISO 965-1 표 1 기초 편차, H28 표 2.21,
   날 단면 이분법 X(R ≤ 0.6H), 절입 횟수 한도 경계(합 1000 숫자 · 1001 멈춤) 등.
-- 일부러 틀린 식(Td −3.15P, Le = 9P, 3B 상 · 하한 없음, 암나사 기본 R H/6, 목표 뒤집기, TD2 1.3, Δdmin 무시)을 모두 잡는 것을 확인했다.
+- 일부러 틀린 식(Td −3.15P, UNC · UNF 의 Le = 9P, 3B 상 · 하한 없음, 암나사 기본 R H/6, 목표 뒤집기, TD2 1.3, Δdmin 무시)을 모두 잡는 것을 확인했다.
+  UNEF · 20UN 의 Le = D 는 `engagementBySeries` · `UnifiedExtraJsonTest` 가 잡는다.
+
+### 관용 테이퍼 나사 PT · NPT (`PipeThread.kt` — `PipeThreadCalc`, 2026-11-05)
+사용자 결정(2026-11-05): PT · NPT 는 바이트 G92 테이퍼로만 깎는다(다이스 · G76 없음), 숫나사 · 암나사 둘 다. 곧은 나사 타입(`ThreadSpec` · `ThreadClass` ·
+`ThreadTol` · `G76Calc.calc`)에 섞지 않고 따로 둔다 — 테이퍼에는 공차 급수 · 공차 % · G76 이 맞지 않고, 11.5산이 `tpi: Int` 에 안 들어간다.
+- **규격 자료** `PipeTable`(자료 원본 `docs/research/pipe-threads.json` — 출처 대조 끝남. 표 값은 Kotlin 리터럴로 옮기고 jvmTest `PipeThreadJsonTest` 가 모든 칸을 견준다):
+  - **PT**: JIS B 0203:1999 付表1(1/16 ~ 6) · 附属書1付表1(3 1/2 — ISO 7-1 에 없는 크기), 16 크기. 55°, 1/16 테이퍼(지름), h = 0.640327P,
+    r = 0.137278P, 산의 이등분선이 축에 수직. 칸: 산수 · 기준경 바깥지름 d · 기준 길이 a · 접합 여유 f · 테이퍼 암나사 유효 나사부 l · r · 강관 바깥지름(참고).
+    게이지 면 피치경 = d − 0.640327P(ISO 7-1 Table 1 주 — 바깥지름을 먼저 환산하고 h 를 뺐다. 표의 d2 와 0.0005 안).
+    게이지 공차는 **산 수**로 둔다(ISO 7-1 Table 1 10 · 14열의 규정값: 숫 1산(1/16 ~ 2) · 1½산(2½ ~ 6), 암 1¼ · 1½산). JIS b · c 는 그 산 × P 를
+    0.01 mm 로 둥근 값이라 b/P 로 되돌리면 1산이 못 된다(1/2: 1.81 / 1.8143 = 0.998). 암나사는 c(암나사 기준경 위치 허용차)를 쓴다.
+    JIS 와 ISO 7-1 은 지름 · h 가 같고 길이 · 허용차 자리 수(0.01 · 0.1 mm)와 암나사 기준면 자리(JIS 관 끝 쪽 · ISO 끝면에서 0.5P 안)가 다르다 —
+    앱은 JIS 값(요청이 PT 이름이라 계획에서 정한 기본).
+  - **NPT**: NBS Handbook H28 (1957) Part II 표 VII.2(= ANSI B2.1 — 1969 판에 Part II 는 없다, JSON notFound), 24 크기(1/16 ~ 24 OD) 가운데
+    **1/16 ~ 4 의 14 크기**(선반 바이트로 깎는 범위로 정함 — 14 OD 의 L2 산수 인쇄 오류 칸도 이 밖). 60°, h = 0.8p(깎인 산의 기본 최대 깊이),
+    칸: 산수 · D · E1 · L1 · L2 · L3(인치 × 25.4 를 mm 로). 관 끝 피치경 E0 = E1 − L1/16. 게이지 공차 ±1산(8항).
+  - `PipeSpec`: `gaugePitch`(PT d − h · NPT E1) · `gaugeLen`(PT a · NPT L1) · `tolTurns` · `tolTurnsInner` · `extLen`(숫나사 최소 나사 길이 — PT a + f ·
+    NPT L2) · `intLen`(암나사 — PT l · NPT L1 + L3) · `rootR`(PT r) · `pipeOd`(PT 강관 · NPT D), 파생 `pitch` = 25.4/산수 · `angleDeg` · `h`.
+    이름 `label` "PT 1/2" · "1/2-14 NPT" · "1 1/4-11.5 NPT", `name(inner)` 은 PT 를 숫 "R 1/2" · 암 "Rc 1/2" 로(JIS 기호).
+- **기하**(X 는 지름. 두 꼴 모두 대칭 형상이라 바깥지름 = E + h · 골지름 = E − h):
+  - 기준면 zRef(빈칸 0) = 공작물 끝면 — 숫나사 관 끝(작은 쪽), 암나사 입구 면. 게이지 면 Zg: 숫나사 zRef − 게이지 길이(작은 끝에서 척 쪽),
+    암나사 zRef(JIS 의 암나사 기준경 자리 · NPT 플러그 게이지 노치가 입구 면과 맞는 자리).
+  - 피치선 지름 E(z): 숫나사 Eg + (Zg − z)/16(척 쪽으로 굵어짐), 암나사 Eg − (Zg − z)/16(안쪽으로 가늘어짐).
+  - **게이지 면 옮김** s 산(빈칸 0, + = 조립 때 더 깊이 들어가는 쪽): 숫나사 Eg − s·P/16, 암나사 Eg + s·P/16(한 산 = 축 P = 지름 P/16) —
+    끝 골 X 도 ∓ s·P/16 옮는다. |s| 가 게이지 공차 밖이면 `BAD_INPUT`.
+  - **끝 골 X** = E(끝 Z) ∓ h(숫 − · 암 +), k = h(0.001) — **풀 프로파일 인서트 가정**(인서트가 산봉우리까지 함께 만든다).
+  - 절입표 · 회차 X 는 곧은 나사와 같다(`G76Calc.schedule`, 같은 Δdmin · d · m · X 여유 기본값, Δd 는 기본 없음): 회차 X = 끝 X ± 2(k − 누적 깊이).
+  - **I** = ∓(시작 Z − 끝 Z)/32(숫 − · 암 +, 0.001 로 반올림한 지령값) = 사이클 시작 Z 쪽 반경 − 끝 반경(지름 차 L/16 의 반). FANUC 0i-F 4.1.2.2 표 (a) 의
+    1 · 2번 그림(외경 U < 0 · R < 0, 내경 U > 0 · R > 0 — "|R| ≤ |U/2|" 조건이 붙는 3 · 4번이 아님), 시뮬레이터 `GCycles.single` 의 A′ = (A.z, B.x + I)와
+    같은 부호다(`sim/G92TaperThreadTest` 가 못 박는다). I 는 사이클 시작 Z ~ 끝 Z 길이로 낸다(나사 길이가 아님).
+  - **시작 X**: 숫나사 = 끝 Z 바깥지름(나사 안에서 가장 굵은 곳) + 2 × 여유, 암나사 = 끝 Z 안지름(가장 가는 곳) − 2 × 여유(0 이하면 `CLEARANCE_TOO_BIG`).
+  - 나사 내기 전 테이퍼(숫 바깥지름 · 암 안지름)의 기준면 · 끝 Z 지름(`crestAtRef` · `crestAtEnd`)은 숫자만 낸다(G90 글 없음).
+  - 정가공(Z−)만 — 왼나사 테이퍼는 범위 밖.
+- **글**(`g92` · `g92Finish`): 곧은 나사 G92 글과 같은 꼴에 첫 G92 줄만 테이퍼 낱말 — (`G97S…`) · `G0X(시작 X)Z20.` · `Z(시작 Z)` · `M23` ·
+  `G92X(1회 X)Z(끝 Z)I(i)F(리드)` · `X(2회 X)` … · `M24` · `G0Z200.`, 다듬질 블록은 마지막 X 두 번. I 는 X · Z 처럼 모달이라 둘째 회부터 X 만(시뮬레이터도 그렇게).
+  낱말 `taperWord` = `'I'`(기본 — 사용자 결정 2026-11-05) · `'R'`. **FANUC 0i 의 기본은 R**(반경), I 는 Series 10/11 형식(매개변수 No.0001#1 FCV = 1, 선택 기능)일 때다.
+  Haas 는 I. 모두 반경 · 모달(B-64604EN-1/01 37 · 40~42 · 231 · 359쪽, Haas 워크북 129쪽 — `docs/research/thread-inserts.json` 의 g92Taper).
+  리드 F 는 곧은 나사와 같은 넷째 자리(11.5산 `F2.2087`).
+- **경고**(`G76Warning` 을 같이 씀):
+  - 멈춤: `MISSING_INPUT`(규격 · Z 시작 · 끝 Z · 첫 절입), `BAD_INPUT`(곧은 나사와 같은 한도 + 게이지 면 옮김이 공차 밖 · 낱말이 I · R 밖 · 숫나사 끝 골 X ≤ 0),
+    `Z_ORDER`(시작 Z ≤ 끝 Z), `START_INSIDE`(시작 Z < 기준면 — 시작점으로 급송하면 공작물에 닿음. 기준면 위는 됨), `FINISH_GE_HEIGHT`, `FIRST_CUT_LT_MIN`,
+    `CLEARANCE_TOO_BIG`, `TOO_MANY_PASSES`.
+  - 숫자와 함께: `ONE_ROUGH_PASS`, `SHORT_THREAD` — 나사 길이(zRef − 끝 Z) < 숫나사 PT a + f · NPT L2, 암나사 PT l · NPT L1 + L3, 게이지 면 옮김 s 면 + s·P
+    (게이지 면이 그만큼 옮기므로 — ISO 7-1 Table 1 의 15 · 16 · 17열이 게이지 길이 nominal · max · min 마다 길이를 따로 주는 것과 같은 뜻).
+    NPT 암나사 최소 길이 식은 1957 판에 없어 L1 + L3(렌치 조임 때 숫나사가 들어오는 길이)로 정했다.
+- **손 계산**(`PipeThreadTest`, 지은 치수):
+  - R 1/2 숫 · 기준면 Z0 · Z6 → −14 · Δd 0.4 · 530 rpm: Zg −8.16, Eg = 20.955 − 1.1617361 = 19.7932639, E(−14) = Eg + 0.365 → 끝 골 X 18.9965 → `X18.997`,
+    k 1.162, 시작 X 21.32 + 2 = 23.32, I −20/32 = −0.625 →
+    `G97S530` `G0X23.32Z20.` `Z6.` `M23` `G92X20.521Z-14.I-.625F1.8143` `X20.19` `X19.935` `X19.721` `X19.532` `X19.361` `X19.204` `X19.058` `X19.037`
+    `X18.997` `X18.997` `M24` `G0Z200.`
+  - Rc 1/2 암 · Z4 → −16 · Δd 0.3: E(−16) = Eg − 1 → 끝 골 X = 20.955 − 1 = 19.955, 시작 X 17.6315 − 2 → `X15.632`, `G92X18.231Z-16.I.625F1.8143` … `X19.955`.
+  - 1/2-14 NPT 숫 · Z6 → −14 · Δd 0.4: E1 19.772122 · L1 8.128 → E(−14) = 20.139122, h 1.4514 → `X18.688` · k 1.451 · 시작 X 23.591, `G92X20.79Z-14.I-.625F1.8143`.
+  - 1/2-14 NPT 암 · 기준면 Z−5 · Z−1 → −21: E(−21) = 18.772122 → `X20.224`, 시작 X 15.321, `G92X18.122Z-21.I.625F1.8143`.
+- **API**
+```kotlin
+enum class PipeKind { PT /*55° R · Rc*/, NPT /*60°*/ }
+data class PipeSpec(val kind: PipeKind, val size: String /*"1/2" "1 1/4"*/, val tpi: Double, val gaugePitch: Double, val gaugeLen: Double,
+    val tolTurns: Double, val tolTurnsInner: Double /*게이지 공차 ± 산*/, val extLen: Double, val intLen: Double /*최소 나사 길이*/,
+    val rootR: Double? = null, val pipeOd: Double? = null) {   // 모두 mm
+    val pitch: Double; val angleDeg: Int; val h: Double /*0.640327P · 0.8P*/; val label: String; fun name(inner: Boolean): String }
+object PipeTable { val PT: List<PipeSpec> /*16*/; val NPT: List<PipeSpec> /*14*/; fun of(kind: PipeKind): List<PipeSpec> }
+data class PipeInput(val inner: Boolean = false, val spec: PipeSpec? = null, val zRef: Double? = null /*0*/, val zStart: Double? = null,
+    val zEnd: Double? = null, val rpm: Double? = null, val gaugeShift: Double? = null /*산, 0*/, val firstCut: Double? = null /*기본 없음*/,
+    val minCut: Double? = null, val finishAllow: Double? = null, val finishCount: Int? = null, val xClear: Double? = null,
+    val taperWord: Char = 'I' /*'I' · 'R'*/)
+data class PipeSolution(val gaugeZ: Double, val gaugePitch: Double, val pitchAtEnd: Double, val crestAtRef: Double, val crestAtEnd: Double,
+    val x: Double /*끝 골, 반올림 전*/, val height: Double /*k = h*/, val taper: Double /*I 지령값*/, val startX: Double, val lead: Double,
+    val finishCount: Int, val minCut: Double, val finishAllow: Double, val firstCut: Double, val passes: List<G76Pass>,
+    val g92: List<String>, val g92Finish: List<String>, val feedPerMin: Double?, val threadLen: Double, val needLen: Double)
+data class PipeResult(val solution: PipeSolution?, val warnings: List<G76Warning>)
+object PipeThreadCalc { val TAPER_WORDS: List<Char>; fun calc(i: PipeInput): PipeResult }
+// G76Calc (internal): fun g92(…, lead: Double, taper: Double? = null, word: Char = 'I') — taper 가 null 이면 곧은 나사 글 그대로
+```
+- **테스트**: `PipeThreadTest`(표 불변식 · 이름, 위 네 손 계산의 G92 전문 · 다듬질 · X · I · 시작 X · 기준면 지름, I 부호와 크기(길이 25 → ±.781), 낱말 R ·
+  I/R 밖 멈춤, 게이지 면 옮김 ±1 · 0.5산이 X 를 ∓ s·P/16 · 최소 길이를 s·P 옮김 · 공차 경계(PT 숫 1 · 암 1¼ · 2½ 1½ · NPT 1), 나사 길이 경고와 경계,
+  멈춤 · 숫자와 함께 경고마다 사례), jvmTest `PipeThreadJsonTest`(PT 16 · NPT 14 줄의 모든 칸 = JSON — 단위 · 반올림 규칙은 그 파일 머리, 상수 55° · 60° ·
+  0.640327 · 0.137278 · 0.8 · ±1산), `sim/G92TaperThreadTest`(대표 7가지 — R 1/2 숫 · Rc 1/2 암 · NPT 1/2 숫 · 암(기준면 −5) · R 1/8 숫 · 1-11.5 NPT 암 ·
+  게이지 +1산 — 의 G92 글을 GSim 에 넣어 멈춤 · 문제 0, 깎는 회 = 분석표 + 1(M24 줄), 회마다 THREAD 끝 = (분석표 X, 끝 Z) · 시작 = (끝 X + 2I, 시작 Z) ·
+  숫나사는 시작 쪽이 가늚 · 기울기 반경 1/32, 진입 · 물러남이 Z 로만, 다듬질 블록, R 꼴 글과 이동이 같음).
+  I 부호를 뒤집거나 암나사 테이퍼 방향을 숫나사와 같게 하면 이 시험들이 실패하는 것을 확인했다.
+- **시뮬레이터 예제**: R 1/2 숫나사(기준면 Z0 · Z4 → −16 · Δd 0.35 · 560 rpm)의 이 글이 편집기 예제 ⑯(O9024 — `simulator-design.md` 19.3)이다. 글 = 계산 글은
+  `ExamplesTest.pipeTaperExampleIsCalculatorText`, 나사 이동 기울기 1/32 는 `pipeTaperExampleIsTapered`.
+
+### 다이스 헤드 (`DieHead.kt` — `DieHeadCalc` · `DieHeadCatalog.kt` — `DieHeadCatalog`, 2026-11-05)
+사용자 결정(2026-11-05): 고정형 자동 열림 다이스 헤드(공작물이 돌고 터렛의 머리는 서 있다)를 나사 화면 안의 가공 방식으로 둔다. 처음 값은 이송 = 피치 × 0.96,
+끝 멈춤 `G4U1.`(1초), 물러남 Z150., NC 꼴은 아래 — 화면에서 바꾼다. M · UN 숫나사 · 정가공(Z−)만: 타입이 막는다(`DieInput` 에 내외 칸이 없고
+관용 테이퍼 `PipeSpec` 은 받지 않는다).
+- **글**(깎는 구간만 — 공구 호출 · M03 은 넣지 않는다): `G97S…` · `G0X0.Z(진입 — 20.)` · `Z(시작)` · `G1Z(끝)F(비율 × P)` · `G4U(멈춤 초)` · `G0Z(물러남 — 150.)`.
+  F 는 0.001 자리(`F1.219` — 나사 G92 의 리드 넷째 자리와 다르다. 계획에서 정한 기본값), 멈춤은 찍힐 값(0.001)이 0 이면 G4 줄을 뺀다.
+- **계산**:
+  - S = round(1000·Vc/(π·d)), d = 호칭 바깥지름. 회전수를 직접 넣으면 그것(반올림, Vc 와 둘 다 있으면 회전수). 쓴 Vc = π·d·S/1000(찍힌 S 의 절삭 속도).
+  - F = 비율 × P(`feed` 는 반올림 전 — 시간 · 당김도 반올림 전 값으로 낸다. NC 의 0.001 과의 차는 0.0005 mm/rev 이하).
+  - 분당 이송 = F·S, 시간(초) = 60·(시작 Z − 끝 Z)/(F·S) + 멈춤 — 진입 · 물러남 급송은 넣지 않는다.
+  - **끝 당김 길이** = (1 − 비율)·(물림 Z − 끝 Z): 비율 < 1 이면 체이서는 자기 리드(P)로 나아가 머리 앞쪽이 몸통보다 회전마다 (1 − 비율)P 씩 앞으로 끌려
+    나간다 — 그 합을 머리의 플로트(축 방향 여유)가 받아야 한다. 물림 Z = 공작물 끝면 Z(`zFace` — 물리기 전엔 끌리지 않는다), 없으면 시작 Z(끝면 밖이라 실제보다
+    크게 본 값 — S3 의 처음 식). 화면은 끝면 Z 칸(빈칸 0 — 관용 테이퍼의 기준면 Z 와 같은 공작물 끝면)을 늘 넘긴다(2026-11-06 — 시작 Z 부터 세면 Z5 → −20 에서 25 %
+    크게 보여 플로트 경고가 잘못 뜬다).
+    Landis 는 이 너트 작용으로 머리를 당겨 연다(pull-off — LAN_CM 9쪽), Wagner 고정형은 이송을 멈추면 연다(WAG_WEB). 비율 > 1 이면 음수(밀림).
+  - **완전 나사 끝 Z** = 끝 Z + 목 산수 × P(목 산수를 넣었을 때만) — 당김이 없다고 본(가장 짧게 본) 값이다. 실제 체이서 끝은 G1 끝보다 당김 길이(와 멈춤 동안
+    열릴 때까지 더 끌린 몫)만큼 더 들어간다.
+- **카탈로그와 다른 점 — 안내(경고 아님)**: Wagner('Mit steigungsgenauem Vorschub' · ZR 26-I 'infeed has to correspond always with the lead')와
+  Landis('must be correct for the lead of the thread')는 이송을 리드(피치)와 같게 쓴다. TACO 공식 브로셔에는 이송 글이 없다. **피치보다 작게 하라는 비율은 세 곳
+  어디에도 없다**(die-heads.json notFound). 처음 값 0.96 은 사용자 결정이고, 비율이 1 이 아니면 `DieSolution.note` = `CATALOG_FEED_NOTE`
+  ("카탈로그(Wagner · Landis)는 이송을 피치와 같게(리드와 맞게) 쓴다") — 화면 · 문서에 한 줄로 알린다.
+- **경고** `DieWarning`:
+  - 멈춤: `MISSING_INPUT`(규격 · Z 시작 · Z 끝, 또는 Vc 와 회전수 둘 다 빈칸), `BAD_INPUT`(숫자 아님 · 크기 한도 밖 · 비율 ≤ 0 · 멈춤 · 플로트 · 목 산수 < 0 ·
+    Vc ≤ 0 · > `MAX_SPEED` · 회전수 < 1 · 찍힐 S 가 1 미만 · 100 000 초과 · 찍힐 F 가 0), `Z_ORDER`(시작 Z ≤ 끝 Z, 진입 Z < 시작 Z, 물러남 Z < 시작 Z —
+    급송이 공작물 쪽으로 간다. 같으면 된다. 끝면 Z 를 넣었으면 끝면 > 시작 Z(시작점으로 급송하면 닿음) · 끝면 ≤ 끝 Z(깎을 나사가 없음)도).
+  - 숫자와 함께: `RATIO_OVER_ONE`(비율 > 1 — 기계 이송이 체이서 리드보다 빨라 머리를 밀어붙인다. 당겨 여는 머리는 끝에서 안 열릴 수 있고, Wagner Z39-2 고장표는
+    물릴 때 이송이 너무 크면 두 줄 나사가 된다고 쓴다 — 계획은 "당김 열림 규칙이 확인되면 경고", 조사가 Landis pull-off 를 확인), `FLOAT_EXCEEDED`(당김 >
+    플로트 — G1 끝 전에 열려 덜 깎인다, 플로트를 넣었을 때만. 같으면 없음), `SHORT_THREAD`(완전 나사 끝 Z ≥ 물림 Z(끝면, 없으면 시작 Z) — 나사 길이가 목 길이 이하라 완전 나사가
+    생기지 않는다. 시작 Z 로 보므로 확실히 짧은 경우만 잡는다).
+- **카탈로그** `DieHeadCatalog`: 자료 `calc/catalog/die-heads.json` = `docs/research/die-heads.json`(Wagner · Landis · TACO 공식 자료, 출처 21 · 절삭 속도 24 ·
+  체이서 34 · 홀더 표 12개 162줄, 출처 대조 끝)을 **바이트 그대로 복사**, 빌드(`generateCatalogs`)가 `DieHeadCatalogJson` 문자열로 만든다(드릴과 같은 길).
+  읽기는 `ignoreUnknownKeys = false`. 앱이 쓰는 칸(출처 · 절삭 속도 · 체이서 · 홀더 표 · 열림 · 플로트 · 이송 규칙 · 체이서 크기 · 재질)은 타입을 주고,
+  화면이 쓰지 않는 조사 기록(머리 모델 사양 `headTypes` · 목 · 릴리프 폭 · 고침 · 뺌 · 대조 · 검산)과 메이커마다 꼴이 다른 칸(체이서의 tpi · pitch · throat ·
+  setOf · sizeRange — 글 · 배열 · 수가 섞임)은 `JsonElement` 로 값 그대로 들고 다닌다(버리는 값 없음 — jvmTest 가 모든 잎을 견준다).
+  - `speeds(maker?, iso?)`: 절삭 속도 줄. **권장값이 없으면 만들지 않는다** — Wagner 두 설명서 표(ZR 26-I 14.1 · Z39-2 8.2) 모두 범위만이라 `vcRec` 는 null 그대로.
+    사다리꼴 나사 줄(Z39-2 Trapezgewinde 6줄)은 뺀다(60° M · UN 다이스가 아님) → 18줄. `iso` 를 주면 그 군 줄과 **군이 없는 줄**(출처가 군을 정하지 않아 뺄 수
+    없다 — 지금 24줄 모두 없다)을 돌려준다. 앱이 재질 → ISO 군을 짝짓지 않는다(출처에 없는 해석). Landis · TACO 는 수치 표가 공개 자료에 없다.
+  - `chasers(spec)`: 나사 꼴 · 피치가 맞는 체이서 줄 — UN 은 나사 꼴 "UN" 이고 산수 목록에 그 산수, 미터는 "mm (미터)" 이고 피치 목록("1.50")에 그 피치.
+    UNC · UNF · UNEF · 20UN 모두 같은 UN 꼴 체이서다(체이서는 피치만 정한다). **크기로는 거르지 않는다** — 지름 범위는 머리의 홀더가 정하는데(Landis 체이서 줄의
+    sizeRange 글), 홀더 표는 UNC · UNF · 미터 · 관용 범위만 있어 거르면 UNEF · 20UN 이 모두 빠진다. 피치 목록이 배열인 줄만 맞춘다 — Landis 28줄(Wagner 체이서 줄은
+    표기 예 글, TACO 는 나사 꼴 · 피치가 비어 있다). 예: 20산 UN → Landis 5/8 x 1-1/8 · 3/4 x 1-5/8 · 15/16 x 2-1/8 · 1-3/64 x 3 · 1-3/64 x 4.
+  - `source(id)` · `maker(key)` · `makers`(Wagner · Landis · TACO, `label`) · `data`(원문 전체). 홀더 표는 `DieMaker.chaserHolders`(Wagner 표기 · 품번 · 골지름 범위 ·
+    홀더 각 · 나사 열, Landis 범위 · 나사 꼴 · 리드각 · 체이서 크기 — 원문 오식으로 보이는 칸도 고치지 않음).
+  - 플로트 · 열림 행정 mm 는 세 곳 고정형 모두 없다(notFound) → `DieInput.floatTravel` 은 빈칸이 처음. 목 산수도 머리 · 목 종류마다라 빈칸이 처음.
+- **API**
+```kotlin
+enum class DieWarning { MISSING_INPUT, BAD_INPUT, Z_ORDER, /* ↑ 멈춤 · ↓ 숫자와 함께 */ RATIO_OVER_ONE, FLOAT_EXCEEDED, SHORT_THREAD }
+data class DieInput(val spec: ThreadSpec? = null, val vc: Double? = null /*m/min*/, val rpm: Double? = null /*직접 — 있으면 vc 대신*/,
+    val zStart: Double? = null, val zEnd: Double? = null, val ratio: Double = 0.96, val dwell: Double = 1.0 /*초*/,
+    val retractZ: Double = 150.0, val approachZ: Double = 20.0, val floatTravel: Double? = null, val throatThreads: Double? = null,
+    val zFace: Double? = null /*공작물 끝면 — 당김 · 완전 나사를 여기부터, null = 시작 Z*/)
+data class DieSolution(val rpm: Long /*S*/, val vcUsed: Double, val feed: Double /*비율 × P, 반올림 전*/, val feedPerMin: Double,
+    val timeSec: Double, val floatPull: Double, val fullThreadEndZ: Double?, val program: List<String>, val note: String?)
+data class DieResult(val solution: DieSolution?, val warnings: List<DieWarning>)
+object DieHeadCalc { const val RATIO_DEFAULT = 0.96; const val DWELL_DEFAULT = 1.0; const val RETRACT_Z_DEFAULT = 150.0
+    const val APPROACH_Z_DEFAULT = 20.0; const val CATALOG_FEED_NOTE: String; fun calc(i: DieInput): DieResult }
+
+@Serializable data class DieRef(val sourceId: String, val page: String)
+@Serializable data class DieSource(val id: String, val sourceType: String, val maker: String? = null, val title: String, val edition: String? = null,
+    val url: String? = null, val urls: Map<String, String>? = null, val listedAt: String? = null, val alsoUrl: String? = null,
+    val readVia: String? = null, val pages: String? = null, val note: String? = null)
+@Serializable data class DieOpening(val mechanism: String, val closing: String? = null, val quote: String, val mounting: String? = null,
+    val caution: String? = null, val deTrip: String? = null, val sourceRefs: List<DieRef>)
+@Serializable data class DieFloatItem(val what: String, val values: Map<String, JsonPrimitive> /*원문 단위*/, val unit: String,
+    val caution: String? = null, val sourceId: String, val page: String)
+@Serializable data class DieFloat(val items: List<DieFloatItem>, val value: Double? = null, val note: String, val sourceRefs: List<DieRef>? = null)
+@Serializable data class DieFeedRule(val rule: String? = null, val feedToLead: Double? = null /*같게 = 1*/, val quote: String? = null,
+    val quoteContext: String? = null, val manualRule: String? = null, val related: String? = null, val deCushion: String? = null,
+    val leadTolerance: String? = null, val note: String? = null, val sourceRefs: List<DieRef>)
+@Serializable data class DieSpeed(val material: String, val materialKo: String, val threadType: String? = null, val isoGroup: String? = null,
+    val chaserMaterial: String? = null, val vcMin: Double? = null, val vcRec: Double? = null, val vcMax: Double? = null,
+    val sourceId: String, val page: String) { val iso: IsoGroup? }
+@Serializable data class DieChaser(val designation: String? = null, val threadForm: String? = null, val chaserSize: String? = null,
+    val setOf: JsonElement? = null, val tpi: JsonElement? = null, val pitch: JsonElement? = null, val sizeRange: JsonElement? = null,
+    val throat: JsonElement? = null, val note: String? = null, val set: JsonElement? = null, val materials: JsonElement? = null,
+    val sourceRefs: List<DieRef>? = null, val sourceId: String, val page: String) {
+    val tpis: List<String>; val pitches: List<String>; val throats: List<String> /*원문이 배열일 때만*/ }
+@Serializable data class DieHolderRow(val designation: String? = null, val itemNo: String? = null, val cuttingRangeMinorDiaMm: String? = null,
+    val holderAngleDeg: Double? = null, val holderAngleExtra: String? = null, val chaserDimMm: String? = null, val chaserSize: String,
+    val mCoarse: List<String>? = null, val unc: List<String>? = null, val unf: List<String>? = null, val npt: List<String>? = null,
+    val rTaperPipe: List<String>? = null /*JSON 칸 UNC · UNF · NPT · R_taperPipe*/, val page: Int? = null, val range: String? = null,
+    val threadForm: String? = null, val helixAngle: String? = null, val note: String? = null)
+@Serializable data class DieChaserHolder(val table: String? = null, val forHeads: String? = null, val head: String? = null, val sourceId: String,
+    val page: String? = null, val pages: List<Int>? = null, val notes: List<String>? = null, val rows: List<DieHolderRow>)
+@Serializable data class DieChaserSize(val size: String, val dimMm: String, val usedIn: String, val note: String? = null, val sourceRefs: List<DieRef>)
+@Serializable data class DieText(val value: String, val sourceRefs: List<DieRef>)
+@Serializable data class DieMaker(val key: String, val name: String, val headTypes: List<JsonObject>, val headTypesNotes: List<String>,
+    val opening: DieOpening, val floatTravel: DieFloat, val feedRule: DieFeedRule, val speeds: List<DieSpeed>, val speedsNote: String? = null,
+    val speedsNotes: List<String>? = null, val materialLimit: String? = null, val chasers: List<DieChaser>, val chasersNote: String? = null,
+    val chaserCodeNote: String? = null, val throatTypes: JsonElement? = null, val reliefWidth: JsonElement? = null,
+    val chaserSizes: List<DieChaserSize>? = null, val chaserMaterials: DieText? = null, val chaserHolders: List<DieChaserHolder>? = null,
+    val chaserHoldersNote: String? = null) { val label: String }
+@Serializable data class DieHeadCatalogData(val title: String, val researchedAt: String, val rules: List<String>, val fields: Map<String, String>,
+    val sources: List<DieSource>, val makers: List<DieMaker>, val notFound: List<String>, val notes: String, val removed: JsonElement,
+    val corrected: JsonElement, val crossCheck: JsonElement, val verification: JsonElement, val confidence: String)
+data class DieSpeedHit(val maker: DieMaker, val speed: DieSpeed)
+data class DieChaserHit(val maker: DieMaker, val chaser: DieChaser)
+object DieHeadCatalog { val data: DieHeadCatalogData; val makers: List<DieMaker>; fun maker(key: String): DieMaker?; fun source(id: String): DieSource?
+    fun speeds(maker: String? = null, iso: IsoGroup? = null): List<DieSpeedHit>; fun chasers(spec: ThreadSpec): List<DieChaserHit> }
+```
+- **손 계산**(`DieHeadCalcTest`, 지은 치수): 1/2-20 UNF · Vc 12 · Z4 → −22 → n = 12 000/(π × 12.7) = 300.77 → `S301`, 쓴 Vc 12.0094, F = 0.96 × 1.27 = 1.2192,
+  분당 366.9792, 시간 = 60 × 26/366.9792 + 1 = 5.2509 초, 당김 1.04 → `G97S301` `G0X0.Z20.` `Z4.` `G1Z-22.F1.219` `G4U1.` `G0Z150.` + 안내.
+  M10×1.5 · 320 rpm · 비율 0.98 · 멈춤 0.5 · 물러남 120 · 진입 15 · Z3 → −17 · 목 2.5산 · 플로트 1 → `F1.47` · `G4U.5` · 시간 3.0510 · 당김 0.4 · 완전 나사 끝 −13.25.
+  첫 사례에 끝면 0 → 당김 = 0.04 × 22 = 0.88(시간 · 글은 그대로), 플로트 0.9 는 경고 없음(시작 Z 부터면 1.04 > 0.9 로 경고).
+- **테스트**: `DieHeadCalcTest`(위 둘의 전문 · 숫자, 비율 1 이면 안내 없음 · 당김 0, F 0.001 반올림(`F1.588` · `F.871`), 멈춤 0 이면 G4 없음, 경고 셋과 경계 · 함께 날 때,
+  멈춤 경고마다 사례, 처음 값, 끝면 Z — 당김 · 완전 나사 · 끝면 Z 순서 · 범위 `faceZ`), `DieHeadCatalogTest`(메이커 · 출처 참조가 모두 있음 · 홀더 표 줄 수, 절삭 속도 18줄 · 권장값 없음 · ISO 군 없음 · Z39-2 값,
+  UN 체이서 20산 · 32산 · 6산 · 미터 1.5 · 4 · 5 · 6 · 0.25, 이송 규칙 · 플로트 자료), jvmTest `DieHeadCatalogJsonTest`(드릴과 같은 꼴: 사본이 원본과 바이트까지 같음 ·
+  생성 문자열 = 사본 · 모델을 다시 JSON 으로 바꿔 원본과 모든 잎(null 아닌 값 3102 개 — 파이썬으로 센 수)을 맞춤, 개수 21 · 3 · 24 · 34 · 162).
+- **시뮬레이터**: 이 글(M12×1.75 · 230 rpm · Z6 → −20)이 편집기 예제 ⑮(O9023)의 다이스 줄이다 — DIE 공구의 G1 · 나사 모양(모형)은 `simulator-design.md` 19절,
+  예제 글 = 이 계산 글은 `DieHeadSimTest.exampleIsCalculatorText`.
+
+### 나사 인서트 (`ThreadInserts.kt`, 2026-11-05)
+사용자 결정(2026-11-05): 팁 이름 "3ER 20UN" 을 기준으로 암나사 짝과 관용 테이퍼 인서트를 넣는다. 자료 원본 `docs/research/thread-inserts.json`(출처 대조 끝남) —
+행이 적어 Kotlin 리스트로 옮겼다(jvmTest `ThreadInsertsJsonTest` 가 모든 줄 · 칸을 견준다).
+- 40줄: VARDEX(VDX_TT — Vargus 인치판 카탈로그 발췌, 쪽은 인쇄 쪽)와 Carmex(CMX_TT 발췌)마다 UN 20산 외 · 내, NPT 27 · 18 · 14 · 11.5 · 8 외 · 내,
+  BSPT 28 · 19 · 14 · 11 외 · 내. 모두 IC 3/8"(VARDEX 크기 3 · Carmex 크기 16 — 두 회사 표가 같은 IC 로 적는다) · 풀 프로파일(산봉우리까지 만듦).
+  이름은 출처 표기 그대로 — VARDEX 붙여 씀(`3ER20UN` · 왼손 `3EL20UN` · 내경 `3IR20UN`), Carmex 띄어 씀(`16 ER 20 UN` · `16 IR 20 UN`).
+- **날 끝 R 은 출처에 있는 것만**: VARDEX BSPT 의 그림 글자 'R0.137P'(53 · 54쪽 — JIS · ISO 의 r = 0.137278P 와 맞음) → `tipRPerPitch` 0.137, `tipR` = 0.137P.
+  UN · NPT 는 두 회사 표 · 그림 글자에 R 이 없고 Carmex BSPT 도 없다 → null(만들지 않음).
+- "VARDEX 3ER = Carmex 16ER" 이라는 부름은 판매처 하나에만 있어 넣지 않았다(크기가 같다는 것만 공식 표 둘로 확인).
+- 관용 테이퍼: PT(R · Rc)는 BSPT 인서트(BS 21 = ISO 7-1 = JIS B 0203 의 55° 꼴), NPT 는 NPT 인서트로 고른다.
+```kotlin
+enum class InsertForm { UN, NPT, BSPT }
+data class ThreadInsert(val maker: String, val designation: String, val lhDesignation: String, val internal: Boolean, val form: InsertForm,
+    val tpi: Double, val ic: String /*3/8"*/, val fullProfile: Boolean, val tipRPerPitch: Double? = null, val sourceId: String, val page: String) {
+    val pitch: Double; val tipR: Double? /*mm = tipRPerPitch × P*/ }
+object ThreadInserts { val ALL: List<ThreadInsert> /*40 — 원본 JSON 차례*/; fun match(inner: Boolean, form: InsertForm, tpi: Double): List<ThreadInsert> }
+```
+- 테스트: jvmTest `ThreadInsertsJsonTest`(40줄을 차례대로 — 제조사 · 이름 · 내외 · 꼴 · 산수 · IC · 풀 프로파일 · 출처 · 쪽, 날 끝 R 계수 = 원문 "R 0.137P" ·
+  없으면 null, R 있는 줄은 VARDEX BSPT 8줄뿐, `match` 가 고르는 줄 — 20산 UN 외 · 내 · BSPT 14 외(R 0.248557) · NPT 11.5 내 · 없는 산수).
 
 ### 안 한 것 · 확인 못 한 것
-- 관용 테이퍼 나사(PT · NPT): 둘째 줄 R(i) · 테이퍼 공차가 필요 — 안 함.
+- 다이스 헤드(위 절)에서 안 한 것: 홀더 표로 크기 거르기(UNEF · 20UN 행이 없음), 재질 → ISO 군 짝짓기(출처에 군이 없음), Landis · TACO 절삭 속도(공개 표 없음),
+  머리 모델별 최대 나사 길이 · 피치 한도 검사(`headTypes` 는 조사 기록으로만), 내경 · 관용 테이퍼 다이스, 열림 행정(플로트) 기본값(카탈로그에 없음).
+- 관용 테이퍼 나사(위 절)에서 안 한 것: 평행 암나사 Rp(H' · r' 가 다름), 왼나사(역가공) 테이퍼, G76 테이퍼(둘째 줄 R(i)), 부분 프로파일 인서트 ·
+  NPT 산봉우리 · 골 평탄부 공차(H28 표 VII.1), ISO 7-1 의 암나사 기준면(끝면에서 0.5P 안 — 앱은 JIS 의 관 끝 쪽), NPT 4 넘는 크기, PT 7 ~ 12.
+- 9 피치 계열(UNEF · 20UN)의 긴 물림: H28 7절(p. 2.21)은 15 피치를 넘으면 피치경 공차를 식 값의 125 %, 30 피치를 넘으면 150 % 로 정한다 —
+  넣지 않음(표 값 = 9 피치 기준만). 20UN 밖의 일정 피치 계열(4 · 6 · 8 · 12 · 16 · 28 · 32UN)도 넣지 않음.
 - 미터 e · f 위치(6e · 6f): RoyMech 가 "작은 피치 예외" 가 있다고만 적어 넣지 않음. 4H · 5H · 7H: 암나사 피치경의 등급 배수를 확인 못 해 넣지 않음.
 - 미터 등급 4 · 8 의 공차 표(ISO 965-1 의 Td(4) · Td(8) · Td2(4) · Td2(8))는 무료 공개본을 못 구해 4h · 8g 는 식이다(`byFormula`).
   Engineers Edge 의 4g6g 줄(예 M36×3 Td2(4) 125 · M48×3 132 · M52×4 150)과 식 값의 차는 1.5 μm 안이었다. 표를 구하면 `Iso965` 에 더한다.
@@ -1481,7 +1730,7 @@ object WorkMaterials { val groups: List<IsoGroupInfo> /*P M K N S H 순서*/; fu
 
 ### 드릴링 — 카탈로그 자료 (`DrillCatalog`)
 - **자료**: `calc/catalog/drill-catalog.json` = `docs/research/drill-catalog.json`(5사 · 35 시리즈 · 519 행 · 이송 구간 3052, 공식 카탈로그와 쪽 대조 끝)을
-  **바이트 그대로 복사**. 빌드(`calc/build.gradle.kts` 의 `generateDrillCatalog`)가 이 파일을 Kotlin 문자열(`DrillCatalogJson`, 60KB 씩 나눔 —
+  **바이트 그대로 복사**. 빌드(`calc/build.gradle.kts` 의 `generateCatalogs` — (JSON, object 이름) 목록을 같은 쪼개기 코드로: 드릴 · 다이스 헤드)가 이 파일을 Kotlin 문자열(`DrillCatalogJson`, 60KB 씩 나눔 —
   클래스 파일 문자열 상수 한도 64KB)로 만들어 commonMain 에 넣는다. 그래서 JVM · 안드로이드가 같은 코드로 읽는다(플랫폼별 리소스 읽기 없음).
   처음 부를 때 kotlinx.serialization 으로 읽는다(`ignoreUnknownKeys = false` — 모르는 칸이 생기면 실패).
   자료를 고칠 때는 docs/research 쪽을 고치고 calc/catalog 로 다시 복사한다(둘이 다르면 테스트가 실패).

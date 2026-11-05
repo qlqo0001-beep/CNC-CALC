@@ -1,0 +1,3087 @@
+{
+ "title": "유니파이 UNEF 계열 · 20UN(일정 피치 20산) 계열 — 규격 값과 출처",
+ "researchedAt": "2026-11-05",
+ "rules": [
+  "값은 NBS Handbook H28 (1969) Part I(미국 정부 간행물, 공개)에서만 읽었다. NIST 의 PDF 는 크기가 WebFetch 한도(10 MB)를 넘어 열지 못해, 같은 간행물을 NIST 연구도서관이 디지털화한 archive.org 판의 OCR 글(djvu.txt)과 쪽별 낱말 좌표(BookReader 글 API)로 읽었다. 읽기는 WebFetch 로만 했다.",
+  "Machinery's Handbook 31판(MH31)은 보조 출처(secondary)다. 값으로 쓰지 않고 H28 값과 대조하는 데만 썼다(limits[].mh31).",
+  "값은 원문 단위(인치) · 원문 자리 수 그대로다. JSON 수 글자도 원문의 끝자리 0 을 지켰다(.2500 → 0.2500, 2B 안지름 .196 → 0.196).",
+  "size 는 원문의 소수 호칭(.3125)을 분수(5/16)로 바꾼 것이다. H28 (1969) 는 호칭을 소수로 적는다(10절 예: '.250-20 UNC-2A formerly 1/4-20 UNC-2A', p. 2.22). .216 = #12 는 0.060 + 0.013 × 12 (ThreadSpec.kt 의 번호 사이즈 식).",
+  "확인 안 된 칸은 null 로 두고 notFound 에 까닭을 적었다. 기억으로 채운 값은 없다.",
+  "OCR 이 틀리게 읽은 칸은 표 안의 다른 칸과 식으로 근거를 대고 고쳤고 corrected 에 적었다. 표 값이 식과 다르지만 OCR 잘못이 아닌 칸은 고치지 않고 limits[].formulaCheck 에 둘 다 적었다.",
+  "R1 대조(2026-11-05, 조사한 에이전트와 다른 에이전트): 출처를 다시 열어 칸마다 판정했다(verification.crossCheck). 인쇄 값이 같은 표의 다른 칸 · H28 자신의 식과 어긋나는 한 칸(인쇄 오류로 보이는 칸)은 비우고 removed 에 인쇄 값 · 식 값 · 까닭을 적었다(drill-catalog 와 같은 '의심스러우면 뺀다'). corrected · removed 의 stage 가 'R1 조사' 면 조사 때, 'R1 대조' 면 대조 때 바꾼 것이다."
+ ],
+ "sources": [
+  {
+   "id": "H28_1969_P1",
+   "sourceType": "official",
+   "title": "NBS Handbook H28 (1969) Part I — Screw-Thread Standards for Federal Services: Unified, UNJ, Unified Miniature Screw Threads",
+   "publisher": "National Bureau of Standards (미국 상무부) · Interdepartmental Screw Thread Committee",
+   "edition": "1969판 (archive.org 기록의 날짜 1970-03-01, 'NBS Handbook 28 p1 1969'). H28 (1957) Part I 을 대체",
+   "url": "https://nvlpubs.nist.gov/nistpubs/Legacy/hb/nbshandbook28-1969p1.pdf",
+   "readVia": [
+    "https://archive.org/details/screwthreadstand2811unit (NIST Research Library 디지털화 스캔 272쪽, 공개 저작물)",
+    "https://archive.org/stream/screwthreadstand2811unit/screwthreadstand2811unit_djvu.txt (OCR 글 917,595자 — 표 값은 여기서 읽음)",
+    "https://ia800501.us.archive.org/BookReader/BookReaderGetTextWrapper.php?path=/15/items/screwthreadstand2811unit/screwthreadstand2811unit_djvu.xml&page=N (쪽별 낱말과 좌표 — 표 2.16 의 Primary/Secondary 칸 판정, 표 2.21 다시 읽기)",
+    "https://archive.org/download/screwthreadstand2811unit/page/nN.jpg (쪽 그림 — R1 대조에서 n48 · n59 · n61 · n64 를 브라우저 캔버스에 그려 글자 모양으로 인쇄 값을 확인했다. 파일로 내려받지 않음)",
+    "https://ia800501.us.archive.org/fulltext/inside.php?item_id=screwthreadstand2811unit&doc=screwthreadstand2811unit&path=/15/items/screwthreadstand2811unit&q=... (전문 검색 — R1 대조에서 인용문 · 표 제목이 있는 스캔 쪽과 낱말 상자 확인)",
+    "https://archive.org/download/screwthreadstand2811unit/screwthreadstand2811unit_page_numbers.json (스캔 쪽 → 인쇄 쪽: leaf 39 = 2.05, 44 = 2.10, 49 = 2.15, 51 = 2.17, 52 = 2.18, 54 = 2.20, 55 = 2.21, 56 = 2.22, 60 = 2.26 … 68 = 2.34, 71 = 2.37. BookReader 의 page=N · 'nN' 은 leaf N+1)"
+   ],
+   "pages": "3.5 · 3.6 (p. 2.05) · 표 2.7 (p. 2.08) · 표 2.10 (p. 2.10) · 표 2.16 (p. 2.15, 스캔 n48) · 4 · 5 절 (p. 2.17) · 6.1 절 (p. 2.17~2.20 — 물림 길이(Le) 문장은 p. 2.20) · 6.2 · 6.3 · 표 2.20 (p. 2.20) · 7절 (p. 2.21) · 10절 (p. 2.22~2.25) · 표 2.21 (p. 2.26~2.37, 첫 쪽 스캔 n59, 각주 글은 p. 2.37). 'p.' 는 인쇄 쪽 번호, 'n' 은 archive.org 스캔 쪽(0부터)",
+   "note": "WebFetch 가 NIST PDF 를 'maxContentLength 10485760 exceeded' 로 거절. archive.org 판이 NIST PDF 와 같은 스캔인지는 대조하지 못했다(같은 간행물 · 같은 쪽 번호). R1 대조: NIST PDF 는 브라우저에서는 열려(270쪽, 표지 'HANDBOOK H28 (1969) PART I', NIST 도서관 바코드) 같은 간행물임을 보았으나 쪽 이동이 안 되어, 값 대조는 archive.org 스캔(같은 NIST 연구도서관 소장본의 디지털화)으로 했다"
+  },
+  {
+   "id": "MH31",
+   "sourceType": "secondary",
+   "title": "Machinery's Handbook 31st Edition (Industrial Press, 2020), Part B — Unified Screw Threads (ASME B1.1 바탕)",
+   "url": "https://online.flippingbook.com/view/954046886/",
+   "pages": "flippingbook 쪽 600 (표 5f 20-UN 기본 치수) · 606 (물림 길이 글) · 541 · 542 · 548 · 565 (표 3 한계 치수)",
+   "note": "flippingbook 에 올라온 판으로 출판사 공식 배포인지 확인 못 함. 표 3 은 글 뽑기에서 칸 정렬이 깨져, 값이 쪽에 있는지 · 옆 값이 무엇인지만 확인했다. 값으로 쓰지 않음"
+  },
+  {
+   "id": "ASME_B1_1_2024_TOC",
+   "sourceType": "official",
+   "title": "ASME B1.1-2024 Unified Inch Screw Threads — 목차 PDF (asme.org)",
+   "url": "https://asme.org/wwwasmeorg/media/codes-standards/find-codes/c-t_b1_1_2024.pdf",
+   "note": "PDF 가 암호화(AESV3)되어 WebFetch 로 글을 못 뽑음. 값 · 인용에 쓰지 않았다(notFound)"
+  },
+  {
+   "id": "FED_STD_H28_2B",
+   "sourceType": "official",
+   "title": "FED-STD-H28/2B (1991-08-20) Screw-Thread Standards for Federal Services, Section 2: Unified Inch Screw Threads — UN and UNR Thread Forms",
+   "url": "https://everyspec.com/FED-STD/download.php?spec=FED-STD-H28-2B.056425.pdf",
+   "note": "스캔 그림 PDF(글 층 없음)라 못 읽음. 값 · 인용에 쓰지 않았다(notFound)"
+  }
+ ],
+ "series": {
+  "UNEF": [
+   {
+    "size": "#12",
+    "dIn": 0.216,
+    "tpi": 32,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1/4",
+    "dIn": 0.250,
+    "tpi": 32,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "5/16",
+    "dIn": 0.3125,
+    "tpi": 32,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "3/8",
+    "dIn": 0.375,
+    "tpi": 32,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "7/16",
+    "dIn": 0.4375,
+    "tpi": 28,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1/2",
+    "dIn": 0.500,
+    "tpi": 28,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "9/16",
+    "dIn": 0.5625,
+    "tpi": 24,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "5/8",
+    "dIn": 0.625,
+    "tpi": 24,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "11/16",
+    "dIn": 0.6875,
+    "tpi": 24,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "3/4",
+    "dIn": 0.750,
+    "tpi": 20,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "13/16",
+    "dIn": 0.8125,
+    "tpi": 20,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "7/8",
+    "dIn": 0.875,
+    "tpi": 20,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "15/16",
+    "dIn": 0.9375,
+    "tpi": 20,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1",
+    "dIn": 1.000,
+    "tpi": 20,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1-1/16",
+    "dIn": 1.0625,
+    "tpi": 18,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1-1/8",
+    "dIn": 1.125,
+    "tpi": 18,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1-3/16",
+    "dIn": 1.1875,
+    "tpi": 18,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1-1/4",
+    "dIn": 1.250,
+    "tpi": 18,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1-5/16",
+    "dIn": 1.3125,
+    "tpi": 18,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1-3/8",
+    "dIn": 1.375,
+    "tpi": 18,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1-7/16",
+    "dIn": 1.4375,
+    "tpi": 18,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1-1/2",
+    "dIn": 1.500,
+    "tpi": 18,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1-9/16",
+    "dIn": 1.5625,
+    "tpi": 18,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1-5/8",
+    "dIn": 1.625,
+    "tpi": 18,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   },
+   {
+    "size": "1-11/16",
+    "dIn": 1.6875,
+    "tpi": 18,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.10 (p. 2.10)"
+   }
+  ],
+  "UN20": [
+   {
+    "size": "1/4",
+    "dIn": 0.250,
+    "coincidesWith": "UNC",
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "5/16",
+    "dIn": 0.3125,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "3/8",
+    "dIn": 0.375,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "7/16",
+    "dIn": 0.4375,
+    "coincidesWith": "UNF",
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1/2",
+    "dIn": 0.500,
+    "coincidesWith": "UNF",
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "9/16",
+    "dIn": 0.5625,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "5/8",
+    "dIn": 0.625,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "11/16",
+    "dIn": 0.6875,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "3/4",
+    "dIn": 0.750,
+    "coincidesWith": "UNEF",
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "13/16",
+    "dIn": 0.8125,
+    "coincidesWith": "UNEF",
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "7/8",
+    "dIn": 0.875,
+    "coincidesWith": "UNEF",
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "15/16",
+    "dIn": 0.9375,
+    "coincidesWith": "UNEF",
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1",
+    "dIn": 1.000,
+    "coincidesWith": "UNEF",
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-1/16",
+    "dIn": 1.0625,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-1/8",
+    "dIn": 1.125,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-3/16",
+    "dIn": 1.1875,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-1/4",
+    "dIn": 1.250,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-5/16",
+    "dIn": 1.3125,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-3/8",
+    "dIn": 1.375,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-7/16",
+    "dIn": 1.4375,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-1/2",
+    "dIn": 1.500,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-9/16",
+    "dIn": 1.5625,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-5/8",
+    "dIn": 1.625,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-11/16",
+    "dIn": 1.6875,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-3/4",
+    "dIn": 1.750,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-13/16",
+    "dIn": 1.8125,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-7/8",
+    "dIn": 1.875,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "1-15/16",
+    "dIn": 1.9375,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "2",
+    "dIn": 2.000,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "2-1/8",
+    "dIn": 2.125,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "2-1/4",
+    "dIn": 2.250,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "2-3/8",
+    "dIn": 2.375,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "2-1/2",
+    "dIn": 2.500,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "2-5/8",
+    "dIn": 2.625,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "2-3/4",
+    "dIn": 2.750,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "2-7/8",
+    "dIn": 2.875,
+    "coincidesWith": null,
+    "preferred": 2,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   },
+   {
+    "size": "3",
+    "dIn": 3.000,
+    "coincidesWith": null,
+    "preferred": 1,
+    "sourceId": "H28_1969_P1",
+    "page": "표 2.16 (p. 2.15)"
+   }
+  ]
+ },
+ "designationRule": {
+  "rule": "20UN 크기 가운데 UNC · UNF · UNEF 표에 같은 지름 · 같은 산수로 있는 것은 그 계열의 기호(UNC · UNF · UNEF)로 부르고, 그 계열의 공차 · 한계 치수를 쓴다. 겹치지 않는 크기만 '-20 UN' 이다.",
+  "bySize": {
+   "1/4-20": "UNC",
+   "7/16-20": "UNF",
+   "1/2-20": "UNF",
+   "3/4-20": "UNEF",
+   "13/16-20": "UNEF",
+   "7/8-20": "UNEF",
+   "15/16-20": "UNEF",
+   "1-20": "UNEF",
+   "그 밖의 5/16 ~ 3 (29개)": "UN"
+  },
+  "quotes": [
+   {
+    "text": "Whenever a thread in a constant-pitch series also appears in the UNC, UNF, or UNEF series, the symbols, tolerances, and limits of size of those standard series are applicable.",
+    "where": "3.6 (constant-pitch series)",
+    "sourceId": "H28_1969_P1",
+    "page": "p. 2.05"
+   },
+   {
+    "text": "These are standard sizes of the UNC, UNF, or UNEF series.",
+    "where": "표 2.16 각주 a — .250 · .4375 · .500 · .750 · .8125 · .875 · .9375 · 1.000 에 붙음",
+    "sourceId": "H28_1969_P1",
+    "page": "p. 2.15"
+   },
+   {
+    "text": "The thread series symbol is UNC, UNF, UNEF, or UN for any of the series shown in table 2.7",
+    "where": "10 (method of designating screw threads)",
+    "sourceId": "H28_1969_P1",
+    "page": "p. 2.22"
+   }
+  ],
+  "evidence": "표 2.21 의 표기 목록: 20산 겹치는 크기는 .250-20 UNC · .4375-20 UNF · .500-20 UNF · .750-20 UNEF · .8125-20 UNEF · .875-20 UNEF · .9375-20 UNEF · 1.000-20 UNEF 로만 실리고 같은 크기의 '-20 UN' 줄은 없다. 나머지 20산 크기(.3125 · .375 · .5625 · .625 · .6875 · 1.0625 ~ 3.000)는 '-20 UN' 으로 실린다 (p. 2.26~2.34). 어느 계열과 겹치는지는 이 표기와 표 2.10(UNEF 20산 = .750 ~ 1.000)에서 읽었다."
+ },
+ "engagement": {
+  "UNEF": "9P",
+  "UN20": "9P",
+  "UNC": "D",
+  "UNF": "D",
+  "bySeries": {
+   "LE = D (호칭 지름)": [
+    "UNC",
+    "UNF",
+    "4UN",
+    "6UN",
+    "8UN"
+   ],
+   "LE = 9P (9 피치)": [
+    "UNEF",
+    "12UN",
+    "16UN",
+    "20UN",
+    "28UN",
+    "32UN"
+   ]
+  },
+  "quotes": [
+   {
+    "text": "The length of thread engagement (Le) used in the formula is 1 D (diameter) or 9 pitches, depending on the series.",
+    "where": "6.1 Pitch diameter tolerances",
+    "sourceId": "H28_1969_P1",
+    "page": "p. 2.20"
+   },
+   {
+    "text": "The pitch diameter tolerances specified in table 2.21 for the UNC, UNF, 4UN, 6UN, and 8UN series are based on a length of engagement equal to the basic major (nominal) diameter and are applicable for lengths of engagement up to 1.5 diameters.",
+    "where": "7 Length of engagement",
+    "sourceId": "H28_1969_P1",
+    "page": "p. 2.21"
+   },
+   {
+    "text": "The pitch diameter tolerances specified in table 2.21 for the UNEF, 12UN, 16UN, 20UN, 28UN, and 32UN series are based on a length of engagement of 9 pitches and are applicable for lengths of engagement up to 15 pitches.",
+    "where": "7 Length of engagement",
+    "sourceId": "H28_1969_P1",
+    "page": "p. 2.21"
+   },
+   {
+    "text": "for lengths of engagement over 15 to 30 pitches, the pitch diameter tolerances are 125 percent of the formula values; and for lengths of engagement over 30 pitches, the tolerances are 150 percent of the formula values.",
+    "where": "7 Length of engagement (9 피치 계열의 긴 물림)",
+    "sourceId": "H28_1969_P1",
+    "page": "p. 2.21"
+   }
+  ],
+  "secondary": "MH31 쪽 606 도 UNEF · 12-UN · 16-UN · 20-UN · 28-UN · 32-UN 의 모든 급수 피치경 공차가 9 피치 물림 기준이라고 적는다. 다만 적용 범위를 '5 ~ 15 피치' 로 적어 H28 1969 ('15 피치까지') 와 표현이 다르다.",
+  "check": {
+   "designation": "3/4-20 UNEF-2A",
+   "tablePitchMin": 0.7118,
+   "formulaLE9P": 0.7118,
+   "formulaLED": 0.7114,
+   "page": "표 2.21 (p. 2.28)",
+   "note": "H28 6.1 식(D = 0.750, p = 0.05): LE = 9P = 0.45 이면 공차 0.0044 · 허용차 0.0013 → 피치경 0.7162 / 0.7118 (표와 같음). LE = D 이면 공차 0.0047 · 허용차 0.0014 → 0.7161 / 0.7114 (표와 다름)"
+  },
+  "count": "표 2.21 에서 읽은 UNEF · 20UN 88줄(인쇄 값) 가운데 LE = 9P 식(tableVsFormula.procedure)과 칸마다 같은 줄 64, LE = D 식과 같은 줄 4 (#12-32 UNEF-2A, 1/4-32 UNEF-2A · 3A · 3B — 두 식 값이 우연히 같은 줄). 9P 식과 다른 24줄(tableVsFormula 의 nominalDGap 22줄 + 인쇄 오류로 보는 2줄) 가운데 LE = D 식과 같은 줄은 #12-32 UNEF-2A 하나뿐이고(같은 표기의 2B · 3A · 3B 는 LE = D 로 안 맞음), 23줄은 어느 쪽과도 칸마다 같지 않다.",
+  "appNote": "지금 앱 ThreadTol.unified 는 LE = D 고정이다(ThreadSpec.kt 의 base 식 '// Le = D'). UNEF · 20UN 을 넣으려면 LE 를 계열별로 바꿔야 표와 맞는다."
+ },
+ "classes": {
+  "UNEF": [
+   "2A",
+   "3A",
+   "2B",
+   "3B"
+  ],
+  "UN20": [
+   "2A",
+   "3A",
+   "2B",
+   "3B"
+  ],
+  "class1AB": "표 2.21 에서 1A · 1B 줄은 UNC · UNF 표기에만 있다. 읽은 UNEF 12개 · 20UN 10개 표기(limits[])에는 1A · 1B 줄이 없다.",
+  "how": "OCR 글에서 1A/1B 줄은 앞 표기의 3B 뒤에 붙어 나오는데, 피치경 값이 뒤따르는 UNC · UNF 표기의 기본 피치경과 맞는다. 예: .216-32 UNEF 뒤의 '1A .0011 .2489 .2367 .2164 .2108' 은 1/4-20 UNC(기본 피치경 .2175 − .0011 = .2164), .3125-20 UN 뒤의 '1A .0011 .3114 .3006 .2843 .2788' 은 .3125-24 UNF(.2854 − .0011), .375-32 UNEF 뒤의 1A 줄은 .4375-14 UNC(.3911 − .0014 = .3897). UN · UNEF 표기 다음이 다시 UN · UNEF 이면 1A/1B 줄이 아예 없다(.4375-28 UNEF → .4375-32 UN, .750-20 UNEF → .750-28 UN, 1.500-18 UNEF → 1.500-20 UN 등). 스캔 n59 의 낱말 좌표로 같은 배치를 다시 확인했다.",
+  "section4": [
+   {
+    "text": "Six distinct classes of screw threads have been established for general use.",
+    "sourceId": "H28_1969_P1",
+    "page": "p. 2.17"
+   },
+   {
+    "text": "1A, 2A, and 3A (for external threads only) and 1B, 2B, and 3B (for internal threads only)",
+    "sourceId": "H28_1969_P1",
+    "page": "p. 2.17"
+   },
+   {
+    "text": "These classes are intended for ordnance and other special uses.",
+    "where": "4.1 (1A · 1B)",
+    "sourceId": "H28_1969_P1",
+    "page": "p. 2.17"
+   }
+  ],
+  "note": "H28 4절은 급수를 계열별로 나누어 말하지 않는다(계열별 허용차 · 공차는 표에 있다고만 함). 그래서 '표에 정한 급수' 는 표 2.21 에 실린 줄로 판단했다. ASME B1.1 의 급수 적용 글은 못 읽었다(notFound). 허용차(allowance)는 1A · 2A 만(5절 — 'The allowance is minus and is applied from the basic size to below basic size.' p. 2.17)."
+ },
+ "limits": [
+  {
+   "designation": "1/4-20 UNC",
+   "h28Label": ".250-20 UNC",
+   "class": "1A",
+   "majorMax": 0.2489,
+   "majorMin": 0.2367,
+   "pitchMax": 0.2164,
+   "pitchMin": 0.2108,
+   "pitchTol": 0.0056,
+   "minorMax": 0.1876,
+   "minorMin": null,
+   "allowance": 0.0011,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "541",
+    "cells": {
+     "pitchMax": 0.2164,
+     "pitchMin": 0.2108
+    }
+   }
+  },
+  {
+   "designation": "1/4-20 UNC",
+   "h28Label": ".250-20 UNC",
+   "class": "2A",
+   "majorMax": 0.2489,
+   "majorMin": 0.2408,
+   "majorMinHotRolled": 0.2367,
+   "pitchMax": 0.2164,
+   "pitchMin": 0.2127,
+   "pitchTol": 0.0037,
+   "minorMax": 0.1876,
+   "minorMin": null,
+   "allowance": 0.0011,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "541",
+    "cells": {
+     "majorMax": 0.2489,
+     "majorMin": 0.2408,
+     "majorMinHotRolled": 0.2367,
+     "pitchMax": 0.2164,
+     "pitchMin": 0.2127
+    }
+   }
+  },
+  {
+   "designation": "1/4-20 UNC",
+   "h28Label": ".250-20 UNC",
+   "class": "3A",
+   "majorMax": 0.2500,
+   "majorMin": 0.2419,
+   "pitchMax": 0.2175,
+   "pitchMin": 0.2147,
+   "pitchTol": 0.0028,
+   "minorMax": 0.1887,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/4-20 UNC",
+   "h28Label": ".250-20 UNC",
+   "class": "1B",
+   "majorMax": null,
+   "majorMin": 0.2500,
+   "pitchMax": 0.2248,
+   "pitchMin": 0.2175,
+   "pitchTol": 0.0073,
+   "minorMax": 0.207,
+   "minorMin": 0.196,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "541",
+    "cells": {
+     "pitchMin": 0.2175,
+     "pitchMax": 0.2248
+    }
+   }
+  },
+  {
+   "designation": "1/4-20 UNC",
+   "h28Label": ".250-20 UNC",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.2500,
+   "pitchMax": 0.2224,
+   "pitchMin": 0.2175,
+   "pitchTol": 0.0049,
+   "minorMax": 0.207,
+   "minorMin": 0.196,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "541",
+    "cells": {
+     "pitchMin": 0.2175,
+     "pitchMax": 0.2224
+    }
+   }
+  },
+  {
+   "designation": "1/4-20 UNC",
+   "h28Label": ".250-20 UNC",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.2500,
+   "pitchMax": 0.2211,
+   "pitchMin": 0.2175,
+   "pitchTol": 0.0036,
+   "minorMax": 0.2067,
+   "minorMin": 0.1960,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "541",
+    "cells": {
+     "minorMin": 0.1960,
+     "minorMax": 0.2067
+    }
+   }
+  },
+  {
+   "designation": "3/8-20 UN",
+   "h28Label": ".375-20 UN",
+   "class": "2A",
+   "majorMax": 0.3738,
+   "majorMin": 0.3657,
+   "pitchMax": 0.3413,
+   "pitchMin": 0.3372,
+   "pitchTol": 0.0041,
+   "minorMax": 0.3125,
+   "minorMin": null,
+   "allowance": 0.0012,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3/8-20 UN",
+   "h28Label": ".375-20 UN",
+   "class": "3A",
+   "majorMax": 0.3750,
+   "majorMin": 0.3669,
+   "pitchMax": 0.3425,
+   "pitchMin": 0.3394,
+   "pitchTol": 0.0031,
+   "minorMax": 0.3137,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3/8-20 UN",
+   "h28Label": ".375-20 UN",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.3750,
+   "pitchMax": 0.3479,
+   "pitchMin": 0.3425,
+   "pitchTol": 0.0054,
+   "minorMax": 0.332,
+   "minorMin": 0.321,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3/8-20 UN",
+   "h28Label": ".375-20 UN",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.3750,
+   "pitchMax": 0.3465,
+   "pitchMin": 0.3425,
+   "pitchTol": 0.0040,
+   "minorMax": 0.3297,
+   "minorMin": 0.3210,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/2-20 UNF",
+   "h28Label": ".500-20 UNF",
+   "class": "2A",
+   "majorMax": 0.4987,
+   "majorMin": 0.4906,
+   "pitchMax": 0.4662,
+   "pitchMin": 0.4619,
+   "pitchTol": 0.0043,
+   "minorMax": 0.4374,
+   "minorMin": null,
+   "allowance": 0.0013,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/2-20 UNF",
+   "h28Label": ".500-20 UNF",
+   "class": "3A",
+   "majorMax": 0.5000,
+   "majorMin": 0.4919,
+   "pitchMax": 0.4675,
+   "pitchMin": 0.4643,
+   "pitchTol": 0.0032,
+   "minorMax": 0.4387,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/2-20 UNF",
+   "h28Label": ".500-20 UNF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.5000,
+   "pitchMax": 0.4731,
+   "pitchMin": 0.4675,
+   "pitchTol": 0.0056,
+   "minorMax": 0.457,
+   "minorMin": 0.446,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/2-20 UNF",
+   "h28Label": ".500-20 UNF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.5000,
+   "pitchMax": 0.4717,
+   "pitchMin": 0.4675,
+   "pitchTol": 0.0042,
+   "minorMax": 0.4537,
+   "minorMin": 0.4460,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3/4-20 UNEF",
+   "h28Label": ".750-20 UNEF",
+   "class": "2A",
+   "majorMax": 0.7487,
+   "majorMin": 0.7406,
+   "pitchMax": 0.7162,
+   "pitchMin": 0.7118,
+   "pitchTol": 0.0044,
+   "minorMax": 0.6874,
+   "minorMin": null,
+   "allowance": 0.0013,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3/4-20 UNEF",
+   "h28Label": ".750-20 UNEF",
+   "class": "3A",
+   "majorMax": 0.7500,
+   "majorMin": 0.7419,
+   "pitchMax": 0.7175,
+   "pitchMin": 0.7142,
+   "pitchTol": 0.0033,
+   "minorMax": 0.6887,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3/4-20 UNEF",
+   "h28Label": ".750-20 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.7500,
+   "pitchMax": 0.7232,
+   "pitchMin": 0.7175,
+   "pitchTol": 0.0057,
+   "minorMax": 0.707,
+   "minorMin": 0.696,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3/4-20 UNEF",
+   "h28Label": ".750-20 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.7500,
+   "pitchMax": 0.7218,
+   "pitchMin": 0.7175,
+   "pitchTol": 0.0043,
+   "minorMax": 0.7037,
+   "minorMin": 0.6960,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-20 UNEF",
+   "h28Label": "1.000-20 UNEF",
+   "class": "2A",
+   "majorMax": 0.9986,
+   "majorMin": 0.9905,
+   "pitchMax": 0.9661,
+   "pitchMin": 0.9616,
+   "pitchTol": 0.0045,
+   "minorMax": 0.9373,
+   "minorMin": null,
+   "allowance": 0.0014,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.29)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-20 UNEF",
+   "h28Label": "1.000-20 UNEF",
+   "class": "3A",
+   "majorMax": 1.0000,
+   "majorMin": 0.9919,
+   "pitchMax": 0.9675,
+   "pitchMin": 0.9641,
+   "pitchTol": 0.0034,
+   "minorMax": 0.9387,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.29)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-20 UNEF",
+   "h28Label": "1.000-20 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 1.0000,
+   "pitchMax": 0.9734,
+   "pitchMin": 0.9675,
+   "pitchTol": 0.0059,
+   "minorMax": 0.957,
+   "minorMin": 0.946,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.29)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-20 UNEF",
+   "h28Label": "1.000-20 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 1.0000,
+   "pitchMax": 0.9719,
+   "pitchMin": 0.9675,
+   "pitchTol": 0.0044,
+   "minorMax": 0.9537,
+   "minorMin": 0.9460,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.29)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "#12-32 UNEF",
+   "h28Label": ".216-32 UNEF",
+   "class": "2A",
+   "majorMax": 0.2151,
+   "majorMin": 0.2091,
+   "pitchMax": 0.1948,
+   "pitchMin": 0.1917,
+   "pitchTol": 0.0031,
+   "minorMax": 0.1768,
+   "minorMin": null,
+   "allowance": 0.0009,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "allowance": {
+      "table": 0.0009,
+      "formula": 0.0010
+     },
+     "majorMax": {
+      "table": 0.2151,
+      "formula": 0.2150
+     },
+     "pitchMax": {
+      "table": 0.1948,
+      "formula": 0.1947
+     },
+     "minorMax": {
+      "table": 0.1768,
+      "formula": 0.1767
+     },
+     "majorMin": {
+      "table": 0.2091,
+      "formula": 0.2090
+     },
+     "pitchMin": {
+      "table": 0.1917,
+      "formula": 0.1915
+     },
+     "pitchTol": {
+      "table": 0.0031,
+      "formula": 0.0032
+     }
+    }
+   },
+   "mh31": {
+    "page": "541",
+    "cells": {
+     "allowance": 0.0010,
+     "majorMax": 0.2150,
+     "majorMin": 0.2090,
+     "pitchMax": 0.1947,
+     "pitchMin": 0.1915
+    }
+   }
+  },
+  {
+   "designation": "#12-32 UNEF",
+   "h28Label": ".216-32 UNEF",
+   "class": "3A",
+   "majorMax": 0.2160,
+   "majorMin": 0.2100,
+   "pitchMax": 0.1957,
+   "pitchMin": 0.1933,
+   "pitchTol": 0.0024,
+   "minorMax": 0.1777,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "#12-32 UNEF",
+   "h28Label": ".216-32 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.2160,
+   "pitchMax": 0.1998,
+   "pitchMin": 0.1957,
+   "pitchTol": 0.0041,
+   "minorMax": 0.190,
+   "minorMin": 0.182,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "#12-32 UNEF",
+   "h28Label": ".216-32 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.2160,
+   "pitchMax": 0.1988,
+   "pitchMin": 0.1957,
+   "pitchTol": 0.0031,
+   "minorMax": 0.1895,
+   "minorMin": 0.1820,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/4-32 UNEF",
+   "h28Label": ".250-32 UNEF",
+   "class": "2A",
+   "majorMax": 0.2490,
+   "majorMin": 0.2430,
+   "pitchMax": 0.2287,
+   "pitchMin": 0.2255,
+   "pitchTol": 0.0032,
+   "minorMax": 0.2107,
+   "minorMin": null,
+   "allowance": 0.0010,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/4-32 UNEF",
+   "h28Label": ".250-32 UNEF",
+   "class": "3A",
+   "majorMax": 0.2500,
+   "majorMin": 0.2440,
+   "pitchMax": 0.2297,
+   "pitchMin": 0.2273,
+   "pitchTol": 0.0024,
+   "minorMax": 0.2117,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/4-32 UNEF",
+   "h28Label": ".250-32 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.2500,
+   "pitchMax": 0.2339,
+   "pitchMin": 0.2297,
+   "pitchTol": 0.0042,
+   "minorMax": 0.224,
+   "minorMin": 0.216,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/4-32 UNEF",
+   "h28Label": ".250-32 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.2500,
+   "pitchMax": 0.2328,
+   "pitchMin": 0.2297,
+   "pitchTol": 0.0031,
+   "minorMax": 0.2229,
+   "minorMin": 0.2160,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "5/16-32 UNEF",
+   "h28Label": ".3125-32 UNEF",
+   "class": "2A",
+   "majorMax": 0.3115,
+   "majorMin": 0.3055,
+   "pitchMax": 0.2912,
+   "pitchMin": 0.2880,
+   "pitchTol": 0.0032,
+   "minorMax": 0.2732,
+   "minorMin": null,
+   "allowance": 0.0010,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMin": {
+      "table": 0.2880,
+      "formula": 0.2879
+     },
+     "pitchTol": {
+      "table": 0.0032,
+      "formula": 0.0033
+     }
+    }
+   },
+   "mh31": {
+    "page": "542",
+    "cells": {
+     "pitchMax": 0.2912,
+     "pitchMin": 0.2879
+    }
+   }
+  },
+  {
+   "designation": "5/16-32 UNEF",
+   "h28Label": ".3125-32 UNEF",
+   "class": "3A",
+   "majorMax": 0.3125,
+   "majorMin": 0.3065,
+   "pitchMax": 0.2922,
+   "pitchMin": 0.2898,
+   "pitchTol": 0.0024,
+   "minorMax": 0.2742,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMin": {
+      "table": 0.2898,
+      "formula": 0.2897
+     },
+     "pitchTol": {
+      "table": 0.0024,
+      "formula": 0.0025
+     }
+    }
+   },
+   "mh31": {
+    "page": "542",
+    "cells": {
+     "pitchMax": 0.2922,
+     "pitchMin": 0.2897
+    }
+   }
+  },
+  {
+   "designation": "5/16-32 UNEF",
+   "h28Label": ".3125-32 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.3125,
+   "pitchMax": 0.2964,
+   "pitchMin": 0.2922,
+   "pitchTol": 0.0042,
+   "minorMax": 0.286,
+   "minorMin": 0.279,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 0.2964,
+      "formula": 0.2965
+     },
+     "pitchTol": {
+      "table": 0.0042,
+      "formula": 0.0043
+     }
+    }
+   },
+   "mh31": {
+    "page": "542",
+    "cells": {
+     "pitchMin": 0.2922,
+     "pitchMax": 0.2965
+    }
+   }
+  },
+  {
+   "designation": "5/16-32 UNEF",
+   "h28Label": ".3125-32 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.3125,
+   "pitchMax": 0.2953,
+   "pitchMin": 0.2922,
+   "pitchTol": 0.0031,
+   "minorMax": 0.2847,
+   "minorMin": 0.2790,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 0.2953,
+      "formula": 0.2954
+     },
+     "pitchTol": {
+      "table": 0.0031,
+      "formula": 0.0032
+     }
+    }
+   },
+   "mh31": {
+    "page": "542",
+    "cells": {
+     "pitchMin": 0.2922,
+     "pitchMax": 0.2954
+    }
+   }
+  },
+  {
+   "designation": "3/8-32 UNEF",
+   "h28Label": ".375-32 UNEF",
+   "class": "2A",
+   "majorMax": 0.3740,
+   "majorMin": 0.3680,
+   "pitchMax": 0.3537,
+   "pitchMin": 0.3503,
+   "pitchTol": 0.0034,
+   "minorMax": 0.3357,
+   "minorMin": null,
+   "allowance": 0.0010,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3/8-32 UNEF",
+   "h28Label": ".375-32 UNEF",
+   "class": "3A",
+   "majorMax": 0.3750,
+   "majorMin": 0.3690,
+   "pitchMax": 0.3547,
+   "pitchMin": 0.3522,
+   "pitchTol": 0.0025,
+   "minorMax": 0.3367,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3/8-32 UNEF",
+   "h28Label": ".375-32 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.3750,
+   "pitchMax": 0.3591,
+   "pitchMin": 0.3547,
+   "pitchTol": 0.0044,
+   "minorMax": 0.349,
+   "minorMin": 0.341,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3/8-32 UNEF",
+   "h28Label": ".375-32 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.3750,
+   "pitchMax": 0.3580,
+   "pitchMin": 0.3547,
+   "pitchTol": 0.0033,
+   "minorMax": 0.3469,
+   "minorMin": 0.3410,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "7/16-28 UNEF",
+   "h28Label": ".4375-28 UNEF",
+   "class": "2A",
+   "majorMax": 0.4364,
+   "majorMin": 0.4299,
+   "pitchMax": 0.4132,
+   "pitchMin": 0.4096,
+   "pitchTol": 0.0036,
+   "minorMax": 0.3926,
+   "minorMin": null,
+   "allowance": 0.0011,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "7/16-28 UNEF",
+   "h28Label": ".4375-28 UNEF",
+   "class": "3A",
+   "majorMax": 0.4375,
+   "majorMin": 0.4310,
+   "pitchMax": 0.4143,
+   "pitchMin": 0.4116,
+   "pitchTol": 0.0027,
+   "minorMax": 0.3937,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "7/16-28 UNEF",
+   "h28Label": ".4375-28 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.4375,
+   "pitchMax": 0.4189,
+   "pitchMin": 0.4143,
+   "pitchTol": 0.0046,
+   "minorMax": 0.407,
+   "minorMin": 0.399,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 0.4189,
+      "formula": 0.4190
+     },
+     "pitchTol": {
+      "table": 0.0046,
+      "formula": 0.0047
+     }
+    }
+   }
+  },
+  {
+   "designation": "7/16-28 UNEF",
+   "h28Label": ".4375-28 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.4375,
+   "pitchMax": 0.4178,
+   "pitchMin": 0.4143,
+   "pitchTol": 0.0035,
+   "minorMax": 0.4051,
+   "minorMin": 0.3990,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/2-28 UNEF",
+   "h28Label": ".500-28 UNEF",
+   "class": "2A",
+   "majorMax": 0.4989,
+   "majorMin": 0.4924,
+   "pitchMax": 0.4757,
+   "pitchMin": 0.4720,
+   "pitchTol": 0.0037,
+   "minorMax": 0.4551,
+   "minorMin": null,
+   "allowance": 0.0011,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/2-28 UNEF",
+   "h28Label": ".500-28 UNEF",
+   "class": "3A",
+   "majorMax": 0.5000,
+   "majorMin": 0.4935,
+   "pitchMax": 0.4768,
+   "pitchMin": 0.4740,
+   "pitchTol": 0.0028,
+   "minorMax": 0.4562,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/2-28 UNEF",
+   "h28Label": ".500-28 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.5000,
+   "pitchMax": 0.4816,
+   "pitchMin": 0.4768,
+   "pitchTol": 0.0048,
+   "minorMax": 0.470,
+   "minorMin": 0.461,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1/2-28 UNEF",
+   "h28Label": ".500-28 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.5000,
+   "pitchMax": 0.4804,
+   "pitchMin": 0.4768,
+   "pitchTol": 0.0036,
+   "minorMax": 0.4676,
+   "minorMin": 0.4610,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "5/8-24 UNEF",
+   "h28Label": ".625-24 UNEF",
+   "class": "2A",
+   "majorMax": 0.6238,
+   "majorMin": 0.6166,
+   "pitchMax": 0.5967,
+   "pitchMin": 0.5927,
+   "pitchTol": 0.0040,
+   "minorMax": 0.5727,
+   "minorMin": null,
+   "allowance": 0.0012,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "5/8-24 UNEF",
+   "h28Label": ".625-24 UNEF",
+   "class": "3A",
+   "majorMax": 0.6250,
+   "majorMin": 0.6178,
+   "pitchMax": 0.5979,
+   "pitchMin": 0.5949,
+   "pitchTol": 0.0030,
+   "minorMax": 0.5739,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "5/8-24 UNEF",
+   "h28Label": ".625-24 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.6250,
+   "pitchMax": 0.6031,
+   "pitchMin": 0.5979,
+   "pitchTol": 0.0052,
+   "minorMax": 0.590,
+   "minorMin": 0.580,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "5/8-24 UNEF",
+   "h28Label": ".625-24 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.6250,
+   "pitchMax": 0.6018,
+   "pitchMin": null,
+   "pitchTol": 0.0039,
+   "minorMax": 0.5869,
+   "minorMin": 0.5800,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMin": {
+      "table": 0.5879,
+      "formula": 0.5979
+     }
+    },
+    "note": "table = 인쇄 값(쪽 그림 확인). 인쇄 오류로 보여 pitchMin 을 비웠다(removed)"
+   }
+  },
+  {
+   "designation": "1-7/16-18 UNEF",
+   "h28Label": "1.4375-18 UNEF",
+   "class": "2A",
+   "majorMax": 1.4360,
+   "majorMin": 1.4273,
+   "pitchMax": 1.3999,
+   "pitchMin": 1.3949,
+   "pitchTol": 0.0050,
+   "minorMax": 1.3678,
+   "minorMin": null,
+   "allowance": 0.0015,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMin": {
+      "table": 1.3949,
+      "formula": 1.3950
+     },
+     "pitchTol": {
+      "table": 0.0050,
+      "formula": 0.0049
+     }
+    }
+   }
+  },
+  {
+   "designation": "1-7/16-18 UNEF",
+   "h28Label": "1.4375-18 UNEF",
+   "class": "3A",
+   "majorMax": 1.4375,
+   "majorMin": 1.4288,
+   "pitchMax": 1.4014,
+   "pitchMin": 1.3977,
+   "pitchTol": 0.0037,
+   "minorMax": 1.3693,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-7/16-18 UNEF",
+   "h28Label": "1.4375-18 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 1.4375,
+   "pitchMax": 1.4079,
+   "pitchMin": 1.4014,
+   "pitchTol": 0.0065,
+   "minorMax": 1.390,
+   "minorMin": 1.377,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 1.4079,
+      "formula": 1.4078
+     },
+     "pitchTol": {
+      "table": 0.0065,
+      "formula": 0.0064
+     }
+    }
+   }
+  },
+  {
+   "designation": "1-7/16-18 UNEF",
+   "h28Label": "1.4375-18 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 1.4375,
+   "pitchMax": 1.4062,
+   "pitchMin": 1.4014,
+   "pitchTol": 0.0048,
+   "minorMax": 1.3855,
+   "minorMin": 1.3770,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-1/2-18 UNEF",
+   "h28Label": "1.500-18 UNEF",
+   "class": "2A",
+   "majorMax": 1.4985,
+   "majorMin": 1.4898,
+   "pitchMax": 1.4624,
+   "pitchMin": 1.4574,
+   "pitchTol": 0.0050,
+   "minorMax": 1.4303,
+   "minorMin": null,
+   "allowance": 0.0015,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "565",
+    "cells": {
+     "pitchMax": 1.4624,
+     "pitchMin": 1.4574
+    }
+   }
+  },
+  {
+   "designation": "1-1/2-18 UNEF",
+   "h28Label": "1.500-18 UNEF",
+   "class": "3A",
+   "majorMax": 1.5000,
+   "majorMin": 1.4913,
+   "pitchMax": 1.4639,
+   "pitchMin": 1.4602,
+   "pitchTol": 0.0037,
+   "minorMax": 1.4318,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "565",
+    "cells": {
+     "pitchMax": 1.4639,
+     "pitchMin": 1.4602
+    }
+   }
+  },
+  {
+   "designation": "1-1/2-18 UNEF",
+   "h28Label": "1.500-18 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 1.5000,
+   "pitchMax": 1.4704,
+   "pitchMin": 1.4639,
+   "pitchTol": 0.0065,
+   "minorMax": null,
+   "minorMin": 1.440,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "minorMax": {
+      "table": 1.452,
+      "formula": 1.453
+     }
+    },
+    "note": "table = 인쇄 값(쪽 그림 확인). 인쇄 오류로 보여 minorMax 를 비웠다(removed)"
+   },
+   "mh31": {
+    "page": "565",
+    "cells": {
+     "minorMin": 1.440,
+     "minorMax": 1.453
+    }
+   }
+  },
+  {
+   "designation": "1-1/2-18 UNEF",
+   "h28Label": "1.500-18 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 1.5000,
+   "pitchMax": 1.4687,
+   "pitchMin": 1.4639,
+   "pitchTol": 0.0048,
+   "minorMax": 1.4480,
+   "minorMin": 1.4400,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "565",
+    "cells": {
+     "minorMin": 1.4400,
+     "minorMax": 1.4480,
+     "pitchMax": 1.4687
+    }
+   }
+  },
+  {
+   "designation": "1-11/16-18 UNEF",
+   "h28Label": "1.6875-18 UNEF",
+   "class": "2A",
+   "majorMax": 1.6860,
+   "majorMin": 1.6773,
+   "pitchMax": 1.6499,
+   "pitchMin": 1.6448,
+   "pitchTol": 0.0051,
+   "minorMax": 1.6178,
+   "minorMin": null,
+   "allowance": 0.0015,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.32)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMin": {
+      "table": 1.6448,
+      "formula": 1.6449
+     },
+     "pitchTol": {
+      "table": 0.0051,
+      "formula": 0.0050
+     }
+    }
+   }
+  },
+  {
+   "designation": "1-11/16-18 UNEF",
+   "h28Label": "1.6875-18 UNEF",
+   "class": "3A",
+   "majorMax": 1.6875,
+   "majorMin": 1.6788,
+   "pitchMax": 1.6514,
+   "pitchMin": 1.6476,
+   "pitchTol": 0.0038,
+   "minorMax": 1.6193,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.32)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-11/16-18 UNEF",
+   "h28Label": "1.6875-18 UNEF",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 1.6875,
+   "pitchMax": 1.6580,
+   "pitchMin": 1.6514,
+   "pitchTol": 0.0066,
+   "minorMax": 1.640,
+   "minorMin": 1.627,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.32)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 1.6580,
+      "formula": 1.6579
+     },
+     "pitchTol": {
+      "table": 0.0066,
+      "formula": 0.0065
+     }
+    }
+   }
+  },
+  {
+   "designation": "1-11/16-18 UNEF",
+   "h28Label": "1.6875-18 UNEF",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 1.6875,
+   "pitchMax": 1.6563,
+   "pitchMin": 1.6514,
+   "pitchTol": 0.0049,
+   "minorMax": 1.6355,
+   "minorMin": 1.6270,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.32)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "5/16-20 UN",
+   "h28Label": ".3125-20 UN",
+   "class": "2A",
+   "majorMax": 0.3113,
+   "majorMin": 0.3032,
+   "pitchMax": 0.2788,
+   "pitchMin": 0.2748,
+   "pitchTol": 0.0040,
+   "minorMax": 0.2500,
+   "minorMin": null,
+   "allowance": 0.0012,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMin": {
+      "table": 0.2748,
+      "formula": 0.2747
+     },
+     "pitchTol": {
+      "table": 0.0040,
+      "formula": 0.0041
+     }
+    }
+   },
+   "mh31": {
+    "page": "542",
+    "cells": {
+     "pitchMax": 0.2788,
+     "pitchMin": 0.2747
+    }
+   }
+  },
+  {
+   "designation": "5/16-20 UN",
+   "h28Label": ".3125-20 UN",
+   "class": "3A",
+   "majorMax": 0.3125,
+   "majorMin": 0.3044,
+   "pitchMax": 0.2800,
+   "pitchMin": 0.2770,
+   "pitchTol": 0.0030,
+   "minorMax": 0.2512,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "542",
+    "cells": {
+     "pitchMax": 0.2800,
+     "pitchMin": 0.2770
+    }
+   }
+  },
+  {
+   "designation": "5/16-20 UN",
+   "h28Label": ".3125-20 UN",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.3125,
+   "pitchMax": 0.2852,
+   "pitchMin": 0.2800,
+   "pitchTol": 0.0052,
+   "minorMax": 0.270,
+   "minorMin": 0.258,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 0.2852,
+      "formula": 0.2853
+     },
+     "pitchTol": {
+      "table": 0.0052,
+      "formula": 0.0053
+     }
+    }
+   },
+   "mh31": {
+    "page": "542",
+    "cells": {
+     "pitchMin": 0.2800,
+     "pitchMax": 0.2853
+    }
+   }
+  },
+  {
+   "designation": "5/16-20 UN",
+   "h28Label": ".3125-20 UN",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.3125,
+   "pitchMax": 0.2839,
+   "pitchMin": 0.2800,
+   "pitchTol": 0.0039,
+   "minorMax": 0.2680,
+   "minorMin": 0.2580,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.26)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 0.2839,
+      "formula": 0.2840
+     },
+     "pitchTol": {
+      "table": 0.0039,
+      "formula": 0.0040
+     }
+    }
+   },
+   "mh31": {
+    "page": "542",
+    "cells": {
+     "pitchMin": 0.2800,
+     "pitchMax": 0.2840
+    }
+   }
+  },
+  {
+   "designation": "9/16-20 UN",
+   "h28Label": ".5625-20 UN",
+   "class": "2A",
+   "majorMax": 0.5612,
+   "majorMin": 0.5531,
+   "pitchMax": 0.5287,
+   "pitchMin": 0.5245,
+   "pitchTol": 0.0042,
+   "minorMax": 0.4999,
+   "minorMin": null,
+   "allowance": 0.0013,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMin": {
+      "table": 0.5245,
+      "formula": 0.5244
+     },
+     "pitchTol": {
+      "table": 0.0042,
+      "formula": 0.0043
+     }
+    }
+   },
+   "mh31": {
+    "page": "548",
+    "cells": {
+     "pitchMax": 0.5287,
+     "pitchMin": 0.5244
+    }
+   }
+  },
+  {
+   "designation": "9/16-20 UN",
+   "h28Label": ".5625-20 UN",
+   "class": "3A",
+   "majorMax": 0.5625,
+   "majorMin": 0.5544,
+   "pitchMax": 0.5300,
+   "pitchMin": 0.5268,
+   "pitchTol": 0.0032,
+   "minorMax": 0.5012,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "548",
+    "cells": {
+     "pitchMax": 0.5300,
+     "pitchMin": 0.5268
+    }
+   }
+  },
+  {
+   "designation": "9/16-20 UN",
+   "h28Label": ".5625-20 UN",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.5625,
+   "pitchMax": 0.5355,
+   "pitchMin": 0.5300,
+   "pitchTol": 0.0055,
+   "minorMax": 0.520,
+   "minorMin": 0.508,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 0.5355,
+      "formula": 0.5356
+     },
+     "pitchTol": {
+      "table": 0.0055,
+      "formula": 0.0056
+     }
+    }
+   },
+   "mh31": {
+    "page": "548",
+    "cells": {
+     "minorMin": 0.508,
+     "minorMax": 0.520,
+     "pitchMin": 0.5300,
+     "pitchMax": 0.5356
+    }
+   }
+  },
+  {
+   "designation": "9/16-20 UN",
+   "h28Label": ".5625-20 UN",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.5625,
+   "pitchMax": 0.5341,
+   "pitchMin": 0.5300,
+   "pitchTol": 0.0041,
+   "minorMax": 0.5162,
+   "minorMin": 0.5080,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.27)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 0.5341,
+      "formula": 0.5342
+     },
+     "pitchTol": {
+      "table": 0.0041,
+      "formula": 0.0042
+     }
+    }
+   },
+   "mh31": {
+    "page": "548",
+    "cells": {
+     "minorMin": 0.5080,
+     "minorMax": 0.5161,
+     "pitchMax": 0.5342
+    }
+   }
+  },
+  {
+   "designation": "5/8-20 UN",
+   "h28Label": ".625-20 UN",
+   "class": "2A",
+   "majorMax": 0.6237,
+   "majorMin": 0.6156,
+   "pitchMax": 0.5912,
+   "pitchMin": 0.5869,
+   "pitchTol": 0.0043,
+   "minorMax": 0.5624,
+   "minorMin": null,
+   "allowance": 0.0013,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "5/8-20 UN",
+   "h28Label": ".625-20 UN",
+   "class": "3A",
+   "majorMax": 0.6250,
+   "majorMin": 0.6169,
+   "pitchMax": 0.5925,
+   "pitchMin": 0.5893,
+   "pitchTol": 0.0032,
+   "minorMax": 0.5637,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "5/8-20 UN",
+   "h28Label": ".625-20 UN",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.6250,
+   "pitchMax": 0.5981,
+   "pitchMin": 0.5925,
+   "pitchTol": 0.0056,
+   "minorMax": 0.582,
+   "minorMin": 0.571,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "5/8-20 UN",
+   "h28Label": ".625-20 UN",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.6250,
+   "pitchMax": 0.5967,
+   "pitchMin": 0.5925,
+   "pitchTol": 0.0042,
+   "minorMax": 0.5787,
+   "minorMin": 0.5710,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "11/16-20 UN",
+   "h28Label": ".6875-20 UN",
+   "class": "2A",
+   "majorMax": 0.6862,
+   "majorMin": 0.6781,
+   "pitchMax": 0.6537,
+   "pitchMin": 0.6494,
+   "pitchTol": 0.0043,
+   "minorMax": 0.6249,
+   "minorMin": null,
+   "allowance": 0.0013,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMin": {
+      "table": 0.6494,
+      "formula": 0.6493
+     },
+     "pitchTol": {
+      "table": 0.0043,
+      "formula": 0.0044
+     }
+    }
+   }
+  },
+  {
+   "designation": "11/16-20 UN",
+   "h28Label": ".6875-20 UN",
+   "class": "3A",
+   "majorMax": 0.6875,
+   "majorMin": 0.6794,
+   "pitchMax": 0.6550,
+   "pitchMin": 0.6518,
+   "pitchTol": 0.0032,
+   "minorMax": 0.6262,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMin": {
+      "table": 0.6518,
+      "formula": 0.6517
+     },
+     "pitchTol": {
+      "table": 0.0032,
+      "formula": 0.0033
+     }
+    }
+   }
+  },
+  {
+   "designation": "11/16-20 UN",
+   "h28Label": ".6875-20 UN",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 0.6875,
+   "pitchMax": 0.6606,
+   "pitchMin": 0.6550,
+   "pitchTol": 0.0056,
+   "minorMax": 0.645,
+   "minorMin": 0.633,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 0.6606,
+      "formula": 0.6607
+     },
+     "pitchTol": {
+      "table": 0.0056,
+      "formula": 0.0057
+     }
+    }
+   }
+  },
+  {
+   "designation": "11/16-20 UN",
+   "h28Label": ".6875-20 UN",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 0.6875,
+   "pitchMax": 0.6592,
+   "pitchMin": 0.6550,
+   "pitchTol": 0.0042,
+   "minorMax": 0.6412,
+   "minorMin": 0.6330,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.28)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 0.6592,
+      "formula": 0.6593
+     },
+     "pitchTol": {
+      "table": 0.0042,
+      "formula": 0.0043
+     }
+    }
+   }
+  },
+  {
+   "designation": "1-1/16-20 UN",
+   "h28Label": "1.0625-20 UN",
+   "class": "2A",
+   "majorMax": 1.0611,
+   "majorMin": 1.0530,
+   "pitchMax": 1.0286,
+   "pitchMin": 1.0241,
+   "pitchTol": 0.0045,
+   "minorMax": 0.9998,
+   "minorMin": null,
+   "allowance": 0.0014,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.29)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMin": {
+      "table": 1.0241,
+      "formula": 1.0240
+     },
+     "pitchTol": {
+      "table": 0.0045,
+      "formula": 0.0046
+     }
+    }
+   }
+  },
+  {
+   "designation": "1-1/16-20 UN",
+   "h28Label": "1.0625-20 UN",
+   "class": "3A",
+   "majorMax": 1.0625,
+   "majorMin": 1.0544,
+   "pitchMax": 1.0300,
+   "pitchMin": 1.0266,
+   "pitchTol": 0.0034,
+   "minorMax": 1.0012,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.29)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-1/16-20 UN",
+   "h28Label": "1.0625-20 UN",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 1.0625,
+   "pitchMax": 1.0359,
+   "pitchMin": 1.0300,
+   "pitchTol": 0.0059,
+   "minorMax": 1.020,
+   "minorMin": 1.008,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.29)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-1/16-20 UN",
+   "h28Label": "1.0625-20 UN",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 1.0625,
+   "pitchMax": 1.0344,
+   "pitchMin": 1.0300,
+   "pitchTol": 0.0044,
+   "minorMax": 1.0162,
+   "minorMin": 1.0080,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.29)",
+   "formulaCheck": {
+    "match": false,
+    "cells": {
+     "pitchMax": {
+      "table": 1.0344,
+      "formula": 1.0345
+     },
+     "pitchTol": {
+      "table": 0.0044,
+      "formula": 0.0045
+     }
+    }
+   }
+  },
+  {
+   "designation": "1-1/4-20 UN",
+   "h28Label": "1.250-20 UN",
+   "class": "2A",
+   "majorMax": 1.2486,
+   "majorMin": 1.2405,
+   "pitchMax": 1.2161,
+   "pitchMin": 1.2114,
+   "pitchTol": 0.0047,
+   "minorMax": 1.1873,
+   "minorMin": null,
+   "allowance": 0.0014,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.30)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-1/4-20 UN",
+   "h28Label": "1.250-20 UN",
+   "class": "3A",
+   "majorMax": 1.2500,
+   "majorMin": 1.2419,
+   "pitchMax": 1.2175,
+   "pitchMin": 1.2140,
+   "pitchTol": 0.0035,
+   "minorMax": 1.1887,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.30)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-1/4-20 UN",
+   "h28Label": "1.250-20 UN",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 1.2500,
+   "pitchMax": 1.2236,
+   "pitchMin": 1.2175,
+   "pitchTol": 0.0061,
+   "minorMax": 1.207,
+   "minorMin": 1.196,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.30)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-1/4-20 UN",
+   "h28Label": "1.250-20 UN",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 1.2500,
+   "pitchMax": 1.2220,
+   "pitchMin": 1.2175,
+   "pitchTol": 0.0045,
+   "minorMax": 1.2037,
+   "minorMin": 1.1960,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.30)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-1/2-20 UN",
+   "h28Label": "1.500-20 UN",
+   "class": "2A",
+   "majorMax": 1.4986,
+   "majorMin": 1.4905,
+   "pitchMax": 1.4661,
+   "pitchMin": 1.4613,
+   "pitchTol": 0.0048,
+   "minorMax": 1.4373,
+   "minorMin": null,
+   "allowance": 0.0014,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "565",
+    "cells": {
+     "pitchMax": 1.4661,
+     "pitchMin": 1.4613
+    }
+   }
+  },
+  {
+   "designation": "1-1/2-20 UN",
+   "h28Label": "1.500-20 UN",
+   "class": "3A",
+   "majorMax": 1.5000,
+   "majorMin": 1.4919,
+   "pitchMax": 1.4675,
+   "pitchMin": 1.4639,
+   "pitchTol": 0.0036,
+   "minorMax": 1.4387,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "1-1/2-20 UN",
+   "h28Label": "1.500-20 UN",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 1.5000,
+   "pitchMax": 1.4737,
+   "pitchMin": 1.4675,
+   "pitchTol": 0.0062,
+   "minorMax": 1.457,
+   "minorMin": 1.446,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "565",
+    "cells": {
+     "pitchMax": 1.4737
+    }
+   }
+  },
+  {
+   "designation": "1-1/2-20 UN",
+   "h28Label": "1.500-20 UN",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 1.5000,
+   "pitchMax": 1.4721,
+   "pitchMin": 1.4675,
+   "pitchTol": 0.0046,
+   "minorMax": 1.4537,
+   "minorMin": 1.4460,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.31)",
+   "formulaCheck": {
+    "match": true
+   },
+   "mh31": {
+    "page": "565",
+    "cells": {
+     "minorMin": 1.4460,
+     "minorMax": 1.4536,
+     "pitchMax": 1.4721
+    }
+   }
+  },
+  {
+   "designation": "2-20 UN",
+   "h28Label": "2.000-20 UN",
+   "class": "2A",
+   "majorMax": 1.9985,
+   "majorMin": 1.9904,
+   "pitchMax": 1.9660,
+   "pitchMin": 1.9611,
+   "pitchTol": 0.0049,
+   "minorMax": 1.9372,
+   "minorMin": null,
+   "allowance": 0.0015,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.33)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "2-20 UN",
+   "h28Label": "2.000-20 UN",
+   "class": "3A",
+   "majorMax": 2.0000,
+   "majorMin": 1.9919,
+   "pitchMax": 1.9675,
+   "pitchMin": 1.9638,
+   "pitchTol": 0.0037,
+   "minorMax": 1.9387,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.33)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "2-20 UN",
+   "h28Label": "2.000-20 UN",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 2.0000,
+   "pitchMax": 1.9739,
+   "pitchMin": 1.9675,
+   "pitchTol": 0.0064,
+   "minorMax": 1.957,
+   "minorMin": 1.946,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.33)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "2-20 UN",
+   "h28Label": "2.000-20 UN",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 2.0000,
+   "pitchMax": 1.9723,
+   "pitchMin": 1.9675,
+   "pitchTol": 0.0048,
+   "minorMax": 1.9537,
+   "minorMin": 1.9460,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.33)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3-20 UN",
+   "h28Label": "3.000-20 UN",
+   "class": "2A",
+   "majorMax": 2.9984,
+   "majorMin": 2.9903,
+   "pitchMax": 2.9659,
+   "pitchMin": 2.9607,
+   "pitchTol": 0.0052,
+   "minorMax": 2.9371,
+   "minorMin": null,
+   "allowance": 0.0016,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.34)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3-20 UN",
+   "h28Label": "3.000-20 UN",
+   "class": "3A",
+   "majorMax": 3.0000,
+   "majorMin": 2.9919,
+   "pitchMax": 2.9675,
+   "pitchMin": 2.9636,
+   "pitchTol": 0.0039,
+   "minorMax": 2.9387,
+   "minorMin": null,
+   "allowance": 0.0000,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.34)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3-20 UN",
+   "h28Label": "3.000-20 UN",
+   "class": "2B",
+   "majorMax": null,
+   "majorMin": 3.0000,
+   "pitchMax": 2.9743,
+   "pitchMin": 2.9675,
+   "pitchTol": 0.0068,
+   "minorMax": 2.957,
+   "minorMin": 2.946,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.34)",
+   "formulaCheck": {
+    "match": true
+   }
+  },
+  {
+   "designation": "3-20 UN",
+   "h28Label": "3.000-20 UN",
+   "class": "3B",
+   "majorMax": null,
+   "majorMin": 3.0000,
+   "pitchMax": 2.9726,
+   "pitchMin": 2.9675,
+   "pitchTol": 0.0051,
+   "minorMax": 2.9537,
+   "minorMin": 2.9460,
+   "allowance": null,
+   "sourceId": "H28_1969_P1",
+   "page": "표 2.21 (p. 2.34)",
+   "formulaCheck": {
+    "match": true
+   }
+  }
+ ],
+ "appFields": {
+  "note": "앱 ThreadLimits 칸과 limits[] 칸의 짝(인치 → mm 는 × 25.4)",
+  "pitchDia": "[pitchMin, pitchMax]",
+  "crest": "숫나사 [majorMin, majorMax] · 암나사 [minorMin, minorMax]",
+  "deviation": "숫나사 −allowance (3A 는 0.0000) · 암나사 0 (H28 암나사에는 허용차 칸이 없다 — allowance null)",
+  "rootLimit": "암나사 = majorMin (= 호칭 D). 숫나사는 주의: 표 2.21 의 숫나사 골 칸(minorMax)은 Ks − allowance 이고 Ks = D − 1.226869p (표 2.10 · 2.16 의 'Minor diameter, external threads', 설계 형상)다 — 1/4-20 UNC-2A 0.1876 = 0.1887 − 0.0011. 지금 앱 rootLimit (= D − 1.082532P + es, 평평한 골) 와 다른 양이다. 표 2.21 머리의 이 칸 이름은 OCR 이 깨져('Hi *>') 읽지 못했고, 값이 Ks − allowance 와 모두 맞는 것으로 뜻을 정했다",
+  "majorMinHotRolled": "1/4-20 UNC-2A 만 있다: 표 2.21 각주 c 'For unfinished hot-rolled material.' 의 바깥지름 최소 (값 = 바깥지름 최대 − 0.090·p^(2/3))",
+  "pitchTol": "표의 피치경 공차 칸(대조용으로 함께 적음)",
+  "formulaCheck": "tableVsFormula 의 절차로 다시 낸 값과 칸마다 비교. match = false 면 cells 에 표 값과 식 값",
+  "mh31": "MH31 표 3 에서 같은 칸으로 확인한 값(보조)"
+ },
+ "tableVsFormula": {
+  "procedure": "H28 5 · 6.1 · 6.2 · 6.3 절과 표 2.20 의 식. D = 호칭 지름, LE = UNC · UNF 는 D · UNEF · 20UN 은 9P. 피치경 공차 = C × (0.0015·D^(1/3), 0.0015·√LE, 0.015·p^(2/3) 를 각각 소수 6자리로 반올림해 더한 값)을 소수 4자리로 반올림, C: 1A 1.5 · 2A 1.0 · 3A 0.75 · 1B 1.95 · 2B 1.30 · 3B 0.975. 허용차 = 0.3 × 같은 합(1A · 2A). 숫나사 바깥지름 공차 0.060·p^(2/3) (1A · 열간압연 최소는 0.090). 숫나사 골 칸 = Ks − 허용차. 암나사 안지름 최소 = Kn 을 소수 3자리로, 최대 = Kn(4자리) + 표 2.20 공차(4자리)를 1B · 2B 는 3자리 · 3B 는 4자리로. 기본 치수 E = D − 0.649519p, Ks = D − 1.226869p, Kn = D − 1.082532p (각 4자리).",
+  "whyRounding": "증분을 반올림하지 않고 더하면 1/4-20 UNC-2B 피치경 최대가 0.2223 이 되어 표 0.2224 (H28 · MH31 모두)와 다르다 — 표 2.19 가 증분 표라 증분을 반올림한 것으로 보았다(표 2.19 는 OCR 이 깨져 자리 수 확인 못 함). 3B 안지름 최대를 반올림 없이 더하면 3/4-20 UNEF-3B 가 0.7036 이 되어 H28 표 0.7037 과 다르다. 다만 MH31 은 9/16-20 UN-3B 0.5161 · 1-1/2-20 UN-3B 1.4536 으로 반올림 없는 합과 같다(H28 은 0.5162 · 1.4537) — 판마다 반올림 방법이 다르다.",
+  "nominalDGap": {
+   "rows": [
+    "#12-32 UNEF (2A 만 식과 다름: 허용차 0.0009 · 공차 0.0031)",
+    "5/16-32 UNEF (2A · 2B · 3A · 3B 공차가 0.0001 작음)",
+    "7/16-28 UNEF (2B 공차 0.0046 — 식 0.0047)",
+    "1-7/16-18 UNEF (2A 0.0050 · 2B 0.0065 — 식 0.0049 · 0.0064, 0.0001 큼)",
+    "1-11/16-18 UNEF (2A 0.0051 · 2B 0.0066 — 식 0.0050 · 0.0065, 0.0001 큼)",
+    "5/16-20 UN (2A · 2B · 3B)",
+    "9/16-20 UN (2A · 2B · 3B)",
+    "11/16-20 UN (2A · 2B · 3A · 3B)",
+    "1-1/16-20 UN (2A · 3B)"
+   ],
+   "what": "H28 1969 표의 피치경 공차(와 허용차)가 호칭 D 로 낸 식 값보다 0.0001 작거나(#12 · 5/16 · 7/16 · 9/16 · 11/16 · 1-1/16) 크다(1-7/16-18 · 1-11/16-18 UNEF). 한 행의 2A · 2B · 3A · 3B 공차와 최대 · 최소 차가 모두 같은 기본 공차 하나로 서로 맞아서, OCR 잘못 읽음은 아니라고 보았다. 표 값을 거꾸로 풀면 식의 D 자리에 #12-32 → 0.182~0.193, 5/16-32 → 0.222~0.252, 7/16-28 → 0.366~0.394, 1-7/16-18 → 1.499~1.533, 1-11/16-18 → 1.744~1.823, 5/16-20 → 0.230~0.293, 9/16-20 → 0.460~0.522, 11/16-20 → 0.548~0.638, 1-1/16-20 → 0.918~1.016 을 넣은 것과 같다. 까닭을 적은 글은 H28 6 · 7 · 11 절에서 찾지 못했다(6.1 은 D 를 'basic major (nominal) diameter of thread' 라고만 정의).",
+   "mh31": "MH31 표 3(ASME B1.1 바탕, 보조)의 같은 칸은 호칭 D 식과 같다: #12-32 UNEF-2A 허용차 0.0010 · 바깥지름 0.2150/0.2090 · 피치경 0.1947/0.1915, 5/16-20 UN-2A 0.2788/0.2747 · 2B 최대 0.2853 · 3B 최대 0.2840, 5/16-32 UNEF-2A 0.2912/0.2879 · 2B 최대 0.2965, 9/16-20 UN-2A 0.5287/0.5244 · 2B 최대 0.5356 · 3B 최대 0.5342. 즉 H28 1969 와 ASME 쪽 표가 이 줄들에서 0.0001 다르다.",
+   "neighborSizeObservation": "R1 대조의 관찰(원문 근거 없음): 위 9개 표기는 procedure 에서 지름 증분 0.0015·D^(1/3) 의 D 만 이웃 표준 크기로 바꾸면 2A · 3A · 2B · 3B 의 모든 칸이 표와 같아진다 — #12-32 → 0.190(#10), 5/16-32 · 5/16-20 → 0.250, 7/16-28 → 0.375, 9/16-20 → 0.500, 11/16-20 → 0.625, 1-1/16-20 → 1.000, 1-7/16-18 → 1.500, 1-11/16-18 → 1.750 (물림 길이 증분 LE = 9P 와 기본 치수는 호칭 D 그대로). 표 2.19(증분 표)가 지름을 몇 개 값으로만 싣고 그 사이 크기에 이웃 값을 쓴 것일 수 있으나, 표 2.19 를 읽지 못해 확인하지 못했다(notFound). 앱 식 · MH31(ASME 바탕)은 호칭 D 를 쓴다."
+  },
+  "otherGap": "인쇄 오류로 보는 두 칸(R1 대조에서 쪽 그림으로 인쇄 값을 확인, 둘 다 비움 — removed): ① 1-1/2-18 UNEF-2B 안지름 최대 — 인쇄 1.452 (스캔 n64), 식 1.453 (Kn 1.439859 + 표 2.20 공차 0.012654 = 1.452514 → 반올림 1.453. 반올림과 버림이 갈리는 1B · 2B 10줄 가운데 9줄이 반올림 값이고 이 줄만 버림 값), MH31 1.453. ② 5/8-24 UNEF-3B 피치경 최소 — 인쇄 .5879 (스캔 n61), 규격 규칙(암나사 피치경 최소 = 기본 피치경)과 같은 표기의 2B 줄 · 표 2.10 은 .5979, 이 줄 최대 .6018 − 공차 .0039 = .5979. R1 조사는 ①을 OCR 인지 인쇄인지 정하지 못했고 ②를 OCR 잘못으로 보아 0.5979 로 고쳤으나, 둘 다 인쇄가 OCR 과 같았다.",
+  "appNote": "지금 앱 ThreadSpec.kt 의 unified() 는 증분 · 공차 · 허용차를 반올림하지 않는다. 그 식에 계열별 LE(UNC · UNF = D, UNEF · 20UN = 9P)를 넣어 limits[] 를 다시 내면 98줄 가운데 49줄에서 표와 0.0001 인치 다르다 — nominalDGap 줄만이 아니라 UNC · UNF 도 (예 1/4-20 UNC-2A 바깥지름 최소 식 0.2407 / 표 0.2408: 표는 반올림한 허용차 .0011 로 낸다). 비운 두 칸을 빼면 모든 칸이 0.0001 인치 안이다. 이 JSON 을 시험 기준값으로 쓸 때는 ±0.0001 인치를 허용하거나, procedure 처럼 증분(6자리) · 공차 · 허용차(4자리)를 반올림해야 칸마다 같아진다(그래도 nominalDGap 줄은 0.0001 다르다 — MH31 · ASME 쪽 값과는 맞음)."
+ },
+ "notFound": [
+  "ASME B1.1 공개 미리보기 · 목차(2순위): asme.org 목차 PDF 는 암호화(AESV3)라 글을 못 뽑았고, ANSI webstore 미리보기(preview_B1-1_2003_R2008.pdf) · Accuristech 미리보기 · ANSI 블로그는 HTTP 403. 그래서 ASME 원문의 물림 길이 · 겹치는 크기 표기 · 급수 적용 글은 확인 못 했다. 물림 길이는 보조 출처 MH31(쪽 606)이 H28 과 같은 뜻으로 적는 것만 확인했다.",
+  "NIST PDF (nbshandbook28-1969p1.pdf): WebFetch 크기 한도로 못 엶 — archive.org 판으로 읽음(sources H28_1969_P1). R1 대조: 브라우저로는 열렸으나 쪽 이동이 안 되어 값 대조에 쓰지 못함.",
+  "FED-STD-H28/2B (1991): 스캔 그림 PDF 라 글이 없음 — 대조 못 함.",
+  "표 2.19 (피치경 공차 식의 증분 표, p. 2.18): OCR 이 깨져(회전된 표로 보임) 칸 머리 · 값을 못 읽음. 증분의 반올림 자리 수와 D 를 어떻게 잡는지(tableVsFormula.nominalDGap)를 확인 못 했다.",
+  "표 2.21 의 숫나사 골지름 칸 이름: OCR 이 깨짐('Hi *>'). 값의 뜻은 식 대조로 정했다(appFields.rootLimit).",
+  "1/2-20 UNF 의 1A · 1B 줄: OCR 글에서 그 줄을 찾지 못해 limits 에 넣지 않았다(1/4-20 UNC 의 1A · 1B 만 넣음).",
+  "20UN 의 1 · 2 순위를 ASME B1.1 이 같게 정하는지: ASME 를 못 읽었고 MH31 표 5f 는 글 뽑기에서 Primary/Secondary 칸이 사라져 대조 못 함. preferred 는 H28 1969 표 2.16 만으로 정했다.",
+  "UNEF 의 1 · 2 순위: 이번 과제 칸이 아니라 모으지 않았다."
+ ],
+ "removed": [
+  {
+   "path": "limits[designation=5/8-24 UNEF, class=3B].pitchMin",
+   "was": 0.5979,
+   "printed": 0.5879,
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "쪽 그림(archive.org 스캔 n61 = p. 2.28)을 다시 보니 인쇄가 .5879 였다 — 둘째 글자가 아래 고리 양쪽이 있는 8 이고, 같은 칸 2B 줄 .5979 의 9 와 모양이 다르다. 그래서 R1 조사의 'OCR 잘못' 판단은 틀렸고 0.5979 는 원문 값이 아니다. 한편 인쇄 .5879 는 같은 표의 다른 칸(같은 표기 2B 의 피치경 최소 .5979, 표 2.10 기본 피치경 .5979, 이 줄 최대 .6018 − 공차 .0039 = .5979)과 어긋나 인쇄 오류로 보여 비웠다('의심스러우면 뺀다'). 규격 규칙(암나사 피치경 최소 = 기본 피치경)으로는 0.5979."
+  },
+  {
+   "path": "limits[designation=1-1/2-18 UNEF, class=2B].minorMax",
+   "was": 1.452,
+   "printed": 1.452,
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "쪽 그림(스캔 n64 = p. 2.31)으로 인쇄가 1.452 임을 확인했다(끝 글자 바닥에 가로획이 있는 2 — 같은 쪽 1.4303 의 3 과 다름). 그러나 H28 자신의 식(Kn + 표 2.20 공차 = 1.452514)을 다른 1B · 2B 줄처럼 반올림하면 1.453 이고(반올림과 버림이 갈리는 1B · 2B 10줄 가운데 9줄이 반올림 값 — 예 9/16-20 UN .520 · 1-1/16-20 UN 1.020 — 이 줄만 버림 값), MH31(ASME 바탕, 쪽 565)도 1.453 이라 인쇄 오류로 보여 비웠다. 식 값은 1.453."
+  }
+ ],
+ "corrected": [
+  {
+   "path": "limits[designation=1/4-20 UNC, class=3A].majorMax",
+   "was": "OCR .2590",
+   "now": 0.2500,
+   "stage": "R1 조사",
+   "reason": "3A 는 허용차 0.0000 이라 바깥지름 최대 = 호칭 0.2500. 같은 줄 최소 .2419 = .2500 − .0081, 2B · 3B 의 바깥지름 최소도 .2500. 스캔 n59 낱말도 '.2590' 이라 OCR 단계 잘못",
+   "crossCheck": "R1 대조: 쪽 그림(스캔 n59)에서 넷째 글자가 가운데 닫힘이 없는 0 으로 보여 인쇄 .2500 — 고침이 맞다"
+  },
+  {
+   "path": "limits[designation=5/8-24 UNEF, class=3B].pitchMin",
+   "was": "OCR .5879",
+   "now": 0.5979,
+   "stage": "R1 조사",
+   "reason": "암나사 피치경 최소 = 기본 피치경 .5979 — 표 2.10 · 같은 표기의 2B 줄과 같고, 최대 .6018 − 공차 .0039 = .5979",
+   "crossCheck": "R1 대조에서 뒤집음: 인쇄도 .5879 라 OCR 잘못이 아니다. 값은 비웠다(removed[0])"
+  },
+  {
+   "path": "limits[designation=1-20 UNEF, class=3A].majorMax",
+   "was": "OCR '1 0000'",
+   "now": 1.0000,
+   "stage": "R1 조사",
+   "reason": "띄어쓰기만",
+   "crossCheck": "R1 대조: 다시 읽은 OCR 도 '1  0000'. 3A 는 허용차 0 이라 바깥지름 최대 = 호칭 1.0000 — 맞음"
+  },
+  {
+   "path": "limits[designation=5/16-32 UNEF].class 외 급수 글자",
+   "was": "OCR '215' · 'IB' · '2  A'",
+   "now": "2B · 1B · 2A",
+   "stage": "R1 조사",
+   "reason": "5/16-32 UNEF 의 '215' → 2B, 모든 줄의 'IB' → 1B, '2  A' → 2A",
+   "crossCheck": "R1 대조: 다시 읽은 OCR 에도 같은 글자(n60 의 '215', 'IB') — 맞음"
+  },
+  {
+   "path": "series.UN20[].dIn (크기 글자 5개)",
+   "was": "OCR '.4376a' · '1.4376' · '81 25a' · '1 . 6875' · '2 . 625'",
+   "now": ".4375 · 1.4375 · .8125 · 1.6875 · 2.625",
+   "stage": "R1 조사",
+   "reason": "같은 줄의 피치경 · 안지름이 그 크기의 식 값과 맞음",
+   "crossCheck": "R1 대조: 다시 뽑은 낱말 목록에도 같은 글자, 크기 차례로도 맞음"
+  },
+  {
+   "path": "engagement.quotes[0].page",
+   "was": "p. 2.17~2.18 (OCR 쪽 표시로 판단)",
+   "now": "p. 2.20",
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "전문 검색에서 이 문장('...1 D (diameter) or 9 pitches, depending on the series.')은 스캔 쪽 54 에만 있고 그 쪽의 인쇄 번호는 2.20 이다(page_numbers.json — 같은 틀로 leaf 49 = 표 2.16 = p. 2.15, leaf 60 = 표 2.21 첫 쪽 = p. 2.26). 같은 쪽에서 이 문장 바로 뒤에 6.2 · 6.3 · 표 2.20 이 온다. 6.1 제목은 p. 2.17"
+  },
+  {
+   "path": "sources[0].pages",
+   "was": "… 4 · 5 · 6.1 절 (p. 2.17~2.18) … 표 2.21 (p. 2.26~2.37, 첫 쪽 스캔 n59) …",
+   "now": "… 4 · 5 절 (p. 2.17) · 6.1 절 (p. 2.17~2.20 — 물림 길이(Le) 문장은 p. 2.20) · 6.2 · 6.3 · 표 2.20 (p. 2.20) … 표 2.21 (… 각주 글은 p. 2.37) …",
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "위 6.1 인용문의 쪽 고침과 같은 까닭. 4 · 4.1 · 5 절 인용문은 스캔 쪽 51 = p. 2.17 로 맞음. 표 2.21 각주 c 'For unfinished hot-rolled material.' 글은 스캔 쪽 71 = p. 2.37"
+  },
+  {
+   "path": "engagement.check.formulaLED",
+   "was": 0.7115,
+   "now": 0.7114,
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "H28 6.1 식에 LE = D = 0.750 을 넣으면 3/4-20 UNEF-2A 피치경 최소는 0.7114 (R1 절차 0.7175 − 0.0014 − 0.0047, 반올림 없이 0.711417). 같은 칸의 note 도 0.7114 라고 적어 칸 값만 틀렸다"
+  },
+  {
+   "path": "engagement.count",
+   "was": "표 2.21 에서 읽은 UNEF · 20UN 88줄 가운데 LE = 9P 식과 칸마다 같은 줄 65, LE = D 식과 같은 줄 4 (#12-32 UNEF-2A, 1/4-32 UNEF-2A · 3A · 3B — 두 식 값이 우연히 같은 줄). 9P 식과 다른 23줄(tableVsFormula) 가운데 LE = D 식과 같은 줄은 #12-32 UNEF-2A 하나뿐이고(같은 표기의 2B · 3A · 3B 는 LE = D 로 안 맞음), 22줄은 어느 쪽과도 칸마다 같지 않다.",
+   "now": "표 2.21 에서 읽은 UNEF · 20UN 88줄(인쇄 값) 가운데 LE = 9P 식(tableVsFormula.procedure)과 칸마다 같은 줄 64, LE = D 식과 같은 줄 4 (#12-32 UNEF-2A, 1/4-32 UNEF-2A · 3A · 3B — 두 식 값이 우연히 같은 줄). 9P 식과 다른 24줄(tableVsFormula 의 nominalDGap 22줄 + 인쇄 오류로 보는 2줄) 가운데 LE = D 식과 같은 줄은 #12-32 UNEF-2A 하나뿐이고(같은 표기의 2B · 3A · 3B 는 LE = D 로 안 맞음), 23줄은 어느 쪽과도 칸마다 같지 않다.",
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "5/8-24 UNEF-3B 피치경 최소의 인쇄 값이 .5879 라(removed[0]) 그 줄은 9P 식과 같지 않다 — 65 → 64, 23 → 24, 22 → 23"
+  },
+  {
+   "path": "verification.method[1]",
+   "was": "… 75줄이 칸마다 같고 23줄이 다르다(tableVsFormula 의 nominalDGap 22줄 + otherGap 1줄) …",
+   "now": "… 인쇄 값으로 74줄이 칸마다 같고 24줄이 다르다(nominalDGap 22줄 + 인쇄 오류로 보는 2줄) …",
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "engagement.count 와 같은 까닭"
+  },
+  {
+   "path": "tableVsFormula.otherGap",
+   "was": "1-1/2-18 UNEF-2B 안지름 최대: H28 OCR 1.452 …, 식 1.453 …, MH31 1.453. 인쇄 값인지 OCR 잘못인지 쪽 그림을 못 봐서 정하지 못했다. 값은 OCR 그대로 두었다.",
+   "now": "인쇄 오류로 보는 두 칸(쪽 그림으로 인쇄 값 확인, 둘 다 비움): ① 1-1/2-18 UNEF-2B 안지름 최대 인쇄 1.452 · 식 1.453 ② 5/8-24 UNEF-3B 피치경 최소 인쇄 .5879 · 규칙 .5979",
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "쪽 그림으로 두 칸 모두 인쇄가 OCR 과 같음을 확인했다(removed)"
+  },
+  {
+   "path": "tableVsFormula.appNote",
+   "was": "앱처럼 식으로 내면 위 줄에서 H28 1969 표와 0.0001 인치 다를 수 있다 …",
+   "now": "앱 unified() 식(반올림 없음)에 계열별 LE 를 넣으면 98줄 가운데 49줄에서 0.0001 인치 다르다(UNC · UNF 포함) …",
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "R1 조사는 차이가 nominalDGap 줄에만 난다고 적었으나, 앱과 같은 반올림 없는 식으로 다시 내니 49줄에서 0.0001 차이가 났다(대조 스크립트). 차이는 모두 0.0001 인치 안"
+  },
+  {
+   "path": "notFound[5]",
+   "was": "1-1/2-18 UNEF-2B 안지름 최대 1.452 / 1.453: 쪽 그림을 못 봐서 어느 쪽인지 확정 못 함(tableVsFormula.otherGap).",
+   "now": "(지움 — 풀림)",
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "쪽 그림으로 인쇄 1.452 를 확인했다(removed[1])"
+  },
+  {
+   "path": "confidence",
+   "was": "… preferred(1 · 2 순위): 중간 — … 쪽 그림을 눈으로 보지는 않았다. 1-1/2-18 UNEF-2B 안지름 최대: 낮음.",
+   "now": "… preferred: 높음 … 인쇄 오류로 보아 비운 2칸은 값이 없다.",
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "표 2.16 의 크기 낱말 좌표를 따로 다시 뽑아 같았고 쪽 그림(스캔 n48)에서도 1.500 ~ 3.000 의 크기가 Primary · Secondary 칸에 번갈아 놓였다(1-5/8 · 1-7/8 은 Primary). 1-1/2-18 칸은 풀려서 비움"
+  },
+  {
+   "path": "limits[designation=5/8-24 UNEF, class=3B].formulaCheck",
+   "was": "{match: true}",
+   "now": "{match: false, cells.pitchMin: 인쇄 0.5879 / 식 0.5979}",
+   "stage": "R1 대조 (2026-11-05)",
+   "reason": "formulaCheck 의 table 은 인쇄 값이어야 한다(removed[0])"
+  }
+ ],
+ "confidence": "표 2.10 · 2.16 의 크기 · 산수, 표 2.21 의 한계 치수 98줄, 3.6 · 7 · 10 절 인용: 높음 — OCR 글을 식으로 칸마다 다시 내 맞췄고, R1 대조에서 OCR 글을 따로 다시 읽어 값 638칸 가운데 636칸이 같았으며(다른 2칸은 쪽 그림으로 판정), nominalDGap 22줄 가운데 4줄과 의심 칸 3개는 쪽 그림으로 인쇄 값을 확인했다. preferred(1 · 2 순위): 높음 — 표 2.16 의 크기 낱말 x 좌표(Primary 칸 머리 x 86~187, Secondary 칸 머리 x 294~421 / 크기 낱말 x 88~124 이면 1, 304~336 이면 2)를 R1 대조에서 따로 다시 뽑아 같았고, 쪽 그림(스캔 n48)에서 1.500 ~ 3.000 의 크기가 두 칸에 번갈아 놓인 것을 보았다(1-5/8 · 1-7/8 은 Primary). 인쇄 오류로 보아 비운 2칸(removed)은 값이 없다.",
+ "verification": {
+  "checkedAt": "2026-11-05",
+  "method": [
+   "표 2.10 (UNEF 25행) · 표 2.16 (20UN 37행)의 기본 피치경 E · 숫나사 안지름 Ks · 암나사 안지름 Kn 을 D − 0.649519p · D − 1.226869p · D − 1.082532p 로 다시 내 소수 4자리로 비교: UNEF 25행 모두 같음, 20UN 은 OCR 잘못 2칸(아래 ocrErrorsNotStored) 말고 모두 같음.",
+   "표 2.21 의 98줄을 tableVsFormula.procedure 로 다시 내 칸마다 비교(limits[].formulaCheck): 인쇄 값으로 74줄이 칸마다 같고 24줄이 다르다(tableVsFormula 의 nominalDGap 22줄 + 인쇄 오류로 보는 2줄 — otherGap). UNC · UNF 10줄은 LE = D 로 모두 같다.",
+   "표 2.16 의 Primary/Secondary: BookReader 글 API(스캔 n48)의 낱말 좌표와 전문 검색 API 의 'Primary' · 'Secondary' 낱말 상자(스캔 쪽 49, 좌표 같은 틀)로 판정. '.5625' 낱말은 두 API 에서 같은 상자 [111, 638~660] 로 나와 좌표 틀이 같음을 확인.",
+   "표 2.21: djvu 글에서 읽은 줄을 스캔 n59 (p. 2.26) · n64 (p. 2.31)의 낱말 자료(같은 OCR 의 쪽별 판)로 다시 읽어 같았다(.216-32 UNEF · .250-20 UNC · .250-32 UNEF · .3125-20 UN · 1.4375-18 UNEF · 1.500-18 UNEF · 1.500-20 UN).",
+   "20UN 크기 목록(1/4 ~ 3, 37개)과 각 크기의 기본 피치경 · 암나사 안지름은 MH31 표 5f (쪽 600, 보조)와 같았다.",
+   "쪽 번호: djvu 글의 쪽 끝 표시(2.26 · 2.27 …)로 정했다. 스캔 n59 의 첫 표기 .060-80 UNF ~ 끝 .3125-28 UN 이 글의 2.26 표시 앞 범위와 같아, 표시가 쪽 끝에 있음을 확인."
+  ],
+  "ocrErrorsNotStored": [
+   "표 2.16 1-11/16 의 기본 피치경 OCR '1.6650' — 식 1.6550, MH31 표 5f 1.6550 (이 JSON 에는 E 칸이 없어 영향 없음)",
+   "표 2.16 1-13/16 의 암나사 안지름 OCR '1.7684' — 식 1.7584, MH31 표 5f 1.7584 (영향 없음)"
+  ],
+  "crossCheck": {
+   "by": "R1 대조 — 조사한 에이전트와 다른 에이전트",
+   "checkedAt": "2026-11-05",
+   "reopened": [
+    "H28 표 2.21 (p. 2.26 ~ 2.34, 스캔 n59 ~ n67): BookReader 낱말 API 의 OCR 글을 WebFetch 로 쪽마다 다시 읽어 98줄의 값 638칸을 칸마다 맞춤. 표기 · 쪽은 쪽마다 첫 · 끝 표기와 page_numbers.json 으로 확인",
+    "H28 표 2.10 (스캔 n43 = p. 2.10): UNEF 25줄의 크기 · 산수",
+    "H28 표 2.16 (스캔 n48 = p. 2.15): 크기 낱말 37개의 x 좌표를 따로 다시 뽑음(Primary x 88~123, Secondary x 304~336) · 전문 검색 낱말 상자 7개(.3125 · .375 · .625 = x 110~111, .6875 · .9375 · 1.6875 · 2.625 = x 324~335) · 칸 머리 'Primary' x 86~187 · 'Secondary' x 294~421 · 각주 a 글 · 쪽 그림",
+    "인용문 10개: 전문 검색으로 문장과 스캔 쪽을 찾고 page_numbers.json 으로 인쇄 쪽을 정함 — 3.6 (p. 2.05), 표 2.16 각주 a (p. 2.15), 4 · 4.1 · 5 (p. 2.17), 6.1 의 Le 문장 (p. 2.20), 7 의 세 문장 (p. 2.21), 10 (p. 2.22)",
+    "쪽 그림: archive.org 스캔 jpg 를 브라우저 캔버스에 그려 글자 모양을 문자 그림으로 봄(파일 저장 없음) — n59 (1/4-20 UNC-3A 바깥지름 최대, #12-32 UNEF-2A 허용차 · 바깥지름 최대, 5/16-20 UN-2A 피치경), n61 (5/8-24 UNEF-3B 안지름 최대 · 피치경 최소, 2B 피치경 최소), n64 (표기 1.4375-18/-20/-28 · 1.500-6/-8/-12/-16/-18, 1-7/16-18 UNEF-2A 피치경 최소 · 공차 · 2B 피치경 최대, 1-1/2-18 UNEF-2B 안지름), n48 (1.500 ~ 3.000 칸 배치)",
+    "MH31 (보조) flippingbook 쪽 541 · 542 · 548 · 565 · 600 · 606: mh31 칸 60개가 쪽 글에 같은 차례로 있음(예 '2A 0.0010 0.2150 0.2090', '— 0.2912 0.2879 —', 'UNEF 2B 1.440 1.453', '9/16-20 UN 3B 0.5080 0.5161'), 쪽 606 의 '5 to 15 pitches', 쪽 600 의 표 5f 1.6550 · 1.7584"
+   ],
+   "verdicts": {
+    "limits": "값 638칸: ok 637 · mismatch 1 · unverifiable 0. mismatch = 5/8-24 UNEF-3B pitchMin (JSON 0.5979, 인쇄 .5879) — 인쇄 값도 인쇄 오류로 보여 비움(removed[0]). ok 가운데 1-1/2-18 UNEF-2B minorMax 는 인쇄 1.452 와 같으나 인쇄 오류로 보여 비움(removed[1]). designation · h28Label · class · sourceId · page 98줄 ok",
+    "series": "UNEF 25줄 × size · dIn · tpi, UN20 37줄 × size · dIn · coincidesWith · preferred: 모두 ok",
+    "quotesAndRules": "인용문 10개 ok(쪽만 고침 1 — engagement.quotes[0]). designationRule · classes · engagement 의 계열별 LE ok. engagement.check.formulaLED mismatch → 고침",
+    "mh31": "60칸 ok (보조 출처 — H28 인쇄 값 또는 H28 식과 따로 맞음)",
+    "derivedText": "engagement.count · verification.method[1] · tableVsFormula.otherGap · appNote · sources[0].pages · confidence: 고침(corrected). 미해결 판정 0"
+   },
+   "scriptChecks": [
+    "대조 스크립트 unified_extra_verify.py (저장소 밖 작업 폴더, py -I 로 실행)",
+    "값이 있는 칸의 sourceId · page: 빠짐 0 (formulaCheck · mh31 안의 대조용 수 제외 — mh31 은 page 있음)",
+    "다시 읽은 OCR 과 JSON(고치기 전): 638칸 가운데 636칸이 값 · 자리 수까지 같음. 다른 2칸은 쪽 그림으로 판정(1/4-20 UNC-3A 인쇄 .2500 = JSON, 5/8-24 UNEF-3B 인쇄 .5879 ≠ JSON)",
+    "앱 식(ThreadSpec.kt unified(), 반올림 없음)으로 limits[] 재현(고치기 전 JSON 기준), 0.0001 in 안 칸 수: LE = D 이면 UNC 40/40 · UNF 26/26 · UNEF 229/312 · 20UN 174/260, LE = 9P 이면 UNC 28/40 · UNF 26/26 · UNEF 311/312 · 20UN 260/260 (UNEF 1칸 = 인쇄 1.452). 반올림 뒤 같은 칸: UNC D 35/40 · 9P 17/40, UNF D 25/26 · 9P 20/26. 판정: UNC · UNF = D, UNEF · 20UN = 9P — engagement 와 같다",
+    "R1 절차(증분 6자리 · 공차 4자리 반올림) 재현, 칸마다 같은 줄: LE = D 이면 UNC 6/6 · UNF 4/4 · UNEF 4/48 · 20UN 0/40, LE = 9P 이면 UNC 0/6 · UNF 1/4 · UNEF 37/48 · 20UN 28/40 (UNEF 37 은 고치기 전 JSON 값 .5979 기준 — 인쇄 .5879 로는 36, 두 칸을 비운 뒤 남은 칸으로는 38). limits[].formulaCheck.match 와 어긋난 줄 0",
+    "앱 식 · 계열별 LE 로 표와 0.0001 다른 줄 49 (UNC · UNF 4줄 포함) → tableVsFormula.appNote 고침",
+    "nominalDGap 9개 표기 36줄: 지름 증분의 D 를 이웃 표준 크기로 바꾸면 R1 절차로 모든 칸이 같다(관찰 → tableVsFormula.nominalDGap.neighborSizeObservation)",
+    "1B · 2B 안지름 최대: 반올림(half-up)과 버림이 갈리는 10줄 가운데 9줄이 반올림 값, 1-1/2-18 UNEF-2B 만 버림 값(인쇄 1.452)",
+    "3/4-20 UNEF-2A: LE = D → 피치경 0.7161 / 0.7114, LE = 9P → 0.7162 / 0.7118 (표 0.7162 / 0.7118)",
+    "R2 · R3 · R4 검사: 이 파일(R1)에 해당하는 칸이 없어 하지 않음"
+   ]
+  }
+ },
+ "notes": "UN20 의 preferred: 1 = 표 2.16 Primary 칸, 2 = Secondary 칸. H28 1969 표 2.16 의 2순위(Secondary 칸)는 11/16 · 13/16 · 15/16 · 1-1/16 · 1-3/16 · 1-5/16 · 1-7/16 · 1-9/16 · 1-11/16 · 1-13/16 · 1-15/16 · 2-1/8 · 2-3/8 · 2-5/8 · 2-7/8 의 15개이고 나머지 22개는 1순위다(1-5/8 · 1-7/8 도 Primary 칸). 겹치는 크기 8개(coincidesWith ≠ null)는 20UN 표에 실려 있어도 이름 · 공차는 그 계열(designationRule)."
+}

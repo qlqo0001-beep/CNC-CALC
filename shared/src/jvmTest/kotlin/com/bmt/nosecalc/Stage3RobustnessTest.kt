@@ -4,6 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import com.bmt.nosecalc.calc.Cutting
+import com.bmt.nosecalc.calc.DieHeadCalc
+import com.bmt.nosecalc.calc.DieHeadCatalog
+import com.bmt.nosecalc.calc.DieWarning
 import com.bmt.nosecalc.calc.DrillCatalog
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.G76Calc
@@ -12,10 +15,14 @@ import com.bmt.nosecalc.calc.IsoGroup
 import com.bmt.nosecalc.calc.PolarG12
 import com.bmt.nosecalc.calc.PolarShape
 import com.bmt.nosecalc.calc.PolarWarning
+import com.bmt.nosecalc.calc.PipeKind
+import com.bmt.nosecalc.calc.PipeTable
+import com.bmt.nosecalc.calc.PipeThreadCalc
 import com.bmt.nosecalc.calc.ThreadClass
 import com.bmt.nosecalc.calc.ThreadDir
 import com.bmt.nosecalc.calc.ThreadKind
 import com.bmt.nosecalc.calc.ThreadTable
+import com.bmt.nosecalc.calc.UnGroup
 import com.bmt.nosecalc.screens.CuttingScreen
 import com.bmt.nosecalc.screens.PolarScreen
 import com.bmt.nosecalc.screens.ThreadScreen
@@ -41,11 +48,27 @@ import com.bmt.nosecalc.screens.polar.polarWarningText
 import com.bmt.nosecalc.screens.polar.simPlan
 import com.bmt.nosecalc.screens.previewLine
 import com.bmt.nosecalc.screens.resultCells
+import com.bmt.nosecalc.screens.thread.DieField
+import com.bmt.nosecalc.screens.thread.DieStore
+import com.bmt.nosecalc.screens.thread.ThreadFamily
 import com.bmt.nosecalc.screens.thread.ThreadField
+import com.bmt.nosecalc.screens.thread.ThreadMethod
 import com.bmt.nosecalc.screens.thread.ThreadState
+import com.bmt.nosecalc.screens.thread.chaserRows
+import com.bmt.nosecalc.screens.thread.dieFieldHint
+import com.bmt.nosecalc.screens.thread.dieFlagged
+import com.bmt.nosecalc.screens.thread.dieMissing
+import com.bmt.nosecalc.screens.thread.dieResultCells
+import com.bmt.nosecalc.screens.thread.dieSpeedKey
+import com.bmt.nosecalc.screens.thread.dieSpeedNote
+import com.bmt.nosecalc.screens.thread.dieWarningText
 import com.bmt.nosecalc.screens.thread.fieldHint
 import com.bmt.nosecalc.screens.thread.g76Words
+import com.bmt.nosecalc.screens.thread.gaugeRows
 import com.bmt.nosecalc.screens.thread.ncText
+import com.bmt.nosecalc.screens.thread.pipeOutline
+import com.bmt.nosecalc.screens.thread.pipeResultCells
+import com.bmt.nosecalc.screens.thread.pipeSectionGeom
 import com.bmt.nosecalc.screens.thread.sectionGeom
 import com.bmt.nosecalc.screens.thread.threadWarningText
 import java.io.File
@@ -55,7 +78,7 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * 3단계 화면(나사 G76 · 턴밀 극좌표 · 재료·절삭조건)이 잘못된 입력에서 죽지 않는가 — [InputRobustnessTest] 와 같은 방식.
+ * 3단계 화면(나사 G76 — 관용 테이퍼 · 다이스 헤드 포함 · 턴밀 극좌표 · 재료·절삭조건)이 잘못된 입력에서 죽지 않는가 — [InputRobustnessTest] 와 같은 방식.
  * 키패드로 칠 수 있는 글(빈칸 · 0 · 음수 · 12자리 · 아주 작은 수 · '.' · '-')을 칸마다 흔들고, 고르는 칸(사이즈 · 급수 · 도형 · 메이커 · 행 …)도 섞는다.
  * 1) 화면이 쓰는 글 함수(경고 · 결과 칸 · 미리보기 · 낱말)가 예외 없이 나오고 찍는 숫자가 유한한지(극좌표는 PolarStateTest.fuzzNoCrash 가 같은 일을 한다),
  * 2) 그런 상태의 화면을 실제로 그려 본다(키패드 · 다크 · 직접 보정 · 시뮬레이션 모달 · 탭 셋 섞어서).
@@ -90,18 +113,25 @@ class Stage3RobustnessTest {
 
     // ── 나사 G76 ──
 
-    private fun randomThread(): ThreadState {
-        val kind = if (rnd.nextBoolean()) ThreadKind.METRIC else ThreadKind.UN
+    /** 무작위 나사 화면 상태 — 종류는 families 가운데(관용 테이퍼면 크기 · UN 묶음 · 테이퍼 낱말도 무작위, 급수는 없음) */
+    private fun randomThread(families: List<ThreadFamily> = ThreadFamily.entries): ThreadState {
+        val family = families[rnd.nextInt(families.size)]
+        val kind = family.kind
         val inner = rnd.nextBoolean()
-        val specs = ThreadTable.of(kind)
-        val spec = if (rnd.nextInt(10) == 0) null else specs[rnd.nextInt(specs.size)]
+        val specs = kind?.let { ThreadTable.of(it) }.orEmpty()
+        val pipes = family.pipeKind?.let { PipeTable.of(it) }.orEmpty()
+        val spec = if (specs.isEmpty() || rnd.nextInt(10) == 0) null else specs[rnd.nextInt(specs.size)]
+        val pipe = if (pipes.isEmpty() || rnd.nextInt(10) == 0) null else pipes[rnd.nextInt(pipes.size)]
         val classes = ThreadClass.entries.filter { it.kind == kind && it.internal == inner }
         val base = mapOf("zStart" to "5", "zEnd" to "-25", "firstCut" to "0.2")
         return ThreadState(
             inner = inner,
-            kind = kind,
+            family = family,
             spec = spec,
-            cls = if (rnd.nextBoolean()) null else classes[rnd.nextInt(classes.size)],
+            pipe = pipe,
+            unGroup = UnGroup.entries[rnd.nextInt(UnGroup.entries.size)],
+            taperWord = if (rnd.nextInt(3) == 0) 'R' else 'I',
+            cls = if (classes.isEmpty() || rnd.nextBoolean()) null else classes[rnd.nextInt(classes.size)],
             material = if (rnd.nextBoolean()) null else IsoGroup.entries[rnd.nextInt(6)],
             dir = if (rnd.nextInt(4) == 0) ThreadDir.REVERSE else ThreadDir.FORWARD,
             angle = if (rnd.nextBoolean()) null else G76Calc.ANGLES[rnd.nextInt(G76Calc.ANGLES.size)],
@@ -116,7 +146,7 @@ class Stage3RobustnessTest {
     @Test
     fun thread() {
         repeat(20_000) {
-            val s = randomThread()
+            val s = randomThread(listOf(ThreadFamily.METRIC, ThreadFamily.UN))
             check("나사 ${s.spec} ${ThreadField.entries.map { s.value(it) }}") {
                 val r = G76Calc.calc(s.input())
                 val sol = r.solution
@@ -139,6 +169,86 @@ class Stage3RobustnessTest {
             }
         }
         assertTrue(solved > 5_000, "결과가 나온 사례가 너무 적다: $solved")
+    }
+
+    /** 관용 테이퍼(PT · NPT): 같은 흔들기로 계산기 · 화면 글 함수(경고 · 게이지 표 · 결과 칸 · 단면 윤곽)가 예외 없이 유한한 숫자를 낸다 */
+    @Test
+    fun pipeThread() {
+        var pipeSolved = 0
+        repeat(10_000) {
+            val s = randomThread(listOf(ThreadFamily.PT, ThreadFamily.NPT))
+            check("관용 나사 ${s.family} ${s.pipe?.size} 내경 ${s.inner} ${ThreadField.entries.map { s.value(it) }}") {
+                val r = PipeThreadCalc.calc(s.pipeInput())
+                val sol = r.solution
+                s.missing()
+                s.flagged(r.warnings)
+                s.fields.forEach { s.placeholder(it); fieldHint(it, s.inner, pipe = true) }
+                r.warnings.forEach { threadWarningText(it, s, pipe = sol) }
+                threadWarningText(G76Warning.MISSING_INPUT, s)
+                if (s.bad().isNotEmpty()) threadWarningText(G76Warning.BAD_INPUT, s)
+                gaugeRows(s, sol)
+                val g = pipeSectionGeom(s.family.pipeKind!!, s.inner, s.pipe, sol)
+                assertTrue(listOf(g.p, g.k, g.crestToPitch, g.tipR).all { it.isFinite() } && g.depths.all { it.isFinite() }, "단면 그림 값: $g")
+                assertTrue(pipeOutline(g.profile!!, g.p, g.k).all { (z, d) -> z.isFinite() && d.isFinite() }, "단면 윤곽: $g")
+                if (sol != null) {
+                    pipeSolved++
+                    pipeResultCells(s, sol)
+                    show(sol.gaugeZ, sol.gaugePitch, sol.pitchAtEnd, sol.crestAtRef, sol.crestAtEnd, sol.x, sol.height, sol.taper, sol.startX, sol.lead, sol.threadLen, sol.needLen)
+                    sol.passes.forEach { show(it.depth, it.cut, it.xDia) }
+                    sol.feedPerMin?.let { show(it) }
+                }
+            }
+        }
+        assertTrue(pipeSolved > 2_500, "결과가 나온 사례가 너무 적다: $pipeSolved")
+    }
+
+    /** 무작위 다이스 헤드 화면 상태(미터 · UN 숫나사)와 다이스 조건 저장소 글 — 칸마다 셋에 하나를 흔든다 */
+    private fun randomDie(): Pair<ThreadState, Map<String, String>> {
+        val kind = if (rnd.nextBoolean()) ThreadKind.METRIC else ThreadKind.UN
+        val specs = ThreadTable.of(kind)
+        val speeds = DieHeadCatalog.speeds()
+        val material = if (rnd.nextBoolean()) null else IsoGroup.entries[rnd.nextInt(6)]
+        val base = mapOf("zStart" to "5", "zEnd" to "-24", "rpm" to "", "zRef" to "")
+        val s = ThreadState(
+            family = if (kind == ThreadKind.METRIC) ThreadFamily.METRIC else ThreadFamily.UN,
+            spec = if (rnd.nextInt(10) == 0) null else specs[rnd.nextInt(specs.size)],
+            material = material,
+            values = base.mapValues { (_, v) -> if (rnd.nextInt(3) == 0) nudge(v) else v },
+            method = ThreadMethod.DIE,
+            dieSpeed = if (rnd.nextBoolean()) null else dieSpeedKey(speeds[rnd.nextInt(speeds.size)]),
+        )
+        val dieBase = mapOf(DieField.VC to "8", DieField.RATIO to "", DieField.DWELL to "", DieField.RETRACT to "", DieField.FLOAT to "", DieField.THROAT to "")
+        val store = dieBase.entries.associate { (f, v) -> DieStore.key(f, material) to (if (rnd.nextInt(3) == 0) nudge(v) else v) }
+        return s to store
+    }
+
+    /** 다이스 헤드: 같은 흔들기로 계산기 · 화면 글 함수(경고 · 짚는 칸 · 결과 칸 · 체이서 표 · 카탈로그 줄)가 예외 없이 유한한 숫자를 낸다 */
+    @Test
+    fun dieThread() {
+        var dieSolved = 0
+        repeat(10_000) {
+            val (s, store) = randomDie()
+            val d = DieStore(KeyValueStore(File.createTempFile("bmt-die", ".properties").apply { delete() }).apply { store.forEach { (k, v) -> put(k, v) } })
+            check("다이스 ${s.spec} ${s.fields.map { s.value(it) }} $store") {
+                val r = DieHeadCalc.calc(s.dieInput(d))
+                val sol = r.solution
+                dieMissing(s, d)
+                dieFlagged(s, d, r.warnings)
+                s.fields.forEach { s.placeholder(it); dieFieldHint(it) }
+                r.warnings.forEach { dieWarningText(it, s, d, sol) }
+                dieWarningText(DieWarning.MISSING_INPUT, s, d)
+                dieWarningText(DieWarning.BAD_INPUT, s, d)
+                dieSpeedNote(s)
+                s.spec?.let(::chaserRows)
+                if (sol != null) {
+                    dieSolved++
+                    dieResultCells(s, d, sol)
+                    show(sol.vcUsed, sol.feed, sol.feedPerMin, sol.timeSec, sol.floatPull)
+                    sol.fullThreadEndZ?.let { show(it) }
+                }
+            }
+        }
+        assertTrue(dieSolved > 2_500, "결과가 나온 사례가 너무 적다: $dieSolved")
     }
 
     // ── 재료·절삭조건 ──
@@ -200,8 +310,8 @@ class Stage3RobustnessTest {
 
     // ── 화면을 실제로 그려 본다 ──
 
-    private fun draw(dark: Boolean, direct: Boolean, content: @Composable () -> Unit) {
-        val state = AppState(KeyValueStore(File.createTempFile("bmt-kv", ".properties").apply { delete() }))
+    private fun draw(dark: Boolean, direct: Boolean, store: Map<String, String> = emptyMap(), content: @Composable () -> Unit) {
+        val state = AppState(KeyValueStore(File.createTempFile("bmt-kv", ".properties").apply { delete() }).apply { store.forEach { (k, v) -> put(k, v) } })
         state.setTheme(dark)
         if (direct) state.compMode = CompMode.DIRECT
         val scene = ImageComposeScene(400, 1600, Density(1f)) { AppHost(state) { content() } }
@@ -263,6 +373,8 @@ class Stage3RobustnessTest {
             val tEdit = if (rnd.nextInt(3) == 0) ThreadField.entries[rnd.nextInt(ThreadField.entries.size)] else null
             if (tEdit?.advanced == true) t.advOpen = true
             check("나사 화면 $i ${t.spec} ${ThreadField.entries.map { t.value(it) }} 키패드 $tEdit") { draw(dark, false) { ThreadScreen(t, tEdit) } }
+            val (die, dieStore) = randomDie()
+            check("다이스 화면 $i ${die.spec} ${die.fields.map { die.value(it) }} $dieStore") { draw(dark, false, dieStore) { ThreadScreen(die) } }
 
             val p = randomPolar()
             val pEdit = if (rnd.nextInt(3) == 0) PolarField.entries[rnd.nextInt(PolarField.entries.size)] else null
@@ -291,6 +403,26 @@ class Stage3RobustnessTest {
                     advOpen = true,
                 )
                 check("나사 $f = $v") { draw(false, false) { ThreadScreen(t) } }
+                // 관용 테이퍼(PT 숫나사 · NPT 암나사 번갈아)
+                val pt = f.ordinal % 2 == 0
+                val pipe = ThreadState(
+                    inner = !pt,
+                    family = if (pt) ThreadFamily.PT else ThreadFamily.NPT,
+                    pipe = PipeTable.of(if (pt) PipeKind.PT else PipeKind.NPT).first { it.size == "1/2" },
+                    values = mapOf("zStart" to "5", "zEnd" to "-25", "firstCut" to "0.2", f.key to v),
+                    advOpen = true,
+                )
+                check("관용 나사 $f = $v") { draw(false, false) { ThreadScreen(pipe) } }
+            }
+            // 다이스 헤드: 화면 칸 넷 · 다이스 조건 칸 여섯
+            val dieBase = mapOf(DieStore.key(DieField.VC, null) to "8")
+            for (f in listOf(ThreadField.Z_START, ThreadField.RPM, ThreadField.Z_END, ThreadField.Z_REF)) {
+                val die = ThreadState(spec = ThreadTable.pitches(ThreadKind.METRIC, "M10").first(), values = mapOf("zStart" to "5", "zEnd" to "-25", f.key to v), method = ThreadMethod.DIE)
+                check("다이스 $f = $v") { draw(false, false, dieBase) { ThreadScreen(die) } }
+            }
+            for (f in DieField.entries) {
+                val die = ThreadState(spec = ThreadTable.pitches(ThreadKind.UN, "1/2").first(), values = mapOf("zStart" to "5", "zEnd" to "-25"), method = ThreadMethod.DIE)
+                check("다이스 조건 $f = $v") { draw(false, false, dieBase + (DieStore.key(f, null) to v)) { ThreadScreen(die) } }
             }
             for (f in PolarField.entries) {
                 val p = PolarState(values = mapOf("od" to "80", "w" to "70", "rc" to "3", "tool" to "10", "depth" to "-5", "feed" to "100", f.key to v))

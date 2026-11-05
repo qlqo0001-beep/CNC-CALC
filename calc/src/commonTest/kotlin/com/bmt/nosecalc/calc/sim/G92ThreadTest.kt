@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 
 /**
  * 나사 G92 다회 글(계획 단계 6 — `G76Solution.g92` · `g92Finish`)을 GSim 에 넣어 본다. 대표 나사(골든 thread*.txt 의 1/4-20 UNC 바깥 ·
- * M10×1.5 6H 안 · M10×1.5 4h 바깥 · 역가공과 M3×0.5 안 · 1/2-13 UNC)마다
+ * M10×1.5 6H 안 · M10×1.5 4h 바깥 · 역가공과 M3×0.5 안 · 1/2-13 UNC · 3/4-20 UNEF 바깥 · 3/8-20 UN 바깥 · 안)마다
  * - 멈춤 0 · 문제 0(M23 · M24 는 아는 코드라 '기계 M' 알림도 없음)
  * - 나사를 깎는 회 수 = 분석표 회차 수 + 1, 회마다 깎는 X = 분석표 X = GSim 이 같은 나사의 G76 두 줄로 그린 회차 X(0.001 안) — 마지막 X = G76 X(정삭).
  *   + 1 은 M24 줄: G92 모드 안의 M 만 블록이라 FANUC 은 그 줄에서 사이클을 한 번 더 돈 뒤 M 을 실행한다
@@ -37,6 +37,9 @@ class G92ThreadTest {
         "1/4-20 UNC 역가공" to G76Input(spec = un("1/4", 20), dir = ThreadDir.REVERSE, zStart = -30.0, zEnd = 0.0, firstCut = 0.2, rpm = 1821.0),
         "M3×0.5 안" to G76Input(inner = true, spec = metric(3.0, 0.5), zStart = 2.0, zEnd = -6.0, firstCut = 0.05),
         "1/2-13 UNC 바깥 m3" to G76Input(spec = un("1/2", 13), zStart = 5.0, zEnd = -30.0, firstCut = 0.3, finishCount = 3),
+        "3/4-20 UNEF 바깥" to G76Input(spec = un("3/4", 20), zStart = 5.0, zEnd = -20.0, firstCut = 0.2, rpm = 600.0),
+        "3/8-20 UN 바깥" to G76Input(spec = un("3/8", 20), zStart = 5.0, zEnd = -15.0, firstCut = 0.2),
+        "3/8-20 UN 안" to G76Input(inner = true, spec = un("3/8", 20), zStart = 3.0, zEnd = -12.0, firstCut = 0.2),
     )
 
     private fun un(size: String, tpi: Int) = ThreadTable.UN.single { it.size == size && it.tpi == tpi }
@@ -111,6 +114,54 @@ class G92ThreadTest {
             assertEquals(3, fin.size, "$tag: 다듬질 회 수(두 번 + M24 줄)")
             fin.forEach { near(xNc, it.tip.end.xDia, "$tag 다듬질 X") }
         }
+    }
+
+    /**
+     * UNEF · 20UN 의 G92 글 손 계산(H28 식 · 물림 길이 LE = 9P = 0.45 인치, 목표 80%, 기본 인선 R, Δd 0.2 · Δdmin 0.035 · d 0.02 · m 2, 지은 치수).
+     * 절입 깊이 Δd·√n — 0.2 · 0.283 · 0.346 · 0.4 · 0.447 · 0.49 · 0.529 · 0.566, 그다음은 √n 증분이 0.035 보다 작아 +0.035 씩, k − d 에서 자름, 정삭 두 번.
+     * 회차 X = 끝 X ± 2(k − 깊이), G92 줄은 그 X 를 0.001 로(끝 0 지움). 진입 · M23 · M24 · 물러남은 g92HandNumbers 와 같은 꼴.
+     *  - 3/4-20 UNEF 2A 바깥 Z5 → −20: X17.369 · k 0.741 (G76CalcTest.unefHandNumbers), 시작 X 21.016.
+     *    깊이 0.6007 · 0.6357 · 0.6707 · 0.7057 · 0.721(k − d) → X 17.369 + 2 × (0.741 − 깊이).
+     *  - 3/8-20 UN 2A 바깥 Z5 → −15: B = 0.0015∛0.375 + 0.0015√0.45 + 0.015∛0.05² = 0.0010817 + 0.0010062 + 0.0020358 = 0.0041237,
+     *    허용차 0.0012371 → 피치경 0.3371632 ~ 0.3412869 in(H28 표 2.21 3/8-20 UN-2A 0.3372 ~ 0.3413), 바깥지름 0.3656196 ~ 0.3737629(표 0.3657 ~ 0.3738).
+     *    목표 80%: 피치경 0.3379879 in = 8.584894 mm, 바깥지름 0.3672483 in = 9.328106 mm → X = 8.584894 − 0.733235 = 7.851659 → X7.852,
+     *    k = (9.328106 − 7.852)/2 = 0.738053 → 0.738, 시작 X = 0.3737629 × 25.4 + 2 = 11.493577 → X11.494. 깊이 끝 0.718(k − d).
+     *  - 3/8-20 UN 2B 안 Z3 → −12: 피치경 0.3425240 ~ 0.3478849 in(표 0.3425 ~ 0.3479), 안지름 공차 0.25p − 0.4p² = 0.0115000
+     *    → 안지름 0.3208734 ~ 0.3323734(표 0.321 ~ 0.332). 목표 80%: 피치경 0.3425240 + 0.8 × 1.30 × 0.0041237 = 0.3468127 in = 8.809043 mm,
+     *    안지름 0.3208734 + 0.8 × 0.0115 = 0.3300734 in = 8.383865 mm, 인선 R = H/8 → X = 8.809043 + 0.649519 × 1.27 = 9.633932 → X9.634,
+     *    k = (9.634 − 8.383865)/2 = 0.625068 → 0.625, 시작 X = 8.150185 − 2 = 6.150185 → X6.15. 깊이 0.5657 · 0.6007 · 0.605(k − d).
+     */
+    @Test
+    fun unefAndUn20HandNumbers() {
+        val unef = assertNotNull(G76Calc.calc(G76Input(spec = un("3/4", 20), zStart = 5.0, zEnd = -20.0, firstCut = 0.2, rpm = 600.0)).solution)
+        assertEquals(
+            listOf(
+                "G97S600", "G0X21.016Z20.", "Z5.", "M23", "G92X18.451Z-20.F1.27",
+                "X18.285", "X18.158", "X18.051", "X17.957", "X17.871", "X17.793", "X17.72", "X17.65", "X17.58", "X17.51", "X17.44", "X17.409",
+                "X17.369", "X17.369", "M24", "G0Z200.",
+            ),
+            unef.g92,
+        )
+        val ext = assertNotNull(G76Calc.calc(G76Input(spec = un("3/8", 20), zStart = 5.0, zEnd = -15.0, firstCut = 0.2)).solution)
+        assertEquals(
+            listOf(
+                "G0X11.494Z20.", "Z5.", "M23", "G92X8.928Z-15.F1.27",
+                "X8.762", "X8.635", "X8.528", "X8.434", "X8.348", "X8.27", "X8.197", "X8.127", "X8.057", "X7.987", "X7.917", "X7.892",
+                "X7.852", "X7.852", "M24", "G0Z200.",
+            ),
+            ext.g92,
+        )
+        assertEquals(0.738, ext.height, "3/8-20 UN 바깥 k")
+        val inn = assertNotNull(G76Calc.calc(G76Input(inner = true, spec = un("3/8", 20), zStart = 3.0, zEnd = -12.0, firstCut = 0.2)).solution)
+        assertEquals(ThreadClass.UN2B, inn.limits.cls)
+        assertEquals(
+            listOf(
+                "G0X6.15Z20.", "Z3.", "M23", "G92X8.784Z-12.F1.27",
+                "X8.95", "X9.077", "X9.184", "X9.278", "X9.364", "X9.442", "X9.515", "X9.585", "X9.594", "X9.634", "X9.634", "M24", "G0Z200.",
+            ),
+            inn.g92,
+        )
+        assertEquals(0.625, inn.height, "3/8-20 UN 안 k")
     }
 
     /**

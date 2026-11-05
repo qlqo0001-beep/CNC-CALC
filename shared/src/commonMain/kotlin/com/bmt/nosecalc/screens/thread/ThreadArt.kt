@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.G76Solution
+import com.bmt.nosecalc.calc.PipeKind
+import com.bmt.nosecalc.calc.PipeSolution
+import com.bmt.nosecalc.calc.PipeSpec
 import com.bmt.nosecalc.ui.DrawSpec
 import com.bmt.nosecalc.ui.artScale
 import com.bmt.nosecalc.ui.hatchFill
@@ -34,6 +37,7 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tan
 
 /**
  * 나사 단면 그림의 자료(mm, 반경). k = 산봉우리에서 골(날 끝)까지, crestToPitch = 산봉우리에서 피치선까지,
@@ -52,7 +56,96 @@ internal data class SectionGeom(
     val kText: String,
     val pText: String,
     val rText: String,
+    /** 관용 테이퍼의 단면 모양 — null = 곧은 나사(60° 날 · 끝 R 홈, 산봉우리 평면) */
+    val profile: PipeProfile? = null,
 )
+
+/**
+ * 관용 테이퍼 나사의 축 단면(풀 프로파일 인서트가 산봉우리까지 함께 만든다고 본다 — calc-design.md '관용 테이퍼 나사'): 나사산 각, 산봉우리 · 골 둥글기
+ * round(PT r — JIS B 0203 의 0.137278P), null 이면 평탄(NPT — 산 높이 h = 0.8P 를 산봉우리 · 골에 반씩 깎은 평탄, 너비 = 2(P/4 − h/2 · tan 30°) ≈ 0.038P).
+ * 1/16 테이퍼는 그리지 않는다(두 피치에서 지름 차 P/8 — 끝 Z 의 지름으로 그림)
+ */
+internal data class PipeProfile(val angleDeg: Int, val round: Double?)
+
+/**
+ * 관용 테이퍼 단면의 윤곽(z, 산봉우리에서 잰 깊이) — 0 ~ 2P, 산 가운데가 z = 0 · P · 2P, 홈 가운데가 P/2 · 3P/2. 옆면은 피치선(깊이 h/2)에서
+ * 산 가운데로부터 P/4(대칭 형상), PT 원호는 옆면에 접하는 반지름 round(중심은 산 · 홈 가운데 줄 위)
+ */
+internal fun pipeOutline(pr: PipeProfile, p: Double, h: Double): List<Pair<Double, Double>> {
+    val a = pr.angleDeg * PI / 360
+    val tanA = tan(a)
+    // 산 가운데에서 옆면이 산봉우리 높이(깊이 0)에 닿는 곳
+    val c0 = p / 4 - h / 2 * tanA
+    val r = pr.round
+    if (r == null) {
+        val c1 = c0 + h * tanA
+        return listOf(
+            0.0 to 0.0, c0 to 0.0, c1 to h, p - c1 to h, p - c0 to 0.0,
+            p + c0 to 0.0, p + c1 to h, 2 * p - c1 to h, 2 * p - c0 to 0.0, 2 * p to 0.0,
+        )
+    }
+    // 산봉우리 원호 중심 깊이: 옆면까지 거리 = r. 골 원호는 피치선 점 (P/4, h/2) 둘레로 점대칭
+    val dc = (r - c0 * cos(a)) / sin(a)
+    val span = PI / 2 - a
+    val n = 12
+    fun crest(zt: Double, from: Double, to: Double) = (0..n).map { i ->
+        val t = from + (to - from) * i / n
+        (zt + r * sin(t)) to (dc - r * cos(t))
+    }
+    fun root(zg: Double) = (0..n).map { i ->
+        val t = -span + 2 * span * i / n
+        (zg + r * sin(t)) to (h - dc + r * cos(t))
+    }
+    return crest(0.0, 0.0, span) + root(p / 2) + crest(p, -span, span) + root(1.5 * p) + crest(2 * p, -span, 0.0)
+}
+
+/** 관용 테이퍼 홈의 반폭 — 산봉우리에서 깊이 d(거친 절입 깊이 가는 선). 옆면 · PT 골 원호 · NPT 골 평탄 */
+internal fun pipeGrooveHalf(pr: PipeProfile, p: Double, h: Double, d: Double): Double {
+    val a = pr.angleDeg * PI / 360
+    val tanA = tan(a)
+    val c0 = p / 4 - h / 2 * tanA
+    val flank = p / 2 - c0 - d * tanA
+    val r = pr.round ?: return max(flank, p / 2 - c0 - h * tanA)
+    val center = h - (r - c0 * cos(a)) / sin(a)
+    return if (d <= center + r * sin(a)) flank else sqrt(max(0.0, r * r - (d - center) * (d - center)))
+}
+
+/**
+ * 관용 테이퍼 화면의 단면 자료. 풀렸으면 끝 Z 의 지름(바깥지름 · 피치경 · 골 X) · 리드 · k(지령값) · 거친 절입 깊이, 아직이면 피치 1 의 기본 형상에 이름만.
+ * 둥글기는 PT 표의 r(크기를 고르기 전에는 0.137278P), NPT 는 평탄 너비를 적는다
+ */
+internal fun pipeSectionGeom(kind: PipeKind, inner: Boolean, spec: PipeSpec?, sol: PipeSolution?): SectionGeom {
+    val crestName = if (inner) "안지름 Ø" else "바깥지름 Ø"
+    val p = sol?.lead ?: spec?.pitch ?: 1.0
+    val h = sol?.height ?: spec?.h ?: (if (kind == PipeKind.PT) 0.640327 else 0.8)
+    val profile = when (kind) {
+        PipeKind.PT -> PipeProfile(55, spec?.rootR ?: (0.137278 * p))
+        PipeKind.NPT -> PipeProfile(60, null)
+    }
+    val round = profile.round
+    val roundText = if (round != null) "r" to Fmt.fixed3(round) else "평탄" to Fmt.fixed3(2 * (p / 4 - h / 2 * tan(PI / 6)))
+    if (sol == null) {
+        return SectionGeom(
+            p, h, h / 2, round ?: 0.0, emptyList(), inner,
+            crestName to "", "피치경 Ø" to "", "골 X" to "", "k", "P", roundText.first, profile,
+        )
+    }
+    return SectionGeom(
+        p = p,
+        k = h,
+        crestToPitch = kotlin.math.abs(sol.crestAtEnd - sol.pitchAtEnd) / 2,
+        tipR = round ?: 0.0,
+        depths = sol.passes.filter { !it.finish }.map { it.depth },
+        inner = inner,
+        crest = crestName to Fmt.fixed3(sol.crestAtEnd),
+        pitch = "피치경 Ø" to Fmt.fixed3(sol.pitchAtEnd),
+        root = "골 X" to Fmt.fixed3(sol.x),
+        kText = "k ${Fmt.fixed3(sol.height)}",
+        pText = "P ${leadText(sol.lead)}",
+        rText = "${roundText.first} ${roundText.second}",
+        profile = profile,
+    )
+}
 
 /**
  * 화면의 단면 자료. 풀렸으면 계산값(피치 = 리드, k = 지령값, 인선 R = 쓴 값) 그대로 — 그림이 계산과 같다.
@@ -129,22 +222,29 @@ internal fun ThreadSection(g: SectionGeom, modifier: Modifier = Modifier) {
                 if (value.isNotEmpty()) withStyle(SpanStyle(fontFamily = mono, fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold)) { append(value) }
             }
 
-            // 윤곽: 산봉우리 → 홈 둘(옆날 · 끝 원호 · 옆날) → 산봉우리. 원호는 날 끝에서 높이 k 까지만(아주 얕은 홈)
-            val phiMax = if (k >= r / 2) PI / 3 else acos((1 - k / r).coerceIn(-1.0, 1.0))
-            val hk = toolHalfWidth(r, k)
-            val pts = mutableListOf(Offset(x(0.0), y(0.0)))
-            for (zc in listOf(0.5 * p, 1.5 * p)) {
-                pts += Offset(x(zc - hk), y(0.0))
-                val n = 16
-                for (i in 0..n) {
-                    val phi = -phiMax + 2 * phiMax * i / n
-                    val u = r * sin(phi)
-                    val v = r - r * cos(phi)
-                    pts += Offset(x(zc + u), y(k - v))
+            // 윤곽: 산봉우리 → 홈 둘(옆날 · 끝 원호 · 옆날) → 산봉우리. 원호는 날 끝에서 높이 k 까지만(아주 얕은 홈).
+            // 관용 테이퍼는 산봉우리까지 대칭 형상(pipeOutline — PT 둥근 산 · 골, NPT 평탄)
+            val pr = g.profile
+            val pts = if (pr != null) {
+                pipeOutline(pr, p, k).map { (z, d) -> Offset(x(z), y(d)) }
+            } else {
+                val phiMax = if (k >= r / 2) PI / 3 else acos((1 - k / r).coerceIn(-1.0, 1.0))
+                val hk = toolHalfWidth(r, k)
+                val line = mutableListOf(Offset(x(0.0), y(0.0)))
+                for (zc in listOf(0.5 * p, 1.5 * p)) {
+                    line += Offset(x(zc - hk), y(0.0))
+                    val n = 16
+                    for (i in 0..n) {
+                        val phi = -phiMax + 2 * phiMax * i / n
+                        val u = r * sin(phi)
+                        val v = r - r * cos(phi)
+                        line += Offset(x(zc + u), y(k - v))
+                    }
+                    line += Offset(x(zc + hk), y(0.0))
                 }
-                pts += Offset(x(zc + hk), y(0.0))
+                line += Offset(x(2 * p), y(0.0))
+                line
             }
-            pts += Offset(x(2 * p), y(0.0))
             val profile = Path().apply {
                 moveTo(pts[0].x, pts[0].y)
                 pts.drop(1).forEach { lineTo(it.x, it.y) }
@@ -162,7 +262,7 @@ internal fun ThreadSection(g: SectionGeom, modifier: Modifier = Modifier) {
             // 오른쪽 홈: 거친 절입마다 날 끝 깊이(가는 선)
             val zc2 = 1.5 * p
             g.depths.forEach { d ->
-                val hv = toolHalfWidth(r, k - d)
+                val hv = if (pr != null) pipeGrooveHalf(pr, p, k, d) else toolHalfWidth(r, k - d)
                 drawLine(c.drawAngle, Offset(x(zc2 - hv), y(d)), Offset(x(zc2 + hv), y(d)), DrawSpec.dim.toPx() * ks * .9f)
             }
 

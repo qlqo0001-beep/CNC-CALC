@@ -45,9 +45,11 @@ import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.Feature
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.G76Pass
+import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.AppIcons
 import com.bmt.nosecalc.ui.BottomSheet
 import com.bmt.nosecalc.ui.FieldChain
+import com.bmt.nosecalc.ui.Segmented
 import com.bmt.nosecalc.ui.SheetTitle
 import com.bmt.nosecalc.ui.keepWords
 import com.bmt.nosecalc.ui.theme.AppColors
@@ -64,6 +66,65 @@ internal fun AppColors.threadAuto(): Color {
     return if (dark) orange else lerp(orange, textStrong, .25f)
 }
 
+/**
+ * 맨 위 카드: 외경 가공 (OD) · 내경 가공 (ID), 곧은 나사 숫나사(M · UN 외경)면 그 아래 가공 방식 '바이트 (G92 · G76) · 다이스 헤드'
+ * (사용자 결정 2026-11-05 — 내경 · 관용 테이퍼로 가면 바이트로 돌아가고 이 줄이 숨는다)
+ */
+@Composable
+internal fun ThreadTopCard(s: ThreadState) {
+    AppCard(Modifier.fillMaxWidth(), padding = 8.dp) {
+        Segmented(listOf("외경 가공 (OD)", "내경 가공 (ID)"), if (s.inner) 1 else 0, { s.switchInner(it == 1) }, Modifier.fillMaxWidth(), height = 54.dp)
+        if (s.dieAllowed) {
+            Spacer(Modifier.height(8.dp))
+            // 좁은 폰 · 큰 글꼴(글꼴 배율로 나눈 폭 300dp 미만)은 '바이트 (G92 · …' 로 잘리지 않게 '바이트' 만
+            BoxWithConstraints {
+                val narrow = maxWidth / LocalDensity.current.fontScale < 300.dp
+                Segmented(
+                    listOf(if (narrow) "바이트" else "바이트 (G92 · G76)", "다이스 헤드"), if (s.isDie) 1 else 0,
+                    { s.pickMethod(if (it == 1) ThreadMethod.DIE else ThreadMethod.BITE) },
+                    Modifier.fillMaxWidth(), height = 48.dp, fontSize = 15,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 인서트 칸(고급 설정): 지금 내외 · 종류 · 산수에 맞는 카탈로그 인서트(`ThreadInserts.match`)를 고른다. 맞는 줄이 없으면 읽기만('맞는 줄 없음').
+ * 아래 한 줄은 [insertNote]
+ */
+@Composable
+internal fun InsertField(s: ThreadState, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val choices = s.insertChoices
+    val i = s.shownInsert
+    Column(modifier) {
+        ChoiceField(
+            "인서트", i?.let(::insertText) ?: if (choices.isEmpty()) "맞는 줄 없음" else "고르기", Modifier.fillMaxWidth(), empty = i == null,
+            onClick = if (choices.isEmpty()) null else onClick,
+        )
+        insertNote(s)?.let { Text(keepWords(it), Modifier.padding(start = 2.dp, top = 4.dp), style = AppType.caption, color = AppTheme.colors.textMuted) }
+    }
+}
+
+/**
+ * 인서트 칸 아래 한 줄: 고른 인서트의 R(곧은 나사 — 카탈로그 R 을 인선 R 칸에 넣었는지 · 없으면 직접, 관용 테이퍼는 풀 프로파일 표시만) · IC · 출처.
+ * 안 골랐으면 맞는 줄이 없을 때만 자료 범위를 알린다
+ */
+internal fun insertNote(s: ThreadState): String? {
+    val i = s.shownInsert
+    if (i == null) {
+        val picked = (if (s.isPipe) s.pipe else s.spec) != null
+        return if (picked && s.insertChoices.isEmpty()) "인서트 자료(VARDEX · Carmex)는 UN 20산 · PT(BSPT) · NPT 만입니다." else null
+    }
+    val r = i.tipR
+    val what = when {
+        s.isPipe -> "풀 프로파일 (산봉우리까지 만듦 — 골 X 계산의 가정과 같음)"
+        r != null -> "인선 R ${Fmt.fixed3(r)} 을 카탈로그에서 넣음"
+        else -> "날 끝 R 은 카탈로그에 없음 — 인선 R 은 직접 넣으세요"
+    }
+    return "$what · IC ${i.ic} · 출처: ${insertSource(i)}"
+}
+
 /** 칸 위 이름(NumberField 의 라벨 줄과 같은 모양) */
 @Composable
 internal fun ThreadLabel(text: String, modifier: Modifier = Modifier, maxLines: Int = 1) {
@@ -73,10 +134,10 @@ internal fun ThreadLabel(text: String, modifier: Modifier = Modifier, maxLines: 
 /**
  * 고르는 칸(원본의 드롭다운): 위 이름(label = null 이면 없음 · 좁으면 띄어쓰기에서 두 줄) + 52dp 칸(값 굵게 · 오른쪽 ⌄).
  * 누르면 고르기 시트를 연다. 값이 칸보다 길면 0.75배까지 줄이고 그래도 넘치면 '…'(좁은 칸에서도 값이 보이게 여백 · ⌄ 는 작게).
- * empty = 아직 안 고름(값 대신 흐린 자리표시)
+ * empty = 아직 안 고름(값 대신 흐린 자리표시). onClick = null 이면 읽기만 하는 칸(관용 테이퍼의 산수 — 크기에 딸림): 옅은 바탕 · 얇은 테 · ⌄ 없음
  */
 @Composable
-internal fun ChoiceField(label: String?, value: String, modifier: Modifier = Modifier, empty: Boolean = false, onClick: () -> Unit) {
+internal fun ChoiceField(label: String?, value: String, modifier: Modifier = Modifier, empty: Boolean = false, onClick: (() -> Unit)?) {
     val c = AppTheme.colors
     val shape = RoundedCornerShape(6.dp)
     Column(modifier) {
@@ -89,14 +150,14 @@ internal fun ChoiceField(label: String?, value: String, modifier: Modifier = Mod
                 .fillMaxWidth()
                 .height(52.dp)
                 .clip(shape)
-                .background(c.fieldNormal.bg)
-                .border(1.5.dp, c.fieldNormal.border, shape)
-                .clickable(onClick = onClick)
+                .background(if (onClick == null) c.subtle else c.fieldNormal.bg)
+                .border(if (onClick == null) 1.dp else 1.5.dp, if (onClick == null) c.lineCard else c.fieldNormal.border, shape)
+                .then(if (onClick == null) Modifier else Modifier.clickable(onClick = onClick))
                 .padding(start = 8.dp, end = 4.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
         // 아주 좁은 칸(360dp 폰 · 큰 글꼴의 1/4 칸)은 ⌄ 를 빼고 값에 자리를 준다
-        val chevron = maxWidth >= 50.dp * LocalDensity.current.fontScale
+        val chevron = onClick != null && maxWidth >= 50.dp * LocalDensity.current.fontScale
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             BasicText(
                 value,
@@ -196,10 +257,10 @@ internal fun RowScope.Marked(color: Color, weight: Float, content: @Composable (
 
 /**
  * '고급 공차 및 인선 설정' 접이 막대(원본 08 ⑨): 56dp 줄 전체를 누른다. 이름 · 지금 목표 % 표 · ⌄(펴면 위로).
- * 원본은 남색 채움 — 이 앱은 남색 테 + 옅은 바탕(흰 글이 남색 위 4.5:1 에 못 미쳐서)
+ * 원본은 남색 채움 — 이 앱은 남색 테 + 옅은 바탕(흰 글이 남색 위 4.5:1 에 못 미쳐서). title = 막대 이름(관용 테이퍼는 공차 목표 · 인선 R 이 없어 '고급 설정')
  */
 @Composable
-internal fun AdvancedBar(open: Boolean, badge: String, onToggle: () -> Unit) {
+internal fun AdvancedBar(open: Boolean, badge: String, title: String = "고급 공차 및 인선 설정", onToggle: () -> Unit) {
     val c = AppTheme.colors
     val shape = RoundedCornerShape(12.dp)
     Row(
@@ -215,7 +276,7 @@ internal fun AdvancedBar(open: Boolean, badge: String, onToggle: () -> Unit) {
     ) {
         // 좁은 폰 · 큰 글꼴(360dp · 130%)에서 '고급 공차 및 인…' 로 잘리던 것 — 어절에서 두 줄로(3단계 최종 점검)
         Text(
-            keepWords("고급 공차 및 인선 설정"),
+            keepWords(title),
             Modifier.weight(1f),
             color = c.textStrong,
             fontSize = 15.sp,

@@ -1,7 +1,12 @@
 package com.bmt.nosecalc.calc.sim
 
+import com.bmt.nosecalc.calc.PipeInput
+import com.bmt.nosecalc.calc.PipeTable
+import com.bmt.nosecalc.calc.PipeThreadCalc
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -9,7 +14,7 @@ import kotlin.test.assertTrue
 class ExamplesTest {
     @Test
     fun allExamplesRunWithoutStop() {
-        assertEquals(14, SimExamples.all.size)
+        assertEquals(16, SimExamples.all.size)
         for (e in SimExamples.all) {
             val r = GSim.run(SimInput(e.text, MachineSetup(), e.tools))
             assertNull(r.stop, "${e.name}: 멈춤 ${r.stop}")
@@ -27,7 +32,7 @@ class ExamplesTest {
     @Test
     fun companyStyleCutsSameInTypeAAndC() {
         val company = SimExamples.all.filter { it.text.startsWith("O902") }
-        assertEquals(3, company.size)
+        assertEquals(5, company.size)
         for (e in company) {
             val c = GSim.run(SimInput(e.text, MachineSetup(compStartup = CompStartup.C), e.tools))
             val a = GSim.run(SimInput(e.text, MachineSetup(compStartup = CompStartup.AB), e.tools))
@@ -59,6 +64,41 @@ class ExamplesTest {
             val code = e.text.replace(Regex("""\([^)]*\)"""), "")
             assertEquals(code.uppercase(), code, e.name)
         }
+    }
+
+    /**
+     * ⑯ 관용 테이퍼 G92 I(O9024 — R 1/2 숫나사, 지은 치수): 나사 이동마다 시작 Z4 · 끝 Z−16, 시작 반경 = 끝 반경 + I(I = −.625 = −20/32 —
+     * 숫나사라 시작 쪽이 가늚), 곧 반경 기울기 0.625 / 20 = 1/32(지름 1/16). 회 수 = 글의 X 13개 + M24 줄 1. 나사 공구 55°
+     */
+    @Test
+    fun pipeTaperExampleIsTapered() {
+        val e = SimExamples.all.single { it.text.startsWith("O9024") }
+        assertEquals(55.0, e.tools[3]?.threadDeg)
+        val r = GSim.run(SimInput(e.text, MachineSetup(), e.tools))
+        assertNull(r.stop, "${r.stop}")
+        val th = r.steps.filterIsInstance<MoveStep>().filter { it.kind == MoveKind.THREAD }
+        assertEquals(13, e.text.lines().count { it.startsWith("X") || it.startsWith("G92X") })
+        assertEquals(14, th.size)
+        for (m in th) {
+            assertEquals(4.0, m.tip.start.z, 1e-9)
+            assertEquals(-16.0, m.tip.end.z, 1e-9)
+            assertEquals(-0.625, m.tip.start.x - m.tip.end.x, 1e-9, "줄 ${m.line}")
+            val slope = (m.tip.end.x - m.tip.start.x) / (m.tip.start.z - m.tip.end.z)
+            assertTrue(abs(slope - 1.0 / 32) <= 1e-12, "줄 ${m.line} 기울기 $slope")
+        }
+        assertEquals(19.122, th.last().tip.end.xDia, 1e-9)
+    }
+
+    /** ⑯ 의 나사 글 = 나사 화면 계산기(PipeThreadCalc) 글(공구 줄 T0303M03 만 끼움) — 계산기 글이 바뀌면 예제도 같이 고친다 */
+    @Test
+    fun pipeTaperExampleIsCalculatorText() {
+        val e = SimExamples.all.single { it.text.startsWith("O9024") }
+        val s = assertNotNull(PipeThreadCalc.calc(PipeInput(spec = PipeTable.PT.single { it.size == "1/2" }, zStart = 4.0, zEnd = -16.0, rpm = 560.0, firstCut = 0.35)).solution)
+        assertEquals(-0.625, s.taper)
+        val lines = e.text.lines()
+        val from = lines.indexOf(s.g92.first())
+        assertTrue(from > 0)
+        assertEquals(s.g92.take(1) + "T0303M03" + s.g92.drop(1), lines.subList(from, from + s.g92.size + 1))
     }
 
     /** 부프로그램 예제: O9012 를 세 번 — 홈 Z −10 · −18 · −26 */

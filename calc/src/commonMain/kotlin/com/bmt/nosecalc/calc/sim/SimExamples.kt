@@ -14,6 +14,8 @@ data class SimExample(val name: String, val source: String, val text: String, va
  * 다만 사이클 P 블록(G00/G01 을 꼭 쓰는 자리)과 사이클 · M98 바로 뒤 이동은 G 를 다시 쓴다. 첫 줄 `O#### (이름)` 은 목록 이름이라 그대로,
  * N · P · Q · S 정수와 G73 의 R(나눔 수)도 쓴 그대로. 경로는 출처 글(빈칸 · G00 · 0.5)과 같다(NotationTest).
  * 회사 꼴 예제(O9020~ — 설계 18.5)는 회사 작성 꼴만 따르고 치수는 계산기 골든 도형(taper-b · round-inner-b3 · thread)으로 새로 지었다.
+ * O9023 다이스 헤드 · O9024 관용 테이퍼(설계 19절)도 새로 지은 치수다 — 다이스 블록 꼴(G0X0.Z20. · G1 · G4U1. · G0Z150.)은 사용자 결정(2026-11-05),
+ * O9024 의 나사 글은 나사 화면 계산기(`PipeThreadCalc`)가 낸 글 그대로(공구 줄만 끼움). 공구 주석에 품번을 넣지 않았다.
  * 회사 글을 옮기지 않는다.
  */
 object SimExamples {
@@ -193,6 +195,37 @@ object SimExamples {
                 ) + companyTail("T0300"),
             ),
             mapOf(3 to ToolOffset(0.0, 0, ToolKind.THREAD)),
+        ),
+        SimExample(
+            "회사 꼴 ④ 다이스 헤드 — G1 한 번 · 끝 멈춤",
+            "우리 예 — M12×1.75 바깥(Ø11.8 · 면취 1.5) 뒤 다이스 T05(d 12 · P 1.75 · 60°), 이송 0.96P · 멈춤 1초 · 물러남 Z150(사용자 결정 2026-11-05)",
+            text(
+                "O9023", "회사 꼴 다이스",
+                listOf(
+                    "M01",
+                    "N1G50S2350M08", "G96S140", "T0101M03",
+                    "G0X18.Z20.", "Z0.", "G1X-2.F.1", "G0Z3.", "X8.8", "G1Z0.F.1", "X11.8Z-1.5", "Z-24.F.15", "X20.F.3",
+                    "G0Z200.", "M01",
+                    "N2G50S1350M08", "G97S230", "T0505M03",
+                    "G0X0.Z20.", "Z6.", "G1Z-20.F1.68", "G4U1.", "G0Z150.", "M01",
+                ) + companyTail("T0500"),
+            ),
+            mapOf(1 to ToolOffset(0.4, 3), 5 to ToolOffset(kind = ToolKind.DIE, dieDia = 12.0, diePitch = 1.75)),
+        ),
+        SimExample(
+            "회사 꼴 ⑤ 관용 테이퍼 G92 I — R 1/2",
+            "우리 예 — 나사 화면 계산기가 낸 R 1/2 숫나사 글 그대로(기준면 Z0 · Z4 → −16 · Δd 0.35 · 560 rpm, I = −20/32). T03 55° 보정 없음",
+            text(
+                "O9024", "회사 꼴 관용 테이퍼",
+                listOf(
+                    "M01",
+                    "N1G50S1250M08", "G97S560", "T0303M03",
+                    "G0X23.445Z20.", "Z4.", "M23", "G92X20.746Z-16.I-.625F1.8143",
+                    "X20.456", "X20.234", "X20.046", "X19.881", "X19.731", "X19.594", "X19.466", "X19.346", "X19.232", "X19.162", "X19.122", "X19.122",
+                    "M24", "G0Z200.", "M01",
+                ) + companyTail("T0300"),
+            ),
+            mapOf(3 to ToolOffset(0.0, 0, ToolKind.THREAD, threadDeg = 55.0)),
         ),
     )
 }

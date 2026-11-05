@@ -40,43 +40,60 @@ import com.bmt.nosecalc.calc.G76Calc
 import com.bmt.nosecalc.calc.G76Result
 import com.bmt.nosecalc.calc.G76Solution
 import com.bmt.nosecalc.calc.G76Warning
-import com.bmt.nosecalc.calc.ThreadClass
+import com.bmt.nosecalc.calc.PipeKind
 import com.bmt.nosecalc.calc.ThreadDir
 import com.bmt.nosecalc.calc.ThreadKind
 import com.bmt.nosecalc.calc.ThreadTable
 import com.bmt.nosecalc.calc.ThreadTol
+import com.bmt.nosecalc.calc.UnGroup
 import com.bmt.nosecalc.calc.WorkMaterials
 import com.bmt.nosecalc.screens.taper.NcCard
 import com.bmt.nosecalc.screens.taper.NcFact
 import com.bmt.nosecalc.screens.taper.TaperPage
 import com.bmt.nosecalc.screens.taper.firstSentence
 import com.bmt.nosecalc.screens.thread.AdvancedBar
+import com.bmt.nosecalc.screens.thread.COMPANY_20UN
 import com.bmt.nosecalc.screens.thread.ChoiceField
 import com.bmt.nosecalc.screens.thread.ChoiceGrid
 import com.bmt.nosecalc.screens.thread.ChoiceRow
 import com.bmt.nosecalc.screens.thread.ChoiceSheet
+import com.bmt.nosecalc.screens.thread.DieSpeedSheet
+import com.bmt.nosecalc.screens.thread.DieStore
+import com.bmt.nosecalc.screens.thread.DieThreadBody
 import com.bmt.nosecalc.screens.thread.G76Line
+import com.bmt.nosecalc.screens.thread.InsertField
 import com.bmt.nosecalc.screens.thread.Marked
 import com.bmt.nosecalc.screens.thread.PassTable
 import com.bmt.nosecalc.screens.thread.Pick
+import com.bmt.nosecalc.screens.thread.PipeSizeSheet
+import com.bmt.nosecalc.screens.thread.PipeThreadBody
 import com.bmt.nosecalc.screens.thread.ResultCell
+import com.bmt.nosecalc.screens.thread.ThreadFamily
 import com.bmt.nosecalc.screens.thread.ThreadField
 import com.bmt.nosecalc.screens.thread.ThreadLabel
 import com.bmt.nosecalc.screens.thread.ThreadNc
 import com.bmt.nosecalc.screens.thread.ThreadSection
 import com.bmt.nosecalc.screens.thread.ThreadState
+import com.bmt.nosecalc.screens.thread.ThreadTopCard
 import com.bmt.nosecalc.screens.thread.chamferText
 import com.bmt.nosecalc.screens.thread.classNote
 import com.bmt.nosecalc.screens.thread.classText
 import com.bmt.nosecalc.screens.thread.fieldHint
 import com.bmt.nosecalc.screens.thread.g76Words
+import com.bmt.nosecalc.screens.thread.insertSource
+import com.bmt.nosecalc.screens.thread.insertText
+import com.bmt.nosecalc.screens.thread.kindNote
 import com.bmt.nosecalc.screens.thread.kindText
 import com.bmt.nosecalc.screens.thread.leadText
 import com.bmt.nosecalc.screens.thread.materialText
+import com.bmt.nosecalc.screens.thread.pitchLabel
 import com.bmt.nosecalc.screens.thread.pitchRow
 import com.bmt.nosecalc.screens.thread.pitchText
 import com.bmt.nosecalc.screens.thread.plain
 import com.bmt.nosecalc.screens.thread.sectionGeom
+import com.bmt.nosecalc.screens.thread.specTitle
+import com.bmt.nosecalc.screens.thread.standardText
+import com.bmt.nosecalc.screens.thread.unSizes
 import com.bmt.nosecalc.screens.thread.threadAuto
 import com.bmt.nosecalc.screens.thread.threadWarningText
 import com.bmt.nosecalc.ui.AppCard
@@ -110,6 +127,8 @@ fun ThreadScreen() = ThreadScreen(ThreadState())
  * 나사 단면 → NC(탭 G92 다회 · G76 두 줄, 처음은 G92 — G92 면 다듬질 블록 카드가 아래에). 값이 바뀌면 바로 다시 푼다(계산 버튼 없음). 숫자칸은 한 묶음(키패드 하나 · PC Tab 순서)이고, G76 줄의 테두리 칸을 눌러도
  * 그 칸의 키패드가 열린다(고급 설정 칸이면 접이를 편다). 결과가 화면 밖이면 아래 결과 띠에 시작점 · 끝점(G76 X Z).
  * G76 은 공구 노즈R 보정(G41/G42)을 쓰지 않아 보정 방식 스위치가 없다.
+ * 나사 종류가 관용 테이퍼(PT · NPT)면 같은 틀에 다른 카드들(`thread/PipeCards.kt` — G92 테이퍼만)이, 곧은 나사 숫나사에서 가공 방식을 다이스 헤드로 고르면
+ * `thread/DieCards.kt` 의 카드들이 선다(다이스 조건 회사 값은 [DieStore] — 앱 저장소).
  * initial = 시험이 정한 처음 상태, editing = 처음부터 키패드를 열어 둘 칸, sheet = 처음부터 열어 둘 고르기 시트(스크린샷 시험용)
  */
 @Composable
@@ -118,8 +137,18 @@ internal fun ThreadScreen(initial: ThreadState, editing: ThreadField? = null, sh
     val chain = rememberFieldChain(editing?.key)
     var pick by remember { mutableStateOf(sheet) }
     val app = LocalAppState.current
+    // 다이스 조건(회사 값): 화면을 열 때 앱 저장소에서 읽고, 고치면 바로 쓴다
+    val die = remember(app.store) { DieStore(app.store) }
     val c = AppTheme.colors
     FeatureScaffold(Feature.THREAD, ThreadHelp) {
+        if (s.isPipe) {
+            PipeThreadBody(s, chain) { pick = it }
+            return@FeatureScaffold
+        }
+        if (s.isDie) {
+            DieThreadBody(s, die, chain) { pick = it }
+            return@FeatureScaffold
+        }
         val input = s.input()
         val result = remember(input) { G76Calc.calc(input) }
         val sol = result.solution
@@ -150,9 +179,7 @@ internal fun ThreadScreen(initial: ThreadState, editing: ThreadField? = null, sh
 
         FieldChainHost(chain) {
             TaperPage(dock, chain.sheetOpen) { anchor ->
-                AppCard(Modifier.fillMaxWidth(), padding = 8.dp) {
-                    Segmented(listOf("외경 가공 (OD)", "내경 가공 (ID)"), if (s.inner) 1 else 0, { s.switchInner(it == 1) }, Modifier.fillMaxWidth(), height = 54.dp)
-                }
+                ThreadTopCard(s)
                 if (waiting) WarningBanner(threadWarningText(G76Warning.MISSING_INPUT, s), level = WarnLevel.Info)
                 if (errors.isNotEmpty()) {
                     // 결과 띠의 '칸 보기' 가 가는 곳(멈추면 이 빨간 띠)
@@ -168,10 +195,10 @@ internal fun ThreadScreen(initial: ThreadState, editing: ThreadField? = null, sh
                     Spacer(Modifier.height(Space.fieldGap))
                     Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
-                            ChoiceField("나사 종류", kindText(s.kind), Modifier.weight(1.4f)) { pick = Pick.KIND }
+                            ChoiceField("나사 종류", kindText(s.family), Modifier.weight(1.4f)) { pick = Pick.KIND }
                             ChoiceField("사이즈", s.spec?.size ?: "고르기", Modifier.weight(1f), empty = s.spec == null) { pick = Pick.SIZE }
                             ChoiceField(
-                                if (s.kind == ThreadKind.UN) "산수 (TPI)" else "피치", s.spec?.let(::pitchText) ?: "—", Modifier.weight(1f),
+                                pitchLabel(s.family), s.spec?.let(::pitchText) ?: "—", Modifier.weight(1f),
                                 empty = s.spec == null,
                             ) { pick = if (s.spec == null) Pick.SIZE else Pick.PITCH }
                         }
@@ -225,11 +252,13 @@ internal fun ThreadScreen(initial: ThreadState, editing: ThreadField? = null, sh
                                 ThreadField.TARGET to ThreadField.TIP_R,
                                 ThreadField.FINISH_COUNT to ThreadField.MIN_CUT,
                                 ThreadField.ALLOW to ThreadField.X_CLEAR,
-                            ).forEach { (a, b) ->
+                            ).forEachIndexed { i, (a, b) ->
                                 Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                                     field(a, Modifier.weight(1f))
                                     field(b, Modifier.weight(1f))
                                 }
+                                // 인선 R 바로 아래 인서트(UN 20산 자료 — 미터는 자료가 없어 숨김). 이름이 길어 한 줄 전체
+                                if (i == 0 && s.hasInsertData) InsertField(s, Modifier.fillMaxWidth()) { pick = Pick.INSERT }
                             }
                         }
                         LimitsBox(s, sol)
@@ -421,9 +450,9 @@ private fun ClassBox(s: ThreadState, onClick: () -> Unit) {
     ) {
         Column(Modifier.weight(1f)) {
             Text("공차 급수", color = c.textBody, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Text(if (s.kind == ThreadKind.UN) "ASME B1.1" else "ISO 965", color = c.textMuted, fontSize = 12.5.sp)
+            Text(standardText(s.family), color = c.textMuted, fontSize = 12.5.sp)
         }
-        ChoiceField(null, classText(s.shownClass), Modifier.width(150.dp), onClick = onClick)
+        ChoiceField(null, s.shownClass?.let(::classText) ?: "—", Modifier.width(150.dp), onClick = onClick)
     }
 }
 
@@ -432,7 +461,7 @@ private fun ClassBox(s: ThreadState, onClick: () -> Unit) {
 private fun LimitsBox(s: ThreadState, sol: G76Solution?) {
     val c = AppTheme.colors
     val spec = s.spec ?: return
-    val lim = sol?.limits ?: ThreadTol.limits(spec, s.shownClass)
+    val lim = sol?.limits ?: ThreadTol.limits(spec, s.shownClass ?: return)
     val crest = if (s.inner) "안지름" else "바깥지름"
     val shape = RoundedCornerShape(8.dp)
     Column(
@@ -440,7 +469,7 @@ private fun LimitsBox(s: ThreadState, sol: G76Solution?) {
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("${spec.label} ${lim.cls.label} 한계 치수", color = c.textBody, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text("${specTitle(spec)} ${lim.cls.label} 한계 치수", color = c.textBody, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         @Composable
         fun line(name: String, min: Double, max: Double, target: Double?) {
             Row(verticalAlignment = Alignment.Top) {
@@ -497,10 +526,10 @@ private fun ThreadSheet(pick: Pick, s: ThreadState, onDismiss: () -> Unit) {
         Pick.CLASS -> ChoiceSheet(
             "공차 급수",
             if (s.inner) "암나사" else "숫나사",
-            "${if (s.kind == ThreadKind.UN) "ASME B1.1" else "ISO 965-1 · 965-2"} 의 공차로 피치경 · ${if (s.inner) "안지름" else "바깥지름"} 한계를 냅니다.",
+            "${standardText(s.family, long = true)} 의 공차로 피치경 · ${if (s.inner) "안지름" else "바깥지름"} 한계를 냅니다.",
             onDismiss,
         ) {
-            ThreadClass.choices(s.kind, s.inner).forEach { cl ->
+            s.classChoices.forEach { cl ->
                 ChoiceRow(classText(cl), classNote(cl), cl == s.shownClass) {
                     s.pickClass(cl)
                     onDismiss()
@@ -508,28 +537,36 @@ private fun ThreadSheet(pick: Pick, s: ThreadState, onDismiss: () -> Unit) {
             }
         }
         Pick.KIND -> ChoiceSheet("나사 종류", onDismiss = onDismiss) {
-            ChoiceRow(kindText(ThreadKind.METRIC), "ISO 262 보통 · 가는 나사 M1 ~ M64 · 공차 ISO 965", s.kind == ThreadKind.METRIC) {
-                s.switchKind(ThreadKind.METRIC)
-                onDismiss()
-            }
-            ChoiceRow(kindText(ThreadKind.UN), "UNC · UNF #0 ~ 1-1/2 · 공차 ASME B1.1 (치수는 mm 로 바꿔 씀)", s.kind == ThreadKind.UN) {
-                s.switchKind(ThreadKind.UN)
-                onDismiss()
-            }
-        }
-        Pick.SIZE -> {
-            val sizes = ThreadTable.sizes(s.kind)
-            ChoiceSheet("사이즈", kindText(s.kind), "고르면 ${if (s.kind == ThreadKind.UN) "UNC" else "보통 나사"} 피치가 먼저 들어갑니다 — 가는 나사는 피치 칸에서.", onDismiss) {
-                ChoiceGrid(sizes, sizes.indexOf(s.spec?.size).takeIf { it >= 0 }) {
-                    s.pickSize(sizes[it])
+            ThreadFamily.entries.forEach { f ->
+                ChoiceRow(kindText(f), kindNote(f), s.family == f) {
+                    s.switchFamily(f)
                     onDismiss()
                 }
             }
         }
+        Pick.SIZE -> when (s.family) {
+            ThreadFamily.METRIC -> {
+                val sizes = ThreadTable.sizes(ThreadKind.METRIC)
+                ChoiceSheet("사이즈", kindText(s.family), "고르면 보통 나사 피치가 먼저 들어갑니다 — 가는 나사는 피치 칸에서.", onDismiss) {
+                    ChoiceGrid(sizes, sizes.indexOf(s.spec?.size).takeIf { it >= 0 }) {
+                        s.pickSize(sizes[it])
+                        onDismiss()
+                    }
+                }
+            }
+            ThreadFamily.UN -> ChoiceSheet(
+                "사이즈",
+                kindText(s.family),
+                "계열을 고르고 크기를 고르면 그 계열의 산수가 들어갑니다 — 같은 크기의 다른 산수는 산수 칸에서. 20UN 과 겹치는 줄은 '3/4-20 UNEF (20UN)' 처럼 본래 계열 이름입니다.",
+                onDismiss,
+            ) { UnSizePicker(s, onDismiss) }
+            ThreadFamily.PT -> PipeSizeSheet(s, PipeKind.PT, onDismiss)
+            ThreadFamily.NPT -> PipeSizeSheet(s, PipeKind.NPT, onDismiss)
+        }
         Pick.PITCH -> {
             val spec = s.spec
-            ChoiceSheet(if (s.kind == ThreadKind.UN) "산수 (TPI)" else "피치", spec?.size ?: "", onDismiss = onDismiss) {
-                spec?.let { ThreadTable.pitches(s.kind, it.size) }.orEmpty().forEach { p ->
+            ChoiceSheet(pitchLabel(s.family), spec?.size ?: "", onDismiss = onDismiss) {
+                s.kind?.let { k -> spec?.let { ThreadTable.pitches(k, it.size) } }.orEmpty().forEach { p ->
                     val (text, sub) = pitchRow(p)
                     ChoiceRow(text, sub, p == spec) {
                         s.pickSpec(p)
@@ -541,7 +578,11 @@ private fun ThreadSheet(pick: Pick, s: ThreadState, onDismiss: () -> Unit) {
         Pick.MATERIAL -> ChoiceSheet(
             "가공 소재",
             "ISO 피삭재 군",
-            "기록용 — 출처를 확인한 나사 절삭 속도 자료가 없어 회전수를 정하지 않습니다. 회전수는 인서트 카탈로그의 나사 절삭 조건으로 넣으세요.",
+            if (s.isDie) {
+                "다이스 헤드: 다이스 조건의 절삭 속도 Vc(회사 값)를 소재마다 따로 저장하는 열쇠입니다 — 소재를 바꾸면 그 소재의 Vc 가 들어옵니다."
+            } else {
+                "기록용 — 출처를 확인한 나사 절삭 속도 자료가 없어 회전수를 정하지 않습니다. 회전수는 인서트 카탈로그의 나사 절삭 조건으로 넣으세요."
+            },
             onDismiss,
         ) {
             ChoiceRow("고르지 않음", null, s.material == null) {
@@ -581,19 +622,75 @@ private fun ThreadSheet(pick: Pick, s: ThreadState, onDismiss: () -> Unit) {
                 }
             }
         }
+        Pick.INSERT -> ChoiceSheet(
+            "인서트",
+            "${if (s.inner) "내경" else "외경"} · ${s.insertChoices.firstOrNull()?.let { "${it.form.name} ${plain(it.tpi)}산" } ?: ""}",
+            if (s.isPipe) {
+                "풀 프로파일 레이다운 인서트(IC 3/8\") — 이름만 남깁니다(관용 테이퍼는 풀 프로파일을 가정해 계산하고 인선 R 칸이 없습니다). PT 는 BSPT(같은 55° 꼴) 인서트입니다."
+            } else {
+                "풀 프로파일 레이다운 인서트(IC 3/8\"). 카탈로그에 날 끝 R 이 있으면 인선 R 칸에 넣고, 없으면 이름만 남기니 R 은 직접 넣으세요."
+            },
+            onDismiss,
+        ) {
+            ChoiceRow("고르지 않음", null, s.shownInsert == null) {
+                s.pickInsert(null)
+                onDismiss()
+            }
+            s.insertChoices.forEach { i ->
+                val r = i.tipR?.let { "날 끝 R ${Fmt.fixed3(it)} (${plain(i.tipRPerPitch!!)}P)" } ?: "날 끝 R 카탈로그에 없음"
+                ChoiceRow(insertText(i), "왼손 ${i.lhDesignation} · $r · 출처 ${insertSource(i)}", i == s.shownInsert) {
+                    s.pickInsert(i)
+                    onDismiss()
+                }
+            }
+        }
+        Pick.DIE_SPEED -> DieSpeedSheet(s, onDismiss)
     }
 }
 
-/** 헤더 도움말 버튼의 사용법: 나사 고르기 · 값 넣기 · 고급 설정 · G92 · G76 프로그램과 분석 · 경고 */
+/**
+ * UN 사이즈 시트 안: 위 계열 묶음 고르기(UNC · UNF · UNEF · 20UN), 아래 그 묶음의 크기 격자. 20UN 은 자주 쓰는 다섯(사용자 결정 2026-11-05)을
+ * 따로 위에 두고 나머지를 지름 순으로. 고른 칩은 지금 규격이 그 묶음 줄일 때만
+ */
+@Composable
+private fun UnSizePicker(s: ThreadState, onDismiss: () -> Unit) {
+    val g = s.unGroup
+    val chosen = s.spec?.takeIf { it in ThreadTable.group(g) }?.size
+    Segmented(UnGroup.entries.map { it.label }, g.ordinal, { s.unGroup = UnGroup.entries[it] }, Modifier.fillMaxWidth(), height = 48.dp, fontSize = 15)
+    Spacer(Modifier.height(10.dp))
+    @Composable
+    fun grid(sizes: List<String>) = ChoiceGrid(sizes, sizes.indexOf(chosen).takeIf { it >= 0 }) {
+        s.pickSize(sizes[it])
+        onDismiss()
+    }
+    when (g) {
+        UnGroup.UNC, UnGroup.UNF, UnGroup.UNEF -> grid(unSizes(g))
+        UnGroup.UN20 -> {
+            val all = unSizes(g)
+            ThreadLabel("자주 쓰는 크기")
+            grid(all.take(COMPANY_20UN.size))
+            Spacer(Modifier.height(6.dp))
+            ThreadLabel("그 밖의 20UN 크기 (지름 순)")
+            grid(all.drop(COMPANY_20UN.size))
+        }
+    }
+}
+
+/** 헤더 도움말 버튼의 사용법: 나사 고르기 · 값 넣기 · 고급 설정 · G92 · G76 프로그램과 분석 · 관용 테이퍼 나사 · 다이스 헤드 · 경고 */
 internal val ThreadHelp = listOf(
     HelpSection(
         "나사 고르기",
         listOf(
-            "맨 위에서 외경 가공(숫나사, OD) · 내경 가공(암나사, ID)을 고릅니다. 나사 종류(미터 M · 유니파이 UN) → 사이즈 → 피치(UN 은 산수 TPI)를 고르면 " +
-                "규격 기본 치수와 공차로 목표 지름을 정합니다. 사이즈를 고르면 보통 나사(UNC)가 먼저 들어가고, 가는 나사(UNF)는 피치 칸에서 바꿉니다.",
+            "맨 위에서 외경 가공(숫나사, OD) · 내경 가공(암나사, ID)을 고릅니다. 나사 종류(미터 M · 유니파이 UN · 관용 테이퍼 PT · 미국 관용 테이퍼 NPT) → 사이즈 → " +
+                "피치(UN 은 산수 TPI)를 고르면 규격 기본 치수와 공차로 목표 지름을 정합니다. 미터는 사이즈를 고르면 보통 나사가 먼저 들어가고 가는 나사는 피치 칸에서 바꿉니다. " +
+                "UN 은 사이즈 시트 위에서 계열(UNC · UNF · UNEF · 20UN)을 고른 뒤 크기를 고릅니다 — 20UN 은 자주 쓰는 1/4 · 3/8 · 1/2 · 3/4 · 1 이 위에 있고, " +
+                "UNC · UNF · UNEF 와 겹치는 줄은 '3/4-20 UNEF (20UN)' 처럼 본래 계열 이름입니다.",
+            "관용 테이퍼(PT · NPT)는 G92 테이퍼로만 깎습니다 — 아래 '관용 테이퍼 나사 (PT · NPT)'. 미터 · UN 숫나사는 맨 위 가공 방식에서 " +
+                "'다이스 헤드' 를 고를 수 있습니다 — 아래 '다이스 헤드'.",
             "공차 급수는 미터 숫나사 4h(정밀) · 6g(보통, 기본) · 6h · 8g(거침), 암나사 6H(기본) · 6G, UN 은 1A · 2A(기본) · 3A, 1B · 2B(기본) · 3B 입니다. " +
                 "미터는 ISO 965 표 값(표가 없는 칸은 식 — 그때는 파란 안내), UN 은 ASME B1.1 의 식입니다.",
-            "가공 소재는 기록용입니다. 출처를 확인한 나사 절삭 속도 자료가 없어 회전수를 정해 주지 않습니다 — 인서트 카탈로그의 나사 절삭 조건으로 회전수를 넣으세요.",
+            "가공 소재는 바이트에서는 기록용입니다. 출처를 확인한 나사 절삭 속도 자료가 없어 회전수를 정해 주지 않습니다 — 인서트 카탈로그의 나사 절삭 조건으로 회전수를 넣으세요. " +
+                "다이스 헤드에서는 회사 Vc 를 소재마다 저장하는 열쇠입니다.",
         ),
     ),
     HelpSection(
@@ -616,6 +713,8 @@ internal val ThreadHelp = listOf(
             "공차 목표 %: 공차역 안 어디를 겨눌지 — 0% = 최대 실체(숫나사는 큰 쪽, 암나사는 작은 쪽), 100% = 최소 실체. 비우면 80%(원본 화면 값). " +
                 "피치경과 산봉우리 지름(숫나사 바깥지름 · 암나사 안지름)에 같은 비율을 씁니다. 날이 닳으면 최대 실체 쪽으로 움직이므로 큰 % 가 마모 여유가 큽니다.",
             "인선 R: 인서트 날 끝 R(카탈로그 값). 비우면 규격 기본 깊이와 맞는 R — 숫나사 H/6(k = 0.6134P), 암나사 H/8(k = 0.5413P). R 이 크면 골이 덜 파여 노란 경고가 뜹니다.",
+            "인서트: 내외 · 종류 · 산수에 맞는 카탈로그 인서트(VARDEX · Carmex 의 IC 3/8\" 풀 프로파일 — UN 20산 · PT(BSPT) · NPT, 예: 3ER20UN · 16 ER 20 UN)를 고릅니다. " +
+                "카탈로그에 날 끝 R 이 있으면 인선 R 칸에 넣고, 없으면(UN 줄은 모두 없음) 이름만 남기니 R 은 직접 넣습니다. 미터는 자료가 없어 칸이 없습니다.",
             "정삭 횟수 m(기본 2) · 최소 절입 Δdmin(기본 0.035) · 정삭 여유 d(기본 0.02)는 G76 첫 줄의 P 앞 두 자리 · Q · R 입니다. " +
                 "시작 X 여유(기본 1, 반경)는 사이클 시작점을 지름에서 띄우는 거리입니다.",
             "사이즈를 고르면 아래에 그 급수의 한계 치수(피치경 · 산봉우리 지름 · 골 한계)와 목표 값이 보입니다.",
@@ -636,11 +735,41 @@ internal val ThreadHelp = listOf(
         ),
     ),
     HelpSection(
+        "관용 테이퍼 나사 (PT · NPT)",
+        listOf(
+            "PT(숫나사 R · 암나사 Rc — JIS B 0203)와 NPT(ASME B1.20.1)는 바이트 G92 테이퍼로만 깎습니다(G76 · 다이스 헤드 없음). 숫나사 · 암나사 둘 다 됩니다. " +
+                "산수는 크기에 딸려 있고, 급수 대신 게이지 공차(± 산)가 보입니다.",
+            "기준면 Z 는 공작물 끝면(숫나사 관 끝 · 암나사 입구, 빈칸 0)입니다. 여기서 규격 게이지 면을 잡고 끝 Z 의 골 X 와 테이퍼 I(시작 Z ~ 끝 Z 길이의 1/32 — " +
+                "숫나사 −, 암나사 +)를 냅니다. 회차별 분석표의 X 는 끝 Z 쪽이고, 시작 Z 쪽 X = 끝 X + 2I 입니다.",
+            "테이퍼 낱말은 처음 I 이고 NC 카드에서 R 로 바꿀 수 있습니다 — FANUC 0i 의 기본은 R 이고, I 는 Series 10/11 형식일 때입니다. " +
+                "I(R)는 첫 G92 줄에만 쓰고 둘째 줄부터는 X 만 씁니다(모달).",
+            "고급 설정의 게이지 면 옮김(산)은 게이지 공차 안에서 나사를 옮겨 깎습니다(+ 는 조립 때 더 깊이). 풀 프로파일 인서트를 가정합니다(골 X = 끝 Z 피치경 ∓ h) — " +
+                "인서트 칸에서 BSPT(PT) · NPT 인서트 이름을 고를 수 있습니다. 기준면 ~ 끝 Z 가 규격 최소 나사 길이(PT a + f · l, NPT L2 · L1 + L3)보다 짧으면 노란 경고가 뜹니다.",
+        ),
+    ),
+    HelpSection(
+        "다이스 헤드",
+        listOf(
+            "미터 · UN 숫나사는 맨 위 가공 방식에서 '다이스 헤드'(고정형 자동 열림 — 공작물이 돌고 머리는 서 있음)를 고를 수 있습니다. 내경이나 PT · NPT 로 바꾸면 바이트로 돌아갑니다.",
+            "프로그램은 깎는 구간만입니다: G97 S… · G0X0.Z20. · Z(시작) · G1Z(끝)F… · G4U(끝 멈춤) · G0Z(물러남). F 는 회전당 이송(G99)이고, 공구 호출 · M03 은 기계에 맞게 앞에 넣습니다.",
+            "다이스 조건(절삭 속도 Vc · 이송 비율 · 끝 멈춤 · 물러남 Z · 플로트 · 체이서 목 산수)은 회사 값입니다 — 고치면 바로 저장되고 다음에 열어도 그대로입니다. " +
+                "Vc 는 가공 소재마다 따로 저장되고 처음은 빈칸입니다. 회전수 칸에 넣으면 Vc 대신 그 회전수를 씁니다.",
+            "처음 값은 이송 비율 0.96(F = 피치 × 0.96) · 끝 멈춤 1 초 · 물러남 Z150 입니다(사용자가 정한 처음 값). 카탈로그(Wagner · Landis)는 이송을 피치와 같게(비율 1) 씁니다 — " +
+                "비율이 1 이 아니면 파란 안내가 한 줄 뜹니다.",
+            "끝 당김 길이 = (1 − 비율) × (끝면 Z − 끝 Z): 비율 < 1 이면 체이서가 제 리드로 나아가 머리 앞쪽이 끌려 나간 길이로, 머리의 플로트가 받아야 합니다" +
+                "(플로트를 넣으면 넘을 때 노란 경고). 실제 나사 끝은 G1 끝보다 이만큼 척 쪽입니다. 완전 나사 끝 = 끝 Z + 목 산수 × 피치(목 산수를 넣었을 때).",
+            "카탈로그 Vc 는 Wagner 설명서 두 권의 범위(재질 글 — ISO 군 표시 없음)이고 견주기만 합니다. 체이서 규격 표는 그 피치가 맞는 Landis 체이서 줄입니다" +
+                "(체이서는 피치만 정하고 지름 범위는 홀더가 정함). 다이스 헤드 모델을 모르니 카탈로그는 일반 값으로 보고 회사 값을 넣으세요.",
+        ),
+    ),
+    HelpSection(
         "경고",
         listOf(
             "파란 띠는 안내(값을 넣으면 계산 · 식으로 낸 공차 · 역가공 확인), 노란 띠는 숫자는 나왔지만 확인할 것(골이 규격 한계를 넘음 · 거친 절입 한 번), " +
                 "빨간 띠는 계산을 멈춘 것입니다(범위 밖 값 · Z 순서와 방향이 반대 · 인선 R 이 너무 큼 · 정삭 여유 ≥ 산 높이 · 첫 절입 < 최소 절입 · 절입 1000회 넘음 · 내경 시작 X ≤ 0). " +
                 "빨간 띠가 가리키는 칸은 빨간 테두리로 보입니다.",
+            "다이스 헤드: 빨강 = 범위 밖 값 · Z 순서(시작 ≤ 끝 · 시작이 끝면 안 · 진입 Z20 이나 물러남 Z 보다 큰 시작 · 끝면 ≤ 끝), " +
+                "노랑 = 이송 비율 > 1 · 끝 당김 길이 > 플로트 · 완전 나사 없음(목 길이 ≥ 나사 길이), 파랑 = 카탈로그는 이송 = 피치.",
         ),
     ),
 )

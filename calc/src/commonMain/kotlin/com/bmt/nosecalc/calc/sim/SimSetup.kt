@@ -37,11 +37,13 @@ data class MachineSetup(
     val compStartup: CompStartup = CompStartup.C,
 )
 
-enum class ToolKind { TURN, GROOVE, THREAD, ROUND }
+/** 공구 종류. DIE(다이스 헤드 — 설계 19절)는 맨 끝에 더했다(순서 번호를 지킴 — 저장은 이름) */
+enum class ToolKind { TURN, GROOVE, THREAD, ROUND, DIE }
 
 /**
  * 공구 보정표 한 줄(보정 번호 = T 뒤 2자리). [noseR] · [tip] 은 G41/G42 에 꼭 필요하다(빈칸이면 TOOL_DATA_MISSING).
  * G40 에서는 빈칸이면 노즈 0 · 팁 0(인선 = 노즈 중심)으로 그린다. 나머지 칸은 소재 깎기 단계(5.3)가 쓴다.
+ * 다이스 헤드(DIE): [dieDia] = 다이스 호칭 지름 d · [diePitch] = 다이스 피치 P(나사 각은 [threadDeg] — 빈칸 60°) — 나사 모양(모형)을 그린다.
  */
 data class ToolOffset(
     val noseR: Double? = null,
@@ -51,6 +53,8 @@ data class ToolOffset(
     val kappaDeg: Double? = null,
     val width: Double? = null,
     val threadDeg: Double? = null,
+    val dieDia: Double? = null,
+    val diePitch: Double? = null,
 )
 
 /** 소재(5.1) — 소재 단계가 쓴다. [length] = 척 면 ~ 끝면, [faceZ] = 끝면 Z(기장여유) */

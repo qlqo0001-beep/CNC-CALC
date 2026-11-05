@@ -6,6 +6,9 @@ import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.GrooveCalc
 import com.bmt.nosecalc.calc.GrooveInput
 import com.bmt.nosecalc.calc.GrooveRef
+import com.bmt.nosecalc.calc.G76Warning
+import com.bmt.nosecalc.calc.PipeTable
+import com.bmt.nosecalc.calc.PipeThreadCalc
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.RightTriangle
 import com.bmt.nosecalc.calc.RoundCalc
@@ -23,6 +26,12 @@ import com.bmt.nosecalc.screens.taper.TaperSolve
 import com.bmt.nosecalc.screens.taper.TaperState
 import com.bmt.nosecalc.screens.taper.cutEnd
 import com.bmt.nosecalc.screens.taper.example
+import com.bmt.nosecalc.screens.thread.ThreadFamily
+import com.bmt.nosecalc.screens.thread.ThreadField
+import com.bmt.nosecalc.screens.thread.ThreadState
+import com.bmt.nosecalc.screens.thread.gaugeRows
+import com.bmt.nosecalc.screens.thread.pipeResultCells
+import com.bmt.nosecalc.screens.thread.threadWarningText
 import com.bmt.nosecalc.screens.triangle.TriField
 import com.bmt.nosecalc.screens.triangle.TriangleState
 import java.io.File
@@ -177,6 +186,45 @@ class InputRobustnessTest {
                 show(s.a, s.b, s.c, s.angleA, s.angleB, s.dz, s.dxDia)
             }
         }
+    }
+
+    /**
+     * 나사 종류 넷 가운데 관용 테이퍼(PT · NPT — 곧은 나사는 Stage3RobustnessTest.thread): 칸 글을 흔들어 계산기 · 화면 글 함수(경고 · 게이지 표 · 결과 칸 · G92 글)가
+     * 예외 없이 유한한 숫자를 내는가. 크기 · 내외경 · 테이퍼 낱말도 무작위
+     */
+    @Test
+    fun pipeThread() {
+        val base = mapOf(
+            "zRef" to "0", "zStart" to "5", "zEnd" to "-15", "rpm" to "500", "firstCut" to "0.3",
+            "gaugeShift" to "0", "m" to "2", "minCut" to "0.035", "allow" to "0.02", "xClear" to "1",
+        )
+        var pipeSolved = 0
+        repeat(20_000) {
+            val family = if (rnd.nextBoolean()) ThreadFamily.PT else ThreadFamily.NPT
+            val specs = PipeTable.of(family.pipeKind!!)
+            val s = ThreadState(
+                inner = rnd.nextBoolean(),
+                family = family,
+                pipe = specs[rnd.nextInt(specs.size)],
+                // 칸마다 셋에 하나만 흔든다(Stage3RobustnessTest 와 같은 비율) — 다 흔들면 거의 늘 멈춤이라 결과 길을 못 지난다
+                values = base.mapValues { (_, v) -> if (rnd.nextInt(3) == 0) nudge(v) else v },
+                taperWord = if (rnd.nextBoolean()) 'I' else 'R',
+            )
+            check("관용 나사 ${s.pipe?.label} 내경 ${s.inner} ${base.keys.map { s.value(ThreadField.entries.first { f -> f.key == it }) }}") {
+                val r = PipeThreadCalc.calc(s.pipeInput())
+                val sol = r.solution
+                r.warnings.forEach { threadWarningText(it, s, pipe = sol) }
+                if (s.bad().isNotEmpty()) threadWarningText(G76Warning.BAD_INPUT, s)
+                gaugeRows(s, sol)
+                if (sol == null) return@check
+                pipeSolved++
+                pipeResultCells(s, sol)
+                show(sol.x, sol.startX, sol.taper, sol.height, sol.crestAtRef, sol.crestAtEnd, sol.threadLen, sol.needLen)
+                sol.passes.forEach { show(it.depth, it.cut, it.xDia) }
+                assertTrue((sol.g92 + sol.g92Finish).none { "NaN" in it || "Infinity" in it }, "G92 글: ${sol.g92}")
+            }
+        }
+        assertTrue(pipeSolved > 5_000, "결과가 나온 사례가 너무 적다: $pipeSolved")
     }
 
     /** 극단 값으로 화면을 실제로 그린다(그리다 죽지 않는가) */

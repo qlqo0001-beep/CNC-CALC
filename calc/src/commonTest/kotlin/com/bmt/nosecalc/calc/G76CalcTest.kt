@@ -132,6 +132,36 @@ class G76CalcTest {
     }
 
     /**
+     * UNEF 손 계산 — 3/4-20 UNEF 2A(H28 식, 인치, 물림 길이 LE = 9P = 0.45 — H28 7절 p. 2.21), 지은 치수 Z5 → −20 · Δd 0.2 · 600 rpm:
+     * 기본 공차 B = 0.0015∛0.75 + 0.0015√0.45 + 0.015∛0.05² = 0.0013628 + 0.0010062 + 0.0020358 = 0.0044049,
+     * 허용차 0.3B = 0.0013215, 바깥지름 공차 0.060∛0.05² = 0.0081433, 기본 피치경 0.75 − 0.649519×0.05 = 0.7175240.
+     * 피치경 0.7117977 ~ 0.7162026 in(H28 표 2.21 의 3/4-20 UNEF-2A 0.7118 ~ 0.7162), 바깥지름 0.7405353 ~ 0.7486785(표 0.7406 ~ 0.7487).
+     * 목표 80%: 피치경 = 0.7162026 − 0.8 × 0.0044049 = 0.7126787 in = 18.102038 mm, 바깥지름 = 0.7486785 − 0.8 × 0.0081433 = 0.7421639 in = 18.850964 mm,
+     * 인선 R = H/6 → X = 피치경 − 0.577350P = 18.102038 − 0.733235 = 17.368803 → X17.369, k = (18.850964 − 17.369)/2 = 0.740982 → P741.
+     * 시작 X = 바깥지름 최대 19.016435 + 2 = 21.016435 → X21.016. (LE = D 였다면 피치경 최소 0.7114170 — 표와 0.0004 다름)
+     */
+    @Test
+    fun unefHandNumbers() {
+        val s = ok(G76Calc.calc(G76Input(spec = un("3/4", 20), zStart = 5.0, zEnd = -20.0, firstCut = 0.2, rpm = 600.0)))
+        val lim = s.limits
+        val inch7 = 0.0000001 * 25.4 // 인치 7자리로 적은 손 계산 값
+        near(0.7117977 * 25.4, lim.pitchDia.min, inch7, "피치경 최소")
+        near(0.7162026 * 25.4, lim.pitchDia.max, inch7, "피치경 최대")
+        near(0.7405353 * 25.4, lim.crest.min, inch7, "바깥지름 최소")
+        near(0.7486785 * 25.4, lim.crest.max, inch7, "바깥지름 최대")
+        near(-0.0013215 * 25.4, lim.deviation, inch7, "허용차")
+        near(18.102038, s.pitchDia, 1e-6, "목표 피치경")
+        near(18.850964, s.crestDia, 1e-6, "목표 바깥지름")
+        near(17.368803, s.x, 1e-6, "X")
+        near(0.741, s.height, 1e-12, "k")
+        near(21.016435, s.startX, 1e-6, "시작 X")
+        assertEquals(listOf("G97S600", "G0X21.016Z5.", "G76P021060Q35R.02", "G76X17.369Z-20.P741Q200F1.27"), s.program)
+        // 급수: UNEF 는 2A · 3A · 2B · 3B — 1A 를 넣으면 BAD_INPUT
+        stops(G76Warning.BAD_INPUT, G76Input(spec = un("3/4", 20), cls = ThreadClass.UN1A, zStart = 5.0, zEnd = -20.0, firstCut = 0.2))
+        stops(G76Warning.BAD_INPUT, G76Input(inner = true, spec = un("3/8", 20), cls = ThreadClass.UN1B, zStart = 5.0, zEnd = -20.0, firstCut = 0.2))
+    }
+
+    /**
      * 미터 손 계산(ISO 965-1 표 값 — M10×1.5 는 ISO 965-2 표 1 · 2 의 줄): 6g 목표 50%: es −32 μm, Td2 132, Td 236 →
      * 피치경 9.025721 − 0.032 − 0.066 = 8.927721, 바깥지름 10 − 0.032 − 0.118 = 9.850, X = 8.927721 − 0.866025 = 8.061696 → X8.062,
      * k = (9.850 − 8.062)/2 = 0.894 → P894.
@@ -155,13 +185,13 @@ class G76CalcTest {
 
     /**
      * 목표 0%(최대 실체)에서 기본 인선 R 의 깊이 = 규격 기본 깊이: 숫나사 k = 0.613435P(FANUC 예 3.68/6, Haas 표 외경 K = 0.6134P),
-     * 암나사 k = 0.541266P(Haas 표 내경 K = 0.5413P). 급수 · 사이즈와 상관없다(es · EI 는 두 지름을 같이 옮긴다).
+     * 암나사 k = 0.541266P(Haas 표 내경 K = 0.5413P). 급수 · 사이즈와 상관없다(es · EI 는 두 지름을 같이 옮긴다). 급수는 그 계열에 있는 것 전부.
      * Haas 워크북 O00113 3/4-16 외경 K0.0383 · 표의 7 산 내경 K .0773 과 맞다.
      */
     @Test
     fun basicDepthAtMaximumMaterial() {
         for (s in ThreadTable.METRIC.filter { it.d >= 3 } + ThreadTable.UN.filter { it.d >= 6 }) {
-            for (c in ThreadClass.entries.filter { it.kind == s.kind }) {
+            for (c in ThreadClass.choices(s.series, false) + ThreadClass.choices(s.series, true)) {
                 val r = G76Calc.calc(G76Input(inner = c.internal, spec = s, cls = c, zStart = 5.0, zEnd = -20.0, firstCut = 0.05, target = 0.0, xClear = 0.1))
                 val sol = ok(r, r.warnings.filter { it == G76Warning.ONE_ROUGH_PASS })
                 val f = if (c.internal) 5 * sqrt(3.0) / 16 else 17 * sqrt(3.0) / 48 // 0.541266 · 0.613435

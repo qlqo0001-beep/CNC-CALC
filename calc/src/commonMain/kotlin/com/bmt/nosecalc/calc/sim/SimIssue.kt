@@ -196,6 +196,18 @@ enum class IssueCode(val level: IssueLevel) {
     // ---- 소재(5.5 — 소재 단계가 쓴다)
     RAPID_CUT(IssueLevel.WARN),
     CHUCK_HIT(IssueLevel.STOP),
+
+    // ---- 다이스 헤드(DIE 공구 — 설계 19절)
+    /** DIE 공구의 이송이 X0. 에서 −Z 로 곧게가 아님(X ≠ 0 · +Z · 원호 · 모서리 ,C ,R). word = 그 낱말(있으면) */
+    DIE_PATH(IssueLevel.STOP),
+    /** DIE 공구의 이송이 분당 이송(G98) — 다이스는 회전당 이송(G99)으로 피치에 맞춘다 */
+    DIE_NOT_PER_REV(IssueLevel.STOP),
+    /** DIE 공구로 고정 사이클(G70~G76 둘째 줄 · G90 · G92 · G94). args = [G 코드] */
+    DIE_IN_CYCLE(IssueLevel.STOP),
+    /** 공구 설정의 다이스 지름 · 피치가 비었거나 나사 각이 60° · 55° 가 아님 — 경로만 그리고 나사 모양은 없음. args = [공구, 보정 번호] */
+    DIE_DATA_MISSING(IssueLevel.WARN),
+    /** 이송 F 가 다이스 피치 P 보다 큼 — 머리를 밀어붙임(당겨 여는 머리가 끝에서 안 열릴 수 있음). args = [F, P] */
+    DIE_FEED_OVER_PITCH(IssueLevel.WARN),
 }
 
 /**

@@ -34,7 +34,11 @@ enum class ThreadDir {
     REVERSE,
 }
 
-/** G76 경고. 위의 일곱은 계산을 멈춘다([G76Result.solution] = null), 아래 둘은 숫자와 함께 */
+/**
+ * 나사 경고 — G76 · G92 곧은 나사([G76Calc])와 관용 테이퍼 나사([PipeThreadCalc])가 같이 쓴다.
+ * 위의 아홉은 계산을 멈춘다([G76Result.solution] · [PipeResult.solution] = null), 아래 셋은 숫자와 함께.
+ * [TIP_TOO_BIG] · [ROOT_INTERFERES] 는 곧은 나사만, [START_INSIDE] · [SHORT_THREAD] 는 관용 테이퍼만 낸다
+ */
 enum class G76Warning {
     /** 규격 · Z 시작 · 가공 목표 Z · 첫 절입 가운데 빈 것이 있다 */
     MISSING_INPUT,
@@ -42,7 +46,8 @@ enum class G76Warning {
     /**
      * 숫자가 아님, 크기 한도 밖, 목표 0~100% 밖, 정삭 횟수 1~99 밖, 면취량 0~99(0.1L) 밖, 각도가 FANUC 6가지 밖,
      * 첫 절입 · 최소 절입 · 정삭 여유 · 인선 R · X 여유 < 0(첫 절입은 0 이하 — μm 로 반올림해 0 이면), 회전수 1 미만(S0 이 되지 않게),
-     * 급수가 규격 · 내외경과 안 맞음
+     * 급수가 규격(종류 · 계열 — UNEF · UN 에는 1A · 1B 가 없다) · 내외경과 안 맞음.
+     * 관용 테이퍼는 더해서: 게이지 면 옮김이 게이지 공차(산) 밖, 테이퍼 낱말이 I · R 밖, 숫나사 끝 골 X ≤ 0(끝 Z 가 기준면에서 너무 멂)
      */
     BAD_INPUT,
 
@@ -67,6 +72,9 @@ enum class G76Warning {
     /** 내경 사이클 시작 X(안지름 최소 − 2 × X 여유)가 0 이하 */
     CLEARANCE_TOO_BIG,
 
+    /** 관용 테이퍼: 사이클 시작 Z 가 기준면(공작물 끝면) 안 — 시작점으로 급송하면 공작물에 닿는다 */
+    START_INSIDE,
+
     /* ↑ 멈춤 · ↓ 숫자와 함께 */
 
     /** 인선 R 이 커서 골이 규격 한계를 넘는다(숫나사 골지름 > d1 + es, 암나사 바깥지름 < D + EI) — 상대 나사 산봉우리에 닿을 수 있다 */
@@ -74,6 +82,12 @@ enum class G76Warning {
 
     /** 첫 절입 ≥ k − d — 거친 절입이 한 번(한 번에 k − d 까지) */
     ONE_ROUGH_PASS,
+
+    /**
+     * 관용 테이퍼: 나사 길이(기준면 − 끝 Z)가 규격 최소보다 짧다 — 숫나사 PT a + f · NPT L2, 암나사 PT l · NPT L1 + L3
+     * (게이지 면 옮김 s 산이면 s·P 더함 — [PipeSpec.extLen] · [PipeSpec.intLen])
+     */
+    SHORT_THREAD,
 }
 
 /**
@@ -176,7 +190,7 @@ object G76Calc {
     const val X_CLEAR_DEFAULT = 1.0
 
     const val MAX_PASSES = 1000
-    private const val MAX_RPM = 100_000.0
+    internal const val MAX_RPM = 100_000.0
 
     fun calc(i: G76Input): G76Result {
         val spec = i.spec
@@ -191,7 +205,7 @@ object G76Calc {
         val xClear = i.xClear ?: X_CLEAR_DEFAULT
         val reals = listOfNotNull(i.zStart, i.zEnd, i.rpm, target, i.tipR, minCut, allow, i.firstCut, xClear, spec.d, spec.pitch)
         val bad = reals.any { !it.isFinite() } || tooBig(i.zStart, i.zEnd, i.tipR, minCut, allow, i.firstCut, xClear) ||
-            cls.kind != spec.kind || cls.internal != i.inner || spec.d <= 0 || spec.pitch <= 0 ||
+            cls !in ThreadClass.choices(spec.series, i.inner) || spec.d <= 0 || spec.pitch <= 0 ||
             target !in 0.0..100.0 || m !in 1..99 || r !in 0..99 || a !in ANGLES ||
             (i.tipR ?: 0.0) < 0 || minCut < 0 || allow < 0 || xClear < 0 || i.firstCut <= 0 ||
             (i.rpm != null && (i.rpm < 1 || i.rpm > MAX_RPM))
@@ -307,15 +321,20 @@ object G76Calc {
      * 진입 · 물러남은 G41/G42 글과 같은 상수(`CompFrame`) — 공구를 바꾼 뒤 Z20. 에서 X 를 맞추고 Z 로 들어가며(꺾인 G00 이어도 공기), 끝나면 Z 만 물러난다.
      * M23 · M24 = 나사 끝 빼기 켬 · 끔(흔한 FANUC 계열 기계 M 정의 — 기계마다 다를 수 있음, 사용자 결정 11-04). G92 바로 앞 · 마지막 X 바로 뒤에 혼자 줄로 둔다
      * (사이클 블록에 M 을 같이 쓰면 오류 — S 4-93). M24 줄은 G92 모드 안이라 제어기는 그 줄에서 마지막 X 를 한 번 더 돈 뒤 끝 빼기를 끈다(FF 4.1.6).
-     * 안 쓰는 것: 주축 M03/M04 · 공구 호출. 나사산 각도 a · 면취량 r 은 G76 만의 낱말이다(G92 는 X 로 곧게 절입)
+     * 안 쓰는 것: 주축 M03/M04 · 공구 호출. 나사산 각도 a · 면취량 r 은 G76 만의 낱말이다(G92 는 X 로 곧게 절입).
+     * [taper] = 테이퍼 나사의 반경 차(관용 테이퍼 — [PipeThreadCalc]): 첫 G92 줄에만 `X…Z…` 뒤에 [word](`I` 기본 · `R`)로 쓴다
+     * (`G92X…Z…I-.625F…` — X · Z 처럼 모달이라 둘째 회부터 X 만). null 이면 곧은 나사 글 그대로다
      */
-    internal fun g92(rpm: Double?, startX: Double, zStart: Double, zEnd: Double, xs: List<Double>, lead: Double): List<String> {
+    internal fun g92(
+        rpm: Double?, startX: Double, zStart: Double, zEnd: Double, xs: List<Double>, lead: Double,
+        taper: Double? = null, word: Char = 'I',
+    ): List<String> {
         val zApp = CompFrame.approachZ(max(zStart, zEnd))
         return listOfNotNull(rpm?.let { "G97S${it.roundToLong()}" }) +
             "G0X${Fmt.word(startX)}Z${Fmt.word(zApp)}" +
             "Z${Fmt.word(zStart)}" +
             "M23" +
-            "G92X${Fmt.word(xs.first())}Z${Fmt.word(zEnd)}F${lead4(lead)}" +
+            "G92X${Fmt.word(xs.first())}Z${Fmt.word(zEnd)}${taper?.let { "$word${Fmt.word(it)}" } ?: ""}F${lead4(lead)}" +
             xs.drop(1).map { "X${Fmt.word(it)}" } +
             "M24" +
             "G0Z${Fmt.word(max(CompFrame.RETRACT_Z, zApp))}"
@@ -324,10 +343,10 @@ object G76Calc {
     private fun two(v: Int) = v.toString().padStart(2, '0')
 
     /** mm → μm 정수(5 는 올림, Fmt 와 같은 방식) */
-    private fun um(v: Double): Long = floor(abs(v) * 1000 + 0.5 + 1e-6).toLong() * (if (v < 0) -1 else 1)
+    internal fun um(v: Double): Long = floor(abs(v) * 1000 + 0.5 + 1e-6).toLong() * (if (v < 0) -1 else 1)
 
     /** 찍히는 0.001 값 그대로 */
-    private fun r3(v: Double): Double = Fmt.nc(v).toDouble()
+    internal fun r3(v: Double): Double = Fmt.nc(v).toDouble()
 
     /** 리드 F: 0.0001 까지, 끝 0 지움, 소수점은 꼭, 앞 0 뺌(1.5 → "1.5", 6 → "6.", 25.4/13 → "1.9538", 25.4/40 → ".635") */
     private fun lead4(v: Double): String {

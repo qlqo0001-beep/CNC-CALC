@@ -24,7 +24,8 @@ import kotlin.math.sqrt
  *
  * 파서 · 모달 · G00~G03 · `,C` `,R` · G04 · G28 · G30 · G50 S · G96/G97 · G98/G99 · M · T · S · F ·
  * G40/G41/G42(형식 A 모형, [GComp] — 이동 없는 시작 · 취소는 기계 설정 [MachineSetup.compStartup] 의 형식 A · B / C) · M98/M99 · 시간,
- * 고정 사이클 G90/G92/G94 · G70~G76(FANUC 2줄 형식 — 기하는 [GCycles], 블록 읽기 · 모달 · P~Q 는 여기 — 설계 문서 1.6 · 12절).
+ * 고정 사이클 G90/G92/G94 · G70~G76(FANUC 2줄 형식 — 기하는 [GCycles], 블록 읽기 · 모달 · P~Q 는 여기 — 설계 문서 1.6 · 12절),
+ * 다이스 헤드(DIE 공구의 G01 — 설계 19절, [Runner.dieCut]).
  */
 object GSim {
     /** 실행 블록 수 한도(M99 P · M98 L 고리) */
@@ -82,6 +83,8 @@ private data class Mv(
     val dogleg: Boolean = false,
     /** 이동 없는 G40 뒤 첫 직선 이동: 노즈가 이 자리(끝 법선)에서 끝점 − 팁 벡터로(null = 보통 G40 상태 이동) */
     val noseFrom: Pt? = null,
+    /** 다이스 헤드 깎기의 나사(MoveStep.die — [StepSrc.DIE_CUT]) */
+    val die: DieCut? = null,
     /** 이 이동 뒤에 내보낼 걸음(M · 상태) — 이동을 늦게 내보내도 시간 순을 지킨다. copy 는 같은 목록을 나눠 쓴다 */
     val after: MutableList<() -> Unit> = mutableListOf(),
 )
@@ -415,6 +418,7 @@ private class Runner(val input: SimInput) {
             else -> fail(IssueCode.WORD_NOT_USED, line, w)
         }
         if (b.has("R") && b.has(taperKey)) fail(IssueCode.WORD_NOT_USED, line, b.w(taperKey))
+        dieTool()?.let { fail(IssueCode.DIE_IN_CYCLE, line, gWord(b, g), listOf("G$g")) }
         for (w in b.words) if (w.key == "G") when (w.value.toInt()) {
             40 -> g4x = null
             41 -> g4x = Side.G41
@@ -489,6 +493,7 @@ private class Runner(val input: SimInput) {
         }
         b.w("T")?.let { fail(IssueCode.T_WITH_FEED, line, it) } // S 2-24: T 블록은 G00
         b.w("M")?.let { fail(IssueCode.CYCLE_BLOCK_TM, line, it) } // 사이클 앞 · 뒤 어디서 도는지 출처 없음
+        dieTool()?.let { fail(IssueCode.DIE_IN_CYCLE, line, gWord(b, g), listOf("G$g")) }
         // H 73 · H 77: 보정 중에 사이클을 부르지 않는다(G70~G73 의 보정은 P 블록에서)
         if (gc != null || g4x != null) fail(IssueCode.COMP_IN_CYCLE, line, gWord(b, g))
         noMoveCancelLine?.let { fail(IssueCode.COMP_CANCEL_NO_MOVE, line, args = listOf(it.toString())) }
@@ -1047,6 +1052,8 @@ private class Runner(val input: SimInput) {
             CornerReq(it.key == ",C", it.value, it)
         }
         if (mot >= 1 && dry == null) checkFeed(line) // 마른 실행(G71~G73 윤곽)은 P~Q 의 F · S 를 쓰지 않는다
+        val dieT = if (mot >= 1 && dry == null) dieTool() else null
+        val die = dieT?.let { dieCut(b, mot, start, tgt, it) }
         // 이동 없이 보정을 끈 뒤 첫 이동: 남은 벡터를 이 이동에서 지운다 — 노즈는 끝 법선 자리에서 이 블록 끝점(G40 상태)으로 곧게
         // (FF 5.4.4 그림 5.4.4(e) 204쪽 형식 A·B 'The remaining vectors are canceled with the next move command', F0 14.3.4 228쪽).
         // 직선(G00/G01)만 — 원호 · 모서리 · 곧바로 다시 보정 시작은 그 경로를 출처로 확인하지 못해 멈춘다
@@ -1083,9 +1090,40 @@ private class Runner(val input: SimInput) {
             else -> {}
         }
         val kind = if (mot == 0) MoveKind.RAPID else MoveKind.FEED
-        pushMove(Mv(seg, kind, line, b.unit, StepSrc.BLOCK, ctx(), mode, g, corner, noseFrom = fromNose))
+        pushMove(Mv(seg, kind, line, b.unit, if (dieT != null) StepSrc.DIE_CUT else StepSrc.BLOCK, ctx(), mode, g, corner, noseFrom = fromNose, die = die))
         cmd = tgt
         return true
+    }
+
+    /** 지금 보정 번호의 공구가 다이스 헤드(DIE)면 그 공구(설계 19절) */
+    private fun dieTool(): ToolOffset? = if (offset == 0) null else input.tools[offset]?.takeIf { it.kind == ToolKind.DIE }
+
+    /**
+     * 다이스 헤드(DIE 공구)의 이송 블록(설계 19절 — 고정형 자동 열림 머리: 공작물이 돌고 머리는 X0. 에 서서 −Z 로 들어간다). 시간은 보통 이송처럼 F 로(정확).
+     * 멈춤: X0. 에서 −Z 로 곧게가 아님(원호 · 시작이나 끝 |X| > [GCycles.TOL] · 끝 Z ≥ 시작 Z · 모서리 ,C ,R — DIE_PATH), 분당 이송 G98(DIE_NOT_PER_REV).
+     * 알림: F > 다이스 피치 P(DIE_FEED_OVER_PITCH), 공구 설정의 d · P 가 비었거나 나사 각이 60° · 55° 가 아님(DIE_DATA_MISSING — 경로만 그리고 null).
+     * 나사 모양은 공구 설정에서 온 모형([DieCut] — 리드는 F 가 아니라 P). 머리 열림 당김 · 몸통 충돌은 그리지 않는다.
+     */
+    private fun dieCut(b: Block, mot: Int, start: Pt, end: Pt, t: ToolOffset): DieCut? {
+        val line = b.line
+        if (mot >= 2) fail(IssueCode.DIE_PATH, line, gWord(b, mot))
+        if (abs(start.x) > GCycles.TOL || abs(end.x) > GCycles.TOL) fail(IssueCode.DIE_PATH, line, b.w("X") ?: b.w("U"))
+        if (end.z > start.z - 1e-9) fail(IssueCode.DIE_PATH, line, b.w("Z") ?: b.w("W"))
+        (b.w(",C") ?: b.w(",R"))?.let { fail(IssueCode.DIE_PATH, line, it) }
+        if (!perRev) fail(IssueCode.DIE_NOT_PER_REV, line, gWord(b, 98))
+        val d = t.dieDia
+        val p = t.diePitch
+        val a = t.threadDeg ?: 60.0
+        val fv = f
+        if (p != null && p > 0 && fv != null && fv > p + 1e-9) {
+            val fw = b.w("F")
+            issues += SimIssue(IssueCode.DIE_FEED_OVER_PITCH, line, fw?.cols, fw?.text, listOf(Fmt.nc(fv), Fmt.nc(p)))
+        }
+        if (d == null || p == null || d <= 0 || p <= 0 || (abs(a - 60) > 1e-9 && abs(a - 55) > 1e-9)) {
+            issues += SimIssue(IssueCode.DIE_DATA_MISSING, line, args = listOf(tool?.toString() ?: "", offset.toString()))
+            return null
+        }
+        return DieCut(d, p, a)
     }
 
     /**
@@ -1444,7 +1482,7 @@ private class Runner(val input: SimInput) {
         val tipNo = mv.gc?.tip ?: c.tipNo
         steps += MoveStep(
             mv.line, mv.unit, t, t + dur, mv.kind, tip, shift(tip, tv * -1.0), mv.cmdSeg ?: mv.seg, mv.src, mv.pass, mv.model,
-            c.tool, c.offset, r, tipNo, feed, c.perRev, c.css, c.sCmd, rpm0, rpm1,
+            c.tool, c.offset, r, tipNo, feed, c.perRev, c.css, c.sCmd, rpm0, rpm1, mv.die,
         )
         t += dur
         lastMoveIdx = steps.lastIndex

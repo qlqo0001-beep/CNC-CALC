@@ -20,7 +20,9 @@ import kotlin.math.sin
  * - 홈(GROOVE, 팁 1~4): 폭 w 직사각형 + 아래 두 모서리 노즈 R. 팁 3 = 왼쪽 아래 모서리 기준(몸통 위), 4 = Z 거울, 2 = X 거울, 1 = 둘 다.
  * - 나사(THREAD): 끝각 a(빈칸 60°)의 V, 끝 R. 팁 1 · 2 · 6 은 안쪽(꼭짓점 위), 그 밖은 바깥(꼭짓점 아래).
  * - 둥근(ROUND) · 바이트/홈의 팁 0 · 5~9: 노즈 원만.
- * 모양이 없으면(노즈 0 인 원 · 폭 없는 홈 …) 빈 목록 — 소재를 깎지 않는다.
+ * - 다이스 헤드(DIE): 모양 없음 — 래스터를 깎지 않는다(체이서 넷이 둘레를 한꺼번에 깎는 나사라 회전체로 빼면 산까지 없어진다. 나사 모양은
+ *   [StockSim] 이 공구 설정의 d · P · 각으로 그린다 — 설계 19절). 머리 몸통 충돌도 보지 않는다.
+ * 모양이 없으면(노즈 0 인 원 · 폭 없는 홈 · 다이스 …) 빈 목록 — 소재를 깎지 않는다.
  */
 object ToolShape {
     /** 노즈 원을 나누는 현 높이(mm) */
@@ -53,6 +55,7 @@ object ToolShape {
             }
             ToolKind.THREAD -> thread(tool.threadDeg ?: 60.0, r, tip)
             ToolKind.ROUND -> circle(r, tip)
+            ToolKind.DIE -> emptyList()
         }
     }
 
