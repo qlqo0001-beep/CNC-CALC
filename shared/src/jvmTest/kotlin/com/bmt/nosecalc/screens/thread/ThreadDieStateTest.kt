@@ -36,7 +36,8 @@ class ThreadDieStateTest {
     /**
      * [threadDie] + [threadDieStore]: M16×2(d 16 · P 2), P 군 Vc 8, Z 5 → −24, 끝면 빈칸 → 0, 비율 · 멈춤 · 물러남 빈칸 → 0.96 · 1 · 150, 플로트 1.5 · 목 2.5.
      * n = 1000 × 8 / (π × 16) = 159.155 → S159, 쓴 Vc = π × 16 × 159 / 1000 = 7.992212, F = 0.96 × 2 = 1.92, 분당 1.92 × 159 = 305.28,
-     * 시간 = 60 × (5 + 24) / 305.28 + 1 = 5.699686 + 1 = 6.699686 초, 당김 = 0.04 × (0 + 24) = 0.96 ≤ 플로트 1.5, 완전 나사 끝 = −24 + 2.5 × 2 = −19
+     * 시간 = 60 × (5 + 24) / 305.28 + 1 = 5.699686 + 1 = 6.699686 초, 당김 = 0.04 / 0.96 × (0 + 24) = 1.0 ≤ 플로트 1.5, 완전 나사 끝 = −24 + 2.5 × 2 = −19,
+     * 멈춤 동안 체이서 이동 = 159 / 60 × 1 × 2 = 5.3(1.0 + 5.3 ≥ 1.5 — 멈춤 동안 열림), 가장 깊은 체이서 끝 = −24 − 1.5 = −25.5
      */
     @Test
     fun dieInputFields() {
@@ -58,16 +59,18 @@ class ThreadDieStateTest {
         near(1.92, sol.feed, 1e-12, "이송")
         near(305.28, sol.feedPerMin, 1e-9, "분당 이송")
         near(6.699685535, sol.timeSec, 1e-8, "시간")
-        near(0.96, sol.floatPull, 1e-12, "당김")
+        near(1.0, sol.floatPull, 1e-12, "당김")
         near(-19.0, sol.fullThreadEndZ!!, 1e-12, "완전 나사 끝")
+        near(5.3, sol.dwellTravel, 1e-12, "멈춤 동안 이동")
+        near(-25.5, sol.chaserEndZ!!, 1e-12, "체이서 끝")
         assertEquals(listOf("G97S159", "G0X0.Z20.", "Z5.", "G1Z-24.F1.92", "G4U1.", "G0Z150."), sol.program)
-        // 결과 칸(화면 · 골든이 같이 씀)의 값: S · F · 분당 · 시간(소수 한 자리) · 당김 · 완전 나사 끝
-        assertEquals(listOf("S159", "F1.92", "305.3", "6.7", "0.960", "Z-19."), dieResultCells(s, d, sol).map { it.second })
-        // 회전수를 넣으면 Vc 대신(200), 끝면 Z 를 넣으면 그 값(−2 → 당김 0.04 × 22 = 0.88)
+        // 결과 칸(화면 · 골든이 같이 씀)의 값: S · F · 분당 · 시간(소수 한 자리) · 당김 · 완전 나사 끝 · 멈춤 동안 이동 · 체이서 끝
+        assertEquals(listOf("S159", "F1.92", "305.3", "6.7", "1.000", "Z-19.", "5.300", "Z-25.5"), dieResultCells(s, d, sol).map { it.second })
+        // 회전수를 넣으면 Vc 대신(200), 끝면 Z 를 넣으면 그 값(−2 → 당김 0.04 / 0.96 × 22 = 0.916667)
         s.set(ThreadField.RPM, "200")
         s.set(ThreadField.Z_REF, "-2")
         assertEquals(200.0, s.dieInput(d).rpm)
-        near(0.88, DieHeadCalc.calc(s.dieInput(d)).solution!!.floatPull, 1e-12, "끝면 −2 의 당김")
+        near(22.0 / 24, DieHeadCalc.calc(s.dieInput(d)).solution!!.floatPull, 1e-12, "끝면 −2 의 당김")
         assertEquals(200L, DieHeadCalc.calc(s.dieInput(d)).solution!!.rpm)
     }
 
@@ -265,12 +268,12 @@ class ThreadDieStateTest {
             assertEquals(setOf(ThreadField.Z_END, ThreadField.Z_REF) to emptySet(), dieFlagged(s, d, w))
             assertTrue(dieWarningText(w[0], s, d).startsWith("공작물 끝면(Z-24.)이 가공 목표점보다 작거나 같아"))
         }
-        // 플로트 0.5 < 당김 0.96 → 노랑, 숫자 든 글
+        // 플로트 0.5 < 당김 1.0 → 노랑, 숫자 든 글
         case { it.set(DieField.FLOAT, null, "0.5") }.let { (s, d, w) ->
             assertEquals(listOf(DieWarning.FLOAT_EXCEEDED), w)
             val sol = DieHeadCalc.calc(s.dieInput(d)).solution
             assertEquals(
-                "끝 당김 길이(0.960 mm)가 플로트(0.500 mm)보다 깁니다 — G1 끝 전에 머리가 열려 나사가 덜 깎일 수 있습니다. 이송 비율을 1 에 가깝게 하거나 플로트를 확인하세요.",
+                "끝 당김 길이(1.000 mm)가 플로트(0.500 mm)보다 깁니다 — G1 끝 전에 머리가 열려 나사가 덜 깎일 수 있습니다. 이송 비율을 1 에 가깝게 하거나 플로트를 확인하세요.",
                 dieWarningText(w[0], s, d, sol),
             )
         }
@@ -294,9 +297,13 @@ class ThreadDieStateTest {
         assertEquals(listOf("3ER20UN · VARDEX", "16 ER 20 UN · Carmex"), s.insertChoices.map(::insertText))
         s.pickInsert(s.insertChoices[0])
         assertEquals("3ER20UN · VARDEX", s.shownInsert?.let(::insertText))
-        // UN 줄은 날 끝 R 이 카탈로그에 없다 → 인선 R 칸은 그대로(빈칸), 'R 은 직접'
+        // UN 줄은 날 끝 R 이 카탈로그에 없다 → 인선 R 칸은 그대로(빈칸), 비우면 규격 기본 R(숫나사 H/6)
         assertEquals("", s.value(ThreadField.TIP_R))
-        assertEquals("날 끝 R 은 카탈로그에 없음 — 인선 R 은 직접 넣으세요 · IC 3/8\" · 출처: VARDEX Thread Turning 카탈로그 26쪽", insertNote(s))
+        assertEquals(
+            "날 끝 R 은 카탈로그에 없음 — 비우면 규격 기본 R(숫나사 H/6), 인서트에 적힌 R 이 있으면 넣으세요. 풀 프로파일이라 산봉우리도 만듦" +
+                "(소재가 목표보다 크면 첫 회가 깊어짐) · IC 3/8\" · 출처: VARDEX Thread Turning 카탈로그 26쪽",
+            insertNote(s),
+        )
         // 내경으로 바꾸면 그 줄이 맞지 않아 안 보이고, 돌아오면 다시 보인다
         s.switchInner(true)
         assertEquals(listOf("3IR20UN · VARDEX", "16 IR 20 UN · Carmex"), s.insertChoices.map(::insertText))
@@ -338,8 +345,10 @@ class ThreadDieStateTest {
         val s = threadDie()
         // 범위 안은 줄 안 바꿈 빈칸(좁은 칸에서 '10 ~' 로 갈리지 않게)
         assertEquals("구조용강 10\u00A0~\u00A025", s.shownDieSpeed?.speed?.let(::speedShort))
+        // 원문 'N/m²' 는 N/mm² 의 오식으로 보인다는 풀이, 이 줄의 S 범위(Ø16: 1000 × 10/(π × 16) = 198.9 → S199, 25 → 497.4 → S497)
         assertEquals(
-            "Vc 는 'P 강' 에 저장. 출처: WAGNER Operating Manual ZR 26-I 29쪽 (14.1, Table 4) · 원문 'Construction steel up to 500 N/m²'.",
+            "Vc 는 'P 강' 에 저장. 출처: WAGNER Operating Manual ZR 26-I 29쪽 (14.1, Table 4) · 원문 'Construction steel up to 500 N/m²' (N/mm² 의 오식으로 보임)." +
+                " 이 줄은 Vc 10 ~ 25 → S199 ~ 497 (Ø16).",
             dieSpeedNote(s),
         )
         assertEquals("Landis Standard Stock & Non Stock Chasers 1쪽", dieSourceText("LAN_CH", "1쪽"))

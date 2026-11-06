@@ -496,7 +496,7 @@
     },
     {
      "material": "Construction steel up to 500 N/m²",
-     "materialKo": "구조용강 (원문 '500 N/m² 이하')",
+     "materialKo": "구조용강 (원문 '500 N/m² 이하' — N/mm² 의 오식으로 보임)",
      "threadType": null,
      "isoGroup": null,
      "chaserMaterial": null,
@@ -508,7 +508,7 @@
     },
     {
      "material": "Construction steel over 500 N/m²",
-     "materialKo": "구조용강 (원문 '500 N/m² 초과')",
+     "materialKo": "구조용강 (원문 '500 N/m² 초과' — N/mm² 의 오식으로 보임)",
      "threadType": null,
      "isoGroup": null,
      "chaserMaterial": null,

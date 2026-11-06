@@ -25,7 +25,11 @@ import kotlin.math.abs
  *    공차는 다루지 않음). 절입표 · 회차 X 는 곧은 나사와 같다([G76Calc.schedule], 회차 X = 끝 X ± 2(k − 누적 깊이)).
  *  - G92 테이퍼 I(또는 R) = 사이클 시작 Z 쪽 반경 − 끝 반경 = ∓(시작 Z − 끝 Z)/32(지름 차 L/16 의 반 — 숫 − · 암 +).
  *    FANUC S 4-96 · 시뮬레이터 `GCycles.single` 의 A′ = (A.z, B.x + R)와 같은 부호. 시작 X: 숫나사 = 끝 Z 바깥지름(가장 굵은 곳) + 2 × 여유,
- *    암나사 = 끝 Z 안지름(가장 가는 곳) − 2 × 여유. 정가공(Z−)만 — 왼나사 테이퍼는 범위 밖.
+ *    암나사 = 끝 Z 안지름(가장 가는 곳) − 2 × 여유 — 날 끝 기준이다(암나사는 날이 안쪽으로 빠지는 만큼 바 뒤가 맞은편 벽으로 다가간다).
+ *    정가공(Z−)만 — 왼나사 테이퍼는 범위 밖.
+ *  - 소재: 나사 전 테이퍼(숫 바깥지름 · 암 안지름 = E ± h)를 앞 공정에서 깎아 두었다고 본다(k = h, Δd 는 그 테이퍼에서). 곧은 소재면 작은 쪽(숫나사) ·
+ *    입구 쪽(암나사) 첫 회가 그 차만큼 깊다.
+ *  - 나사 길이 검사(기준면 − 끝 Z ≥ 규격 최소)는 끝 Z 까지를 센다 — G92 앞 M23(나사 끝 빼기)을 쓰면 끝의 빼기 길이(기계 설정)만큼 완전 나사가 짧다.
  */
 
 /** 관용 테이퍼 나사 종류 */
@@ -173,7 +177,7 @@ data class PipeInput(
     val spec: PipeSpec? = null,
     /** 기준면 Z(공작물 끝면 — 숫나사 관 끝 · 암나사 입구 면). null = 0 */
     val zRef: Double? = null,
-    /** 사이클 시작점 Z(기준면 밖이어야 함) */
+    /** 사이클 시작점 Z(기준면 밖이어야 함 — 같으면 멈춤, 2 × 피치 안이면 [G76Warning.START_NEAR]) */
     val zStart: Double? = null,
     /** 나사 끝 Z */
     val zEnd: Double? = null,
@@ -258,7 +262,8 @@ object PipeThreadCalc {
         val firstUm = G76Calc.um(i.firstCut)
         if (firstUm < 1) return stop(G76Warning.BAD_INPUT)
         if (i.zStart <= i.zEnd) return stop(G76Warning.Z_ORDER)
-        if (i.zStart < zRef - EPS) return stop(G76Warning.START_INSIDE)
+        // 같음도 멈춘다 — 시작 Z 에서 X 로 급송 절입하므로 기준면(끝면) 위면 날이 끝 모서리를 문다
+        if (i.zStart <= zRef + EPS) return stop(G76Warning.START_INSIDE)
 
         val p = spec.pitch
         val h = spec.h
@@ -293,6 +298,7 @@ object PipeThreadCalc {
         val warnings = buildList {
             if (firstUm / 1000.0 >= k - d - EPS) add(G76Warning.ONE_ROUGH_PASS)
             if (threadLen < needLen - EPS) add(G76Warning.SHORT_THREAD)
+            if (i.zStart - zRef < 2 * p - EPS) add(G76Warning.START_NEAR)
         }
         val xs = passes.map { it.xDia }
         val g92 = G76Calc.g92(i.rpm, startX, i.zStart, i.zEnd, xs, p, taper, i.taperWord)

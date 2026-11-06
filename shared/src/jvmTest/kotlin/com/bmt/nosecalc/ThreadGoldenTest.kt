@@ -122,7 +122,7 @@ class ThreadGoldenTest {
             line("경고 ${r.warnings}")
             r.warnings.forEach { line("  ${dieWarningText(it, s, d, sol)}") }
             if (s.bad().isNotEmpty() || dieBad(s, d).isNotEmpty()) line("범위 밖 ${s.bad()} ${dieBad(s, d)}")
-            line("카탈로그 줄 ${s.shownDieSpeed?.speed?.let(::speedShort)} · ${dieSpeedNote(s)}")
+            line("카탈로그 줄 ${s.shownDieSpeed?.speed?.let(::speedShort)} · ${dieSpeedNote(s, sol)}")
             s.spec?.let { sp ->
                 val rows = chaserRows(sp)
                 rows.forEach { line("체이서 ${it.maker} · ${it.size} · ${it.thread} · 목 ${it.throats} · 한 벌 ${it.set} · ${it.sourceId} ${it.page}") }

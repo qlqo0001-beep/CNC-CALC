@@ -534,10 +534,10 @@
 |---|---|
 | `ThreadScreen.kt` | `ThreadScreen()` — 외경/내경 → (파란 안내 · 빨간 멈춤) → '스레드 및 소재 설정'(접이 '고급 공차 및 인선 설정' 포함) → (노란 확인 · 역가공 안내) → 'G76 파라미터 입력 및 분석' → 회차별 분석 → 나사 단면 → NC(탭 G92 다회 · G76 두 줄, G92 면 다듬질 블록 카드). 종류가 PT · NPT 면 같은 틀에 `PipeThreadBody`, 가공 방식이 다이스 헤드면 `DieThreadBody`(다이스 조건 저장소 `DieStore(app.store)` 를 화면을 열 때 만든다). 고르기 시트 `ThreadSheet`(UN 사이즈 시트 안 `UnSizePicker` · 인서트 · 다이스 카탈로그 `DieSpeedSheet`), 결과 칸 `resultCells`(골든도 씀), 도움말 `ThreadHelp`(일곱 묶음) |
 | `thread/ThreadModel.kt` | `ThreadField`(숫자칸 12 · `advanced` · `straight` · `pipe` — 관용 테이퍼의 기준면 Z · 게이지 면 옮김은 맨 끝), 종류 `ThreadFamily`(METRIC · UN · PT · NPT — `kind` · `pipeKind`), `Pick`(고르기 시트 9 — 인서트 `INSERT` · 다이스 카탈로그 `DIE_SPEED`), NC 탭 `ThreadNc`(G92 · G76), 가공 방식 `ThreadMethod`(BITE · DIE), `ThreadState`(+ Saver · `family` · `pipe` · `unGroup` · `taperWord` · `nc` · `method` · `insert` · `dieSpeed` · `input` · `pipeInput` · `dieInput(DieStore)` · `fields` · `missing` · `bad` · `flagged` · `placeholder` · `switchInner` · `switchFamily` · `pickSize` · `pickSpec` · `pickPipe` · `dieAllowed` · `isDie` · `pickMethod` · `hasInsertData` · `insertChoices` · `shownInsert` · `pickInsert` · `shownDieSpeed`), 20UN 위로 올릴 크기 `COMPANY_20UN` · 묶음 격자 `unSizes`, G76 낱말 `g76Words` · `NcWord` · `ncText`, 경고 글 `threadWarningText`, 칸 안내 `fieldHint`, 종류 글 `kindText` · `kindNote` · `pitchLabel` · `standardText`, 급수 이름 `classText` · `classNote`, 게이지 공차 산 글 `turnsText`, 최소 나사 길이 이름 `needLenName`, 인서트 글 `insertKey` · `insertMaker` · `insertText` · `insertSource`, 카탈로그 줄 열쇠 `dieSpeedKey`, 다이스 칸 안내 `dieFieldHint` |
-| `thread/PipeCards.kt` | 관용 테이퍼 화면 `PipeThreadBody`(설정 · 게이지 공차 상자 `GaugeTolBox` · 게이지 표 `GaugeTableBox` · 고급 설정의 인서트 칸 · G92 절입 및 분석 · 분석표 · 단면 · G92 테이퍼 NC + I/R 고르기 · 다듬질), 사이즈 시트 `PipeSizeSheet`, 결과 칸 `pipeResultCells` · 게이지 표 줄 `gaugeRows`(골든도 씀) |
-| `thread/DieCards.kt` | 다이스 헤드 화면 `DieThreadBody`(다이스 헤드 설정 · 다이스 조건 · 다이스 결과 · 카탈로그 안내 · 체이서 규격 `ChaserCard` · NC), 카탈로그 시트 `DieSpeedSheet`, 글 함수(골든도 씀) `dieWarningText` · `dieMissing` · `dieFlagged` · `dieResultCells` · `chaserRows`(`ChaserRow`) · `chaserSources` · `dieSpeedNote` · `dieSourceText` · `speedShort` · `speedRange` · `dieCatalogFeedText`, 칸 글 `dieFieldLabel` · `diePlaceholder` · `dieConditionHint` |
+| `thread/PipeCards.kt` | 관용 테이퍼 화면 `PipeThreadBody`(설정 · 게이지 공차 상자 `GaugeTolBox` · 게이지 표 `GaugeTableBox` · 고급 설정의 인서트 칸 · G92 절입 및 분석 · 분석표 · 단면 · G92 테이퍼 NC + I/R 고르기 · 다듬질), 사이즈 시트 `PipeSizeSheet`, 결과 칸 `pipeResultCells` · 결과 아래 글 `pipeResultNote` · 게이지 표 줄 `gaugeRows`(골든도 씀) |
+| `thread/DieCards.kt` | 다이스 헤드 화면 `DieThreadBody`(다이스 헤드 설정 · 다이스 조건 · 다이스 결과 · 카탈로그 안내 · 체이서 규격 `ChaserCard` · NC), 카탈로그 시트 `DieSpeedSheet`, 글 함수(골든도 씀) `dieWarningText` · `dieMissing` · `dieFlagged` · `dieResultCells` · `chaserRows`(`ChaserRow`) · `chaserSources` · `dieSpeedNote` · `dieSourceText` · `speedShort` · `speedRange` · `dieCatalogFeedText` · NC 설명 `dieNcExplain`, 칸 글 `dieFieldLabel` · `diePlaceholder` · `dieConditionHint` |
 | `thread/DieStore.kt` | 다이스 조건 칸 `DieField`(VC · RATIO · DWELL · RETRACT · FLOAT · THROAT), 회사 값 저장소 `DieStore(KeyValueStore)`(`value` · `num` · `set` · 열쇠 `DieStore.key` — `thread/die/…`, Vc 는 소재마다), 범위 밖 칸 `dieBad` |
-| `thread/ThreadParts.kt` | 맨 위 카드 `ThreadTopCard`(외경/내경 + 가공 방식), 인서트 칸 `InsertField` · 아래 한 줄 `insertNote`, 드롭다운 칸 `ChoiceField`(onClick = null 이면 읽기만) · 시트 `ChoiceSheet` · `ChoiceRow` · 칩 격자 `ChoiceGrid`, 색 띠 칸 `Marked`, 접이 막대 `AdvancedBar`(이름 바꿈 가능), G76 한 줄 `G76Line`, 결과 칸 `ResultCell`, 분석표 `PassTable`, 자동 값 색 `AppColors.threadAuto()` |
+| `thread/ThreadParts.kt` | 맨 위 카드 `ThreadTopCard`(외경/내경 + 가공 방식), 인서트 칸 `InsertField` · 아래 한 줄 `insertNote` · 노란 띠 `insertBoreWarning`, 드롭다운 칸 `ChoiceField`(onClick = null 이면 읽기만) · 시트 `ChoiceSheet` · `ChoiceRow` · 칩 격자 `ChoiceGrid`, 색 띠 칸 `Marked`, 접이 막대 `AdvancedBar`(이름 바꿈 가능), G76 한 줄 `G76Line`, 결과 칸 `ResultCell`, 분석표 `PassTable`, 자동 값 색 `AppColors.threadAuto()` |
 | `thread/ThreadArt.kt` | 나사 단면 `ThreadSection(SectionGeom)`, 자료 `sectionGeom(inner, sol)` · 관용 테이퍼 `pipeSectionGeom(kind, inner, spec, sol)`, 날 단면 반폭 `toolHalfWidth`, 관용 테이퍼 모양 `PipeProfile` · 윤곽 `pipeOutline` · 홈 반폭 `pipeGrooveHalf` |
 
 - 순서 · 이름은 원본 08 그대로(글은 한글): ② 외경 가공 (OD) / 내경 가공 (ID) → ③ 스레드 및 소재 설정 → ④ 공차 급수 상자(이름 + 오른쪽 드롭다운 '2A (보통)') →
@@ -561,24 +561,27 @@
 - **관용 테이퍼(PT · NPT) 꼴**(`thread/PipeCards.kt` — 사용자 결정 2026-11-05: G92 테이퍼로만): 같은 틀(외경/내경 · 안내 · 키패드 묶음 · 결과 띠 '시작' · '끝')에
   '관용 테이퍼 나사 설정'(게이지 공차 상자 → [나사 종류][사이즈 — PT 는 칸 이름 '사이즈 (R)' · '사이즈 (Rc)', 값은 크기만(1/4 칸에서 잘리지 않게)][산수 — 읽기만 칸: 옅은 바탕 · ⌄ 없음] → [Z축 시작점][회전수] → Vc 한 줄
   (게이지 면 바깥지름) → [가공 목표점][기준면 Z — 자리표시 '기본 0'] → '고급 설정' 막대(표 '옮김 0산') → [게이지 면 옮김][정삭 횟수] / [최소 절입][정삭 여유] / [시작 X 여유] →
-  게이지 표 상자 → 접힌 설명) → (노랑) → 'G92 절입 및 분석'([첫 절입][절입 횟수] · 결과 격자 8칸) → 회차별 분석(아래 글 '시작 Z 쪽 X = 끝 X + 2I') → 나사 단면 →
-  NC(`NcCard` 하나 — 머리 아래 '테이퍼 낱말 [I | R]' 청록 Segmented(`ThreadState.taperWord`, 처음 I) + 한 줄 'FANUC 0i 의 기본은 R, I 는 Series 10/11 형식',
+  게이지 표 상자 → 접힌 설명) → (노랑) → 'G92 절입 및 분석'([첫 절입][절입 횟수] · 결과 격자 8칸 · 아래 글 `pipeResultNote` — 나사 전 테이퍼를 앞 공정에서 깎아 둔다는 가정과
+  곧은 소재면 작은 쪽 · 입구 쪽 첫 회 깊이, M23 끝 빼기 몫(2026-11-06)) → 회차별 분석(아래 글 '시작 Z 쪽 X = 끝 X + 2I') → 나사 단면 →
+  NC(`NcCard` 하나 — 머리 아래 '테이퍼 낱말 [I | R]' 청록 Segmented(`ThreadState.taperWord`, 처음 I) + 한 줄 'FANUC 0i 의 기본은 R, I 는 Series 10/11 형식 · 안 받으면 알람이나 곧은 나사',
   칩 '회차 n줄 = 분석표' · 'I 는 첫 줄만 (모달)' · '관용 테이퍼 나사는 G92 로만' · 'M03/M04 · 공구 호출 없음') + 다듬질 블록 카드. G76 탭 · 방향 · 각도 · 면취량 · 소재 ·
   공차 목표 · 인선 R 은 없다(`ThreadField.straight` · `pipe` — `bad()` 는 그 종류 화면의 칸만 본다). 칸 묶음: Z축 시작점 → 회전수 → 가공 목표점 → 기준면 Z →
   (고급) 게이지 면 옮김 → 정삭 횟수 → 최소 절입 → 정삭 여유 → 시작 X 여유 → 첫 절입. 키패드 결과 한 줄은 테이퍼 낱말이 든 첫 G92 줄.
-  경고 글은 곧은 나사와 같은 `threadWarningText`(관용 테이퍼면 `pipe` 결과를 넘김): START_INSIDE(시작 Z 와 기준면 Z 숫자) · SHORT_THREAD(나사 길이 · 규격 최소 · 이름
-  a + f / l / L2 / L1 + L3 · 고칠 목표 Z — 0.001 내림) · Z_ORDER(정가공만) · BAD_INPUT(게이지 면 옮김 ± 공차 산, 칸이 다 맞으면 '숫나사 끝 골 X 가 0 이하').
-  빨간 테: START_INSIDE → Z축 시작점 · 기준면 Z, 끝 골 X ≤ 0 → 가공 목표점 · 기준면 Z. SHORT_THREAD 는 노랑이라 테를 두르지 않는다(빨강 = 멈춤).
+  경고 글은 곧은 나사와 같은 `threadWarningText`(관용 테이퍼면 `pipe` 결과를 넘김): START_INSIDE(시작 Z 와 기준면 Z 숫자 — 같음도) · SHORT_THREAD(나사 길이 · 규격 최소 · 이름
+  a + f / l / L2 / L1 + L3 · 고칠 목표 Z — 0.001 내림 · M23 끝 빼기 몫) · START_NEAR(노랑 — 기준면에서 2 × 피치 안, 2P 값) · Z_ORDER(정가공만) · BAD_INPUT(게이지 면 옮김 ± 공차 산, 칸이 다 맞으면 '숫나사 끝 골 X 가 0 이하').
+  빨간 테: START_INSIDE → Z축 시작점 · 기준면 Z, 끝 골 X ≤ 0 → 가공 목표점 · 기준면 Z. SHORT_THREAD · START_NEAR 는 노랑이라 테를 두르지 않는다(빨강 = 멈춤).
+  게이지 공차 상자의 규격 이름(`standardText`)은 NPT 가 'ANSI B2.1 (ASME B1.20.1)'(값의 출처가 H28 1957 = ANSI B2.1 — 2026-11-06).
 - **가공 방식**(2026-11-06 — 사용자 결정 2026-11-05): 맨 위 카드 `ThreadTopCard` 의 외경/내경 아래 [바이트 (G92 · G76) | 다이스 헤드](파랑 48dp · 15sp).
   좁은 폰 · 큰 글꼴(글꼴 배율로 나눈 폭 300dp 미만)은 [바이트 | 다이스 헤드](360dp 130% 에서 '바이트 (G92 · …' 로 잘렸다). `ThreadState.dieAllowed`(M · UN 외경)일 때만 보이고, 내경 · 관용 테이퍼로 가면 `switchInner` · `switchFamily` 가 바이트로 돌린다(되살린 상태도 같은 규칙, `pickMethod` 는
   못 고르는 상태에서 다이스를 받지 않는다). 고름은 화면 상태(Saver).
 - **다이스 헤드 꼴**(`thread/DieCards.kt`): 같은 틀(키패드 묶음 · 결과 띠 '시작' · '끝' = X0 · 시작 Z / G1 끝 Z)에
   '다이스 헤드 설정'([나사 종류][사이즈][피치] → [가공 소재] 한 줄 전체 → [Z축 시작점][회전수 — 자리표시 'Vc 로'] → [가공 목표점][끝면 Z — `ThreadField.Z_REF` 칸을
   이름만 바꿔 씀(관용 테이퍼의 기준면 Z 와 같은 값 — 공작물 끝면), 빈칸 0] → 규격 한 줄) → '다이스 조건'([절삭 속도 Vc][이송 비율] → [카탈로그 절삭 속도 (Wagner)] 한 줄
-  전체(360dp 130% 에서 반 칸이면 범위가 '구조용강 1…' 로 잘렸다) → 출처 한 줄 → [끝 멈춤][물러남 Z] → [플로트][체이서 목 산수] → 접힌 설명) → (노랑) →
-  '다이스 결과'(6칸 — S · F · 분당 이송 · 가공 시간 (초) · 끝 당김 길이 · 완전 나사 끝) → (파랑: 비율 ≠ 1 이면 카탈로그는 이송 = 피치) →
+  전체(360dp 130% 에서 반 칸이면 범위가 '구조용강 1…' 로 잘렸다) → 출처 한 줄(`dieSpeedNote` — 원문 풀이 · 그 줄 범위의 S · 지금 Vc 가 범위 밖이면 그 말) →
+  [끝 멈춤][물러남 Z] → [플로트][체이서 목 산수] → 접힌 설명) → (노랑 — 비율 > 1 · 당김 > 플로트 · 완전 나사 없음 · 끝 멈춤 동안 안 열림 · 시작이 끝면에서 피치 안) →
+  '다이스 결과'(8칸 — S · F · 분당 이송 · 가공 시간 (초) · 끝 당김 길이 · 완전 나사 끝 · 멈춤 동안 체이서 이동 · 체이서 끝 (가장 깊게)) → (파랑: 비율 ≠ 1 이면 카탈로그는 이송 = 피치) →
   '체이서 규격 (카탈로그)'(`chaserRows` — 줄마다 '제조사 · 체이서 크기' + 오른쪽 나사(13sp 굵게), 아래 '목 · 한 벌 n개 · 쪽'(한 벌 · 쪽은 줄 안 바꿈 빈칸),
-  끝에 출처 한 줄 `chaserSources`(쪽을 모음)) → NC `NcCard`('다이스 헤드 프로그램').
+  끝에 출처 한 줄 `chaserSources`(쪽을 모음)) → NC `NcCard`('다이스 헤드 프로그램' — 설명 `dieNcExplain`: 체이서 끝은 멈춤 동안 플로트까지 더 들어감 · 다음 공작물 전에 머리를 닫음).
   `ThreadState.fields` 는 다이스면 Z 시작 · 회전수 · Z 끝 · 끝면 Z 넷이라 `bad()` 도 그 넷만 본다. 다이스 조건 칸은 `dieBad`(계산기 BAD_INPUT 규칙 — 피치와 엮인 F 0 ·
   목 길이 한도도 그 칸에서). 회전수 S 가 한도 밖인 것처럼 지름과 엮인 BAD_INPUT 은 칸을 짚지 않고 글이 회전수를 말한다. Z 순서 멈춤은 계산기 차례로 까닭 하나
   (시작 ≤ 끝 · 진입 Z20 < 시작 · 물러남 < 시작 · 끝면 > 시작 · 끝면 ≤ 끝)를 골라 글 · 빨간 테를 정한다(`dieFlagged`). 칸 묶음: Z축 시작점 → 회전수 → 가공 목표점 → 끝면 Z →
@@ -589,7 +592,9 @@
 - **인서트**: 바이트 고급 설정의 [공차 목표][인선 R] 아래 한 줄 전체 `InsertField`(관용 테이퍼는 [시작 X 여유] 아래) — `ThreadState.insertChoices` =
   `ThreadInserts.match(내외, 꼴(UN · BSPT(PT) · NPT), 산수)`, 미터는 자료가 없어 칸이 없다(`hasInsertData`), 맞는 줄이 없으면 읽기만 '맞는 줄 없음' + 자료 범위 한 줄.
   시트 줄 '3ER20UN · VARDEX' · '16 ER 20 UN · Carmex'(아래 왼손 이름 · 날 끝 R · 출처). 고르면(`pickInsert`) 카탈로그 R 이 있으면 곧은 나사의 인선 R 칸에 넣고
-  (관용 테이퍼는 인선 R 칸이 없어 이름 · 풀 프로파일만), 아래 한 줄 `insertNote`('날 끝 R 은 카탈로그에 없음 — 인선 R 은 직접 넣으세요 · IC 3/8" · 출처 …').
+  (관용 테이퍼는 인선 R 칸이 없어 이름 · 풀 프로파일만), 아래 한 줄 `insertNote`('날 끝 R 은 카탈로그에 없음 — 비우면 규격 기본 R(숫나사 H/6), 인서트에 적힌 R 이 있으면
+  넣으세요. 풀 프로파일이라 산봉우리도 만듦(…) · IC 3/8" · 출처 …'). 내경이면 시트 줄에 '최소 구멍 Ø…'(`ThreadInsert.minBore`)과 `ThreadState.insertBore`(곧은 나사 =
+  급수 안지름 최소, 관용 = 끝 Z 안지름)가 더 작을 때 '(구멍 Ø… 에 안 들어감)', 칸 아래 노란 `WarningBanner` `insertBoreWarning`(구멍 < 최소 구멍 · (구멍 − 최소 구멍)/2 < 시작 X 여유).
   고른 인서트는 열쇠(`insertKey`)로 저장하고 지금 내외 · 종류 · 산수에 맞을 때만 보인다(`shownInsert`).
 - **도움말** `ThreadHelp` 일곱 묶음: 나사 고르기 · 값 넣기 · 고급 공차 및 인선 설정(+ 인서트) · G92 · G76 프로그램과 분석 · 관용 테이퍼 나사 (PT · NPT) · 다이스 헤드 · 경고(+ 다이스).
 - 칸 묶음('다음'): Z축 시작점 → 회전수 → 가공 목표점 → (고급 설정을 펴면 공차 목표 → 인선 R → 정삭 횟수 → 최소 절입 → 정삭 여유 → 시작 X 여유) → 첫 절입.

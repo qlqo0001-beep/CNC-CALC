@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bmt.nosecalc.calc.Cutting
 import com.bmt.nosecalc.calc.DieHeadCalc
 import com.bmt.nosecalc.calc.DieHeadCatalog
 import com.bmt.nosecalc.calc.DieResult
@@ -50,12 +51,14 @@ import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.AppType
 import com.bmt.nosecalc.ui.theme.Space
 import kotlinx.serialization.json.JsonPrimitive
+import kotlin.math.roundToLong
 
 /**
  * 다이스 헤드 나사 화면 — 사용자 결정 2026-11-05: 고정형 자동 열림(공작물이 돌고 머리는 서 있다), M · UN 숫나사만, 나사 화면 안의 가공 방식.
  * 외경/내경 + 가공 방식(맨 위 카드) → (파란 안내 · 빨간 멈춤) → '다이스 헤드 설정'(종류 · 사이즈 · 피치 · 가공 소재 · Z 시작 · 회전수(직접) · Z 끝 · 끝면 Z) →
  * '다이스 조건'(회사 값 — Vc(소재마다) + 카탈로그 줄 · 이송 비율 · 끝 멈춤 · 물러남 Z · 플로트 · 목 산수, 고치면 바로 [DieStore] 에 저장) → (노란 확인) →
- * '다이스 결과'(S · F · 분당 이송 · 시간 · 끝 당김 길이 · 완전 나사 끝) → (파랑: 카탈로그는 이송 = 피치) → '체이서 규격 (카탈로그)' → NC '다이스 헤드 프로그램'(깎는 구간만).
+ * '다이스 결과'(S · F · 분당 이송 · 시간 · 끝 당김 길이 · 완전 나사 끝 · 멈춤 동안 체이서 이동 · 가장 깊은 체이서 끝) → (파랑: 카탈로그는 이송 = 피치) →
+ * '체이서 규격 (카탈로그)' → NC '다이스 헤드 프로그램'(깎는 구간만).
  * 계산은 [DieHeadCalc], 틀(키패드 묶음 · 결과 띠)은 곧은 나사 화면과 같다
  */
 @Composable
@@ -146,7 +149,7 @@ internal fun DieThreadBody(s: ThreadState, die: DieStore, chain: FieldChain, onP
                     ChoiceField("카탈로그 절삭 속도 (Wagner)", hit?.speed?.let { "${speedShort(it)} m/min" } ?: "재질 고르기", Modifier.fillMaxWidth(), empty = hit == null) {
                         onPick(Pick.DIE_SPEED)
                     }
-                    Text(keepWords(dieSpeedNote(s)), Modifier.padding(start = 2.dp), style = AppType.caption, color = c.textMuted)
+                    Text(keepWords(dieSpeedNote(s, sol)), Modifier.padding(start = 2.dp), style = AppType.caption, color = c.textMuted)
                     Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                         dieField(DieField.DWELL, Modifier.weight(1f))
                         dieField(DieField.RETRACT, Modifier.weight(1f))
@@ -162,12 +165,12 @@ internal fun DieThreadBody(s: ThreadState, die: DieStore, chain: FieldChain, onP
                         "절삭 속도 Vc 는 가공 소재마다 따로 저장되고 처음은 빈칸입니다(회전수 칸에 넣으면 Vc 대신 그 값). " +
                         "이송 비율 · 끝 멈춤 · 물러남 Z 의 빈칸은 처음 값 ${plain(DieHeadCalc.RATIO_DEFAULT)} · ${plain(DieHeadCalc.DWELL_DEFAULT)} 초 · " +
                         "Z${plain(DieHeadCalc.RETRACT_Z_DEFAULT)} 입니다(사용자가 정한 처음 값). 플로트(머리의 축 방향 여유)와 체이서 목 산수는 카탈로그에 값이 없어 " +
-                        "빈칸이 처음이고, 넣으면 끝 당김 길이 · 완전 나사를 견줍니다.",
+                        "빈칸이 처음이고, 넣으면 끝 당김 길이 · 끝 멈춤 동안 열림 · 완전 나사를 견줍니다.",
                     Modifier.padding(top = 4.dp),
                 )
             }
 
-            // 숫자와 함께 나온 확인 경고(비율 > 1 · 당김 > 플로트 · 완전 나사 없음)
+            // 숫자와 함께 나온 확인 경고(비율 > 1 · 당김 > 플로트 · 완전 나사 없음 · 멈춤 동안 안 열림 · 시작이 끝면에 가까움)
             if (sol != null) result.warnings.forEach { WarningBanner(dieWarningText(it, s, die, sol), level = WarnLevel.Warn) }
 
             AppCard(if (sol != null) anchor.fillMaxWidth() else Modifier.fillMaxWidth(), padding = Space.cardPad) {
@@ -193,10 +196,7 @@ internal fun DieThreadBody(s: ThreadState, die: DieStore, chain: FieldChain, onP
                 val retract = die.num(DieField.RETRACT, s.material) ?: DieHeadCalc.RETRACT_Z_DEFAULT
                 NcCard(
                     sol.program,
-                    "다이스 헤드는 X0.(머리가 공작물 중심)에서 Z 로만 움직입니다. Z20. 에서 Z축 시작점으로 급송한 뒤 G1 로 가공 목표점까지 깎고, " +
-                        "끝 멈춤(G4 U — 초)으로 머리가 열리게 한 뒤 Z${Fmt.word(retract)} 로 물러납니다. F 는 회전당 이송(G99)이고 피치 × 이송 비율입니다. " +
-                        "끝 당김 길이만큼 체이서가 G1 끝보다 더 들어가니 실제 나사 끝은 그만큼 척 쪽입니다. " +
-                        "G97 S 는 계산한 회전수입니다. 공구 호출(T) · 주축 회전(M03) · 냉각은 기계에 맞게 앞에 넣습니다.",
+                    dieNcExplain(retract),
                     programName = "다이스 헤드 프로그램",
                     facts = listOf(
                         NcFact("깎는 구간만 — T · M03 없음"),
@@ -226,9 +226,9 @@ internal fun diePlaceholder(f: DieField): String = when (f) {
 internal fun dieConditionHint(f: DieField): String = when (f) {
     DieField.VC -> "다이스 절삭 속도 (호칭 지름에서) — 회사 값, 가공 소재마다 저장 · 회전수 칸을 넣으면 쓰지 않음"
     DieField.RATIO -> "이송 F = 피치 × 비율 · 비우면 ${plain(DieHeadCalc.RATIO_DEFAULT)} — 카탈로그(Wagner · Landis)는 1 (F = 피치)"
-    DieField.DWELL -> "G1 끝에서 멈추는 시간 (G4 U, 초) — 머리가 열리게 · 비우면 ${plain(DieHeadCalc.DWELL_DEFAULT)} · 0 이면 G4 줄 없음"
+    DieField.DWELL -> "G1 끝에서 멈추는 시간 (G4 U, 초) — 머리가 열리게 · 비우면 ${plain(DieHeadCalc.DWELL_DEFAULT)} · 0 이면 G4 줄 없음(안 열린 채 물러나 노란 경고)"
     DieField.RETRACT -> "끝나고 급송으로 물러나는 Z (G0 Z) · 비우면 ${plain(DieHeadCalc.RETRACT_Z_DEFAULT)}"
-    DieField.FLOAT -> "머리의 축 방향 여유 (카탈로그에 값 없음) — 넣으면 끝 당김 길이가 넘을 때 노란 경고"
+    DieField.FLOAT -> "머리의 축 방향 여유 · 열림 행정 (카탈로그에 값 없음) — 넣으면 당김이 넘을 때 · 멈춤 동안 못 열 때 노란 경고, 체이서 끝 = 끝 Z − 플로트"
     DieField.THROAT -> "체이서 목(모따기) 산수 — 넣으면 완전 나사 끝 Z = 끝 Z + 목 산수 × 피치"
 }
 
@@ -336,7 +336,38 @@ internal fun dieWarningText(w: DieWarning, s: ThreadState, d: DieStore, sol: Die
         "완전 나사 끝${end}이 공작물 끝면(Z$face) 이상입니다 — 나사 길이가 체이서 목 길이(목 산수 × 피치) 이하라 완전 나사가 생기지 않습니다. " +
             "가공 목표점과 목 산수를 확인하세요."
     }
+    DieWarning.DWELL_SHORT -> {
+        val fl = d.num(DieField.FLOAT, s.material)
+        val noG4 = sol != null && sol.program.none { it.startsWith("G4") }
+        if (fl == null || noG4) {
+            "끝 멈춤이 0 이라(G4 줄 없음) 머리가 열리기 전에 급송(G0 물러남)으로 닫힌 체이서를 끌어냅니다 — 나사 끝이 뜯기거나 머리가 상할 수 있습니다. " +
+                "끝 멈춤을 넣으세요(처음 값 ${plain(DieHeadCalc.DWELL_DEFAULT)} 초)."
+        } else {
+            val pull = sol?.let { Fmt.fixed3(it.floatPull) } ?: ""
+            val move = sol?.let { Fmt.fixed3(it.dwellTravel) } ?: ""
+            "끝 당김 길이 $pull mm 에 끝 멈춤 동안 체이서 이동 $move mm 를 더해도 플로트 ${Fmt.fixed3(fl)} mm 에 못 미쳐, 머리가 열리기 전에 급송(G0 물러남)으로 " +
+                "닫힌 체이서를 끌어낼 수 있습니다 — 끝 멈춤을 늘리거나 플로트를 확인하세요."
+        }
+    }
+    DieWarning.START_NEAR -> {
+        val zs = s.num(ThreadField.Z_START)?.let(Fmt::nc) ?: ""
+        val face = Fmt.nc(s.num(ThreadField.Z_REF) ?: 0.0)
+        val p = s.spec?.let { Fmt.fixed3(it.pitch) } ?: ""
+        "Z축 시작점(Z$zs)이 공작물 끝면(Z$face)에서 피치($p)보다 가깝습니다 — 급송 끝이 끝면에 붙어 체이서 목이 급송으로 닿을 수 있습니다. " +
+            "Z축 시작점을 끝면에서 더 띄우세요 (예: 끝면 + 5)."
+    }
 }
+
+/**
+ * 다이스 NC 카드 설명 — 체이서 끝은 G1 끝에서 당김만큼 들어가 있고 끝 멈춤 동안 머리가 열릴 때까지(플로트까지) 더 들어간다, 자동 열림 머리는 다음 공작물 전에 닫는다
+ */
+internal fun dieNcExplain(retract: Double): String =
+    "다이스 헤드는 X0.(머리가 공작물 중심)에서 Z 로만 움직입니다. Z20. 에서 Z축 시작점으로 급송한 뒤 G1 로 가공 목표점까지 깎고, " +
+        "끝 멈춤(G4 U — 초)으로 머리가 열리게 한 뒤 Z${Fmt.word(retract)} 로 물러납니다. F 는 회전당 이송(G99)이고 피치 × 이송 비율입니다. " +
+        "체이서는 G1 끝에서 이미 끝 당김 길이만큼 더 들어가 있고, 끝 멈춤 동안에도 제 리드로 더 들어가다가 머리 앞쪽이 플로트(열림 행정)까지 끌려 나가야 열립니다 — " +
+        "실제 나사 끝(체이서 끝)은 가장 많이 G1 끝보다 플로트만큼 척 쪽입니다(결과의 '체이서 끝'). 어깨 가까이 끝낼 때는 이 몫과 머리 앞면을 보고 가공 목표점을 잡으세요. " +
+        "자동 열림 머리는 다음 공작물 전에 닫아 둡니다(닫기 레버 등 — 잊으면 다음 회는 열린 채 지나가 나사가 생기지 않음). " +
+        "G97 S 는 계산한 회전수입니다. 공구 호출(T) · 주축 회전(M03) · 냉각은 기계에 맞게 앞에 넣습니다."
 
 /** 비율이 1 이 아닐 때의 파랑 안내 한 줄(경고 아님 — 계산기 [DieHeadCalc.CATALOG_FEED_NOTE] 와 같은 뜻) */
 internal fun dieCatalogFeedText(): String = "카탈로그(Wagner · Landis)는 이송 = 피치(비율 1)로 씁니다 — 처음 값 ${plain(DieHeadCalc.RATIO_DEFAULT)}\u00A0은 사용자가 정한 값입니다."
@@ -350,11 +381,17 @@ internal fun dieResultCells(s: ThreadState, d: DieStore, sol: DieSolution): List
         Triple("이송 F", "F${Fmt.word(sol.feed)}", "피치 ${spec?.let { Fmt.fixed3(it.pitch) } ?: ""} × ${plain(i.ratio)}"),
         Triple("분당 이송", oneDecimal(sol.feedPerMin), "mm/min = S × F"),
         Triple("가공 시간 (초)", oneDecimal(sol.timeSec), "G1 + 끝 멈춤 ${plain(i.dwell)} 초"),
-        Triple("끝 당김 길이", Fmt.fixed3(sol.floatPull), if (sol.floatPull < 0) "밀림 (비율 > 1)" else "끝면부터 (1 − 비율)배"),
+        Triple("끝 당김 길이", Fmt.fixed3(sol.floatPull), if (sol.floatPull < 0) "밀림 (비율 > 1)" else "끝면부터 (1 − 비율)/비율 배"),
         Triple(
             "완전 나사 끝",
             sol.fullThreadEndZ?.let { "Z${Fmt.nc(it)}" } ?: "—",
             if (sol.fullThreadEndZ == null) "목 산수를 넣으면" else "끝 Z + 목 ${plain(i.throatThreads ?: 0.0)}산 × 피치",
+        ),
+        Triple("멈춤 동안 체이서 이동", Fmt.fixed3(sol.dwellTravel), "S/60 × 멈춤 × 피치"),
+        Triple(
+            "체이서 끝 (가장 깊게)",
+            sol.chaserEndZ?.let { "Z${Fmt.nc(it)}" } ?: "—",
+            if (sol.chaserEndZ == null) "플로트를 넣으면" else "끝 Z − 플로트 ${plain(i.floatTravel ?: 0.0)}",
         ),
     )
 }
@@ -387,11 +424,34 @@ internal fun dieSourceText(sourceId: String, page: String): String {
     return "$named $p"
 }
 
-/** Vc 칸 아래 한 줄: 고른 카탈로그 줄의 출처(안 골랐으면 고르는 법) · Vc 가 어느 소재 열쇠에 저장되는지 */
-internal fun dieSpeedNote(s: ThreadState): String {
+/**
+ * Vc 칸 아래 한 줄: 고른 카탈로그 줄의 출처(안 골랐으면 고르는 법) · Vc 가 어느 소재 열쇠에 저장되는지 · 원문 풀이(한글 이름의 '— …로 보임') ·
+ * 사이즈가 있으면 그 줄 범위의 S(호칭 지름에서), 풀렸으면 지금 쓴 Vc 가 범위 밖인지
+ */
+internal fun dieSpeedNote(s: ThreadState, sol: DieSolution? = null): String {
     val at = "Vc 는 '${s.material?.let(::materialText) ?: "소재 고르지 않음"}' 에 저장"
     val hit = s.shownDieSpeed ?: return "$at. 카탈로그는 Wagner 설명서 두 권의 범위 — ISO 군 표시가 없어 재질 글로 고릅니다."
-    return "$at. 출처: ${dieSourceText(hit.speed.sourceId, hit.speed.page)} · 원문 '${hit.speed.material}'."
+    val sp = hit.speed
+    val gloss = sp.materialKo.substringAfter(" — ", "").removeSuffix(")").let { if (it.isEmpty()) "" else " ($it)" }
+    val rpm = s.spec?.let { " 이 줄은 Vc ${speedRange(sp)} → ${speedRpm(sp, it.d)} (Ø${plain(it.d)})." } ?: ""
+    val lo = sp.vcMin
+    val hi = sp.vcMax
+    val out = sol?.takeIf { (lo != null && it.vcUsed < lo - 1e-9) || (hi != null && it.vcUsed > hi + 1e-9) }
+        ?.let { " 지금 Vc ${oneDecimal(it.vcUsed)}(S${it.rpm})는 이 범위 밖입니다." } ?: ""
+    return "$at. 출처: ${dieSourceText(sp.sourceId, sp.page)} · 원문 '${sp.material}'$gloss.$rpm$out"
+}
+
+/** 카탈로그 범위의 회전수 글(호칭 지름 d — 계산기와 같은 반올림): "S199 ~ 497" · 최소만 있으면 "S299 이상" */
+private fun speedRpm(sp: DieSpeed, d: Double): String {
+    fun n(vc: Double) = Cutting.rpm(vc, d).roundToLong()
+    val lo = sp.vcMin
+    val hi = sp.vcMax
+    return when {
+        lo != null && hi != null -> "S${n(lo)}\u00A0~\u00A0${n(hi)}"
+        lo != null -> "S${n(lo)} 이상"
+        hi != null -> "S${n(hi)} 이하"
+        else -> "—"
+    }
 }
 
 /** 체이서 규격 표의 한 줄(제조사 · 체이서 크기 · 나사(꼴 · 산수/피치) · 목 · 한 벌 · 출처 id · 쪽) */

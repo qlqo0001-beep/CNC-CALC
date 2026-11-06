@@ -34,7 +34,8 @@ class DieHeadCalcTest {
     /**
      * 1/2-20 UNF(d 12.7 · P 1.27), Vc 12 m/min: n = 1000 × 12 / (π × 12.7) = 300.765 → S301, 쓴 Vc = π × 12.7 × 301 / 1000 = 12.009366.
      * F = 0.96 × 1.27 = 1.2192 → F1.219. 길이 4 − (−22) = 26, 분당 이송 1.2192 × 301 = 366.9792,
-     * 시간 = 60 × 26 / 366.9792 + 1 = 4.250922 + 1 = 5.250922 초, 당김 (1 − 0.96) × 26 = 1.04. 비율 ≠ 1 → 카탈로그 안내.
+     * 시간 = 60 × 26 / 366.9792 + 1 = 4.250922 + 1 = 5.250922 초. 당김: 회전 수 = 26 / (0.96 × 1.27) = 21.325, 회전마다 0.04 × 1.27 →
+     * 0.04 / 0.96 × 26 = 26 / 24 = 1.083333. 멈춤 동안 체이서 이동 = 301 / 60 × 1 × 1.27 = 6.371167. 비율 ≠ 1 → 카탈로그 안내.
      */
     @Test
     fun unfHandNumbers() {
@@ -45,8 +46,10 @@ class DieHeadCalcTest {
         near(1.2192, s.feed, 1e-12, "이송")
         near(366.9792, s.feedPerMin, 1e-9, "분당 이송")
         near(5.2509221231067045, s.timeSec, 1e-9, "시간")
-        near(1.04, s.floatPull, 1e-12, "당김")
+        near(26.0 / 24, s.floatPull, 1e-12, "당김")
         assertNull(s.fullThreadEndZ)
+        near(6.371166666666667, s.dwellTravel, 1e-12, "멈춤 동안 이동")
+        assertNull(s.chaserEndZ)
         assertEquals(listOf("G97S301", "G0X0.Z20.", "Z4.", "G1Z-22.F1.219", "G4U1.", "G0Z150."), s.program)
         assertEquals(DieHeadCalc.CATALOG_FEED_NOTE, s.note)
         assertEquals("카탈로그(Wagner · Landis)는 이송을 피치와 같게(리드와 맞게) 쓴다", s.note)
@@ -55,7 +58,8 @@ class DieHeadCalcTest {
     /**
      * M10×1.5, 회전수 직접 320, 비율 0.98 · 멈춤 0.5 · 물러남 Z120 · 진입 Z15 · Z3 → −17 · 목 2.5산 · 플로트 1:
      * 쓴 Vc = π × 10 × 320 / 1000 = 10.053096, F = 0.98 × 1.5 = 1.47, 분당 470.4, 시간 = 60 × 20 / 470.4 + 0.5 = 2.551020 + 0.5 = 3.051020,
-     * 당김 0.02 × 20 = 0.4 ≤ 1(경고 없음), 완전 나사 끝 = −17 + 2.5 × 1.5 = −13.25.
+     * 당김 0.02 / 0.98 × 20 = 20 / 49 = 0.408163 ≤ 1(경고 없음), 완전 나사 끝 = −17 + 2.5 × 1.5 = −13.25,
+     * 멈춤 동안 이동 = 320 / 60 × 0.5 × 1.5 = 4 → 0.408 + 4 ≥ 플로트 1(멈춤 동안 열림), 가장 깊은 체이서 끝 = −17 − 1 = −18.
      */
     @Test
     fun metricDirectRpmAndOptions() {
@@ -69,8 +73,10 @@ class DieHeadCalcTest {
         near(1.47, s.feed, 1e-12, "이송")
         near(470.4, s.feedPerMin, 1e-9, "분당 이송")
         near(3.0510204081632653, s.timeSec, 1e-9, "시간")
-        near(0.4, s.floatPull, 1e-12, "당김")
+        near(20.0 / 49, s.floatPull, 1e-12, "당김")
         near(-13.25, s.fullThreadEndZ!!, 1e-12, "완전 나사 끝")
+        near(4.0, s.dwellTravel, 1e-12, "멈춤 동안 이동")
+        near(-18.0, s.chaserEndZ!!, 1e-12, "체이서 끝")
         assertEquals(listOf("G97S320", "G0X0.Z15.", "Z3.", "G1Z-17.F1.47", "G4U.5", "G0Z120."), s.program)
         // 회전수와 Vc 를 둘 다 넣으면 회전수(Vc 99 는 n = 99000 / (π × 10) = 3151 이 될 값)
         assertEquals(320L, ok(DieHeadCalc.calc(i.copy(vc = 99.0))).rpm)
@@ -96,27 +102,50 @@ class DieHeadCalcTest {
         assertEquals("G1Z-9.F.871", f28.program[3])
     }
 
-    /** 멈춤 0 이면 G4 줄 없음, 시간은 깎는 시간만(60 × 26 / 366.9792 = 4.250922). 0.0004 초도 찍으면 0 이라 없음 */
+    /**
+     * 멈춤 0 이면 G4 줄 없음, 시간은 깎는 시간만(60 × 26 / 366.9792 = 4.250922). 0.0004 초도 찍으면 0 이라 없음.
+     * G4 가 없으면 머리가 열리기 전에 급송으로 물러나므로 노란 DWELL_SHORT(플로트를 안 넣었을 때 — 멈춤 동안 이동 0)
+     */
     @Test
     fun zeroDwellDropsG4() {
-        val s = ok(DieHeadCalc.calc(base.copy(dwell = 0.0)))
+        val s = ok(DieHeadCalc.calc(base.copy(dwell = 0.0)), listOf(DieWarning.DWELL_SHORT))
         assertEquals(listOf("G97S301", "G0X0.Z20.", "Z4.", "G1Z-22.F1.219", "G0Z150."), s.program)
         near(4.2509221231067045, s.timeSec, 1e-9, "시간")
-        assertEquals(5, ok(DieHeadCalc.calc(base.copy(dwell = 0.0004))).program.size)
+        assertEquals(0.0, s.dwellTravel)
+        assertEquals(5, ok(DieHeadCalc.calc(base.copy(dwell = 0.0004)), listOf(DieWarning.DWELL_SHORT)).program.size)
         assertEquals("G4U.001", ok(DieHeadCalc.calc(base.copy(dwell = 0.001))).program[4])
+    }
+
+    /**
+     * 끝 멈춤 동안 머리가 열리나(DWELL_SHORT): base(S301 · P1.27 · 당김 26/24 = 1.083333) 멈춤 1초 → 이동 301/60 × 1.27 = 6.371167.
+     * 플로트 7.5 > 1.083333 + 6.371167 = 7.454500 → 경고(체이서 끝 −22 − 7.5 = −29.5), 플로트 7.45 → 없음.
+     * 멈춤 0 · 플로트 2 → 1.083 < 2 라 경고, 멈춤 0 · 플로트 = 당김(26/24) → G1 끝에서 바로 열려 없음, 멈춤 0 · 플로트 1 → G1 도중 열림(FLOAT_EXCEEDED 만)
+     */
+    @Test
+    fun dwellOpensHead() {
+        val long = ok(DieHeadCalc.calc(base.copy(floatTravel = 7.5)), listOf(DieWarning.DWELL_SHORT))
+        near(-29.5, long.chaserEndZ!!, 1e-12, "체이서 끝")
+        ok(DieHeadCalc.calc(base.copy(floatTravel = 7.45)))
+        ok(DieHeadCalc.calc(base.copy(dwell = 0.0, floatTravel = 2.0)), listOf(DieWarning.DWELL_SHORT))
+        ok(DieHeadCalc.calc(base.copy(dwell = 0.0, floatTravel = 26.0 / 24)))
+        ok(DieHeadCalc.calc(base.copy(dwell = 0.0, floatTravel = 1.0)), listOf(DieWarning.FLOAT_EXCEEDED))
+        // 멈춤 0.25 초: 이동 301/60 × 0.25 × 1.27 = 1.592792 → 1.083333 + 1.592792 = 2.676125, 플로트 2.7 → 경고 · 2.67 → 없음
+        ok(DieHeadCalc.calc(base.copy(dwell = 0.25, floatTravel = 2.7)), listOf(DieWarning.DWELL_SHORT))
+        ok(DieHeadCalc.calc(base.copy(dwell = 0.25, floatTravel = 2.67)))
     }
 
     /** 숫자와 함께 내는 경고: 비율 > 1 · 당김 > 플로트 · 완전 나사 없음 — 각각 경계(같으면 경고 없음) */
     @Test
     fun warningsWithNumbers() {
-        // 비율 1.02: 당김 = (1 − 1.02) × 26 = −0.52(밀림), 안내도 함께
+        // 비율 1.02: 당김 = (1 − 1.02)/1.02 × 26 = −26/51 = −0.509804(밀림), 안내도 함께
         val over = ok(DieHeadCalc.calc(base.copy(ratio = 1.02)), listOf(DieWarning.RATIO_OVER_ONE))
-        near(-0.52, over.floatPull, 1e-12, "밀림")
+        near(-26.0 / 51, over.floatPull, 1e-12, "밀림")
         assertEquals(DieHeadCalc.CATALOG_FEED_NOTE, over.note)
         assertEquals("G1Z-22.F1.295", over.program[3]) // 1.02 × 1.27 = 1.2954
-        // 플로트 0.5 < 당김 1.04 → 경고, 플로트 = 1.04 → 없음
+        // 플로트 0.5 · 1.08 < 당김 26/24 = 1.083333 → 경고, 플로트 = 26/24 → 없음
         ok(DieHeadCalc.calc(base.copy(floatTravel = 0.5)), listOf(DieWarning.FLOAT_EXCEEDED))
-        ok(DieHeadCalc.calc(base.copy(floatTravel = 1.04)))
+        ok(DieHeadCalc.calc(base.copy(floatTravel = 1.08)), listOf(DieWarning.FLOAT_EXCEEDED))
+        ok(DieHeadCalc.calc(base.copy(floatTravel = 26.0 / 24)))
         // 비율 > 1 이면 밀림이라 플로트 경고는 없다
         ok(DieHeadCalc.calc(base.copy(ratio = 1.02, floatTravel = 0.1)), listOf(DieWarning.RATIO_OVER_ONE))
         // 목 3산 × 1.27 = 3.81: Z2 → −1.5 면 완전 나사 끝 −1.5 + 3.81 = 2.31 ≥ 2 → 경고, Z2 → −1.81 이면 끝 = 2.0(같음) → 경고, −1.82 면 1.99 → 없음
@@ -134,26 +163,29 @@ class DieHeadCalcTest {
 
     /**
      * 끝면 Z(체이서가 물리기 시작하는 곳)를 넣으면 당김 · 완전 나사 검사를 거기부터: base(Z4 → −22)에 끝면 0 →
-     * 당김 = (1 − 0.96) × (0 − (−22)) = 0.88(시작 Z 부터면 1.04), 시간 · 글은 그대로(G1 은 시작 Z 부터).
-     * 플로트 0.9 ≥ 0.88 → 경고 없음(시작 Z 부터면 1.04 > 0.9 로 경고), 0.87 → 경고.
+     * 당김 = 0.04 / 0.96 × (0 − (−22)) = 22 / 24 = 0.916667(시작 Z 부터면 26 / 24 = 1.083333), 시간 · 글은 그대로(G1 은 시작 Z 부터).
+     * 플로트 0.92 ≥ 0.916667 → 경고 없음(시작 Z 부터면 1.083 > 0.92 로 경고), 0.91 → 경고.
+     * 시작 Z − 끝면 < 피치 1.27 이면 START_NEAR: 끝면 4 − 1.27 = 2.73 은 같아서 없음, 2.74 · 4(시작 Z 와 같음) 는 경고.
      * 목 3산 × 1.27 = 3.81: 끝 −3.8 이면 완전 나사 끝 = 0.01 ≥ 끝면 0 → 경고(시작 Z 4 부터면 없음), 끝 −3.82 면 −0.01 → 없음.
      */
     @Test
     fun faceZ() {
         val face = base.copy(zFace = 0.0)
         val s = ok(DieHeadCalc.calc(face))
-        near(0.88, s.floatPull, 1e-12, "당김")
+        near(22.0 / 24, s.floatPull, 1e-12, "당김")
         near(5.2509221231067045, s.timeSec, 1e-9, "시간")
         assertEquals(listOf("G97S301", "G0X0.Z20.", "Z4.", "G1Z-22.F1.219", "G4U1.", "G0Z150."), s.program)
-        ok(DieHeadCalc.calc(face.copy(floatTravel = 0.9)))
-        ok(DieHeadCalc.calc(base.copy(floatTravel = 0.9)), listOf(DieWarning.FLOAT_EXCEEDED))
-        ok(DieHeadCalc.calc(face.copy(floatTravel = 0.87)), listOf(DieWarning.FLOAT_EXCEEDED))
+        ok(DieHeadCalc.calc(face.copy(floatTravel = 0.92)))
+        ok(DieHeadCalc.calc(base.copy(floatTravel = 0.92)), listOf(DieWarning.FLOAT_EXCEEDED))
+        ok(DieHeadCalc.calc(face.copy(floatTravel = 0.91)), listOf(DieWarning.FLOAT_EXCEEDED))
         val short = face.copy(zEnd = -3.8, throatThreads = 3.0)
         near(0.01, ok(DieHeadCalc.calc(short), listOf(DieWarning.SHORT_THREAD)).fullThreadEndZ!!, 1e-12, "완전 나사 끝")
         ok(DieHeadCalc.calc(short.copy(zFace = null)))
         ok(DieHeadCalc.calc(short.copy(zEnd = -3.82)))
-        // 끝면 = 시작 Z 는 된다(시작 Z 부터와 같은 값), 시작 Z 보다 밖이면 시작점으로 급송할 때 닿고, 끝 Z 이하면 깎을 나사가 없다
-        near(1.04, ok(DieHeadCalc.calc(base.copy(zFace = 4.0))).floatPull, 1e-12, "끝면 = 시작 Z")
+        // 끝면 = 시작 Z 는 된다(시작 Z 부터와 같은 값 — 급송 끝이 끝면이라 노란 START_NEAR), 시작 Z 보다 밖이면 시작점으로 급송할 때 닿고, 끝 Z 이하면 깎을 나사가 없다
+        near(26.0 / 24, ok(DieHeadCalc.calc(base.copy(zFace = 4.0)), listOf(DieWarning.START_NEAR)).floatPull, 1e-12, "끝면 = 시작 Z")
+        ok(DieHeadCalc.calc(base.copy(zFace = 2.73)))
+        ok(DieHeadCalc.calc(base.copy(zFace = 2.74)), listOf(DieWarning.START_NEAR))
         stops(DieWarning.Z_ORDER, base.copy(zFace = 4.5))
         stops(DieWarning.Z_ORDER, base.copy(zFace = -22.0))
         ok(DieHeadCalc.calc(base.copy(zFace = -21.9)))

@@ -78,4 +78,30 @@ class ThreadInsertsJsonTest {
         assertTrue(ThreadInserts.match(true, InsertForm.NPT, 19.0).isEmpty())
         assertTrue(ThreadInserts.ALL.all { it.ic == "3/8\"" && it.fullProfile })
     }
+
+    /**
+     * 내경 줄의 최소 구멍(가장 작은 홀더의 Min. Bore): VARDEX 는 3IR20UN 줄 minBore.holderMinBore 글의 첫 수(인치) × 25.4 — 8쪽 추천표의 가장 작은 홀더
+     * (holderForSmallest NVR050-3)이고 다른 내경 줄의 추천 홀더도 같은 -3 홀더라 모두 같은 값, Carmex 는 16 IR 20 UN 줄 minBore.holders 의 가장 작은 값(mm,
+     * 나머지 내경 줄은 'see' 로 같은 포켓 16 홀더). 외경 줄은 null
+     */
+    @Test
+    fun minBoreFromJson() {
+        fun mb(designation: String) = rows.single { it.str("designation") == designation }.getValue("minBore").jsonObject
+        val vdxIn = Regex("^([0-9.]+) in").find(mb("3IR20UN").str("holderMinBore"))!!.groupValues[1].toDouble() * 25.4
+        assertTrue(mb("3IR20UN").str("holderForSmallest").startsWith("NVR050-3"))
+        val cmx = mb("16 IR 20 UN").getValue("holders").jsonArray.minOf { it.jsonObject.str("minBore").toDouble() }
+        assertEquals(17.018, vdxIn, 1e-9)
+        assertEquals(16.0, cmx)
+        for ((r, a) in rows.zip(ThreadInserts.ALL)) {
+            val what = r.str("designation")
+            if (!a.internal) {
+                assertNull(a.minBore, what)
+                continue
+            }
+            val want = if (a.maker == "Carmex") cmx else vdxIn
+            assertEquals(want, a.minBore!!, 1e-9, what)
+            // Carmex 다른 내경 줄은 16 IR 20 UN 의 홀더를 가리킨다
+            if (a.maker == "Carmex" && what != "16 IR 20 UN") assertTrue(mb(what).str("see").startsWith("16 IR 20 UN"), what)
+        }
+    }
 }

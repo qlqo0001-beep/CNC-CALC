@@ -157,7 +157,8 @@ internal fun PipeThreadBody(s: ThreadState, chain: FieldChain, onPick: (Pick) ->
                             "(${if (s.inner) "암나사가 지름 s·P/16 굵어짐" else "숫나사가 지름 s·P/16 가늘어짐"}), 게이지 공차(표의 ± 산)를 넘으면 멈춥니다. " +
                             "정삭 횟수 m · 최소 절입 Δdmin · 정삭 여유 d 는 곧은 나사 G92 와 같은 절입표 규칙입니다(n 회 깊이 = Δd × √n). " +
                             "시작 X 여유는 사이클 시작점을 끝 Z 의 ${if (s.inner) "안지름에서 안쪽으로" else "바깥지름에서 바깥으로"} 띄우는 반경 거리입니다 — " +
-                            "나사 안에서 ${if (s.inner) "가장 가는" else "가장 굵은"} 곳이라 테이퍼 전체에서 공구가 닿지 않습니다. " +
+                            "나사 안에서 ${if (s.inner) "가장 가는" else "가장 굵은"} 곳이라 테이퍼 전체에서 날 끝은 닿지 않습니다" +
+                            (if (s.inner) "(날 끝 기준 — 날이 안쪽으로 빠지는 만큼 바 뒤가 맞은편 벽으로 다가가니, 여유는 (구멍 − 홀더 최소 구멍)/2 보다 작게. 인서트를 고르면 넘을 때 노란 안내). " else ". ") +
                             "인서트는 산봉우리까지 함께 만드는 풀 프로파일을 가정합니다(골 X = 끝 Z 피치경 ∓ h).",
                         Modifier.padding(top = 4.dp),
                     )
@@ -187,6 +188,8 @@ internal fun PipeThreadBody(s: ThreadState, chain: FieldChain, onPick: (Pick) ->
                             }
                         }
                     }
+                    // 소재 가정(나사 전 테이퍼를 앞 공정에서) · M23 끝 빼기 몫
+                    Text(keepWords(pipeResultNote(s, sol)), Modifier.padding(top = 10.dp), style = AppType.caption, color = c.textMuted)
                 }
             }
 
@@ -234,7 +237,10 @@ internal fun PipeThreadBody(s: ThreadState, chain: FieldChain, onPick: (Pick) ->
                             )
                         }
                         Text(
-                            keepWords("처음 값은 I. FANUC 0i 의 기본은 R 이고, I 는 Series 10/11 형식일 때입니다 — 기계 설명서로 확인하세요."),
+                            keepWords(
+                                "처음 값은 I. FANUC 0i 의 기본은 R 이고, I 는 Series 10/11 형식일 때입니다 — 기계 설명서로 확인하세요. " +
+                                    "기계가 이 낱말을 받지 않으면 알람이 나거나 테이퍼 없이 곧게 깎이니, 첫 공작물은 싱글 블록 · 그래픽으로 테이퍼를 확인하세요.",
+                            ),
                             Modifier.padding(top = 4.dp),
                             style = AppType.caption,
                             color = c.textMuted,
@@ -246,7 +252,8 @@ internal fun PipeThreadBody(s: ThreadState, chain: FieldChain, onPick: (Pick) ->
                     "관용 테이퍼 나사는 G92 로만 깎습니다(G76 은 쓰지 않음). G92 는 X 줄마다 나사를 한 번 깎고 시작점으로 돌아옵니다. X 줄은 회차별 분석표의 X(끝 Z 쪽) 그대로이고, " +
                         "첫 G92 줄의 $w 는 사이클 시작 Z 쪽 반경 − 끝 반경 = (시작 Z − 끝 Z)/32 입니다(${if (s.inner) "암나사 +" else "숫나사 −"}). " +
                         "$w 는 X · Z 처럼 모달이라 둘째 줄부터는 X 만 씁니다. " +
-                        "G92 앞 M23 · 마지막 X 뒤 M24 는 나사 끝 빼기 켬 · 끔입니다 — 흔한 FANUC 계열 기계 M 정의라 기계마다 다를 수 있습니다. " +
+                        "G92 앞 M23 · 마지막 X 뒤 M24 는 나사 끝 빼기 켬 · 끔입니다 — 흔한 FANUC 계열 기계 M 정의라 기계마다 다를 수 있습니다" +
+                        "(끝 빼기를 켜면 끝의 빼기 길이만큼 완전 나사가 짧음). " +
                         "공구를 바꾼 뒤 Z20. 에서 시작 X 를 맞추고 Z 로 들어가며, 끝나면 Z 만 물러납니다(Z200.). " +
                         "G97 S 줄은 회전수를 넣었을 때만 씁니다. 주축 회전(M03/M04) · 공구 호출 · 냉각은 기계에 맞게 앞에 넣습니다.",
                     programName = "G92 테이퍼 나사 프로그램",
@@ -309,6 +316,28 @@ private fun pipeVcText(s: ThreadState): String? {
     return "Vc ≈ ${oneDecimal(Cutting.vc(n, d))} m/min (게이지 면 바깥지름 Ø${Fmt.fixed3(d)} · ${plain(n)} rpm) — 공구 카탈로그의 나사 절삭 속도와 견주세요"
 }
 
+/**
+ * 결과 격자 아래 글(화면 · 시험이 같이 씀): 소재 가정 — 나사 전 테이퍼(숫 바깥지름 · 암 안지름)를 앞 공정에서 깎아 둔다고 보고, 곧은 소재에 바로 깎으면
+ * 작은 쪽(숫나사 기준면 — 곧은 관 바깥지름, 표에 없으면 끝 Z 바깥지름) · 입구 쪽(암나사 — 끝 Z 안지름의 곧은 구멍) 첫 회가 (소재 − 테이퍼)/2 + Δd 로 깊다.
+ * 그리고 나사 길이는 끝 Z 까지라 M23 끝 빼기 몫만큼 완전 나사가 짧다
+ */
+internal fun pipeResultNote(s: ThreadState, sol: PipeSolution): String {
+    val taper = "Ø${Fmt.fixed3(sol.crestAtRef)} → ${Fmt.fixed3(sol.crestAtEnd)}"
+    val dd = plain(sol.firstCut)
+    val blank = if (s.inner) {
+        val deep = (sol.crestAtRef - sol.crestAtEnd) / 2 + sol.firstCut
+        "나사 전 구멍 테이퍼($taper)를 앞 공정에서 깎아 둔다고 봅니다 — 곧은 구멍 Ø${Fmt.fixed3(sol.crestAtEnd)} 에 바로 깎으면 입구 쪽 첫 회 깊이가 " +
+            "${Fmt.fixed3(deep)} mm 입니다(계획 Δd $dd)."
+    } else {
+        val od = s.pipe?.pipeOd
+        val d = od ?: sol.crestAtEnd
+        val deep = (d - sol.crestAtRef) / 2 + sol.firstCut
+        "나사 전 바깥지름 테이퍼($taper)를 앞 공정에서 깎아 둔다고 봅니다 — 곧은 ${if (od != null) "관(바깥지름 Ø${plain(od)})" else "소재 Ø${Fmt.fixed3(d)}"} 에 " +
+            "바로 깎으면 기준면 쪽 첫 회 깊이가 ${Fmt.fixed3(deep)} mm 입니다(계획 Δd $dd)."
+    }
+    return "$blank 나사 길이는 기준면 ~ 끝 Z 입니다 — G92 앞 M23(나사 끝 빼기)을 쓰면 끝의 빼기 길이(기계 설정 — FANUC 매개변수 No.5130)만큼 완전 나사가 짧습니다."
+}
+
 /** 결과 격자의 칸(이름 · 값 · 아래 글) — 화면과 골든이 같이 쓴다 */
 internal fun pipeResultCells(s: ThreadState, sol: PipeSolution): List<Triple<String, String, String>> {
     val zs = s.num(ThreadField.Z_START) ?: 0.0
@@ -323,7 +352,7 @@ internal fun pipeResultCells(s: ThreadState, sol: PipeSolution): List<Triple<Str
         Triple("테이퍼 $w", "$w${Fmt.word(sol.taper)}", "반경 · 길이 ÷ 32"),
         Triple("사이클 시작점", "X${Fmt.nc(sol.startX)} Z${Fmt.nc(zs)}", "G00 · 회마다 여기로"),
         Triple("나사산 높이 k", Fmt.fixed3(sol.height), "반경 = h ($hRule)"),
-        Triple(if (s.inner) "나사 전 구멍 지름" else "나사 전 바깥지름", "Ø${Fmt.fixed3(sol.crestAtRef)} → ${Fmt.fixed3(sol.crestAtEnd)}", "기준면 → 끝 Z"),
+        Triple(if (s.inner) "나사 전 구멍 지름" else "나사 전 바깥지름", "Ø${Fmt.fixed3(sol.crestAtRef)} → ${Fmt.fixed3(sol.crestAtEnd)}", "기준면 → 끝 Z · 앞 공정에서"),
         Triple("리드 F", leadText(sol.lead), s.pipe?.name(s.inner) ?: ""),
         Triple("나사 길이", Fmt.fixed3(sol.threadLen), "규격 최소 ${Fmt.fixed3(sol.needLen)}"),
         Triple("분당 이송", sol.feedPerMin?.let(::oneDecimal) ?: "—", if (sol.feedPerMin != null) "mm/min = 회전수 × 리드" else "회전수를 넣으면"),

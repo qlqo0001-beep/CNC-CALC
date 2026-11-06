@@ -14,6 +14,9 @@ import kotlin.math.abs
  *    그림 글자에 R 이 없고, Carmex BSPT 도 없다 — null(만들지 않음).
  *  - "VARDEX 3ER = Carmex 16ER" 이라는 부름은 판매처 하나에만 있어 넣지 않았다(크기가 같다는 것만 공식 표 둘로 확인).
  * 관용 테이퍼: PT(R · Rc)는 BSPT 인서트(BS 21 = ISO 7-1 = JIS B 0203 의 55° 꼴), NPT 는 NPT 인서트.
+ *  - 내경 줄의 최소 구멍 = 이 IC 인서트를 받는 가장 작은 홀더의 'Min. Bore dia.'(JSON minBore): VARDEX 는 8쪽 추천표의 가장 작은 홀더 NVR050-3 의
+ *    108쪽 줄(냉각형 NVRC050-3) 0.67 in, Carmex 는 41쪽 포켓 16 홀더 가운데 가장 작은 SIR 0013 M16 의 16 mm. 이보다 작은 구멍은 다른(작은) 인서트다
+ *    (VARDEX 추천표 — 예: 20산 암나사는 3/4 부터, 5/8 ~ 11/16 은 2IR20UN).
  */
 
 /** 인서트 나사 꼴 */
@@ -38,6 +41,10 @@ data class ThreadInsert(
     val tipRPerPitch: Double? = null,
     val sourceId: String,
     val page: String,
+    /** 최소 구멍(mm) — 내경만: 이 인서트를 받는 가장 작은 홀더의 최소 구멍 지름 */
+    val minBore: Double? = null,
+    /** [minBore] 의 홀더 이름과 쪽(출처 표기) */
+    val minBoreHolder: String? = null,
 ) {
     val pitch: Double get() = 25.4 / tpi
 
@@ -86,6 +93,7 @@ object ThreadInserts {
         val io = if (internal) "I" else "E"
         return ThreadInsert(
             VDX, "3${io}R${t(tpi)}${form.name}", "3${io}L${t(tpi)}${form.name}", internal, form, tpi, "3/8\"", true, tipRPerPitch, "VDX_TT", page,
+            (0.67 * 25.4).takeIf { internal }, "NVRC050-3, 108쪽".takeIf { internal },
         )
     }
 
@@ -94,6 +102,7 @@ object ThreadInserts {
         val io = if (internal) "I" else "E"
         return ThreadInsert(
             CMX, "16 ${io}R ${t(tpi)} ${form.name}", "16 ${io}L ${t(tpi)} ${form.name}", internal, form, tpi, "3/8\"", true, null, "CMX_TT", page,
+            16.0.takeIf { internal }, "SIR 0013 M16, 41쪽".takeIf { internal },
         )
     }
 }

@@ -294,7 +294,10 @@ class PipeThreadTest {
         assertEquals(-2.0, out.threadLen)
     }
 
-    /** 멈추는 입력과 숫자와 함께 나오는 경고 — 곧은 나사와 같은 경계(시작 Z 가 기준면 위는 됨) */
+    /**
+     * 멈추는 입력과 숫자와 함께 나오는 경고 — 곧은 나사와 같은 경계. 시작 Z 가 기준면 안이거나 같으면 멈춤(급송 절입이 끝 모서리를 묾),
+     * 기준면에서 2 × 피치(14산 2 × 25.4/14 = 3.628571) 안이면 노란 START_NEAR — 3.62 는 경고, 3.63 은 없음
+     */
     @Test
     fun warnings() {
         for (i in listOf(rExt.copy(spec = null), rExt.copy(zStart = null), rExt.copy(zEnd = null), rExt.copy(firstCut = null))) {
@@ -309,11 +312,18 @@ class PipeThreadTest {
         )) stops(G76Warning.BAD_INPUT, i)
         stops(G76Warning.Z_ORDER, rExt.copy(zStart = -14.0))
         stops(G76Warning.Z_ORDER, rExt.copy(zStart = -20.0))
-        // 시작 Z 가 기준면 안(숫 · 암 같다), 기준면 위는 됨
+        // 시작 Z 가 기준면 안(숫 · 암 같다) · 기준면 위도 멈춤
         stops(G76Warning.START_INSIDE, rExt.copy(zStart = -0.5))
         stops(G76Warning.START_INSIDE, nptInt.copy(zStart = -6.0))
-        ok(PipeThreadCalc.calc(rExt.copy(zStart = 0.0)))
-        ok(PipeThreadCalc.calc(nptInt.copy(zStart = -5.0)))
+        stops(G76Warning.START_INSIDE, rExt.copy(zStart = 0.0))
+        stops(G76Warning.START_INSIDE, nptInt.copy(zStart = -5.0))
+        // 2 × 피치 안: R 1/2 숫(기준면 0) · 1/2 NPT 암(기준면 −5)
+        ok(PipeThreadCalc.calc(rExt.copy(zStart = 0.5)), listOf(G76Warning.START_NEAR))
+        ok(PipeThreadCalc.calc(rExt.copy(zStart = 3.62)), listOf(G76Warning.START_NEAR))
+        ok(PipeThreadCalc.calc(rExt.copy(zStart = 3.63)))
+        ok(PipeThreadCalc.calc(nptInt.copy(zStart = -1.38)), listOf(G76Warning.START_NEAR))
+        ok(PipeThreadCalc.calc(nptInt.copy(zStart = -1.37)))
+        ok(PipeThreadCalc.calc(rExt.copy(zStart = 1.0, zEnd = -13.0)), listOf(G76Warning.SHORT_THREAD, G76Warning.START_NEAR))
         stops(G76Warning.FINISH_GE_HEIGHT, rExt.copy(finishAllow = 1.162))
         stops(G76Warning.FIRST_CUT_LT_MIN, rExt.copy(firstCut = 0.02))
         stops(G76Warning.TOO_MANY_PASSES, rExt.copy(firstCut = 0.001, minCut = 0.0))

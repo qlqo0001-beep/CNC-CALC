@@ -17,15 +17,18 @@ import kotlin.math.roundToLong
  *  - S = round(1000·Vc/(π·d))(d = 호칭 바깥지름) — 회전수를 직접 넣으면 그것(반올림). 쓴 Vc = π·d·S/1000(찍힌 S 의 절삭 속도).
  *  - F = 비율 × P. NC 는 0.001 자리(`F1.219`) — 시간 · 당김은 반올림 전 값으로 낸다(차 0.0005 mm/rev 이하).
  *  - 시간(초) = 60·(시작 Z − 끝 Z)/(F·S) + 멈춤. 진입 · 물러남 급송은 넣지 않는다.
- *  - 끝 당김 길이 = (1 − 비율) × (물림 Z − 끝 Z): 비율 < 1 이면 체이서가 자기 리드(P)로 나아가 머리 앞쪽이 몸통보다 회전마다 (1 − 비율)P 씩
- *    앞으로 끌려 나간 몫의 합 — 머리의 플로트(축 방향 여유)가 받아야 한다. 물림 Z = 공작물 끝면 Z(넣었을 때 — 물리기 전엔 끌리지 않음),
+ *  - 끝 당김 길이 = (1 − 비율)/비율 × (물림 Z − 끝 Z): 비율 < 1 이면 체이서가 자기 리드(P)로 나아가 머리 앞쪽이 몸통보다 회전마다 (1 − 비율)P 씩
+ *    앞으로 끌려 나간 몫의 합 — 물린 뒤 기계가 (물림 Z − 끝 Z) 를 가는 동안 회전 수는 (물림 Z − 끝 Z)/(비율 × P) 이다(= (1 − 비율) × 체이서가 간 길이).
+ *    머리의 플로트(축 방향 여유)가 받아야 한다. 물림 Z = 공작물 끝면 Z(넣었을 때 — 물리기 전엔 끌리지 않음),
  *    없으면 시작 Z(끝면보다 밖이라 실제보다 크게 본 값). Landis 는 이 너트 작용으로 머리를 당겨 연다(pull-off — 'This nut engagement is used to pull Landmatic type die heads open').
+ *  - 멈춤 동안 체이서 이동 = S/60 × 멈춤 × P(G4 줄이 없으면 0): G1 이 끝나 기계가 서도 공작물은 돌아 체이서가 제 리드로 더 들어가고, 머리 앞쪽이
+ *    플로트(열림 행정)까지 끌려 나가야 머리가 열린다. 당김 + 이 이동이 플로트에 못 미치면 닫힌 체이서를 급송(G0 물러남)으로 끌어낸다.
  *  - 완전 나사 끝 Z = 끝 Z + 목 산수 × P(체이서 목 길이만큼은 완전 나사가 아님 — 목 산수를 넣었을 때만). 당김이 없다고 본(가장 짧게 본) 값이다 —
- *    실제 체이서 끝은 G1 끝보다 당김 길이(와 멈춤 동안 열릴 때까지 더 끌린 몫)만큼 더 들어간다.
+ *    실제 체이서 끝은 G1 끝보다 당김 길이와 멈춤 동안 열릴 때까지 더 끌린 몫만큼 더 들어간다. 플로트를 넣으면 가장 깊게 본 체이서 끝 = 끝 Z − 플로트.
  * 숫나사 · M · UN 만 — 타입이 막는다(내외 칸이 없고 관용 테이퍼 [PipeSpec] 은 받지 않는다). 정가공(Z−)만.
  */
 
-/** 다이스 헤드 경고. 위의 셋은 계산을 멈춘다([DieResult.solution] = null), 아래 셋은 숫자와 함께 */
+/** 다이스 헤드 경고. 위의 셋은 계산을 멈춘다([DieResult.solution] = null), 아래 다섯은 숫자와 함께 */
 enum class DieWarning {
     /** 규격 · Z 시작 · Z 끝이 비었거나, Vc 와 회전수가 둘 다 비었다 */
     MISSING_INPUT,
@@ -55,6 +58,15 @@ enum class DieWarning {
 
     /** 완전 나사 끝 Z ≥ 물림 Z(끝면 Z, 없으면 시작 Z) — 나사 길이가 목 길이(목 산수 × P) 이하라 완전 나사가 생기지 않는다(목 산수를 넣었을 때만) */
     SHORT_THREAD,
+
+    /**
+     * 끝 멈춤 동안 머리가 열리지 않을 수 있다 — 닫힌 체이서를 급송(G0 물러남)으로 끌어낸다(나사 끝이 뜯기거나 머리가 상함).
+     * 플로트를 안 넣었으면 G4 줄이 없을 때(멈춤 0), 넣었으면 당김 + 멈춤 동안 체이서 이동 < 플로트일 때. [FLOAT_EXCEEDED](G1 도중 열림)와는 함께 나지 않는다
+     */
+    DWELL_SHORT,
+
+    /** 시작 Z − 끝면 Z < 피치 — 급송 끝이 공작물 끝면에 너무 가깝다(체이서 목이 급송으로 닿을 수 있음, 끝면을 넣었을 때만) */
+    START_NEAR,
 }
 
 /** 입력. 길이 mm, X 는 늘 0(머리가 중심에). 공정 값(비율 · 멈춤 · 물러남 · 진입)은 사용자 결정 처음 값([DieHeadCalc] 상수) */
@@ -93,10 +105,14 @@ data class DieSolution(
     val feedPerMin: Double,
     /** 깎는 시간 + 멈춤(초) */
     val timeSec: Double,
-    /** 끝 당김 길이 = (1 − 비율) × (물림 Z − 끝 Z), 물림 Z = 끝면 Z(없으면 시작 Z) — 음수면 밀림(비율 > 1) */
+    /** 끝 당김 길이 = (1 − 비율)/비율 × (물림 Z − 끝 Z), 물림 Z = 끝면 Z(없으면 시작 Z) — 음수면 밀림(비율 > 1) */
     val floatPull: Double,
     /** 완전 나사 끝 Z = 끝 Z + 목 산수 × P (목 산수를 넣었을 때만) */
     val fullThreadEndZ: Double?,
+    /** 끝 멈춤 동안 체이서가 더 들어가는 길이 = S/60 × 멈춤 × P (G4 줄이 없으면 0) */
+    val dwellTravel: Double,
+    /** 가장 깊게 본 체이서 끝 Z = 끝 Z − 플로트(머리가 플로트 끝까지 끌려 열린다고 봄 — 플로트를 넣었을 때만) */
+    val chaserEndZ: Double?,
     /** `G97S…` · `G0X0.Z…` · `Z…` · `G1Z…F…` · (`G4U…`) · `G0Z…` */
     val program: List<String>,
     /** 비율이 1 이 아니면 [DieHeadCalc.CATALOG_FEED_NOTE](정보 — 경고 아님), 1 이면 null */
@@ -141,24 +157,31 @@ object DieHeadCalc {
         // 물림 Z: 체이서가 공작물에 물리기 시작하는 곳(끝면, 없으면 시작 Z) — 당김 · 완전 나사는 여기부터
         val engage = i.zFace ?: i.zStart
         val feedPerMin = Cutting.feedRate(feed, s.toDouble())
-        val pull = (1 - i.ratio) * (engage - i.zEnd)
+        // 회전 수 = (물림 Z − 끝 Z)/(비율 × P), 회전마다 머리 앞쪽이 (1 − 비율)P 씩 끌려 나간다
+        val pull = (1 - i.ratio) / i.ratio * (engage - i.zEnd)
         val fullEnd = i.throatThreads?.let { i.zEnd + it * p }
+        val g4 = G76Calc.um(i.dwell) >= 1
+        val dwellTravel = if (g4) s / 60.0 * i.dwell * p else 0.0
+        val floatExceeded = i.floatTravel != null && pull > i.floatTravel + EPS
         val warnings = buildList {
             if (i.ratio > 1 + EPS) add(DieWarning.RATIO_OVER_ONE)
-            if (i.floatTravel != null && pull > i.floatTravel + EPS) add(DieWarning.FLOAT_EXCEEDED)
+            if (floatExceeded) add(DieWarning.FLOAT_EXCEEDED)
             if (fullEnd != null && fullEnd >= engage - EPS) add(DieWarning.SHORT_THREAD)
+            val noOpen = if (i.floatTravel == null) !g4 else pull + dwellTravel < i.floatTravel - EPS
+            if (!floatExceeded && noOpen) add(DieWarning.DWELL_SHORT)
+            if (i.zFace != null && i.zStart - i.zFace < p - EPS) add(DieWarning.START_NEAR)
         }
         val program = listOfNotNull(
             "G97S$s",
             "G0X0.Z${Fmt.word(i.approachZ)}",
             "Z${Fmt.word(i.zStart)}",
             "G1Z${Fmt.word(i.zEnd)}F${Fmt.word(feed)}",
-            "G4U${Fmt.word(i.dwell)}".takeIf { G76Calc.um(i.dwell) >= 1 },
+            "G4U${Fmt.word(i.dwell)}".takeIf { g4 },
             "G0Z${Fmt.word(i.retractZ)}",
         )
         val sol = DieSolution(
-            s, Cutting.vc(s.toDouble(), spec.d), feed, feedPerMin, 60 * len / feedPerMin + i.dwell, pull, fullEnd, program,
-            CATALOG_FEED_NOTE.takeIf { abs(i.ratio - 1) > EPS },
+            s, Cutting.vc(s.toDouble(), spec.d), feed, feedPerMin, 60 * len / feedPerMin + i.dwell, pull, fullEnd, dwellTravel,
+            i.floatTravel?.let { i.zEnd - it }, program, CATALOG_FEED_NOTE.takeIf { abs(i.ratio - 1) > EPS },
         )
         return DieResult(sol, warnings)
     }

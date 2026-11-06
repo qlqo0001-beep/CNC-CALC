@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.Feature
 import com.bmt.nosecalc.calc.Fmt
+import com.bmt.nosecalc.calc.G76Calc
 import com.bmt.nosecalc.calc.G76Pass
 import com.bmt.nosecalc.ui.AppCard
 import com.bmt.nosecalc.ui.AppIcons
@@ -51,6 +52,8 @@ import com.bmt.nosecalc.ui.BottomSheet
 import com.bmt.nosecalc.ui.FieldChain
 import com.bmt.nosecalc.ui.Segmented
 import com.bmt.nosecalc.ui.SheetTitle
+import com.bmt.nosecalc.ui.WarnLevel
+import com.bmt.nosecalc.ui.WarningBanner
 import com.bmt.nosecalc.ui.keepWords
 import com.bmt.nosecalc.ui.theme.AppColors
 import com.bmt.nosecalc.ui.theme.AppTheme
@@ -91,7 +94,7 @@ internal fun ThreadTopCard(s: ThreadState) {
 
 /**
  * 인서트 칸(고급 설정): 지금 내외 · 종류 · 산수에 맞는 카탈로그 인서트(`ThreadInserts.match`)를 고른다. 맞는 줄이 없으면 읽기만('맞는 줄 없음').
- * 아래 한 줄은 [insertNote]
+ * 아래 한 줄은 [insertNote], 내경 인서트가 구멍에 안 맞으면 노란 [insertBoreWarning]
  */
 @Composable
 internal fun InsertField(s: ThreadState, modifier: Modifier = Modifier, onClick: () -> Unit) {
@@ -103,6 +106,7 @@ internal fun InsertField(s: ThreadState, modifier: Modifier = Modifier, onClick:
             onClick = if (choices.isEmpty()) null else onClick,
         )
         insertNote(s)?.let { Text(keepWords(it), Modifier.padding(start = 2.dp, top = 4.dp), style = AppType.caption, color = AppTheme.colors.textMuted) }
+        insertBoreWarning(s)?.let { WarningBanner(it, Modifier.padding(top = 6.dp), level = WarnLevel.Warn) }
     }
 }
 
@@ -120,9 +124,31 @@ internal fun insertNote(s: ThreadState): String? {
     val what = when {
         s.isPipe -> "풀 프로파일 (산봉우리까지 만듦 — 골 X 계산의 가정과 같음)"
         r != null -> "인선 R ${Fmt.fixed3(r)} 을 카탈로그에서 넣음"
-        else -> "날 끝 R 은 카탈로그에 없음 — 인선 R 은 직접 넣으세요"
+        else -> "날 끝 R 은 카탈로그에 없음 — 비우면 규격 기본 R(${if (s.inner) "암나사 H/8" else "숫나사 H/6"}), 인서트에 적힌 R 이 있으면 넣으세요. " +
+            "풀 프로파일이라 산봉우리도 만듦(소재가 목표보다 크면 첫 회가 깊어짐)"
     }
     return "$what · IC ${i.ic} · 출처: ${insertSource(i)}"
+}
+
+/**
+ * 내경 인서트가 구멍에 들어가나(노란 안내): 고른 인서트의 최소 구멍(그 인서트를 받는 가장 작은 홀더의 Min. Bore — [com.bmt.nosecalc.calc.ThreadInsert.minBore])과
+ * 나사의 가장 가는 구멍([ThreadState.insertBore])을 견준다. 구멍이 더 작으면 다른(작은) 인서트, 들어가도 (구멍 − 최소 구멍)/2 가 시작 X 여유보다 작으면
+ * 시작점(날 끝이 안쪽으로 여유만큼 빠진 자리)에서 바 뒤가 맞은편 벽에 닿을 수 있다. 외경 · 안 골랐음 · 구멍을 모름은 null
+ */
+internal fun insertBoreWarning(s: ThreadState): String? {
+    val i = s.shownInsert ?: return null
+    val min = i.minBore ?: return null
+    val bore = s.insertBore ?: return null
+    val holder = i.minBoreHolder?.let { "($it)" } ?: ""
+    if (bore < min - 1e-9) {
+        return "구멍(가장 가는 곳 Ø${Fmt.fixed3(bore)})이 ${insertText(i)} 를 받는 가장 작은 홀더의 최소 구멍 Ø${Fmt.fixed3(min)}$holder 보다 작습니다 — " +
+            "더 작은 인서트를 쓰세요(카탈로그 추천표)."
+    }
+    val clear = s.num(ThreadField.X_CLEAR)?.takeIf { ThreadField.X_CLEAR !in s.bad() } ?: G76Calc.X_CLEAR_DEFAULT
+    val room = (bore - min) / 2
+    if (clear <= room + 1e-9) return null
+    return "시작 X 여유 ${Fmt.fixed3(clear)} mm 가 (구멍 Ø${Fmt.fixed3(bore)} − 홀더 최소 구멍 Ø${Fmt.fixed3(min)})/2 = ${Fmt.fixed3(room)} mm 보다 커서, " +
+        "시작점(날 끝이 안쪽으로 빠진 자리)에서 바 뒤가 맞은편 벽에 닿을 수 있습니다 — 고급 설정의 시작 X 여유를 그보다 작게 하세요."
 }
 
 /** 칸 위 이름(NumberField 의 라벨 줄과 같은 모양) */

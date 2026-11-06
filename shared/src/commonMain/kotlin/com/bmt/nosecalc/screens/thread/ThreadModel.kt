@@ -23,6 +23,7 @@ import com.bmt.nosecalc.calc.PipeKind
 import com.bmt.nosecalc.calc.PipeSolution
 import com.bmt.nosecalc.calc.PipeSpec
 import com.bmt.nosecalc.calc.PipeTable
+import com.bmt.nosecalc.calc.PipeThreadCalc
 import com.bmt.nosecalc.calc.ThreadClass
 import com.bmt.nosecalc.calc.ThreadDir
 import com.bmt.nosecalc.calc.ThreadInsert
@@ -31,6 +32,7 @@ import com.bmt.nosecalc.calc.ThreadKind
 import com.bmt.nosecalc.calc.ThreadSeries
 import com.bmt.nosecalc.calc.ThreadSpec
 import com.bmt.nosecalc.calc.ThreadTable
+import com.bmt.nosecalc.calc.ThreadTol
 import com.bmt.nosecalc.calc.UnGroup
 import com.bmt.nosecalc.calc.WorkMaterials
 import com.bmt.nosecalc.calc.ncWords
@@ -368,6 +370,17 @@ internal class ThreadState(
     val isPipe: Boolean get() = family.pipeKind != null
 
     /**
+     * 내경 나사의 가장 가는 구멍 지름(인서트의 최소 구멍과 견줌): 곧은 나사 = 지금 급수의 안지름 최소, 관용 테이퍼 = 끝 Z 안지름(값이 모자라 안 풀리면 null).
+     * 외경 · 사이즈 없음은 null
+     */
+    val insertBore: Double?
+        get() = when {
+            !inner -> null
+            isPipe -> PipeThreadCalc.calc(pipeInput()).solution?.crestAtEnd
+            else -> spec?.let { sp -> shownClass?.let { ThreadTol.limits(sp, it).crest.min } }
+        }
+
+    /**
      * 이 종류의 화면에 있는 칸(곧은 나사는 기준면 Z · 게이지 면 옮김이 없고, 관용 테이퍼는 공차 목표 · 인선 R 이 없다 — 풀 프로파일 인서트).
      * 다이스 헤드는 Z 시작 · 회전수 · Z 끝 · 끝면 Z 넷(다이스 조건 칸은 [DieStore])
      */
@@ -488,7 +501,8 @@ internal class ThreadState(
                     advOpen = l[8].toBoolean(),
                     nc = ThreadNc.valueOf(l[9 + OLD_FIELDS]),
                     pipe = pipe?.takeIf { it.kind == family.pipeKind },
-                    unGroup = l.getOrNull(tail + 1)?.let { UnGroup.valueOf(it) } ?: UnGroup.UNC,
+                    // 옛 글(묶음 칸 없음)은 규격 줄의 계열 묶음 — UNC 로 두면 UNF 줄이 묶음 밖에 남아 같은 크기를 누르면 UNC 피치로 바뀐다
+                    unGroup = l.getOrNull(tail + 1)?.let { UnGroup.valueOf(it) } ?: spec?.let(::naturalGroup) ?: UnGroup.UNC,
                     taperWord = l.getOrNull(tail + 2)?.firstOrNull() ?: 'I',
                     method = l.getOrNull(more)?.let { ThreadMethod.valueOf(it) } ?: ThreadMethod.BITE,
                     insert = l.getOrNull(more + 1)?.takeIf { it.isNotEmpty() },
@@ -549,7 +563,8 @@ internal fun standardText(f: ThreadFamily, long: Boolean = false): String = when
     ThreadFamily.METRIC -> if (long) "ISO 965-1 · 965-2" else "ISO 965"
     ThreadFamily.UN -> "ASME B1.1"
     ThreadFamily.PT -> "JIS B 0203"
-    ThreadFamily.NPT -> "ASME B1.20.1"
+    // 값의 출처는 NBS H28 (1957) Part II = ANSI B2.1(지금 이름 ASME B1.20.1 — 현행판 원문과는 대조 못 함)
+    ThreadFamily.NPT -> "ANSI B2.1 (ASME B1.20.1)"
 }
 
 /** 게이지 공차 산 수 글(표의 1 · 1¼ · 1½): 1 → "1", 1.25 → "1¼", 1.5 → "1½" — ¼ 단위가 아니면 소수 */
@@ -714,12 +729,14 @@ internal fun threadWarningText(w: G76Warning, s: ThreadState, sol: G76Solution? 
     G76Warning.START_INSIDE -> {
         val zs = s.num(ThreadField.Z_START)?.let { " Z${Fmt.nc(it)}" } ?: ""
         val ref = s.num(ThreadField.Z_REF)?.takeIf { ThreadField.Z_REF !in s.bad() } ?: 0.0
-        "Z축 시작점$zs 이 기준면(공작물 끝면) Z${Fmt.nc(ref)} 안입니다 — 시작점으로 급송하면 공작물에 닿습니다. Z축 시작점을 기준면보다 크게 하세요 (예: 기준면 + 5)."
+        "Z축 시작점$zs 이 기준면(공작물 끝면) Z${Fmt.nc(ref)} 안이거나 같습니다 — 시작점에서 X 로 급송 절입하면 날이 공작물 끝 모서리를 뭅니다. " +
+            "Z축 시작점을 기준면보다 크게 하세요 (예: 기준면 + 5)."
     }
     G76Warning.SHORT_THREAD -> if (pipe != null) {
         val ref = s.num(ThreadField.Z_REF) ?: 0.0
         "나사 길이 ${Fmt.fixed3(pipe.threadLen)} mm(기준면 Z${Fmt.nc(ref)} ~ 가공 목표점)가 규격 최소 ${Fmt.fixed3(pipe.needLen)} mm" +
-            "(${needLenName(s)})보다 짧습니다 — 가공 목표점을 Z${Fmt.nc(floor((ref - pipe.needLen) * 1000 + 1e-6) / 1000)} 이하로 하거나 도면을 확인하세요."
+            "(${needLenName(s)})보다 짧습니다 — 가공 목표점을 Z${Fmt.nc(floor((ref - pipe.needLen) * 1000 + 1e-6) / 1000)} 이하로 하거나 도면을 확인하세요. " +
+            "G92 앞 M23(나사 끝 빼기)을 쓰면 끝의 빼기 길이(기계 설정)만큼 완전 나사가 더 짧으니 그만큼 더 깊게 잡으세요."
     } else {
         "나사 길이(기준면 ~ 가공 목표점)가 규격의 최소 나사 길이보다 짧습니다. 가공 목표점을 확인하세요."
     }
@@ -734,6 +751,13 @@ internal fun threadWarningText(w: G76Warning, s: ThreadState, sol: G76Solution? 
     }
     G76Warning.ONE_ROUGH_PASS ->
         "첫 절입이 '나사산 높이 − 정삭 여유' 이상이라 거친 절입이 한 번입니다 (한 번에 거의 다 깎음). 의도한 것인지 확인하세요."
+    G76Warning.START_NEAR -> {
+        val zs = s.num(ThreadField.Z_START)?.let { " Z${Fmt.nc(it)}" } ?: ""
+        val ref = s.num(ThreadField.Z_REF)?.takeIf { ThreadField.Z_REF !in s.bad() } ?: 0.0
+        val two = s.pipe?.let { Fmt.fixed3(2 * it.pitch) } ?: ""
+        "Z축 시작점$zs 이 기준면 Z${Fmt.nc(ref)} 에서 2 × 피치($two mm) 안입니다 — 급송 절입이 끝면에 가깝고, 나사 시작의 가속 구간(서보 지연 — 회전수가 높을수록 김)에 " +
+            "끝면 쪽 산${if (s.inner) "(암나사는 입구 면이 게이지 면)" else ""}이 들어가 리드가 틀어질 수 있습니다. Z축 시작점을 기준면 + $two 이상으로 하세요."
+    }
 }
 
 /** 규격 최소 나사 길이의 이름(SHORT_THREAD 글 · 게이지 표): 숫나사 PT a + f · NPT L2, 암나사 PT l · NPT L1 + L3, 게이지 면을 옮겼으면 + 옮김 */

@@ -1203,7 +1203,8 @@ object RoundCalc {
 - 숫자와 함께: `ROOT_INTERFERES`(인선 R 이 커서 골이 `rootLimit` 을 넘음 — 목표 0% 에서 숫나사 R > H/4, 암나사 R > H/8. 기본 R 은 안 걸림),
   `ONE_ROUGH_PASS`(Δd ≥ k − d, 거친 절입 한 번).
 - 첫 절입 Δd 는 **기본값이 없다** — 공구 제조사 권장 절입 횟수를 출처로 확인하지 못했다. 분석표의 횟수를 보고 고친다(Haas 표처럼 Δd ≈ (k − d)/√횟수).
-- 관용 테이퍼(`PipeThreadCalc`)도 이 enum 을 쓴다. 그것만 내는 것: 멈춤 `START_INSIDE`(시작 Z 가 기준면 안), 숫자와 함께 `SHORT_THREAD`(나사 길이가 규격 최소보다 짧음).
+- 관용 테이퍼(`PipeThreadCalc`)도 이 enum 을 쓴다. 그것만 내는 것: 멈춤 `START_INSIDE`(시작 Z 가 기준면 안이거나 같음), 숫자와 함께 `SHORT_THREAD`(나사 길이가 규격 최소보다 짧음) ·
+  `START_NEAR`(시작 Z − 기준면 < 2 × 피치 — 2026-11-06).
   `TIP_TOO_BIG` · `ROOT_INTERFERES` 는 곧은 나사만 낸다.
 
 ### API
@@ -1230,7 +1231,7 @@ object ThreadTol { fun limits(spec: ThreadSpec, cls: ThreadClass): ThreadLimits 
 enum class ThreadDir { FORWARD /*Z−, 오른나사*/, REVERSE /*Z+, 왼나사*/ }
 enum class G76Warning { MISSING_INPUT, BAD_INPUT, Z_ORDER, TIP_TOO_BIG, FINISH_GE_HEIGHT, FIRST_CUT_LT_MIN, TOO_MANY_PASSES,
                         CLEARANCE_TOO_BIG, START_INSIDE /*관용 테이퍼만*/, /* ↑ 멈춤 · ↓ 숫자와 함께 */ ROOT_INTERFERES, ONE_ROUGH_PASS,
-                        SHORT_THREAD /*관용 테이퍼만*/ }
+                        SHORT_THREAD, START_NEAR /*관용 테이퍼만*/ }
 data class G76Input(val inner: Boolean = false, val spec: ThreadSpec? = null, val cls: ThreadClass? = null /*null = 기본*/,
     val dir: ThreadDir = ThreadDir.FORWARD, val zStart: Double? = null, val zEnd: Double? = null, val rpm: Double? = null,
     val angle: Int? = null /*60*/, val chamfer: Int? = null /*10 = 1.0L*/, val target: Double? = null /*80 %*/,
@@ -1305,7 +1306,11 @@ object G76Calc { val ANGLES: List<Int>; const val FINISH_COUNT_DEFAULT = 2; cons
     1 · 2번 그림(외경 U < 0 · R < 0, 내경 U > 0 · R > 0 — "|R| ≤ |U/2|" 조건이 붙는 3 · 4번이 아님), 시뮬레이터 `GCycles.single` 의 A′ = (A.z, B.x + I)와
     같은 부호다(`sim/G92TaperThreadTest` 가 못 박는다). I 는 사이클 시작 Z ~ 끝 Z 길이로 낸다(나사 길이가 아님).
   - **시작 X**: 숫나사 = 끝 Z 바깥지름(나사 안에서 가장 굵은 곳) + 2 × 여유, 암나사 = 끝 Z 안지름(가장 가는 곳) − 2 × 여유(0 이하면 `CLEARANCE_TOO_BIG`).
-  - 나사 내기 전 테이퍼(숫 바깥지름 · 암 안지름)의 기준면 · 끝 Z 지름(`crestAtRef` · `crestAtEnd`)은 숫자만 낸다(G90 글 없음).
+    날 끝 기준이다 — 암나사는 회마다 끝 Z(가장 가는 곳)에서 날이 안쪽으로 여유만큼 빠지는 만큼 바 뒤가 맞은편 벽으로 다가간다. 화면은 내경 인서트를 고르면
+    (구멍 − 그 인서트의 최소 구멍)/2 < 여유일 때 노란 안내(아래 '나사 인서트' 의 `minBore`).
+  - 나사 내기 전 테이퍼(숫 바깥지름 · 암 안지름)의 기준면 · 끝 Z 지름(`crestAtRef` · `crestAtEnd`)은 숫자만 낸다(G90 글 없음). **소재 가정**: 절입표(k = h, Δd)는
+    이 테이퍼를 앞 공정에서 깎아 두었다고 본다. 곧은 소재에 바로 깎으면 숫나사는 기준면(작은) 쪽, 암나사는 입구 쪽 첫 회가 (소재 − 테이퍼)/2 만큼 더 깊다 —
+    화면은 결과 아래에 곧은 관(바깥지름 `pipeOd`, 없으면 끝 Z 바깥지름) · 곧은 구멍(끝 Z 안지름)일 때의 첫 회 깊이를 적는다(2026-11-06 검증 — R 3/4 Z0 쪽 0.35 → 강관 Ø27.2 면 1.027).
   - 정가공(Z−)만 — 왼나사 테이퍼는 범위 밖.
 - **글**(`g92` · `g92Finish`): 곧은 나사 G92 글과 같은 꼴에 첫 G92 줄만 테이퍼 낱말 — (`G97S…`) · `G0X(시작 X)Z20.` · `Z(시작 Z)` · `M23` ·
   `G92X(1회 X)Z(끝 Z)I(i)F(리드)` · `X(2회 X)` … · `M24` · `G0Z200.`, 다듬질 블록은 마지막 X 두 번. I 는 X · Z 처럼 모달이라 둘째 회부터 X 만(시뮬레이터도 그렇게).
@@ -1314,11 +1319,14 @@ object G76Calc { val ANGLES: List<Int>; const val FINISH_COUNT_DEFAULT = 2; cons
   리드 F 는 곧은 나사와 같은 넷째 자리(11.5산 `F2.2087`).
 - **경고**(`G76Warning` 을 같이 씀):
   - 멈춤: `MISSING_INPUT`(규격 · Z 시작 · 끝 Z · 첫 절입), `BAD_INPUT`(곧은 나사와 같은 한도 + 게이지 면 옮김이 공차 밖 · 낱말이 I · R 밖 · 숫나사 끝 골 X ≤ 0),
-    `Z_ORDER`(시작 Z ≤ 끝 Z), `START_INSIDE`(시작 Z < 기준면 — 시작점으로 급송하면 공작물에 닿음. 기준면 위는 됨), `FINISH_GE_HEIGHT`, `FIRST_CUT_LT_MIN`,
-    `CLEARANCE_TOO_BIG`, `TOO_MANY_PASSES`.
+    `Z_ORDER`(시작 Z ≤ 끝 Z), `START_INSIDE`(시작 Z ≤ 기준면 — 시작점에서 X 로 급송 절입하므로 기준면 위도 날이 끝 모서리를 묾. 2026-11-06 검증 전에는 같음을 받았다),
+    `FINISH_GE_HEIGHT`, `FIRST_CUT_LT_MIN`, `CLEARANCE_TOO_BIG`, `TOO_MANY_PASSES`.
   - 숫자와 함께: `ONE_ROUGH_PASS`, `SHORT_THREAD` — 나사 길이(zRef − 끝 Z) < 숫나사 PT a + f · NPT L2, 암나사 PT l · NPT L1 + L3, 게이지 면 옮김 s 면 + s·P
     (게이지 면이 그만큼 옮기므로 — ISO 7-1 Table 1 의 15 · 16 · 17열이 게이지 길이 nominal · max · min 마다 길이를 따로 주는 것과 같은 뜻).
-    NPT 암나사 최소 길이 식은 1957 판에 없어 L1 + L3(렌치 조임 때 숫나사가 들어오는 길이)로 정했다.
+    NPT 암나사 최소 길이 식은 1957 판에 없어 L1 + L3(렌치 조임 때 숫나사가 들어오는 길이)로 정했다. 길이는 끝 Z 까지라 G92 앞 M23(나사 끝 빼기)을 쓰면 끝의 빼기 길이
+    (기계 설정 — FANUC 매개변수 No.5130, 0.1 리드 단위)만큼 완전 나사가 짧다 — 기계 값을 몰라 검사에는 넣지 않고 경고 글 · 화면 결과 아래 글 · 도움말에 적는다.
+    `START_NEAR`(2026-11-06) — 시작 Z − 기준면 < 2 × 피치: 급송 절입이 끝면에 가깝고 나사 시작의 가속 구간(서보 지연 — 회전수 · 리드에 비례)에 끝면 쪽 산
+    (암나사는 게이지 면이 입구 면)이 들어간다. 가속 구간 길이는 기계 시정수에 달려 회전수로 따로 셈하지 않고 2P 만 본다(글에 '회전수가 높으면 더 띄움').
 - **손 계산**(`PipeThreadTest`, 지은 치수):
   - R 1/2 숫 · 기준면 Z0 · Z6 → −14 · Δd 0.4 · 530 rpm: Zg −8.16, Eg = 20.955 − 1.1617361 = 19.7932639, E(−14) = Eg + 0.365 → 끝 골 X 18.9965 → `X18.997`,
     k 1.162, 시작 X 21.32 + 2 = 23.32, I −20/32 = −0.625 →
@@ -1349,7 +1357,7 @@ object PipeThreadCalc { val TAPER_WORDS: List<Char>; fun calc(i: PipeInput): Pip
 ```
 - **테스트**: `PipeThreadTest`(표 불변식 · 이름, 위 네 손 계산의 G92 전문 · 다듬질 · X · I · 시작 X · 기준면 지름, I 부호와 크기(길이 25 → ±.781), 낱말 R ·
   I/R 밖 멈춤, 게이지 면 옮김 ±1 · 0.5산이 X 를 ∓ s·P/16 · 최소 길이를 s·P 옮김 · 공차 경계(PT 숫 1 · 암 1¼ · 2½ 1½ · NPT 1), 나사 길이 경고와 경계,
-  멈춤 · 숫자와 함께 경고마다 사례), jvmTest `PipeThreadJsonTest`(PT 16 · NPT 14 줄의 모든 칸 = JSON — 단위 · 반올림 규칙은 그 파일 머리, 상수 55° · 60° ·
+  멈춤 · 숫자와 함께 경고마다 사례 — 시작 Z = 기준면 멈춤 · 2P 경계의 START_NEAR), jvmTest `PipeThreadJsonTest`(PT 16 · NPT 14 줄의 모든 칸 = JSON — 단위 · 반올림 규칙은 그 파일 머리, 상수 55° · 60° ·
   0.640327 · 0.137278 · 0.8 · ±1산), `sim/G92TaperThreadTest`(대표 7가지 — R 1/2 숫 · Rc 1/2 암 · NPT 1/2 숫 · 암(기준면 −5) · R 1/8 숫 · 1-11.5 NPT 암 ·
   게이지 +1산 — 의 G92 글을 GSim 에 넣어 멈춤 · 문제 0, 깎는 회 = 분석표 + 1(M24 줄), 회마다 THREAD 끝 = (분석표 X, 끝 Z) · 시작 = (끝 X + 2I, 시작 Z) ·
   숫나사는 시작 쪽이 가늚 · 기울기 반경 1/32, 진입 · 물러남이 Z 로만, 다듬질 블록, R 꼴 글과 이동이 같음).
@@ -1367,13 +1375,16 @@ object PipeThreadCalc { val TAPER_WORDS: List<Char>; fun calc(i: PipeInput): Pip
   - S = round(1000·Vc/(π·d)), d = 호칭 바깥지름. 회전수를 직접 넣으면 그것(반올림, Vc 와 둘 다 있으면 회전수). 쓴 Vc = π·d·S/1000(찍힌 S 의 절삭 속도).
   - F = 비율 × P(`feed` 는 반올림 전 — 시간 · 당김도 반올림 전 값으로 낸다. NC 의 0.001 과의 차는 0.0005 mm/rev 이하).
   - 분당 이송 = F·S, 시간(초) = 60·(시작 Z − 끝 Z)/(F·S) + 멈춤 — 진입 · 물러남 급송은 넣지 않는다.
-  - **끝 당김 길이** = (1 − 비율)·(물림 Z − 끝 Z): 비율 < 1 이면 체이서는 자기 리드(P)로 나아가 머리 앞쪽이 몸통보다 회전마다 (1 − 비율)P 씩 앞으로 끌려
-    나간다 — 그 합을 머리의 플로트(축 방향 여유)가 받아야 한다. 물림 Z = 공작물 끝면 Z(`zFace` — 물리기 전엔 끌리지 않는다), 없으면 시작 Z(끝면 밖이라 실제보다
+  - **끝 당김 길이** = (1 − 비율)/비율 · (물림 Z − 끝 Z): 비율 < 1 이면 체이서는 자기 리드(P)로 나아가 머리 앞쪽이 몸통보다 회전마다 (1 − 비율)P 씩 앞으로 끌려
+    나간다 — 물린 뒤 기계가 (물림 Z − 끝 Z) 를 가는 동안 회전 수는 (물림 Z − 끝 Z)/(비율 · P) 이므로 합은 (1 − 비율)/비율 · 길이(= (1 − 비율) × 체이서가 간 길이).
+    2026-11-06 검증 전에는 회전 수를 길이/P 로 세어 (1 − 비율) · 길이였다(0.96 에서 4.2 % 작아 플로트 경고를 경계에서 놓침). 그 합을 머리의 플로트(축 방향 여유)가 받아야 한다. 물림 Z = 공작물 끝면 Z(`zFace` — 물리기 전엔 끌리지 않는다), 없으면 시작 Z(끝면 밖이라 실제보다
     크게 본 값 — S3 의 처음 식). 화면은 끝면 Z 칸(빈칸 0 — 관용 테이퍼의 기준면 Z 와 같은 공작물 끝면)을 늘 넘긴다(2026-11-06 — 시작 Z 부터 세면 Z5 → −20 에서 25 %
     크게 보여 플로트 경고가 잘못 뜬다).
     Landis 는 이 너트 작용으로 머리를 당겨 연다(pull-off — LAN_CM 9쪽), Wagner 고정형은 이송을 멈추면 연다(WAG_WEB). 비율 > 1 이면 음수(밀림).
-  - **완전 나사 끝 Z** = 끝 Z + 목 산수 × P(목 산수를 넣었을 때만) — 당김이 없다고 본(가장 짧게 본) 값이다. 실제 체이서 끝은 G1 끝보다 당김 길이(와 멈춤 동안
-    열릴 때까지 더 끌린 몫)만큼 더 들어간다.
+  - **완전 나사 끝 Z** = 끝 Z + 목 산수 × P(목 산수를 넣었을 때만) — 당김이 없다고 본(가장 짧게 본) 값이다. 실제 체이서 끝은 G1 끝보다 당김 길이와 멈춤 동안
+    열릴 때까지 더 끌린 몫만큼 더 들어간다.
+  - **멈춤 동안 체이서 이동** `dwellTravel` = S/60 × 멈춤 × P(G4 줄이 없으면 0): G1 이 끝나 기계가 서도 공작물은 돌아 체이서가 제 리드로 더 들어가고, 머리 앞쪽이
+    플로트(열림 행정)까지 끌려 나가야 당겨 여는 머리가 열린다. **가장 깊게 본 체이서 끝** `chaserEndZ` = 끝 Z − 플로트(플로트를 넣었을 때만 — 어깨 틈을 볼 때).
 - **카탈로그와 다른 점 — 안내(경고 아님)**: Wagner('Mit steigungsgenauem Vorschub' · ZR 26-I 'infeed has to correspond always with the lead')와
   Landis('must be correct for the lead of the thread')는 이송을 리드(피치)와 같게 쓴다. TACO 공식 브로셔에는 이송 글이 없다. **피치보다 작게 하라는 비율은 세 곳
   어디에도 없다**(die-heads.json notFound). 처음 값 0.96 은 사용자 결정이고, 비율이 1 이 아니면 `DieSolution.note` = `CATALOG_FEED_NOTE`
@@ -1385,7 +1396,10 @@ object PipeThreadCalc { val TAPER_WORDS: List<Char>; fun calc(i: PipeInput): Pip
   - 숫자와 함께: `RATIO_OVER_ONE`(비율 > 1 — 기계 이송이 체이서 리드보다 빨라 머리를 밀어붙인다. 당겨 여는 머리는 끝에서 안 열릴 수 있고, Wagner Z39-2 고장표는
     물릴 때 이송이 너무 크면 두 줄 나사가 된다고 쓴다 — 계획은 "당김 열림 규칙이 확인되면 경고", 조사가 Landis pull-off 를 확인), `FLOAT_EXCEEDED`(당김 >
     플로트 — G1 끝 전에 열려 덜 깎인다, 플로트를 넣었을 때만. 같으면 없음), `SHORT_THREAD`(완전 나사 끝 Z ≥ 물림 Z(끝면, 없으면 시작 Z) — 나사 길이가 목 길이 이하라 완전 나사가
-    생기지 않는다. 시작 Z 로 보므로 확실히 짧은 경우만 잡는다).
+    생기지 않는다. 시작 Z 로 보므로 확실히 짧은 경우만 잡는다), `DWELL_SHORT`(2026-11-06 — 끝 멈춤 동안 머리가 안 열릴 수 있어 닫힌 체이서를 급송으로 끌어냄:
+    플로트를 안 넣었으면 G4 줄이 없을 때, 넣었으면 당김 + 멈춤 동안 이동 < 플로트. `FLOAT_EXCEEDED` 와는 함께 나지 않음), `START_NEAR`(2026-11-06 — 끝면을 넣었고
+    시작 Z − 끝면 < P: 급송 끝이 끝면에 붙어 체이서 목이 닿을 수 있음. 같음은 된다던 끝면 = 시작 Z 도 이 노랑).
+    플로트를 비우면(처음) 긴 나사에서 G1 도중 열리는지는 볼 수 없다(비율 0.96 · 플로트 1.5 면 끝면부터 36 mm — 회전 수 × 0.04P 가 1.5 가 되는 길이) — 결과의 당김과 머리 사양을 견준다.
 - **카탈로그** `DieHeadCatalog`: 자료 `calc/catalog/die-heads.json` = `docs/research/die-heads.json`(Wagner · Landis · TACO 공식 자료, 출처 21 · 절삭 속도 24 ·
   체이서 34 · 홀더 표 12개 162줄, 출처 대조 끝)을 **바이트 그대로 복사**, 빌드(`generateCatalogs`)가 `DieHeadCatalogJson` 문자열로 만든다(드릴과 같은 길).
   읽기는 `ignoreUnknownKeys = false`. 앱이 쓰는 칸(출처 · 절삭 속도 · 체이서 · 홀더 표 · 열림 · 플로트 · 이송 규칙 · 체이서 크기 · 재질)은 타입을 주고,
@@ -1403,13 +1417,14 @@ object PipeThreadCalc { val TAPER_WORDS: List<Char>; fun calc(i: PipeInput): Pip
   - 플로트 · 열림 행정 mm 는 세 곳 고정형 모두 없다(notFound) → `DieInput.floatTravel` 은 빈칸이 처음. 목 산수도 머리 · 목 종류마다라 빈칸이 처음.
 - **API**
 ```kotlin
-enum class DieWarning { MISSING_INPUT, BAD_INPUT, Z_ORDER, /* ↑ 멈춤 · ↓ 숫자와 함께 */ RATIO_OVER_ONE, FLOAT_EXCEEDED, SHORT_THREAD }
+enum class DieWarning { MISSING_INPUT, BAD_INPUT, Z_ORDER, /* ↑ 멈춤 · ↓ 숫자와 함께 */ RATIO_OVER_ONE, FLOAT_EXCEEDED, SHORT_THREAD, DWELL_SHORT, START_NEAR }
 data class DieInput(val spec: ThreadSpec? = null, val vc: Double? = null /*m/min*/, val rpm: Double? = null /*직접 — 있으면 vc 대신*/,
     val zStart: Double? = null, val zEnd: Double? = null, val ratio: Double = 0.96, val dwell: Double = 1.0 /*초*/,
     val retractZ: Double = 150.0, val approachZ: Double = 20.0, val floatTravel: Double? = null, val throatThreads: Double? = null,
     val zFace: Double? = null /*공작물 끝면 — 당김 · 완전 나사를 여기부터, null = 시작 Z*/)
 data class DieSolution(val rpm: Long /*S*/, val vcUsed: Double, val feed: Double /*비율 × P, 반올림 전*/, val feedPerMin: Double,
-    val timeSec: Double, val floatPull: Double, val fullThreadEndZ: Double?, val program: List<String>, val note: String?)
+    val timeSec: Double, val floatPull: Double /*(1 − 비율)/비율 × 길이*/, val fullThreadEndZ: Double?, val dwellTravel: Double /*S/60 × 멈춤 × P*/,
+    val chaserEndZ: Double? /*끝 Z − 플로트*/, val program: List<String>, val note: String?)
 data class DieResult(val solution: DieSolution?, val warnings: List<DieWarning>)
 object DieHeadCalc { const val RATIO_DEFAULT = 0.96; const val DWELL_DEFAULT = 1.0; const val RETRACT_Z_DEFAULT = 150.0
     const val APPROACH_Z_DEFAULT = 20.0; const val CATALOG_FEED_NOTE: String; fun calc(i: DieInput): DieResult }
@@ -1458,10 +1473,14 @@ object DieHeadCatalog { val data: DieHeadCatalogData; val makers: List<DieMaker>
     fun speeds(maker: String? = null, iso: IsoGroup? = null): List<DieSpeedHit>; fun chasers(spec: ThreadSpec): List<DieChaserHit> }
 ```
 - **손 계산**(`DieHeadCalcTest`, 지은 치수): 1/2-20 UNF · Vc 12 · Z4 → −22 → n = 12 000/(π × 12.7) = 300.77 → `S301`, 쓴 Vc 12.0094, F = 0.96 × 1.27 = 1.2192,
-  분당 366.9792, 시간 = 60 × 26/366.9792 + 1 = 5.2509 초, 당김 1.04 → `G97S301` `G0X0.Z20.` `Z4.` `G1Z-22.F1.219` `G4U1.` `G0Z150.` + 안내.
-  M10×1.5 · 320 rpm · 비율 0.98 · 멈춤 0.5 · 물러남 120 · 진입 15 · Z3 → −17 · 목 2.5산 · 플로트 1 → `F1.47` · `G4U.5` · 시간 3.0510 · 당김 0.4 · 완전 나사 끝 −13.25.
-  첫 사례에 끝면 0 → 당김 = 0.04 × 22 = 0.88(시간 · 글은 그대로), 플로트 0.9 는 경고 없음(시작 Z 부터면 1.04 > 0.9 로 경고).
-- **테스트**: `DieHeadCalcTest`(위 둘의 전문 · 숫자, 비율 1 이면 안내 없음 · 당김 0, F 0.001 반올림(`F1.588` · `F.871`), 멈춤 0 이면 G4 없음, 경고 셋과 경계 · 함께 날 때,
+  분당 366.9792, 시간 = 60 × 26/366.9792 + 1 = 5.2509 초, 당김 0.04/0.96 × 26 = 1.0833, 멈춤 동안 이동 301/60 × 1.27 = 6.3712 →
+  `G97S301` `G0X0.Z20.` `Z4.` `G1Z-22.F1.219` `G4U1.` `G0Z150.` + 안내.
+  M10×1.5 · 320 rpm · 비율 0.98 · 멈춤 0.5 · 물러남 120 · 진입 15 · Z3 → −17 · 목 2.5산 · 플로트 1 → `F1.47` · `G4U.5` · 시간 3.0510 · 당김 0.02/0.98 × 20 = 0.4082 ·
+  완전 나사 끝 −13.25 · 멈춤 동안 이동 4 · 체이서 끝 −18.
+  첫 사례에 끝면 0 → 당김 = 0.04/0.96 × 22 = 0.9167(시간 · 글은 그대로), 플로트 0.92 는 경고 없음(시작 Z 부터면 1.0833 > 0.92 로 경고).
+  멈춤: 플로트 7.5 > 1.0833 + 6.3712 → `DWELL_SHORT`, 7.45 → 없음, 멈춤 0 → `DWELL_SHORT`. 끝면 2.73(= 4 − P) 은 없음 · 2.74 → `START_NEAR`.
+- **테스트**: `DieHeadCalcTest`(위 둘의 전문 · 숫자, 비율 1 이면 안내 없음 · 당김 0, F 0.001 반올림(`F1.588` · `F.871`), 멈춤 0 이면 G4 없음 · `DWELL_SHORT`, 경고 다섯과 경계 · 함께 날 때,
+  `dwellOpensHead`(멈춤 동안 열림 경계),
   멈춤 경고마다 사례, 처음 값, 끝면 Z — 당김 · 완전 나사 · 끝면 Z 순서 · 범위 `faceZ`), `DieHeadCatalogTest`(메이커 · 출처 참조가 모두 있음 · 홀더 표 줄 수, 절삭 속도 18줄 · 권장값 없음 · ISO 군 없음 · Z39-2 값,
   UN 체이서 20산 · 32산 · 6산 · 미터 1.5 · 4 · 5 · 6 · 0.25, 이송 규칙 · 플로트 자료), jvmTest `DieHeadCatalogJsonTest`(드릴과 같은 꼴: 사본이 원본과 바이트까지 같음 ·
   생성 문자열 = 사본 · 모델을 다시 JSON 으로 바꿔 원본과 모든 잎(null 아닌 값 3102 개 — 파이썬으로 센 수)을 맞춤, 개수 21 · 3 · 24 · 34 · 162).
@@ -1478,15 +1497,21 @@ object DieHeadCatalog { val data: DieHeadCatalogData; val makers: List<DieMaker>
   UN · NPT 는 두 회사 표 · 그림 글자에 R 이 없고 Carmex BSPT 도 없다 → null(만들지 않음).
 - "VARDEX 3ER = Carmex 16ER" 이라는 부름은 판매처 하나에만 있어 넣지 않았다(크기가 같다는 것만 공식 표 둘로 확인).
 - 관용 테이퍼: PT(R · Rc)는 BSPT 인서트(BS 21 = ISO 7-1 = JIS B 0203 의 55° 꼴), NPT 는 NPT 인서트로 고른다.
+- **최소 구멍**(내경 줄만, 2026-11-06 검증): `minBore` = 그 인서트를 받는 가장 작은 홀더의 Min. Bore — VARDEX 는 8쪽 추천표의 가장 작은 홀더 NVR050-3 의 108쪽 줄(NVRC050-3)
+  0.67 in = 17.018 mm(다른 내경 줄의 추천 홀더도 같은 -3 홀더), Carmex 는 41쪽 포켓 16 홀더 가운데 가장 작은 SIR 0013 M16 의 16 mm. `minBoreHolder` 는 그 이름 · 쪽.
+  이보다 작은 구멍은 다른(작은) 인서트다(VARDEX 추천표 — 20산 암나사는 3/4 부터, 5/8 ~ 11/16 은 2IR20UN, Rc · NPT 1/16 ~ 3/8 은 Micro · 5L · 6.0 · 2IR).
+  화면이 나사의 가장 가는 구멍(곧은 나사 = 급수 안지름 최소, 관용 = 끝 Z 안지름)과 견준다.
 ```kotlin
 enum class InsertForm { UN, NPT, BSPT }
 data class ThreadInsert(val maker: String, val designation: String, val lhDesignation: String, val internal: Boolean, val form: InsertForm,
-    val tpi: Double, val ic: String /*3/8"*/, val fullProfile: Boolean, val tipRPerPitch: Double? = null, val sourceId: String, val page: String) {
+    val tpi: Double, val ic: String /*3/8"*/, val fullProfile: Boolean, val tipRPerPitch: Double? = null, val sourceId: String, val page: String,
+    val minBore: Double? = null /*mm, 내경만*/, val minBoreHolder: String? = null) {
     val pitch: Double; val tipR: Double? /*mm = tipRPerPitch × P*/ }
 object ThreadInserts { val ALL: List<ThreadInsert> /*40 — 원본 JSON 차례*/; fun match(inner: Boolean, form: InsertForm, tpi: Double): List<ThreadInsert> }
 ```
 - 테스트: jvmTest `ThreadInsertsJsonTest`(40줄을 차례대로 — 제조사 · 이름 · 내외 · 꼴 · 산수 · IC · 풀 프로파일 · 출처 · 쪽, 날 끝 R 계수 = 원문 "R 0.137P" ·
-  없으면 null, R 있는 줄은 VARDEX BSPT 8줄뿐, `match` 가 고르는 줄 — 20산 UN 외 · 내 · BSPT 14 외(R 0.248557) · NPT 11.5 내 · 없는 산수).
+  없으면 null, R 있는 줄은 VARDEX BSPT 8줄뿐, `match` 가 고르는 줄 — 20산 UN 외 · 내 · BSPT 14 외(R 0.248557) · NPT 11.5 내 · 없는 산수, `minBoreFromJson` — 내경 줄의
+  최소 구멍 = JSON 3IR20UN holderMinBore 0.67 in × 25.4 · 16 IR 20 UN holders 의 가장 작은 값, 외경 null).
 
 ### 안 한 것 · 확인 못 한 것
 - 다이스 헤드(위 절)에서 안 한 것: 홀더 표로 크기 거르기(UNEF · 20UN 행이 없음), 재질 → ISO 군 짝짓기(출처에 군이 없음), Landis · TACO 절삭 속도(공개 표 없음),
