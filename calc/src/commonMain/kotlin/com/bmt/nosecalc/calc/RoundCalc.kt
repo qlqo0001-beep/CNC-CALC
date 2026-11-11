@@ -17,7 +17,7 @@ enum class RoundWarning {
     /** 값이 모자람. 비울 수 있는 값(구 중심이 축 위라 나머지로 정해지는 것)은 하나까지 */
     MISSING_INPUT,
 
-    /** 길이·지름·R ≤ 0, 모서리 R·노즈R·Z 여유 < 0, 뒤 요소 길이 ≤ 0, 팁 0~9 밖, X < 0, 숫자가 아님, 좌표·치수가 ±[MAX_MM] 밖 */
+    /** 길이·지름·R ≤ 0, 모서리 R·노즈R·Z 여유 < 0, 노즈R·Z 여유가 둘 다 0(진입 거리 없음), 뒤 요소 길이 ≤ 0, 팁 0~9 밖, X < 0, 숫자가 아님, 좌표·치수가 ±[MAX_MM] 밖 */
     BAD_INPUT,
 
     /** 비울 수 있는 값까지 다 넣었는데 서로 0.001 mm 넘게 안 맞다 */
@@ -762,7 +762,9 @@ object RoundCalc {
     }
 
     private fun checkTool(r: Double, tip: Int?, zClear: Double) {
-        val ok = r >= 0 && r.isFinite() && zClear >= 0 && zClear.isFinite() && (tip == null || tip in 0..9) && !tooBig(r, zClear)
+        // Z 여유 0 은 된다(진입 거리 = 노즈R). 둘 다 0 이면 진입 이동이 없다 — 테이퍼(`TaperCalc.checkCommon`)와 같이 멈춘다: 기계 보정 프로그램의 진입점이
+        // 첫 점과 겹쳐 첫 깎는 줄의 방향이 없고(NaN 좌표 — NC 글을 쓰다 예외가 나 화면이 꺼졌다, 2026-11-10 피드백 1), 직접 보정은 G0 이 도면 첫 점에 닿는다
+        val ok = r >= 0 && r.isFinite() && zClear >= 0 && zClear.isFinite() && max(r, zClear) > 0 && (tip == null || tip in 0..9) && !tooBig(r, zClear)
         if (!ok) stop(RoundWarning.BAD_INPUT)
     }
 

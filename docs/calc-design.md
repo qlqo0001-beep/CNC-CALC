@@ -1821,3 +1821,23 @@ object DrillCatalog { val makers: List<DrillMaker>; fun maker(key: String): Dril
 - 카탈로그 각주의 감소율(깊이별 이송 85% · 70%, 외부 급유 Vc 10% 감소, TAFL 80% 등)은 글로만 보이고 계산하지 않는다 — 고른 깊이 · 급유를 입력받지 않아서.
 - 원본 03 의 제품 카드(사진 · 설명), 대구텍 · Gühring · OSG, 날 수(2날/3날) 고르기 — 카탈로그 행에 날 수 칸이 없다.
 - G96 의 가공 시간(지름이 바뀌며 회전수가 변함 — KORLOY F11 에 식이 있으나 넣지 않음), 동력 · 절삭저항(kc 값은 재질별 표 값이라 쓰지 않음).
+
+## 2026-11-10 피드백 — 라운드
+
+### 1. 노즈R 을 고치려 하면 앱이 꺼짐 (고침)
+- 증상(피드백 1): 형상에 치수를 넣어 풀린(비운 칸이 자동 계산된) 화면에서 노즈 R '직접' 칩으로 키패드를 열고 값을 치면 앱이 꺼졌다. 폰 · PC 가 같은 코드다.
+- 원인: 키패드는 누르는 대로 칸에 넣는다(`NumEdit.live`) — 0.4 · 0.8 처럼 1 보다 작은 값은 첫 키(0 · . · ⌫)에서 노즈R 이 0 이 된다. 화면의 Z 여유 처음 값은 빈칸(0)이라
+  진입 거리 c = max(Z 여유, 노즈R) = 0 → `RoundCalc.machineFrame` 이 진입점 e0 = 첫 점 − t0·c = 첫 점으로 `CompFrame.entry` 를 부르고, `entry0` 의 첫 깎는 줄 방향
+  `(s − e0).unit()` 이 0 벡터 × (1 / 0) = NaN → 진입 명령점이 NaN → `CompFrame.write` → `NcLines.move` → `Fmt.text` 의 `require(isFinite)` 가
+  IllegalArgumentException("숫자가 아니다: NaN"). 화면은 값이 바뀔 때마다 그리는 중에 보정 탭과 상관없이 `RoundCalc.machine` 을 부르므로 그 예외가 앱을 끈다.
+  풀이가 있는 모든 형상(1~6 외 · 내경) · 3점호에서 같았다(풀이가 없으면 `machine` 이 틀을 짜지 않는다 — "자동 계산이 된 상태에서" 만 꺼진 까닭).
+  예시 상태(`roundExample`)는 Z 여유가 1.0 이라 `InputRobustnessTest` · 스크린샷 · 골든 시험은 이 길을 지나지 않았다.
+- 고침: `RoundCalc.checkTool` 이 테이퍼(`TaperCalc.checkCommon`)와 같이 노즈R 과 Z 여유가 둘 다 0 이면 `BAD_INPUT` 으로 멈춘다(`calc` · `arc3` · `machine` 모두 —
+  직접 보정도 그 값이면 G0 이 도면 첫 점에 닿는다). Z 여유 0 + 노즈R > 0, 노즈R 0 + Z 여유 > 0 은 전과 같이 푼다. 화면 글(`roundWarningText`)에 테이퍼와 같은
+  "(노즈R 이 0 이면 Z 여유를 넣으세요 — 진입 거리가 없습니다)" 를 더했다. 치는 동안(0 · 0.) 빨간 안내가 잠깐 뜨고 값이 0 보다 커지면 다시 풀린다.
+- 시험: `RoundNoseSweepTest`(calc — 말한 상태에서 노즈R 글 차례, 둘 다 0 → `BAD_INPUT`, 형상 1~6 × 외 · 내경 × 비운 칸 · 관통 · 팁 · Z 여유 × 노즈R 글 37 가지 · 3점호 ·
+  보링바 `HolderStop.plan` 까지 예외 0), `RoundNoseEditTest`(shared jvmTest — 실제 화면에서 형상 5 에 주 R · D2 · D1 · L1 을 넣고 '직접' → 0 · . · 8 을 화면 키 · PC 키로,
+  ⌫ · C · 취소, 형상 × 외 · 내경 × 비운 칸 × 보정 탭 × 노즈R 글을 그리기까지, Z 여유 1 에서는 노즈R 0 도 풀린 채 그리는지). 고치기 전 코드에서는 둘 다 같은 스택으로 실패한다
+  (Z 여유 1 시험만 전후 모두 통과 — 꺼지는 길이 아니다).
+  몽키(`UiMonkeyTest.round`)에는 시작 상태 '라운드 형상 5 자동 L2 · Z 여유 빈칸' 을 더했다 — 고치기 전 코드에서 `BMT_MONKEY=0.25` 로 '직접 → − → 0' 경로의 같은 예외를 잡는다
+  (전에는 풀린 시작 상태가 모두 Z 여유 1.0 이라 못 잡았다).

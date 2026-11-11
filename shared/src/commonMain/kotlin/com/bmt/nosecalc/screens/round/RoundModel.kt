@@ -292,7 +292,9 @@ internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = e
             "값을 넣으면 바로 계산합니다." + if (need.isEmpty()) "" else " 넣을 값: ${need.joinToString(", ")}."
         }
         RoundWarning.BAD_INPUT ->
-            "입력이 잘못됐습니다. 길이 · 지름 · R 은 0 보다 크고, 모서리 R · 노즈R · Z 여유는 0 이상, ${legLabel(type, inner)}는 0 보다 커야 합니다. X 는 0 이상, 모든 값은 ±${MAX_MM.toInt()} mm 안입니다."
+            // 노즈R 0 + Z 여유 0(빈칸)은 진입 거리가 없어 멈춘다(테이퍼와 같은 글) — 노즈R 칸을 키패드로 고치는 동안 0 을 지나간다
+            "입력이 잘못됐습니다. 길이 · 지름 · R 은 0 보다 크고, 모서리 R · 노즈R · Z 여유는 0 이상, ${legLabel(type, inner)}는 0 보다 커야 합니다" +
+                "(노즈R 이 0 이면 Z 여유를 넣으세요 — 진입 거리가 없습니다). X 는 0 이상, 모든 값은 ±${MAX_MM.toInt()} mm 안입니다."
         RoundWarning.CONTRADICTION ->
             "치수가 서로 맞지 않습니다(0.001 mm 넘게). 주 R 은 중심이 축 위인 구라서 $blanks 가운데 하나는 나머지로 정해집니다. 하나를 비우면 계산합니다."
         RoundWarning.SHAPE_MISMATCH -> when (type) {
