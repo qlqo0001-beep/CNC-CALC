@@ -159,8 +159,9 @@ class RoundNoseSweepTest {
                     // Z 여유는 화면 처음 값(빈칸 = 0)이 대부분
                     zClear = pick(0.0, 0.0, 0.0, 1.0, 2.0), tip = if (rnd.nextInt(4) == 0) rnd.nextInt(10) else null,
                 )
-                for (t in noseTexts) {
-                    val i = base.copy(noseR = nose(t))
+                // 가공 방향을 바꾼 것도(2026-11-10 피드백 2 — 뒤집은 시작 규칙 · 접근 줄)
+                for (t in noseTexts) for (flip in listOf(false, true)) {
+                    val i = base.copy(noseR = nose(t), flip = flip)
                     seen.run({ "$i" }) {
                         val r = RoundCalc.calc(i)
                         if (r.solution != null) solved++
@@ -185,8 +186,8 @@ class RoundNoseSweepTest {
             fun z() = rnd.nextInt(-40_000, 5_000) / 1000.0
             Arc3Input(inner = rnd.nextBoolean(), x1 = x(), z1 = z(), x2 = x(), z2 = z(), x3 = x(), z3 = z())
         }
-        for (base in pts) for (zc in listOf(0.0, 1.0)) for (t in noseTexts) {
-            val a = base.copy(noseR = nose(t), zClear = zc)
+        for (base in pts) for (zc in listOf(0.0, 1.0)) for (t in noseTexts) for (flip in listOf(false, true)) {
+            val a = base.copy(noseR = nose(t), zClear = zc, flip = flip)
             seen.run({ "$a" }) {
                 val r = RoundCalc.arc3(a)
                 if (r.solution != null) solved++

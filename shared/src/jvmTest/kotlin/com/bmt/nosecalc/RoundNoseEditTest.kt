@@ -241,4 +241,25 @@ class RoundNoseEditTest {
         sweep("3점호 내경", roundManualInnerMouth().apply { setShared("zClear", "") }.withBar("8", "4.5", "D", "7.75", "93"))
         sweep("3점호 내경 역방향", roundManualInnerRev().apply { setShared("zClear", "") })
     }
+
+    /**
+     * 가공 방향을 바꾼 화면(2026-11-10 피드백 2)도 같은 훑기: 형상 1~6 × 외·내경(막힘 · 관통) · 3점호 × 보정 탭 × 노즈R 글 — 그리기까지 예외 0.
+     * 내경은 보링바 칸을 채워 '검사 안 함' 안내 길까지
+     */
+    @Test
+    fun noseTextsDrawWhenFlipped() {
+        for (type in 1..6) for (inner in listOf(false, true)) {
+            if (inner && type == 1) continue
+            for (through in if (inner && type >= 5) listOf(false, true) else listOf(false)) {
+                val st = shape(type, inner, blankable(type).firstOrNull())
+                if (inner) st.withBar("8", "4.5", "D", "7.75", "93")
+                st.through = through
+                st.setFlipped(type, true)
+                sweep("바꿈 · 형상 $type · 내경 $inner · 관통 $through", st)
+            }
+        }
+        sweep("바꿈 · 3점호 외경", roundExample(MANUAL, open = true).apply { setShared("zClear", ""); manualFlip = true })
+        sweep("바꿈 · 3점호 내경", roundManualInnerMouth().apply { setShared("zClear", ""); manualFlip = true }.withBar("8", "4.5", "D", "7.75", "93"))
+        sweep("바꿈 · 3점호 내경 역방향", roundManualInnerRev().apply { setShared("zClear", ""); manualFlip = true })
+    }
 }

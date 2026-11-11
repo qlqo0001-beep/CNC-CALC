@@ -146,6 +146,12 @@ object HolderStop {
      * [faceAtStart] · [bar] = [HolderCheck.check] 와 같다, [safe] = 안전 여유(mm). 안전 여유 값이 틀리면 result.skip = BAD_INPUT
      */
     fun plan(sol: RoundSolution, drawn: RoundSolution?, r: Double, faceAtStart: Boolean, bar: BoringBar, safe: Double = SAFE_DEFAULT): HolderPlan {
+        // 가공 방향을 뒤집은 풀이는 보지 않는다(HolderSkip.FLIPPED) — 화면이 기본 방향으로 돌려 확인하라고 알린다.
+        // 아래(와 `replay`)는 `approach` 가 있으면 기계 보정 프로그램으로 본다 — 뒤집은 풀이는 직접 보정도 `approach`(접근 점)를 갖고 기계 보정은 진입 뒤 이송 점
+        // (`leadIn`)이 더 있으므로, 뒤집은 방향의 검사를 넣을 때는 그 가름부터 따로 둘 것(지금은 여기서 돌아가 닿지 않는다)
+        if (sol.flip) {
+            return HolderPlan(HolderResult(HolderSkip.FLIPPED, emptyList(), null, null, null), safe, null, emptyList(), null, null, emptyList(), null, null)
+        }
         val res = HolderCheck.check(sol.drawing, sol.program, sol.entry, sol.tip, r, faceAtStart, bar)
         if (res.skip != null) return HolderPlan(res, safe, null, emptyList(), null, null, emptyList(), null, null)
         if (!safeOk(safe)) {
