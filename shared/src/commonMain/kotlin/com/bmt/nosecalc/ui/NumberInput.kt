@@ -44,6 +44,7 @@ import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -274,7 +275,7 @@ private fun FieldChip(text: String, bg: Color, fg: Color, border: Color = Color.
  * preview = 제목 위 결과 한 줄(누를 때마다 바뀐다), figure = 제목 아래 작은 그림(시트 자리가 넉넉할 때만).
  * chain = 칸 묶음: PC 의 Tab · Shift+Tab 이 닫을 때처럼 다듬고 다음 · 앞 칸을 연다(시트는 그대로). 화면 키는 넘기지 않으므로 제목에 "n / m" 을 적지 않는다.
  * PC 는 실제 키보드도 받는다(숫자 · . · − · Backspace · Delete = C · Enter = 확인(닫기) · Tab = 다음 칸(마지막 칸 · 묶음 밖은 닫기) ·
- * Shift+Tab = 앞 칸 · Esc = 닫기).
+ * Shift+Tab = 앞 칸 · Esc = 닫기). 오른쪽 숫자 키패드의 숫자 · . · − · Enter 도 같다([NumEdit.keyOf]).
  */
 @Composable
 internal fun NumberPad(
@@ -527,13 +528,15 @@ internal object NumEdit {
         digitKeys.indexOf(e.key).takeIf { it >= 0 && !e.isShiftPressed }?.let { return '0' + it }
         padKeys.indexOf(e.key).takeIf { it >= 0 }?.let { return '0' + it }
         return when (e.key) {
-            Key.Period, Key.NumPadDot, Key.Comma -> '.'
+            Key.Period, Key.NumPadDot, Key.Comma, Key.NumPadComma -> '.'
             Key.Minus, Key.NumPadSubtract -> '-'
             Key.Backspace -> '<'
             Key.Delete -> 'C'
             Key.Enter, Key.NumPadEnter -> DONE
             Key.Tab -> if (e.isShiftPressed) PREV else NEXT
-            else -> null
+            // PC 창은 숫자 키패드의 . 을 AWT VK_DECIMAL 로 받는데 Key.NumPadDot 는 VK_PERIOD + 숫자 키패드 자리라 맞지 않는다 —
+            // 눌린 글자로 받는다(소수점 키가 , 인 자판 배치도)
+            else -> if (e.utf16CodePoint == '.'.code || e.utf16CodePoint == ','.code) '.' else null
         }
     }
 

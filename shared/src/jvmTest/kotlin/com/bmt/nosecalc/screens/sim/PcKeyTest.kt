@@ -8,11 +8,13 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.bmt.nosecalc.KeyValueStore
+import com.bmt.nosecalc.numPadKey
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import java.awt.event.KeyEvent as AwtKey
 
 /** PC 키보드(설계 7.1): 글자는 대문자로, 화살표 · Shift 고르기, Ctrl+Z/Y/A/C/X/V/F, 찾기 줄이 열리면 찾는 글로 */
 @Suppress("DEPRECATION")
@@ -82,5 +84,37 @@ class PcKeyTest {
         press(Key.Backspace)
         assertEquals("Z-", sim.query)
         assertEquals("G01 Z-30.", sim.editor.text)
+    }
+
+    /**
+     * 숫자 키패드(PC 창이 받는 그대로 — [numPadKey]): 숫자 · . · − · + · / 는 눌린 글자로 들어가고 Enter 는 줄바꿈.
+     * 찾기 줄이 열려 있으면 찾는 글로, Enter 는 다음 찾기
+     */
+    @Test
+    fun numPadKeys() {
+        fun pad(code: Int, ch: Char) = assertTrue(pcKey(numPadKey(code, ch), sim, clip), "$ch")
+        fun digits(s: String) = s.forEach { pad(AwtKey.VK_NUMPAD0 + (it - '0'), it) }
+        pad(AwtKey.VK_DIVIDE, '/')
+        type("g1x")
+        pad(AwtKey.VK_SUBTRACT, '-')
+        digits("12")
+        pad(AwtKey.VK_DECIMAL, '.')
+        digits("5")
+        type("w")
+        pad(AwtKey.VK_ADD, '+')
+        digits("03")
+        pad(AwtKey.VK_ENTER, '\n')
+        type("z")
+        digits("4")
+        pad(AwtKey.VK_DECIMAL, '.')
+        assertEquals("/G1X-12.5W+03\nZ4.", sim.editor.text)
+        press(Key.F, ctrl = true)
+        digits("12")
+        pad(AwtKey.VK_DECIMAL, '.')
+        assertEquals("12.", sim.query)
+        assertEquals("12.", sim.editor.selectedText())
+        pad(AwtKey.VK_ENTER, '\n') // 다음 찾기 — 하나뿐이라 그 자리
+        assertEquals("12.", sim.editor.selectedText())
+        assertEquals("/G1X-12.5W+03\nZ4.", sim.editor.text)
     }
 }

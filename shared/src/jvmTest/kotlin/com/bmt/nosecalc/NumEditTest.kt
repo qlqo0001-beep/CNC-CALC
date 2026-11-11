@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -41,6 +42,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import java.awt.event.KeyEvent as AwtKey
 
 class NumEditTest {
     /** 글 고치기만(연 뒤 덮어쓰기 없이) */
@@ -163,6 +165,75 @@ class NumEditTest {
         assertEquals(NumEdit.DONE, NumEdit.keyOf(KeyEvent(Key.NumPadEnter, KeyEventType.KeyDown)))
         assertEquals(NumEdit.NEXT, NumEdit.keyOf(KeyEvent(Key.Tab, KeyEventType.KeyDown)))
         assertEquals(NumEdit.PREV, NumEdit.keyOf(KeyEvent(Key.Tab, KeyEventType.KeyDown, isShiftPressed = true)))
+    }
+
+    /**
+     * 현장 보고(2026-11-10) "키보드 오른쪽 숫자 키패드의 . 키가 작동하지 않음": PC 창은 숫자 키패드 . 을 AWT VK_DECIMAL 로 받는데
+     * Compose 의 Key.NumPadDot 는 VK_PERIOD + 숫자 키패드 자리라 다른 키다(숫자 · − · Enter 는 이름과 같은 키로 온다) — . 은 눌린 글자로 받는다.
+     * 키는 창이 받는 그대로 만든다([awtKey])
+     */
+    @Test
+    fun numPadKeys() {
+        for (d in 0..9) assertEquals('0' + d, NumEdit.keyOf(numPadKey(AwtKey.VK_NUMPAD0 + d, '0' + d)))
+        assertEquals('.', NumEdit.keyOf(numPadKey(AwtKey.VK_DECIMAL, '.')))
+        assertEquals('.', NumEdit.keyOf(numPadKey(AwtKey.VK_DECIMAL, ','))) // 소수점 키가 , 인 자판 배치
+        assertEquals('.', NumEdit.keyOf(numPadKey(AwtKey.VK_SEPARATOR, ',')))
+        assertEquals('-', NumEdit.keyOf(numPadKey(AwtKey.VK_SUBTRACT, '-')))
+        assertEquals(NumEdit.DONE, NumEdit.keyOf(numPadKey(AwtKey.VK_ENTER, '\n')))
+        // 숫자 칸에 쓰지 않는 키는 받지 않는다
+        assertNull(NumEdit.keyOf(numPadKey(AwtKey.VK_ADD, '+')))
+        assertNull(NumEdit.keyOf(numPadKey(AwtKey.VK_MULTIPLY, '*')))
+        assertNull(NumEdit.keyOf(numPadKey(AwtKey.VK_DIVIDE, '/')))
+        // NumLock 이 꺼져 Delete 로 오는 . 자리는 예전처럼 받지 않는다(. 도 C 도 아니다)
+        assertNull(NumEdit.keyOf(numPadKey(AwtKey.VK_DELETE, '\u007f')))
+        // Ctrl · Alt 와 같이 누르면 받지 않는다(다른 키와 같게)
+        assertNull(NumEdit.keyOf(numPadKey(AwtKey.VK_DECIMAL, '.', AwtKey.CTRL_DOWN_MASK)))
+        assertNull(NumEdit.keyOf(numPadKey(AwtKey.VK_DECIMAL, '.', AwtKey.ALT_DOWN_MASK)))
+        // 글자 줄의 숫자 · . · , · − · Enter 는 그대로
+        assertEquals('7', NumEdit.keyOf(awtKey(AwtKey.VK_7, '7')))
+        assertEquals('.', NumEdit.keyOf(awtKey(AwtKey.VK_PERIOD, '.')))
+        assertEquals('.', NumEdit.keyOf(awtKey(AwtKey.VK_COMMA, ',')))
+        assertEquals('-', NumEdit.keyOf(awtKey(AwtKey.VK_MINUS, '-')))
+        assertEquals(NumEdit.DONE, NumEdit.keyOf(awtKey(AwtKey.VK_ENTER, '\n')))
+        // 크게 보기 · 궤적 창이 이름으로 받는 숫자 키패드 키(+ − 0)는 AWT 가 보내는 키와 같다
+        assertEquals(Key.NumPadAdd, numPadKey(AwtKey.VK_ADD, '+').key)
+        assertEquals(Key.NumPadSubtract, numPadKey(AwtKey.VK_SUBTRACT, '-').key)
+        assertEquals(Key.NumPad0, numPadKey(AwtKey.VK_NUMPAD0, '0').key)
+    }
+
+    /** 숫자 키패드로 친 값: . 은 한 번만 들어가고, 연 뒤 . 부터 치면 0. 으로 덮어쓴다 — 글자 줄의 . 과 똑같다 */
+    @Test
+    fun padTakesNumPadPoint() {
+        fun digit(d: Int) = numPadKey(AwtKey.VK_NUMPAD0 + d, '0' + d)
+        for (dot in listOf(numPadKey(AwtKey.VK_DECIMAL, '.'), awtKey(AwtKey.VK_PERIOD, '.'))) {
+            Pad("40").use { pad ->
+                pad.press(digit(1))
+                pad.press(digit(2))
+                pad.press(dot)
+                assertEquals("12", pad.value) // "12." 은 다듬어 넣는다
+                pad.press(digit(5))
+                assertEquals("12.5", pad.value)
+                pad.press(dot) // 두 번째 . 은 버린다
+                pad.press(digit(5))
+                assertEquals("12.55", pad.value)
+                pad.press(numPadKey(AwtKey.VK_ENTER, '\n'))
+                assertFalse(pad.open.value)
+                assertEquals("12.55", pad.value)
+            }
+            Pad("40").use { pad ->
+                pad.press(dot)
+                assertEquals("0", pad.value) // "0."
+                pad.press(digit(5))
+                assertEquals("0.5", pad.value)
+            }
+            Pad("").use { pad ->
+                pad.press(numPadKey(AwtKey.VK_SUBTRACT, '-'))
+                pad.press(dot)
+                pad.press(digit(2))
+                pad.press(digit(5))
+                assertEquals("-0.25", pad.value)
+            }
+        }
     }
 
     /**
@@ -377,8 +448,10 @@ class NumEditTest {
         }
 
         @OptIn(InternalComposeUiApi::class)
-        fun press(k: Key) {
-            state.handleKey(KeyEvent(k, KeyEventType.KeyDown))
+        fun press(k: Key) = press(KeyEvent(k, KeyEventType.KeyDown))
+
+        fun press(e: KeyEvent) {
+            state.handleKey(e)
             frame()
         }
 

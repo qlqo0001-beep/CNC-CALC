@@ -801,3 +801,20 @@
   calc `RevolveMeshTest`(부피 손 계산 · 1/4 = 270° 몫 · 바깥쪽 감김 · 삼각형 한도 · 나사 골 자리 = 2D 톱니 · 척 · 둥근 홈 법선).
 - 4단계 최종 점검 시험: `SimRobustnessTest`(예제 11개를 실제 화면으로 · 무작위 프로그램 2 400개 × 공구표 · 소재 · 기계 칸 — `build/perf/sim-robust.txt`) · `SimLongProgramTest`(글 5 000줄 — 실행 · 편집기 키 하나 · 궤적 창 재생 값 `build/perf/sim-long.txt`, 스크린샷 `sim-editor-long`). 두 시험의 장면은 `UiQueue`(효과를 프레임 사이에 시험 스레드에서 — 앱처럼 한 UI 스레드)로 돌린다. 결과는 `stage4-report.md`.
 
+## 2026-11-10 피드백 — 키패드 · 편집기
+
+### 6. 키보드 오른쪽 숫자 키패드의 . 키 (PC 창)
+- 증상(현장 보고 "키보드 오른쪽 숫자 키패드의 . 키가 작동하지 않음"): PC 창의 숫자 칸 키패드(`NumberPad`)에서 숫자 키패드의 숫자 · − · Enter 는 먹는데 . 만 아무 일도 하지 않았다.
+- 까닭: PC 창(AWT)은 그 키를 `VK_DECIMAL`(110) + 숫자 키패드 자리로 보내는데, Compose Desktop(1.11.1)의 `Key.NumPadDot` 는 `VK_PERIOD`(46) + 숫자 키패드 자리라 같은 키가 아니다
+  (`Key.NumPadComma` 도 `VK_COMMA` + 숫자 키패드 자리라 AWT 의 `VK_SEPARATOR` 와 다르다). 나머지 — `Key.NumPad0`~`9` · `NumPadSubtract` · `NumPadAdd` · `NumPadMultiply` · `NumPadDivide` · `NumPadEnter` — 는 AWT 가 보내는 키와 같다.
+  AWT 가 보내는 키는 작업 PC(윈도우 10 · 한국어 · JDK 25)에서 보이지 않는 AWT 창에 `WM_KEYDOWN` 을 넣어 확인했다: 숫자 키패드 . = `KEY_PRESSED` 키 코드 110 · 글자 `.` · 자리 4(숫자 키패드), 숫자 · − · + · * · / · Enter 도 키 코드와 글자가 같이 온다.
+- 고침(`NumEdit.keyOf`): 이름으로 알아보지 못한 키는 **눌린 글자**(`utf16CodePoint`)가 `.` 이나 `,` 면 소수점으로 받는다(글자 줄의 `,` 를 . 으로 받던 것과 같게 — 소수점 키가 `,` 인 자판 배치도 이 길로 온다).
+  이름 목록에는 `Key.NumPadComma` 를 더했다. Ctrl · Alt 와 같이 누른 키는 예전처럼 받지 않는다.
+- NumLock 이 꺼져 있으면 그 키는 Delete(`VK_DELETE` + 숫자 키패드 자리 = `Key.NumPadDelete`)로 온다 — 예전처럼 아무 일도 하지 않는다(소수점으로 바꾸지 않고, C 로도 받지 않는다).
+  같은 까닭으로 NumLock 을 끈 숫자 키패드의 화살표 · Home · End · Delete(`Key.NumPadDirectionUp` 등 — 숫자 키패드 자리)는 편집기 `pcKey` 가 받지 않는다(글자 줄 옆 화살표 키만) — 이번에 바꾸지 않았다.
+- 한글 입력기(한/영): 앱에 시스템 글 칸(TextField)이 없어 Compose 가 창의 입력기를 꺼 둔다(글 칸 입력이 시작될 때만 `enableInputMethods(true)`) — 한/영 상태와 상관없이 같은 키 · 같은 글자가 온다.
+- 하드웨어 키를 받는 다른 자리(바꾸지 않음): 시뮬레이터 편집기 `pcKey` 는 글자 키를 눌린 글자로 받아 숫자 키패드의 숫자 · . · − · + · / 가 원래 들어가고 Enter 는 `Key.NumPadEnter` 로 줄바꿈(찾기 줄이 열려 있으면 찾는 글 · 다음 찾기).
+  크게 보기 · 궤적 창의 + − 0(`viewerKey` · `trajKey`)은 `Key.NumPadAdd` · `NumPadSubtract` · `NumPad0` 이 AWT 키와 같아 그대로 먹는다. 안드로이드는 `AppState.handleKey` 를 부르지 않아 숫자 칸 키패드가 하드웨어 키보드를 받지 않는다(원래 그랬다).
+- 시험: `AwtKeys.kt`(jvmTest — AWT 키 이벤트(키 코드 · 눌린 글자 · 자리)를 Compose Desktop 이 창에서 쓰는 변환 `toComposeEvent` 로 바꿔 **창이 받는 그대로의 키**를 만든다: `awtKey` · `numPadKey`.
+  `Key.NumPadDot` 처럼 이름으로 만든 키는 실제 키와 달라 이 버그를 잡지 못한다) · `NumEditTest.numPadKeys`(키마다) · `padTakesNumPadPoint`(키패드에 숫자 키패드로 친 값 — . 한 번만 · 연 뒤 . 부터 · − 뒤 .) · `PcKeyTest.numPadKeys`(편집기 · 찾기 줄).
+  실제 창에서 실제 키보드로 누르는 확인은 하지 않았다(손 확인 대기).
