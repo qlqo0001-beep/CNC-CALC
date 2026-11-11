@@ -240,7 +240,7 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
         )
     }
 
-    /** 마지막 실행 결과(글을 고치고 0.3초 뒤 다시 — 화면이 [runOf] 를 백그라운드에서 불러 넣는다) */
+    /** 마지막 실행 결과(줄을 끝내고 0.3초 뒤 다시 — 화면이 [runOf] 를 검사 글([EditorState.checkedText])로 백그라운드에서 불러 넣는다) */
     var run: SimRun by mutableStateOf(runOf(editor.text, tools))
 
     /** [run] 을 만든 글 · 공구표 · 설정(궤적 창을 열 때 낡았으면 바로 다시 돈다) */
@@ -249,14 +249,16 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
     /** 궤적 창이 열려 있나(도움말이 '궤적 창 조작' 부터 — 설계 7.11) */
     var trajOpen by mutableStateOf(false)
 
-    /** 0.3초를 기다리지 않고 지금 글 · 설정으로(궤적 창을 열 때 — 고친 직후 눌러도 그 글을 보이게) */
+    /** 0.3초를 기다리지 않고 지금 글 · 설정으로(궤적 창을 열 때 — 고친 직후 눌러도 그 글을 보이게). 쓰던 줄도 끝내고 글 전체로 돈다 */
     fun ensureRun() {
+        editor.finishLine()
         val setup = runSetup()
         val k = Triple(editor.text, tools, setup)
         if (runKey != k) {
             run = runOf(editor.text, tools, setup)
             runKey = k
         }
+        editor.ran(editor.checkGen)
     }
 
     var sheet: SimSheet? by mutableStateOf(null)

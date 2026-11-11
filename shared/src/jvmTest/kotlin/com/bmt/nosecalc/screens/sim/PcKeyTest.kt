@@ -117,4 +117,89 @@ class PcKeyTest {
         assertEquals("12.", sim.editor.selectedText())
         assertEquals("/G1X-12.5W+03\nZ4.", sim.editor.text)
     }
+
+    /**
+     * 쓰는 줄(설계 20 — 쓰는 중인 줄에는 오류를 띄우지 않는다): 글자 키가 쓰는 줄을 만들고, Enter(숫자 키패드 Enter) · ↑ ↓ · 줄 밖으로 나가는 ← → ·
+     * Shift+↓ · Ctrl+V · Ctrl+F · ; · 여러 줄 Ctrl+A 가 끝낸다. 같은 줄 안의 ← → Home End · Ctrl+Z · 한 줄 안 Ctrl+X 는 그대로
+     */
+    @Test
+    fun writingLine() {
+        val ed = sim.editor
+        fun writing() = ed.writingLine != null
+        type("x")
+        assertTrue(writing())
+        assertEquals(emptyList(), shownIssues(ed, sim.run))
+        press(Key.Enter)
+        assertFalse(writing())
+        assertEquals("X\n", ed.checkedText)
+        type("z")
+        assertTrue(pcKey(numPadKey(AwtKey.VK_ENTER, '\n'), sim, clip))
+        assertFalse(writing())
+        assertEquals("X\nZ\n", ed.checkedText)
+        // 같은 줄 안에서 옮기는 것은 그대로
+        type("g1")
+        press(Key.DirectionLeft)
+        press(Key.DirectionRight)
+        press(Key.MoveHome)
+        press(Key.MoveEnd)
+        assertEquals(2, ed.writingLine)
+        assertEquals("X\nZ\n", ed.checkedText)
+        // 줄 처음의 ← · 줄 끝의 →
+        press(Key.MoveHome)
+        press(Key.DirectionLeft)
+        assertFalse(writing())
+        type("5")
+        assertEquals(1, ed.writingLine)
+        press(Key.DirectionRight)
+        assertFalse(writing())
+        // ↓ ↑: 갈 줄이 없어도(끝 줄의 ↓)
+        type("f")
+        assertEquals(2, ed.writingLine)
+        press(Key.DirectionDown)
+        assertFalse(writing())
+        type("2")
+        press(Key.DirectionUp)
+        assertFalse(writing())
+        type("3")
+        assertEquals(1, ed.writingLine)
+        press(Key.DirectionDown, shift = true)
+        assertFalse(writing())
+        press(Key.DirectionRight)
+        assertEquals("X\nZ53\nFG12", ed.text)
+        assertEquals(ed.text, ed.checkedText)
+        // Ctrl+V 는 한 글자라도 바로 검사, Ctrl+Z(한 줄 안)는 그대로 쓰는 중
+        clip.held = AnnotatedString("7")
+        type("w")
+        press(Key.V, ctrl = true)
+        assertFalse(writing())
+        type("u1")
+        press(Key.Z, ctrl = true)
+        assertTrue(writing())
+        // Ctrl+F: 줄을 끝내고 찾기 줄을 연다 — 열린 동안 글자는 찾는 글로 가서 쓰는 줄이 생기지 않는다
+        press(Key.F, ctrl = true)
+        assertFalse(writing())
+        assertTrue(sim.findOpen)
+        type("z")
+        assertEquals("Z", sim.query)
+        assertFalse(writing())
+        sim.findOpen = false
+        press(Key.DirectionRight)
+        // ; (EOB)
+        type("m")
+        assertTrue(writing())
+        type(";")
+        assertFalse(writing())
+        // Ctrl+A: 고른 범위가 쓰는 줄 밖으로 나가면 끝
+        type("s")
+        press(Key.A, ctrl = true)
+        assertFalse(writing())
+        assertEquals(ed.text, ed.checkedText)
+        // 한 줄 안에서 고른 것을 Ctrl+X: 그대로 쓰는 중
+        press(Key.DirectionRight)
+        type("t1")
+        press(Key.DirectionLeft, shift = true)
+        press(Key.X, ctrl = true)
+        assertEquals("1", clip.held?.text)
+        assertTrue(writing())
+    }
 }

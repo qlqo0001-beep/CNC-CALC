@@ -70,7 +70,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * 시뮬레이터 화면 A — 편집기(설계 7.1 · 09): 프로그램 줄 → (찾기 줄) → 편집기 → 문제 띠 → CNC 키패드(닫으면 아래 단추 줄).
- * 글을 고치고 0.3초 쉬면 백그라운드에서 다시 돌려(GSim) 문제 표를 바꾸고, 0.5초 쉬면 임시 글을 남긴다.
+ * 줄을 끝내고 0.3초 뒤 백그라운드에서 다시 돌려(GSim) 문제 표를 바꾸고(쓰는 중인 줄은 검사하지 않는다 — 설계 20), 0.5초 쉬면 임시 글을 남긴다.
  * onTrajectory = 궤적 창 열기(▶ 궤적 · 궤적 확인 단추). onTools = 궤적 창을 공구 설정 시트로 열기(문제 띠의 '공구 설정').
  */
 @Composable
@@ -86,22 +86,30 @@ internal fun SimulatorPage(sim: SimState, onTools: () -> Unit, onTrajectory: (Si
 
     // 설정(기계 · 소재 원점 · 읽기)이 바뀌어도 다시 — 궤적 창의 설정 창이 바꾼다
     val setup = sim.runSetup()
-    LaunchedEffect(sim, ed.text, sim.tools, setup) {
+    // 검사 글로 돈다 — 쓰는 동안은 검사 글(번호)이 그대로라 다시 돌지 않는다(설계 20)
+    LaunchedEffect(sim, ed.checkGen, sim.tools, setup) {
         delay(300)
-        val text = ed.text
+        val gen = ed.checkGen
+        val text = ed.checkedText
         val tools = sim.tools
         sim.run = withContext(Dispatchers.Default) { sim.runOf(text, tools, setup) }
         sim.runKey = Triple(text, tools, setup)
+        ed.ran(gen)
     }
     LaunchedEffect(sim, ed.text, ed.cursor) {
         delay(500)
         sim.saveDraft()
     }
-    DisposableEffect(sim) { onDispose { sim.saveDraft() } }
+    DisposableEffect(sim) {
+        onDispose {
+            ed.finishLine()
+            sim.saveDraft()
+        }
+    }
 
     val run = sim.run
-    // 빈 글의 'M30 없이 끝남' 같은 안내는 띄우지 않는다
-    val issues = if (ed.text.isBlank()) emptyList() else run.issues
+    // 빈 글의 'M30 없이 끝남' 같은 안내와 쓰는 줄의 문제는 띄우지 않는다
+    val issues = shownIssues(ed, run)
     FeatureScaffold(Feature.SIMULATOR, SimHelp, helpStart = if (sim.trajOpen) SIM_HELP_TRAJ else 0) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val keyH = if (maxHeight < 700.dp) 46.dp else 58.dp
@@ -112,9 +120,9 @@ internal fun SimulatorPage(sim: SimState, onTools: () -> Unit, onTrajectory: (Si
                 ) {
                     ProgramBar(
                         sim, run,
-                        onSave = { sim.requestSave()?.let { app.toast(it) } },
-                        onList = { sim.sheet = SimSheet.PROGRAMS },
-                        onMore = { sim.sheet = SimSheet.MORE },
+                        onSave = { ed.finishLine(); sim.requestSave()?.let { app.toast(it) } },
+                        onList = { ed.finishLine(); sim.sheet = SimSheet.PROGRAMS },
+                        onMore = { ed.finishLine(); sim.sheet = SimSheet.MORE },
                     )
                     if (sim.findOpen) {
                         FindBar(sim, onClose = { sim.findOpen = false; refocus() })
@@ -126,7 +134,7 @@ internal fun SimulatorPage(sim: SimState, onTools: () -> Unit, onTrajectory: (Si
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         placeholder = "키패드로 G코드를 넣으세요. 저장한 프로그램과 예제는 '목록' 에서 엽니다.",
                     )
-                    IssueStrip(issues, onTools) { sim.sheet = SimSheet.ISSUES }
+                    IssueStrip(issues, onTools = { ed.finishLine(); onTools() }) { ed.finishLine(); sim.sheet = SimSheet.ISSUES }
                 }
                 if (sim.keypadOpen) {
                     CncKeypad(
@@ -138,18 +146,24 @@ internal fun SimulatorPage(sim: SimState, onTools: () -> Unit, onTrajectory: (Si
                         onUndo = { ed.undo(); refocus() },
                         onRedo = { ed.redo(); refocus() },
                         onShift = { long -> sim.shift = nextShift(sim.shift, long); refocus() },
-                        onFind = { if (sim.findOpen) sim.findOpen = false else sim.openFind(); refocus() },
-                        onRun = { onTrajectory(sim.run) },
-                        onClose = { sim.keypadOpen = false },
+                        onFind = {
+                            if (sim.findOpen) sim.findOpen = false else {
+                                ed.finishLine()
+                                sim.openFind()
+                            }
+                            refocus()
+                        },
+                        onRun = { ed.finishLine(); onTrajectory(sim.run) },
+                        onClose = { ed.finishLine(); sim.keypadOpen = false },
                         keyHeight = keyH,
                     )
                 } else {
-                    BottomBar(onKeypad = { sim.keypadOpen = true; refocus() }, onRun = { onTrajectory(sim.run) })
+                    BottomBar(onKeypad = { sim.keypadOpen = true; refocus() }, onRun = { ed.finishLine(); onTrajectory(sim.run) })
                 }
             }
         }
     }
-    OnBack(enabled = sim.keypadOpen, layer = true) { sim.keypadOpen = false }
+    OnBack(enabled = sim.keypadOpen, layer = true) { ed.finishLine(); sim.keypadOpen = false }
     OnBack(enabled = sim.findOpen, layer = true) { sim.findOpen = false }
 
     when (sim.sheet) {
@@ -158,7 +172,7 @@ internal fun SimulatorPage(sim: SimState, onTools: () -> Unit, onTrajectory: (Si
             onNew = { sim.sheet = null; sim.request(Pending.New) },
             onPaste = {
                 sim.sheet = null
-                clip.getText()?.text?.takeIf { it.isNotEmpty() }?.let { ed.insert(it) } ?: app.toast("클립보드에 글이 없습니다")
+                clip.getText()?.text?.takeIf { it.isNotEmpty() }?.let { ed.paste(it) } ?: app.toast("클립보드에 글이 없습니다")
             },
             onCopyAll = {
                 sim.sheet = null
@@ -168,11 +182,15 @@ internal fun SimulatorPage(sim: SimState, onTools: () -> Unit, onTrajectory: (Si
             onExamples = { sim.sheet = SimSheet.PROGRAMS },
             onDismiss = { sim.sheet = null },
         )
-        SimSheet.ISSUES -> IssueSheet(run.issues, run.stop, onPick = { sim.goTo(it); refocus() }) { sim.sheet = null }
+        SimSheet.ISSUES -> IssueSheet(issues, run.stop?.takeIf { !ed.hides(it.line - 1) }, onPick = { sim.goTo(it); refocus() }) { sim.sheet = null }
         null -> {}
     }
     SimAskModal(sim)
 }
+
+/** 편집기에 보일 문제(설계 20): 빈 검사 글이면 없음, 쓰는 줄 · 막 끝낸 줄 것은 뺀다. 화면과 시험이 같이 쓴다 */
+internal fun shownIssues(ed: EditorState, run: SimRun): List<SimIssue> =
+    if (ed.checkedText.isBlank()) emptyList() else run.issues.filterNot { ed.hides(it.line - 1) }
 
 /**
  * 프로그램 줄(48dp — 우리가 정함): O 번호 칩 · 첫 주석과 상태(저장됨 · 예제 · 고침) · [저장] · [목록] · [⋯].
@@ -361,8 +379,11 @@ internal fun pcKey(e: KeyEvent, sim: SimState, clip: ClipboardManager): Boolean 
                 clip.setText(AnnotatedString(it))
                 ed.backspace()
             }
-            Key.V -> clip.getText()?.text?.let { if (sim.findOpen) sim.editQuery(sim.query + EditorState.clean(it).replace("\n", "")) else ed.insert(it) }
-            Key.F -> sim.openFind()
+            Key.V -> clip.getText()?.text?.let { if (sim.findOpen) sim.editQuery(sim.query + EditorState.clean(it).replace("\n", "")) else ed.paste(it) }
+            Key.F -> {
+                ed.finishLine()
+                sim.openFind()
+            }
             else -> return false
         }
         return true

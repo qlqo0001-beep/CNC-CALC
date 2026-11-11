@@ -299,7 +299,7 @@ class SimMonkeyTest {
             part.progress.set(System.nanoTime())
         }
 
-        private fun runFresh() = sim.runKey == Triple(sim.editor.text, sim.tools, sim.runSetup())
+        private fun runFresh() = sim.runKey == Triple(sim.editor.checkedText, sim.tools, sim.runSetup())
 
         /** 몇 프레임 + (waitRun 이면) 글 · 공구 · 설정을 바꾼 뒤의 실행이 끝날 때까지 */
         fun settle(waitRun: Boolean): Res {

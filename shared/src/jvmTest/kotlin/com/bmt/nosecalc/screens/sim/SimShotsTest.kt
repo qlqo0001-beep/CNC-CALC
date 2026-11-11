@@ -21,7 +21,9 @@ class SimShotsTest {
             val sim = remember {
                 SimState(state.store).apply {
                     prep()
-                    run = runOf(editor.text, tools)
+                    // 화면의 0.3초 효과가 한 일 그대로: 검사 글로 돌고(쓰는 줄은 고치기 전 글), 막 끝낸 줄의 가림을 푼다
+                    run = runOf(editor.checkedText, tools)
+                    editor.ran(editor.checkGen)
                 }
             }
             AppHost(state) { SimulatorPage(sim, onTools = {}) {} }
@@ -61,6 +63,23 @@ class SimShotsTest {
 
     @Test
     fun editorErrors() = shot("sim-editor-errors", prep = errors)
+
+    /**
+     * 쓰는 줄(설계 20): 오류 보기 글 끝의 새 줄에 X 를 쓰는 중 — 그 줄에는 표 · 밑줄 · 줄 글이 없고 다른 줄 표와 띠 '오류 2 · 확인 1' 은 그대로.
+     * -left = 그 줄을 떠난 뒤(커서 8줄): 9줄에 ⛔ · 밑줄, 띠 '오류 3 · 확인 1'
+     */
+    @Test
+    fun editorWriting() {
+        shot("sim-editor-writing") {
+            editor.replaceAll(ERRORS + "\n", ERRORS.length + 1)
+            editor.insert("X")
+        }
+        shot("sim-editor-writing-left") {
+            editor.replaceAll(ERRORS + "\n", ERRORS.length + 1)
+            editor.insert("X")
+            editor.vertical(-1)
+        }
+    }
 
     @Test
     fun editorIssues() = shot("sim-editor-issues") {

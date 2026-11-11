@@ -818,3 +818,7 @@
 - 시험: `AwtKeys.kt`(jvmTest — AWT 키 이벤트(키 코드 · 눌린 글자 · 자리)를 Compose Desktop 이 창에서 쓰는 변환 `toComposeEvent` 로 바꿔 **창이 받는 그대로의 키**를 만든다: `awtKey` · `numPadKey`.
   `Key.NumPadDot` 처럼 이름으로 만든 키는 실제 키와 달라 이 버그를 잡지 못한다) · `NumEditTest.numPadKeys`(키마다) · `padTakesNumPadPoint`(키패드에 숫자 키패드로 친 값 — . 한 번만 · 연 뒤 . 부터 · − 뒤 .) · `PcKeyTest.numPadKeys`(편집기 · 찾기 줄).
   실제 창에서 실제 키보드로 누르는 확인은 하지 않았다(손 확인 대기).
+
+### 5. 편집기: 쓰는 중인 줄에는 오류를 띄우지 않는다
+- `simulator-design.md` 20절(쓰는 줄 · 검사 글 · 줄을 끝내는 일 · 시험). 위 '시뮬레이터 편집기' 표의 "0.3초 뒤 백그라운드 실행" 은 그 절이 고친다 — **줄을 끝낸 뒤** 0.3초(쓰는 동안은 다시 돌지 않는다),
+  궤적 창을 열 때는 쓰던 줄을 끝내고 바로. 스크린샷 `sim-editor-writing` · `sim-editor-writing-left`.

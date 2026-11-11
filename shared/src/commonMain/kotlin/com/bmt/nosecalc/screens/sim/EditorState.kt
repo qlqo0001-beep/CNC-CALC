@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 /**
  * G코드 편집기의 글 · 커서 · 선택 · 되돌리기(설계 7.1). 넣는 글은 늘 대문자(소문자 키보드 · 붙여넣기도), 줄 끝은 \n 하나.
  * 선택 = [anchor] ~ [cursor](같으면 없음). 글을 바꾸는 일마다 되돌리기 한 걸음(최대 [UNDO_MAX]).
+ * 쓰는 줄([writingLine] — 설계 20): 고치는 중인 줄은 떠날 때까지 문제를 찾지 않는다. 문제 찾기는 [checkedText] 로 한다.
  */
 @Stable
 internal class EditorState(text: String = "", cursor: Int = 0) {
@@ -27,6 +28,71 @@ internal class EditorState(text: String = "", cursor: Int = 0) {
 
     val canUndo: Boolean get() = history >= 0 && undoStack.isNotEmpty()
     val canRedo: Boolean get() = history >= 0 && redoStack.isNotEmpty()
+
+    // ---- 쓰는 줄(설계 20 — 쓰는 중인 줄에는 오류를 띄우지 않는다)
+
+    /** 쓰는 줄(0부터): 커서가 있고 들어온 뒤 고친 줄 — 떠날 때까지 그 줄의 문제를 보이지 않는다. 없으면 null */
+    var writingLine: Int? by mutableStateOf(null)
+        private set
+
+    /** 검사 글: 쓰는 줄만 고치기 전 그대로인 글(쓰는 줄이 없으면 [text] 와 같다). 문제 찾기(실행)는 이 글로 한다 */
+    var checkedText: String by mutableStateOf(this.text)
+        private set
+
+    /** 검사 글이 바뀐 횟수 — 화면은 이 값이 바뀌면 0.3초 뒤 다시 돈다 */
+    var checkGen: Int by mutableIntStateOf(0)
+        private set
+
+    /** 막 끝낸 줄들(0부터): 그 줄을 넣은 새 결과가 화면에 오를 때까지([ran]) 옛 결과의 그 줄 문제를 가린다 */
+    private var settling: Set<Int> by mutableStateOf(emptySet())
+
+    /** 줄을 끝냄(단추 · 키패드 닫기 · 실행 · 저장 — 화면이 부른다). 쓰는 줄이 없으면 아무것도 하지 않는다 */
+    fun finishLine() {
+        if (writingLine != null) settle(text)
+    }
+
+    /** 붙여넣기: 한 줄 안에 붙여도 바로 검사한다 */
+    fun paste(s: String) {
+        insert(s)
+        finishLine()
+    }
+
+    /** 검사 글 gen 번의 결과가 화면에 올랐다 — 지금 검사 글의 결과면 가림을 푼다(낡은 번호면 그대로) */
+    fun ran(gen: Int) {
+        if (gen == checkGen) settling = emptySet()
+    }
+
+    /** 그 줄(0부터)의 문제를 지금 보이지 않나 */
+    fun hides(line: Int): Boolean = line == writingLine || line in settling
+
+    /** 줄을 끝냄: 검사 글을 now 로. 고친 것이 있으면 번호를 올리고 쓰던 줄은 새 결과가 올 때까지 가린다 */
+    private fun settle(now: String) {
+        val l = writingLine
+        writingLine = null
+        if (checkedText == now) return // 쳤다가 도로 지움 — 화면의 결과가 그대로 맞다
+        checkedText = now
+        checkGen++
+        if (l != null) settling = settling + l
+    }
+
+    /** 글이 바뀐 뒤. old = 바뀌기 전 글, at = 바뀐 자리, removed · added = 빠진 글 · 들어온 글 */
+    private fun edited(old: String, at: Int, removed: CharSequence, added: CharSequence) {
+        if (removed.isEmpty() && added.isEmpty()) return moved()
+        if ('\n' in added || added.isEmpty() && '\n' in removed) return settle(text) // 줄이 나뉘거나 합쳐짐 = 줄 끝
+        // 여러 줄을 고른 채 친 글자: 지운 데까지만 검사하고(줄 합침 = 줄 끝) 친 글자는 아래에서 쓰는 줄이 된다
+        if ('\n' in removed) settle(text.removeRange(at, at + added.length))
+        val line = lineOf(at) // 앞쪽 글이 같아 옛 글에서도 같은 줄
+        if (writingLine != null && writingLine != line) settle(old) // 되돌리기 · 다시하기가 다른 줄을 고침 — 쓰던 줄은 끝
+        writingLine = line // 검사 글은 그대로(고치기 전 글)
+        // EOB · 글이 비면(다 지움 — 빈 편집기에 옛 결과를 남기지 않는다) 줄 끝 · (되돌리기가 커서를 다른 줄에 두면 줄 끝)
+        if (';' in added || text.isBlank()) settle(text) else moved()
+    }
+
+    /** 커서 · 고른 범위가 쓰는 줄을 벗어나면 줄 끝 */
+    private fun moved() {
+        val l = writingLine ?: return
+        if (lineOf(cursor) != l || anchor?.let { lineOf(it) != l } == true) settle(text)
+    }
 
     /** 선택 범위(끝 제외). 없으면 null */
     val selection: IntRange?
@@ -84,9 +150,11 @@ internal class EditorState(text: String = "", cursor: Int = 0) {
         push()
         val a = sel?.first ?: cursor
         val b = sel?.let { it.last + 1 } ?: cursor
-        text = text.substring(0, a) + add + text.substring(b)
+        val old = text
+        text = old.substring(0, a) + add + old.substring(b)
         cursor = a + add.length
         anchor = null
+        edited(old, a, old.subSequence(a, b), add)
     }
 
     fun newline() = insert("\n")
@@ -109,12 +177,14 @@ internal class EditorState(text: String = "", cursor: Int = 0) {
 
     private fun deleteRange(a: Int, b: Int) {
         push()
-        text = text.substring(0, a) + text.substring(b)
+        val old = text
+        text = old.substring(0, a) + old.substring(b)
         cursor = a
         anchor = null
+        edited(old, a, old.subSequence(a, b), "")
     }
 
-    /** 새 글(불러오기 · 새 프로그램) — 되돌리기 쌓임을 비운다 */
+    /** 새 글(불러오기 · 새 프로그램) — 되돌리기 쌓임을 비운다. 쓰는 줄 없이 바로 검사한다 */
     fun replaceAll(s: String, cursorAt: Int = 0) {
         text = clean(s)
         cursor = cursorAt.coerceIn(0, text.length)
@@ -122,6 +192,10 @@ internal class EditorState(text: String = "", cursor: Int = 0) {
         undoStack.clear()
         redoStack.clear()
         history++
+        writingLine = null
+        settling = emptySet()
+        checkedText = text
+        checkGen++
     }
 
     fun undo() {
@@ -137,10 +211,19 @@ internal class EditorState(text: String = "", cursor: Int = 0) {
     }
 
     private fun restore(s: Snap) {
+        val old = text
         text = s.text
         cursor = s.cursor.coerceIn(0, text.length)
         anchor = s.anchor?.coerceIn(0, text.length)
         history++
+        // 바뀐 토막 = 앞 · 뒤의 같은 글을 뺀 가운데(가운데에 줄바꿈이 없으면 한 줄 안에서만 바뀐 것)
+        val new = text
+        val max = minOf(old.length, new.length)
+        var p = 0
+        while (p < max && old[p] == new[p]) p++
+        var e = 0
+        while (e < max - p && old[old.length - 1 - e] == new[new.length - 1 - e]) e++
+        edited(old, p, old.subSequence(p, old.length - e), new.subSequence(p, new.length - e))
     }
 
     private fun push() {
@@ -159,6 +242,7 @@ internal class EditorState(text: String = "", cursor: Int = 0) {
             if (anchor == null) anchor = cursor
         } else anchor = null
         cursor = p
+        moved()
     }
 
     fun select(range: IntRange) {
@@ -166,6 +250,7 @@ internal class EditorState(text: String = "", cursor: Int = 0) {
         val b = (range.last + 1).coerceIn(a, text.length)
         anchor = a
         cursor = b
+        moved()
     }
 
     fun selectAll() = select(0 until text.length)
@@ -193,12 +278,15 @@ internal class EditorState(text: String = "", cursor: Int = 0) {
         moveTo(cursor + 1, extend)
     }
 
-    /** 위 · 아래 줄의 같은 칸(짧으면 그 줄 끝) */
+    /** 위 · 아래 줄의 같은 칸(짧으면 그 줄 끝). 갈 줄이 없어도(첫 줄의 위 · 끝 줄의 아래) 쓰던 줄은 끝낸다 */
     fun vertical(delta: Int, extend: Boolean = false) {
         val line = cursorLine
         val col = cursor - lineStart(line)
         val to = (line + delta).coerceIn(0, lineCount - 1)
-        if (to == line) return moveTo(if (delta < 0) 0 else text.length, extend)
+        if (to == line) {
+            moveTo(if (delta < 0) 0 else text.length, extend)
+            return finishLine()
+        }
         moveTo(minOf(lineStart(to) + col, lineEnd(to)), extend)
     }
 
