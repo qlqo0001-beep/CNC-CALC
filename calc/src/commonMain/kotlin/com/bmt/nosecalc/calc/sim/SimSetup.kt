@@ -44,6 +44,8 @@ enum class ToolKind { TURN, GROOVE, THREAD, ROUND, DIE }
  * 공구 보정표 한 줄(보정 번호 = T 뒤 2자리). [noseR] · [tip] 은 G41/G42 에 꼭 필요하다(빈칸이면 TOOL_DATA_MISSING).
  * G40 에서는 빈칸이면 노즈 0 · 팁 0(인선 = 노즈 중심)으로 그린다. 나머지 칸은 소재 깎기 단계(5.3)가 쓴다.
  * 다이스 헤드(DIE): [dieDia] = 다이스 호칭 지름 d · [diePitch] = 다이스 피치 P(나사 각은 [threadDeg] — 빈칸 60°) — 나사 모양(모형)을 그린다.
+ * [barDia] = 안쪽 공구(바이트 · 홈의 팁 1 · 2, 나사의 팁 1 · 2 · 6 — [ToolShape.inner])의 바 지름 Ø(mm): 날끝에서 몸통 등까지의 X 폭. null = 자동([ToolShape.barOf]),
+ * 받는 범위는 [ToolShape.barOk](범위 밖 값은 자동으로 돈다). 몸통 그림과 '몸통 닿음'([ContactKind.BODY])에 쓴다 — 설계 20절.
  */
 data class ToolOffset(
     val noseR: Double? = null,
@@ -55,6 +57,7 @@ data class ToolOffset(
     val threadDeg: Double? = null,
     val dieDia: Double? = null,
     val diePitch: Double? = null,
+    val barDia: Double? = null,
 )
 
 /** 소재(5.1) — 소재 단계가 쓴다. [length] = 척 면 ~ 끝면, [faceZ] = 끝면 Z(기장여유) */

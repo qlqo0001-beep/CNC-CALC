@@ -232,6 +232,7 @@ internal fun Sim2DView(
     val density = LocalDensity.current
     var size by remember { mutableStateOf(IntSize.Zero) }
     val bounds = remember(paths, spec) { fitBox(paths, spec, run) }
+    val fits = remember(run) { ToolShape.barFit(run) }
     SideEffect { view.follow(bounds, density.fitArea(size, insets), size) }
     val measurer = rememberTextMeasurer()
     val mono = TextStyle(fontFamily = AppTheme.mono, fontWeight = FontWeight.Bold)
@@ -310,7 +311,7 @@ internal fun Sim2DView(
         }
         Canvas(Modifier.fillMaxSize()) {
             val v = xf()
-            currentTool(run, play, tools, v, c)
+            currentTool(run, play, tools, fits, v, c)
             // 알약(Z0 · 척 쪽 · 축척)을 먼저 — 고른 좌표 알약이 그 위에 오게(큰 글꼴에서 축척 막대가 좌표를 덮었다)
             pills(v, gridStep(v), spec, measurer, sans, c, insets)
             val sel = pick?.let { run.ghosts.getOrNull(it.ghost) }
@@ -653,15 +654,15 @@ private fun DrawScope.warnMark(q: Offset, color: Color, bg: Color) {
     drawPath(tri, color)
 }
 
-/** 지금 공구: 인서트 다각형(면 + 테) + 노즈 원 + 가상 인선 점 */
-private fun DrawScope.currentTool(run: SimRun, play: PlayState, tools: Map<Int, ToolOffset>, v: ViewXf, c: AppColors) {
+/** 지금 공구: 몸통 다각형(면 + 테 — 인서트, 안쪽 공구는 바 지름까지 [ToolShape.body]) + 노즈 원 + 가상 인선 점. [fits] = 자동 바 지름의 바탕 */
+private fun DrawScope.currentTool(run: SimRun, play: PlayState, tools: Map<Int, ToolOffset>, fits: Map<Int, Double>, v: ViewXf, c: AppColors) {
     val pose = run.poseAt(play.t)
     var i = pose.step.coerceAtMost(run.steps.size - 1)
     while (i >= 0 && run.steps[i] !is MoveStep) i--
     val m = run.steps.getOrNull(i) as? MoveStep
     val r = m?.r ?: 0.0
     val tipNo = m?.tipNo ?: 0
-    val shape = ToolShape.polygon((pose.offset?.let { tools[it] } ?: ToolOffset()).copy(noseR = r, tip = tipNo), pose.tip)
+    val shape = ToolShape.body((pose.offset?.let { tools[it] } ?: ToolOffset()).copy(noseR = r, tip = tipNo), pose.offset?.let { fits[it] }).map { it + pose.tip }
     if (shape.size >= 3) {
         val path = Path()
         shape.forEachIndexed { k, q ->

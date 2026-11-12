@@ -24,13 +24,15 @@ import com.bmt.nosecalc.calc.sim.SimRun
 import com.bmt.nosecalc.calc.sim.StockAuto
 import com.bmt.nosecalc.calc.sim.ToolKind
 import com.bmt.nosecalc.calc.sim.ToolOffset
+import com.bmt.nosecalc.calc.sim.ToolShape
 
 /** 저장한 프로그램 한 줄(목록) */
 internal data class ProgramInfo(val number: Int, val comment: String?, val lines: Int, val savedAt: Long?)
 
 /**
  * 프로그램 저장소(설계 7.3) — 앱 설정과 같은 [KeyValueStore]. 열쇠: `sim/prog/<번호>` = 글, `sim/prog/<번호>/at` = 저장 시각(ms),
- * `sim/progs` = 번호 목록(최근 저장 먼저, 쉼표). KeyValueStore 에 지우기가 없어 지운 프로그램은 목록에서 빼고 글을 빈칸으로 덮는다.
+ * `sim/prog/<번호>/setup` = 그 프로그램에 딸린 공구표 · 홀더 · 소재 설정([ProgramSetup] 글 — 없음 · 빈칸 = 설정 없음, 2026-11-10 피드백 3 전에 저장한 것),
+ * `sim/progs` = 번호 목록(최근 저장 먼저, 쉼표). KeyValueStore 에 지우기가 없어 지운 프로그램은 목록에서 빼고 글 · 설정을 빈칸으로 덮는다.
  */
 internal class ProgramStore(private val kv: KeyValueStore) {
     fun numbers(): List<Int> = kv.get(LIST)?.split(',')?.mapNotNull { it.trim().toIntOrNull() } ?: emptyList()
@@ -39,8 +41,13 @@ internal class ProgramStore(private val kv: KeyValueStore) {
 
     fun load(n: Int): String? = if (exists(n)) kv.get(key(n)) else null
 
-    fun save(n: Int, text: String) {
+    /** 그 프로그램에 딸린 설정 글. null · 빈칸 = 설정 없음 */
+    fun setup(n: Int): String? = if (exists(n)) kv.get(setupKey(n)) else null
+
+    /** 글 → 설정 → 시각 → 목록(새 번호는 목록이 마지막 — 도중에 꺼져도 반쪽이 목록에 뜨지 않는다). 설정을 안 주면 빈칸(덮은 번호의 옛 설정이 살아나지 않게) */
+    fun save(n: Int, text: String, setup: String = "") {
         kv.put(key(n), text)
+        kv.put(setupKey(n), setup)
         kv.put(atKey(n), nowMillis().toString())
         kv.put(LIST, (listOf(n) + numbers().filter { it != n }).joinToString(","))
     }
@@ -48,6 +55,7 @@ internal class ProgramStore(private val kv: KeyValueStore) {
     fun delete(n: Int) {
         kv.put(LIST, numbers().filter { it != n }.joinToString(","))
         kv.put(key(n), "")
+        kv.put(setupKey(n), "")
         kv.put(atKey(n), "")
     }
 
@@ -63,6 +71,10 @@ internal class ProgramStore(private val kv: KeyValueStore) {
         const val DRAFT_FROM = "sim/draft/from"
         const val KEYPAD = "sim/keypad"
 
+        /** 작업 중 공구표 · 홀더 · 소재 설정([ProgramSetup] — 바뀔 때마다) · '고침' 을 가르는 기준 설정(저장한 프로그램을 연 때만, 빈칸 = 견주지 않음) */
+        const val DRAFT_SETUP = "sim/draft/setup"
+        const val DRAFT_BASE = "sim/draft/base"
+
         /** 기계 설정 · 프로그램 읽기(앱 전체 하나 — 설계 7.3) · 보기 스위치 */
         const val MACHINE = "sim/machine"
         const val VIEW = "sim/view"
@@ -71,6 +83,7 @@ internal class ProgramStore(private val kv: KeyValueStore) {
 
         fun key(n: Int) = "sim/prog/$n"
         fun atKey(n: Int) = "sim/prog/$n/at"
+        fun setupKey(n: Int) = "sim/prog/$n/setup"
 
         /** 첫 주석 글(괄호 안) — 목록 · 프로그램 줄의 이름 */
         fun firstComment(text: String): String? = Regex("""\(([^)\n]*)\)""").find(text)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
@@ -107,10 +120,11 @@ internal sealed interface SimAsk {
 
 /**
  * 시뮬레이터 편집기 화면 상태(설계 8.6 `SimState`): 글(임시 저장 `sim/draft`) · 저장소 · 키패드 · 찾기 · 공구표 · 마지막 실행 결과 · 시트 · 묻는 창.
- * 공구표는 앱을 켠 동안만(화면 상태 Saver) — 프로그램과 함께 저장할지는 사용자 결정 대기(설계 10절, C10).
+ * 공구표 · 홀더 이름표 · 소재 칸은 바뀔 때마다 `sim/draft/setup` 에 써서 앱을 꺼도 남고, 프로그램 '저장' 에 딸려 간다(2026-11-10 피드백 3 — C10 을 뒤집음, 설계 20.2).
+ * [startTools] 를 주면 그 공구표로 시작한다(null = 저장소의 작업 중 값).
  */
 @Stable
-internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffset> = emptyMap()) {
+internal class SimState(private val kv: KeyValueStore, startTools: Map<Int, ToolOffset>? = null) {
     val programs = ProgramStore(kv)
     val editor = EditorState(kv.get(ProgramStore.DRAFT) ?: "", kv.get(ProgramStore.DRAFT_CURSOR)?.toIntOrNull() ?: 0)
 
@@ -120,7 +134,14 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
     /** [origin] 의 글(저장한 글 · 예제 글). 편집기 글과 다르면 '고침' */
     private var baseline: String by mutableStateOf(baselineOf(origin))
 
-    val modified: Boolean get() = editor.text != baseline
+    /** 글이 저장한 글 · 예제 글과 다르다 */
+    val textModified: Boolean get() = editor.text != baseline
+
+    /** 저장한 프로그램을 연 뒤 공구표 · 홀더 · 소재 칸을 고쳤다(견주기 꼴 — 기본값 줄 · 빈 칸은 없는 것과 같다). 예제 · 새 글은 보지 않는다 */
+    val setupModified: Boolean get() = origin is Origin.Saved && setupNow().canonical() != baseSetup
+
+    /** '● 고침' — 글이, 저장한 프로그램이면 설정도 저장 때와 다르다 */
+    val modified: Boolean get() = textModified || setupModified
 
     var keypadOpen: Boolean
         get() = keypad
@@ -139,27 +160,56 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
     var findMiss by mutableStateOf(false)
         private set
 
-    var tools: Map<Int, ToolOffset> by mutableStateOf(tools)
+    /** 작업 중 설정(저장소 — 없거나 읽지 못하면 빈 것) */
+    private val draftSetup = kv.get(ProgramStore.DRAFT_SETUP)?.let(ProgramSetup::decode) ?: ProgramSetup()
 
-    /** 공구 설정에서 고른 회사 홀더(보정 번호 → [CompanyHolder.id]). 칸 값은 [tools] 에 있고 이것은 이름표뿐 — 공구표와 같이 앱을 켠 동안만 */
-    var toolHolders: Map<Int, String> by mutableStateOf(emptyMap())
+    /** 공구표(보정 번호 → 값). 넣을 때마다 `sim/draft/setup` 에 쓴다 */
+    var tools: Map<Int, ToolOffset>
+        get() = toolsState
+        set(v) {
+            toolsState = v
+            saveSetup()
+        }
+    private var toolsState by mutableStateOf(startTools ?: draftSetup.tools)
+
+    /** 공구 설정에서 고른 회사 홀더(보정 번호 → [CompanyHolder.id]). 칸 값은 [tools] 에 있고 이것은 이름표뿐 — 공구표와 같이 저장한다 */
+    var toolHolders: Map<Int, String>
+        get() = holdersState
+        set(v) {
+            holdersState = v
+            saveSetup()
+        }
+    private var holdersState by mutableStateOf(draftSetup.holders)
 
     fun holderOf(n: Int): CompanyHolder? = toolHolders[n]?.let { id -> COMPANY_HOLDERS.firstOrNull { it.id == id } }
 
-    /** 홀더를 고르면 그 보정 번호의 종류 · 인서트 · κr 을 채운다([CompanyHolder.fill]). null = 고르지 않음(칸 값은 그대로) */
+    /** 홀더를 고르면 그 보정 번호의 종류 · 인서트 · κr · 바 지름을 채운다([CompanyHolder.fill]). null = 고르지 않음(칸 값은 그대로) */
     fun pickHolder(n: Int, h: CompanyHolder?) {
         if (h == null) {
             toolHolders = toolHolders - n
             return
         }
-        toolHolders = toolHolders + (n to h.id)
+        holdersState = holdersState + (n to h.id)
         tools = tools + (n to h.fill(tools[n] ?: ToolOffset()))
     }
 
-    // ---- 시뮬레이션 설정(설계 7.8 — 궤적 창). 소재는 앱을 켠 동안만(공구표와 같이 — C10 대기), 기계 · 읽기 · 보기는 앱 전체 하나(`sim/machine` · `sim/view`)
+    // ---- 시뮬레이션 설정(설계 7.8 — 궤적 창). 소재는 공구표와 같이 저장(설계 20.2), 기계 · 읽기 · 보기는 앱 전체 하나(`sim/machine` · `sim/view`)
 
-    /** 소재 칸 글(빈칸 = 자동) */
-    var stockText: Map<StockField, String> by mutableStateOf(emptyMap())
+    /** 소재 칸 글(빈칸 = 자동). 넣을 때마다 `sim/draft/setup` 에 쓴다 */
+    var stockText: Map<StockField, String>
+        get() = stockState
+        set(v) {
+            stockState = v
+            saveSetup()
+        }
+    private var stockState by mutableStateOf(draftSetup.stock)
+
+    init {
+        if (startTools != null) saveSetup()
+    }
+
+    /** '고침' 을 가르는 기준 설정(견주기 꼴). 저장한 프로그램을 열거나 저장할 때 지금 설정으로 — `sim/draft/base` 에 남겨 다시 켜도 같다 */
+    private var baseSetup: ProgramSetup by mutableStateOf(initBase())
 
     /** 기계 칸 글(빈칸 = 가정) */
     var machineText: Map<MachineField, String> by mutableStateOf(readMachine())
@@ -310,8 +360,48 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
         editor.replaceAll(text)
         origin = o
         baseline = baselineOf(o)
+        rebase()
         findMiss = false
         saveDraft()
+    }
+
+    // ---- 공구표 · 홀더 · 소재 설정 한 벌(설계 20.2)
+
+    fun setupNow(): ProgramSetup = ProgramSetup(tools, toolHolders, stockText)
+
+    private fun saveSetup() = kv.put(ProgramStore.DRAFT_SETUP, setupNow().encode())
+
+    /** 설정을 통째로 바꾸고 한 번만 쓴다 */
+    private fun applySetup(s: ProgramSetup) {
+        toolsState = s.tools
+        holdersState = s.holders
+        stockState = s.stock
+        saveSetup()
+    }
+
+    /** 기준 설정 = 지금. 저장한 프로그램일 때만 `sim/draft/base` 에 남긴다(그 밖은 빈칸 = 견주지 않음) */
+    private fun rebase() {
+        baseSetup = setupNow().canonical()
+        kv.put(ProgramStore.DRAFT_BASE, if (origin is Origin.Saved) baseSetup.encode() else "")
+    }
+
+    /** 처음 기준 설정: 남긴 기준 → (이 기능 전의 저장소 · 깨진 기준이면) 그 프로그램에 저장된 설정 → 지금(= 고침 아님). 찾아낸 기준은 남겨 다음에 켜도 같게 */
+    private fun initBase(): ProgramSetup {
+        val n = (origin as? Origin.Saved)?.number ?: return setupNow().canonical()
+        kv.get(ProgramStore.DRAFT_BASE)?.takeIf { it.isNotEmpty() }?.let(ProgramSetup::decode)?.let { return it.canonical() }
+        val b = (programs.setup(n)?.takeIf { it.isNotEmpty() }?.let(ProgramSetup::decode) ?: setupNow()).canonical()
+        kv.put(ProgramStore.DRAFT_BASE, b.encode())
+        return b
+    }
+
+    /** 그 프로그램에 딸린 설정으로 통째로 바꾼다(설정 없음 = 예전 형식 → 그대로). 돌려주는 글 = 토스트 */
+    private fun loadSetup(n: Int): String? {
+        val raw = programs.setup(n)?.takeIf { it.isNotEmpty() } ?: return null
+        val o = ProgramStore.oText(n)
+        val s = ProgramSetup.decode(raw) ?: return "$o 열었습니다 — 저장된 공구 · 소재 설정을 읽지 못해 지금 설정을 그대로 둡니다"
+        val changed = s.canonical() != setupNow().canonical()
+        applySetup(s)
+        return if (changed) "$o 열었습니다 — 공구 · 소재 설정도 저장된 값으로 바꿨습니다" else null
     }
 
     // ---- 저장 · 불러오기(설계 7.3). 돌려주는 글 = 토스트
@@ -345,31 +435,44 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
         if (!programs.exists(n) && programs.numbers().size >= ProgramStore.MAX_PROGRAMS) {
             return "프로그램은 ${ProgramStore.MAX_PROGRAMS}개까지 — 목록에서 지운 뒤 저장하세요"
         }
-        programs.save(n, editor.text)
+        val setup = setupNow()
+        programs.save(n, editor.text, setup.encode())
         origin = Origin.Saved(n)
         baseline = editor.text
+        rebase()
         listVersion++
         saveDraft()
-        return "${ProgramStore.oText(n)} 저장했습니다"
+        return "${ProgramStore.oText(n)} 저장했습니다" + if (setup.isEmpty) "" else " — 공구 · 소재 설정도 함께"
     }
 
-    /** 다른 글로 바꾸기 전: 저장하지 않은 글이 있으면 묻는다 */
-    fun request(p: Pending) {
-        if (modified && editor.text.isNotBlank()) ask = SimAsk.Unsaved(p) else perform(p)
+    /** 다른 글로 바꾸기 전: 저장하지 않은 글(빈칸은 잃을 것이 없다) · 설정이 있으면 묻는다. 돌려주는 글 = 토스트([perform]) */
+    fun request(p: Pending): String? {
+        if (textModified && editor.text.isNotBlank() || setupModified) {
+            ask = SimAsk.Unsaved(p)
+            return null
+        }
+        return perform(p)
     }
 
-    fun perform(p: Pending) {
+    /** 돌려주는 글 = 토스트(저장한 프로그램을 열며 공구 · 소재 설정을 바꿨거나 읽지 못했을 때) */
+    fun perform(p: Pending): String? {
         ask = null
         sheet = null
         when (p) {
-            is Pending.Load -> programs.load(p.number)?.let { set(it, Origin.Saved(p.number)) }
+            is Pending.Load -> {
+                val text = programs.load(p.number) ?: return null
+                val note = loadSetup(p.number)
+                set(text, Origin.Saved(p.number))
+                return note
+            }
             is Pending.Example -> exampleList.getOrNull(p.index)?.let {
+                holdersState = holdersState - it.tools.keys
                 tools = tools + it.tools
-                toolHolders = toolHolders - it.tools.keys
                 set(it.text, Origin.Example(p.index))
             }
             Pending.New -> set("", Origin.New)
         }
+        return null
     }
 
     fun delete(n: Int): String {
@@ -378,6 +481,7 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
         if ((origin as? Origin.Saved)?.number == n) {
             origin = Origin.New
             baseline = ""
+            rebase()
             saveDraft()
         }
         listVersion++
@@ -457,48 +561,40 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
         private const val MACHINE_SKIP = "skip"
         private const val MACHINE_SUV = "suv"
 
-        /** 화면을 떠났다 와도(앱을 켠 동안) 공구표(고른 홀더 이름표 포함) · 찾기 · SHIFT · 소재 칸 · 재생 속도를 남긴다. 글 · 커서는 임시 저장에서 다시 읽는다 */
+        /**
+         * 화면을 떠났다 와도(앱을 켠 동안) 찾기 · SHIFT · 재생 속도 · 싱글 블록 · M01 을 남긴다. 글 · 커서 · 공구표 · 홀더 이름표 · 소재 칸은 저장소에서 다시 읽는다
+         * (프로세스가 죽었다 살 때 낡은 상태 묶음이 더 새 저장소 값을 덮지 않게 — 설계 20.2). 0 · 4 · 8 번 칸은 옛 목록과 차례를 맞추려 빈칸으로 둔다
+         */
         fun saver(kv: KeyValueStore): Saver<SimState, Any> = Saver(
             save = { s ->
                 s.saveDraft()
                 arrayListOf(
-                    encodeTools(s.tools), s.query, if (s.findOpen) "1" else "0", s.shift.name,
-                    SetupText.encode(s.stockText.entries.associate { it.key.key to it.value }), s.speed.toString(),
-                    if (s.singleBlock) "1" else "0", if (s.optStop) "1" else "0",
-                    s.toolHolders.entries.sortedBy { it.key }.joinToString(";") { (n, id) -> "$n=$id" },
+                    "", s.query, if (s.findOpen) "1" else "0", s.shift.name, "", s.speed.toString(),
+                    if (s.singleBlock) "1" else "0", if (s.optStop) "1" else "0", "",
                 )
             },
             restore = { v ->
                 @Suppress("UNCHECKED_CAST")
                 val l = v as List<String>
-                SimState(kv, decodeTools(l[0])).apply {
+                SimState(kv).apply {
                     query = l[1]
                     findOpen = l[2] == "1"
                     shift = ShiftState.valueOf(l[3])
                     if (l.size >= 8) {
-                        val st = SetupText.decode(l[4])
-                        stockText = StockField.entries.mapNotNull { f -> st[f.key]?.let { f to it } }.toMap()
                         speed = l[5].toFloatOrNull() ?: speed
                         singleBlock = l[6] == "1"
                         optStop = l[7] == "1"
-                        run = runOf(editor.text, tools)
-                    }
-                    if (l.size >= 9) {
-                        toolHolders = l[8].split(';').mapNotNull { row ->
-                            val n = row.substringBefore('=').toIntOrNull() ?: return@mapNotNull null
-                            n to row.substringAfter('=')
-                        }.toMap()
                     }
                 }
             },
         )
 
         /**
-         * 공구표 글: 보정 번호마다 `n|노즈R|팁|종류|인서트|κr|폭|나사각|다이스 지름|다이스 피치` 를 ; 로 잇는다(빈칸 = 없음).
-         * 읽기는 다이스 칸이 없던 옛 8칸 글도 받는다(종류는 이름 — 모르는 이름은 바이트)
+         * 공구표 글: 보정 번호마다 `n|노즈R|팁|종류|인서트|κr|폭|나사각|다이스 지름|다이스 피치|바 지름` 을 ; 로 잇는다(빈칸 = 없음).
+         * 읽기는 다이스 칸이 없던 옛 8칸 글 · 바 지름 칸이 없던 10칸 글도 받는다(종류는 이름 — 모르는 이름은 바이트, 범위 밖 바 지름은 빈칸 = 자동)
          */
         fun encodeTools(t: Map<Int, ToolOffset>): String = t.entries.sortedBy { it.key }.joinToString(";") { (n, o) ->
-            listOf(n, o.noseR, o.tip, o.kind.name, o.insert.name, o.kappaDeg, o.width, o.threadDeg, o.dieDia, o.diePitch).joinToString("|") { it?.toString() ?: "" }
+            listOf(n, o.noseR, o.tip, o.kind.name, o.insert.name, o.kappaDeg, o.width, o.threadDeg, o.dieDia, o.diePitch, o.barDia).joinToString("|") { it?.toString() ?: "" }
         }
 
         fun decodeTools(s: String): Map<Int, ToolOffset> = s.split(';').filter { it.isNotBlank() }.mapNotNull { row ->
@@ -515,6 +611,7 @@ internal class SimState(private val kv: KeyValueStore, tools: Map<Int, ToolOffse
                 threadDeg = f[7].toDoubleOrNull(),
                 dieDia = f.getOrNull(8)?.toDoubleOrNull(),
                 diePitch = f.getOrNull(9)?.toDoubleOrNull(),
+                barDia = f.getOrNull(10)?.toDoubleOrNull()?.takeIf(ToolShape::barOk),
             )
         }.toMap()
     }

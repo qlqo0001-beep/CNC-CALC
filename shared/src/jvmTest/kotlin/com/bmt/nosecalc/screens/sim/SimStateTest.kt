@@ -155,11 +155,18 @@ class SimStateTest {
             3 to ToolOffset(0.2, 3, ToolKind.GROOVE, InsertShape.D, 93.0, 3.0, null),
             5 to ToolOffset(kind = ToolKind.DIE, threadDeg = 55.0, dieDia = 12.7, diePitch = 1.27),
             7 to ToolOffset(null, null, ToolKind.THREAD, threadDeg = 55.0),
+            9 to ToolOffset(0.2, 2, insert = InsertShape.T, kappaDeg = 91.0, barDia = 12.0),
         )
         assertEquals(t, SimState.decodeTools(SimState.encodeTools(t)))
         assertEquals(emptyMap(), SimState.decodeTools(""))
-        // 새 글은 10칸(… 나사각 | 다이스 지름 | 다이스 피치), 다이스 칸이 없던 옛 8칸 글도 읽는다(다이스 칸은 빈칸)
-        assertEquals("5|||DIE|C|||55.0|12.7|1.27", SimState.encodeTools(mapOf(5 to t.getValue(5))))
+        // 새 글은 11칸(… 나사각 | 다이스 지름 | 다이스 피치 | 바 지름 — 빈칸 = 자동), 다이스 칸이 없던 옛 8칸 글 · 바 지름이 없던 10칸 글도 읽는다(없는 칸은 빈칸)
+        assertEquals("5|||DIE|C|||55.0|12.7|1.27|", SimState.encodeTools(mapOf(5 to t.getValue(5))))
+        assertEquals("9|0.2|2|TURN|T|91.0|||||12.0", SimState.encodeTools(mapOf(9 to t.getValue(9))))
+        assertEquals(mapOf(5 to t.getValue(5)), SimState.decodeTools("5|||DIE|C|||55.0|12.7|1.27"))
+        // 받는 범위 밖의 바 지름(0 · 음수 · 숫자 아님 · 500 초과)은 빈칸(자동)으로 읽는다
+        for (bad in listOf("0.0", "-3.0", "NaN", "Infinity", "abc", "500.5")) {
+            assertEquals(mapOf(9 to t.getValue(9).copy(barDia = null)), SimState.decodeTools("9|0.2|2|TURN|T|91.0|||||$bad"), bad)
+        }
         assertEquals(
             mapOf(1 to ToolOffset(0.4, 3), 7 to ToolOffset(null, null, ToolKind.THREAD, threadDeg = 55.0)),
             SimState.decodeTools("1|0.4|3|TURN|C|||;7|||THREAD|C|||55.0"),

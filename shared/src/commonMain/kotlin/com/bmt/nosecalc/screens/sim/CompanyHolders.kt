@@ -9,8 +9,10 @@ internal enum class HolderGroup(val label: String) { OUTER("외경 바이트"), 
 
 /**
  * 회사에서 쓰는 홀더 한 줄(사용자 10-29 "회사에서 사용하는 팁홀더도 찾아서 홀더 종류에 추가") — 공구 설정의 '홀더 고르기'.
- * 홀더가 정하는 칸만 든다: 종류 · 인서트 모양 · 절입각 κr. 값은 docs/research/company-holders.json(제조사 카탈로그 · 출처 대조 끝)과 같다 —
+ * 홀더가 정하는 칸만 든다: 종류 · 인서트 모양 · 절입각 κr · 바 지름. 값은 docs/research/company-holders.json(제조사 카탈로그 · 출처 대조 끝)과 같다 —
  * jvmTest CompanyHoldersJsonTest 가 본다. null = 출처에 없음(지어내지 않는다).
+ * [bar] = 바 지름 Ø(2026-11-10 피드백 4 — 공구 설정의 '바 지름' 칸을 채운다): 보링바는 카탈로그 DCON(품번의 08 · 10 · 12 · 16), 슬리브는 끼우는 바의 지름(DCB 5 · 6).
+ * 외경 홀더와 계열 이름(PICCO)은 null, 내경 나사 SNR0020L09A 도 null — 자루(DCON 20)보다 가는 목으로 Ø10.2 구멍에 들어가는 꼴이라 자루 지름을 넣으면 헛경보가 된다.
  * 노즈 R(인서트 코너 R) · 팁 번호 · 홈 폭 · 나사 각(인서트 모양)은 홀더가 정하지 않아 건드리지 않는다. 팁 번호는 홀더 손(L/R)과
  * 외경/내경으로도 정할 수 없다 — 같은 손의 홀더가 척 쪽으로 깎는지 반대로 깎는지는 주축 회전 방향(M03/M04)과 다는 방식(터렛 앞/뒤 · 인서트 위/아래)에 따른다.
  * 같은 품번도 제조사마다 κr 이 다르면(STFCR 한국야금 90° · 대구텍 91°) [makers] 로 줄을 나눈다. 단종 표시 제조사는 넣지 않았다.
@@ -25,24 +27,30 @@ internal class CompanyHolder(
     val kappa: Double?,
     val makers: List<String>,
     val note: String? = null,
+    val bar: Double? = null,
 ) {
     /** 고른 홀더를 기억하는 이름(같은 품번이 제조사로 나뉜 줄도 다르게) */
     val id: String get() = "$code|${makers.joinToString(",")}"
 
-    /** 이 홀더를 고른 공구: 종류, 바이트면 인서트 모양(출처에 없으면 그대로) · κr(출처에 없으면 빈칸 = 가정 값). 나머지 칸은 그대로 */
+    /**
+     * 이 홀더를 고른 공구: 종류, 바이트면 인서트 모양(출처에 없으면 그대로) · κr(출처에 없으면 빈칸 = 가정 값), 바 지름(출처에 없으면 빈칸 = 자동).
+     * 나머지 칸은 그대로
+     */
     fun fill(t: ToolOffset): ToolOffset =
-        if (kind == ToolKind.TURN) t.copy(kind = kind, insert = insert ?: t.insert, kappaDeg = kappa) else t.copy(kind = kind)
+        if (kind == ToolKind.TURN) t.copy(kind = kind, insert = insert ?: t.insert, kappaDeg = kappa, barDia = bar) else t.copy(kind = kind, barDia = bar)
 
     /** 고른 뒤 홀더가 정한 칸을 고쳤나('수정됨'). 홀더가 비운 칸에 넣은 값은 고친 것이 아니다 */
     fun edited(t: ToolOffset): Boolean =
-        t.kind != kind || (kind == ToolKind.TURN && ((insert != null && t.insert != insert) || (kappa != null && t.kappaDeg != kappa)))
+        t.kind != kind || (bar != null && t.barDia != bar) ||
+            (kind == ToolKind.TURN && ((insert != null && t.insert != insert) || (kappa != null && t.kappaDeg != kappa)))
 }
 
 private val KOR_TTK = listOf("한국야금", "대구텍")
 private val KOR_TTK_MMC = listOf("한국야금", "대구텍", "미쓰비시")
 
+/** 보링바 줄 — 바 지름 = 품번의 자루 지름(C08K → 8) */
 private fun bar(code: String, insert: InsertShape, kappa: Double, makers: List<String>) =
-    CompanyHolder(code, HolderGroup.BORING, ToolKind.TURN, insert, kappa, makers)
+    CompanyHolder(code, HolderGroup.BORING, ToolKind.TURN, insert, kappa, makers, bar = code.substring(1, 3).toDouble())
 
 /** 회사 사용 홀더 20 줄(17 품번): 외경 바이트 → 나사(이 두 묶음 안은 품번 알파벳 순) → 보링바(카바이드 SCLCR · 강 STFCR, 지름 순) → 소경 */
 internal val COMPANY_HOLDERS: List<CompanyHolder> = listOf(
@@ -67,7 +75,7 @@ internal val COMPANY_HOLDERS: List<CompanyHolder> = listOf(
     bar("S12M-STFCR11", InsertShape.T, 91.0, listOf("대구텍")),
     bar("S16R-STFCR11", InsertShape.T, 90.0, listOf("한국야금")),
     bar("S16R-STFCR11", InsertShape.T, 91.0, listOf("대구텍")),
-    CompanyHolder("SH0516-100", HolderGroup.SMALL, ToolKind.TURN, null, null, listOf("교세라"), note = "보링바 슬리브(구멍 Ø5) — 인서트 · κr 은 끼운 바의 값을 넣으세요."),
-    CompanyHolder("SH0616-100", HolderGroup.SMALL, ToolKind.TURN, null, null, listOf("교세라"), note = "보링바 슬리브(구멍 Ø6) — 인서트 · κr 은 끼운 바의 값을 넣으세요."),
+    CompanyHolder("SH0516-100", HolderGroup.SMALL, ToolKind.TURN, null, null, listOf("교세라"), note = "보링바 슬리브(구멍 Ø5) — 인서트 · κr 은 끼운 바의 값을 넣으세요.", bar = 5.0),
+    CompanyHolder("SH0616-100", HolderGroup.SMALL, ToolKind.TURN, null, null, listOf("교세라"), note = "보링바 슬리브(구멍 Ø6) — 인서트 · κr 은 끼운 바의 값을 넣으세요.", bar = 6.0),
     CompanyHolder("PICCO", HolderGroup.SMALL, ToolKind.TURN, null, null, listOf("이스카"), note = "초경 소경 보링바 계열 이름 — 품번을 몰라 인서트 · κr 은 직접 넣으세요."),
 )

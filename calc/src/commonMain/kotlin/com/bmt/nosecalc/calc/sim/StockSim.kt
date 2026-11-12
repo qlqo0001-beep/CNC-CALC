@@ -25,13 +25,14 @@ data class ThreadFeature(val root: Line, val lead: Double, val angleDeg: Double,
 
 /**
  * RAPID_CUT = 급송이 소재를 깎음(노랑), CHUCK = 척 닿음(빨강), CANCEL_CUT = 형식 C 의 이동 없는 G40 블록의 노즈 옮김([StepSrc.SHIFT_CANCEL])이
- * 앞 블록 면 쪽으로 들어가며 소재를 깎음(노랑 — 팁 번호가 바이트 반대쪽이면 마지막 깎은 면을 판다, 설계 3.2 · 5.5)
+ * 앞 블록 면 쪽으로 들어가며 소재를 깎음(노랑 — 팁 번호가 바이트 반대쪽이면 마지막 깎은 면을 판다, 설계 3.2 · 5.5),
+ * BODY = 안쪽 공구의 몸통(바 지름 — [ToolShape.body])이 소재에 닿음(노랑 — 깎지 않고 알리기만, 설계 20절)
  */
-enum class ContactKind { RAPID_CUT, CHUCK, CANCEL_CUT }
+enum class ContactKind { RAPID_CUT, CHUCK, CANCEL_CUT, BODY }
 
 /**
  * 급송 깎음 · 척 닿음 · G40 옮김 깎음(설계 5.5 · 3.2). [step] = 그 [MoveStep] 의 `run.steps` 번호, [t] = 처음 닿는 시각(이분법 — 1/2^20 이동 안),
- * [at] = 그때 가상 인선, [area] = 그 이동이 깎은 넓이(mm², 반단면 — 척은 0).
+ * [at] = 그때 가상 인선, [area] = 그 이동이 깎은 넓이(mm², 반단면 — 척은 0, 몸통 닿음은 몸통과 겹친 소재 넓이).
  */
 data class Contact(val kind: ContactKind, val step: Int, val line: Int, val t: Double, val at: Pt, val area: Double)
 
@@ -51,6 +52,8 @@ data class StockProfile(val pieces: List<StockPiece>, val threads: List<ThreadFe
  *
  * 이동마다 쓸고 간 영역 = 시작 · 끝 자세의 공구 다각형([ToolShape]) 볼록 껍질(직선). 원호는 현 높이 [ARC_SAG] 이하로 나눠 같은 방법.
  * 열 가운데 Z 에서 껍질의 x 범위를 재고, 축 아래(x < 0)는 |x| 로 접는다(회전체). 반경은 정확, Z 오차 ≤ 기울기 × dz/2.
+ * 안쪽 공구([ToolShape.inner] — 설계 20절)는 접지 않고 공구 쪽(날끝이 있는 쪽 — 보통 x ≥ 0, 음수 X 로 돌면 x ≤ 0)만 깎는다: 인서트 등이 축을 넘어가도 반대쪽 소재를 밀지 않는다. 대신 몸통 단면
+ * ([ToolShape.body] — 바 지름, 빈칸이면 [ToolShape.barFit] 로 잡은 자동 값)이 쓸고 간 곳 가운데 그 이동이 깎는 범위 밖에 소재가 있으면 [ContactKind.BODY].
  * 나사(THREAD) · 다이스 헤드([StepSrc.DIE_CUT]) 이동은 깎지 않고 [ThreadFeature] 로 남긴다. 급송이 깎으면 [ContactKind.RAPID_CUT], 형식 C 의 G40 옮김이 앞 블록 면 쪽으로
  * 들어가며 깎으면([digsIn]) [ContactKind.CANCEL_CUT], 공구가 척(척 면 왼쪽, 반경 < 척 지름/2)에 들어가면 [ContactKind.CHUCK].
  *
@@ -72,6 +75,10 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
     private val saves = ArrayList<Pair<Int, Array<DoubleArray>>>().apply { add(0 to cols.copyOf()) }
     private var done = 0
     private val shapes = HashMap<Triple<Int?, Double, Int>, List<Pt>>()
+
+    /** 안쪽 공구의 몸통 단면(그 밖의 공구는 빈 목록) */
+    private val bodies = HashMap<Triple<Int?, Double, Int>, List<Pt>>()
+    private val fits: Map<Int, Double> = ToolShape.barFit(run)
     private val found = HashMap<Int, Contact>()
     private val threadGroups: List<ThreadGroup> = threadGroups()
 
@@ -136,8 +143,15 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
 
     private fun step(k: Int): MoveStep = run.steps[moves[k]] as MoveStep
 
-    private fun shapeOf(m: MoveStep): List<Pt> = shapes.getOrPut(Triple(m.offset, m.r, m.tipNo)) {
-        ToolShape.outline((m.offset?.let { tools[it] } ?: ToolOffset()).copy(noseR = m.r, tip = m.tipNo))
+    private fun toolOf(m: MoveStep): ToolOffset = (m.offset?.let { tools[it] } ?: ToolOffset()).copy(noseR = m.r, tip = m.tipNo)
+
+    private fun shapeOf(m: MoveStep): List<Pt> = shapes.getOrPut(Triple(m.offset, m.r, m.tipNo)) { ToolShape.outline(toolOf(m)) }
+
+    /** 안쪽 공구면 몸통 단면(바 지름), 아니면 빈 목록 */
+    private fun bodyOf(m: MoveStep): List<Pt> = bodies.getOrPut(Triple(m.offset, m.r, m.tipNo)) {
+        val t = toolOf(m)
+        val fit = m.offset?.let { fits[it] }
+        if (ToolShape.barOf(t, fit) != null) ToolShape.body(t, fit) else emptyList()
     }
 
     /** 이동 k 를 f(0~1)까지 arr 에서 깎는다. record = 닿음을 적는다(끝까지 깎을 때만) */
@@ -153,24 +167,43 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
         if (threadLike(m)) return
         // 나사 패스 바로 뒤 급송(나사 골에서 빠짐)은 깎지 않는다 — 래스터에는 나사 골이 없어 헛경보가 된다
         if (m.kind == MoveKind.RAPID && k > 0 && threadLike(step(k - 1))) return
+        val body = bodyOf(m)
+        val near = body.isNotEmpty()
+        if (record && near) bodyHit(k, m, shape, body, arr)
         val cancel = m.src == StepSrc.SHIFT_CANCEL && digsIn(m)
         if (record && (m.kind == MoveKind.RAPID || cancel)) {
-            val dry = cutSeg(m.tip, 1.0, shape, arr, dry = true)
+            val dry = cutSeg(m.tip, 1.0, shape, arr, dry = true, near)
             if (dry > RAPID_AREA) {
                 // 처음 닿는 자리: 깎는 넓이가 한도의 반을 넘는 가장 작은 f
                 var a = 0.0
                 var b = 1.0
                 repeat(20) {
                     val c = (a + b) / 2
-                    if (cutSeg(m.tip, c, shape, arr, dry = true) > RAPID_AREA / 2) b = c else a = c
+                    if (cutSeg(m.tip, c, shape, arr, dry = true, near) > RAPID_AREA / 2) b = c else a = c
                 }
-                val area = cutSeg(m.tip, 1.0, shape, arr, dry = false)
+                val area = cutSeg(m.tip, 1.0, shape, arr, dry = false, near)
                 val kind = if (cancel) ContactKind.CANCEL_CUT else ContactKind.RAPID_CUT
                 found[k * KINDS + kind.ordinal] = Contact(kind, moves[k], m.line, m.t0 + b * (m.t1 - m.t0), SimRun.at(m.tip, b), area)
                 return
             }
         }
-        cutSeg(m.tip, f, shape, arr, dry = false)
+        cutSeg(m.tip, f, shape, arr, dry = false, near)
+    }
+
+    /**
+     * 몸통 닿음(설계 20절): 안쪽 공구의 몸통 단면 [body] 가 쓸고 간 곳 가운데 이 이동이 깎는 범위 밖에 소재가 [BODY_AREA] 넘게 있으면 적는다(깎지 않는다).
+     * 처음 닿는 자리 = 겹친 넓이가 한도의 반을 넘는 가장 작은 f. [arr] = 이 이동을 깎기 전 소재.
+     */
+    private fun bodyHit(k: Int, m: MoveStep, shape: List<Pt>, body: List<Pt>, arr: Array<DoubleArray>) {
+        val area = touchSeg(m.tip, 1.0, shape, body, arr)
+        if (area <= BODY_AREA) return
+        var a = 0.0
+        var b = 1.0
+        repeat(20) {
+            val c = (a + b) / 2
+            if (touchSeg(m.tip, c, shape, body, arr) > BODY_AREA / 2) b = c else a = c
+        }
+        found[k * KINDS + ContactKind.BODY.ordinal] = Contact(ContactKind.BODY, moves[k], m.line, m.t0 + b * (m.t1 - m.t0), SimRun.at(m.tip, b), area)
     }
 
     /**
@@ -194,15 +227,35 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
         }
     }
 
-    private fun cutSeg(seg: Seg, f: Double, shape: List<Pt>, arr: Array<DoubleArray>, dry: Boolean): Double {
+    private fun cutSeg(seg: Seg, f: Double, shape: List<Pt>, arr: Array<DoubleArray>, dry: Boolean, near: Boolean): Double {
         val pts = chord(seg, f)
         var area = 0.0
-        for (i in 0 until pts.size - 1) area += cutHull(hull(shape, pts[i], pts[i + 1]), arr, dry)
+        for (i in 0 until pts.size - 1) area += cutHull(hull(shape, pts[i], pts[i + 1]), arr, dry, if (near) sideOf(pts[i], pts[i + 1]) else 0)
         return area
     }
 
-    /** 껍질이 덮는 열에서 그 반경 범위를 뺀다. 뺀 넓이(mm²)를 돌려준다. dry = 넓이만 잼 */
-    private fun cutHull(h: List<Pt>, arr: Array<DoubleArray>, dry: Boolean): Double {
+    /** 안쪽 공구의 공구 쪽: 토막 가운데 날끝이 축 위(x ≥ 0)면 1, 아래면 −1 — 음수 X 로 도는 글은 x ≤ 0 쪽이 공구 쪽이다 */
+    private fun sideOf(a: Pt, b: Pt): Int = if (a.x + b.x >= 0) 1 else -1
+
+    /** 몸통 [body] 가 seg 를 f 까지 가며 닿는 소재 넓이(mm²) — 인서트 [shape] 가 깎는 범위는 뺀다. 몸통이 인서트 안에 들고 축을 넘지 않는 토막은 건너뛴다 */
+    private fun touchSeg(seg: Seg, f: Double, shape: List<Pt>, body: List<Pt>, arr: Array<DoubleArray>): Double {
+        val low = body.minOf { it.x }
+        val high = body.maxOf { it.x }
+        val within = low >= shape.minOf { it.x } - 1e-9
+        val pts = chord(seg, f)
+        var area = 0.0
+        for (i in 0 until pts.size - 1) {
+            val side = sideOf(pts[i], pts[i + 1])
+            if (within && (if (side > 0) min(pts[i].x, pts[i + 1].x) + low >= 0 else max(pts[i].x, pts[i + 1].x) + high <= 0)) continue
+            area += touchHull(hull(body, pts[i], pts[i + 1]), hull(shape, pts[i], pts[i + 1]), arr, side)
+        }
+        return area
+    }
+
+    /** 껍질이 덮는 열([i0] 부터)마다 그 x 범위 [lo] ~ [hi](덮지 않는 열은 lo > hi) */
+    private class Span(val i0: Int, val lo: DoubleArray, val hi: DoubleArray)
+
+    private fun span(h: List<Pt>): Span? {
         var zMin = Double.POSITIVE_INFINITY
         var zMax = Double.NEGATIVE_INFINITY
         for (p in h) {
@@ -211,7 +264,7 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
         }
         val i0 = max(0, ceil((zMin - chuckZ) / dz - 0.5 - 1e-9).toInt())
         val i1 = min(columns - 1, floor((zMax - chuckZ) / dz - 0.5 + 1e-9).toInt())
-        if (i0 > i1) return 0.0
+        if (i0 > i1) return null
         val w = i1 - i0 + 1
         val lo = DoubleArray(w) { Double.POSITIVE_INFINITY }
         val hi = DoubleArray(w) { Double.NEGATIVE_INFINITY }
@@ -236,13 +289,26 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
                 }
             }
         }
+        return Span(i0, lo, hi)
+    }
+
+    /**
+     * 껍질이 덮는 열에서 그 반경 범위를 뺀다. 뺀 넓이(mm²)를 돌려준다. dry = 넓이만 잼.
+     * side = 안쪽 공구의 공구 쪽([sideOf] — 1 은 x ≥ 0, −1 은 x ≤ 0 을 |x| 로)만 깎는다(축 너머로 넘어간 인서트 등은 접어 깎지 않는다 — 설계 20절),
+     * 0 = 그 밖의 공구(축 아래는 |x| 로 접어 다 깎는다)
+     */
+    private fun cutHull(h: List<Pt>, arr: Array<DoubleArray>, dry: Boolean, side: Int): Double {
+        val sp = span(h) ?: return 0.0
+        val i0 = sp.i0
         var removed = 0.0
-        for (j in 0 until w) {
-            val l = lo[j]
-            val u = hi[j]
+        for (j in sp.lo.indices) {
+            val l = sp.lo[j]
+            val u = sp.hi[j]
             if (l > u) continue
             // 회전체: 축 아래는 |x| 로 접는다
             val (a, b) = when {
+                side > 0 -> if (u <= 0) continue else max(l, 0.0) to u
+                side < 0 -> if (l >= 0) continue else -min(u, 0.0) to -l
                 l >= 0 -> l to u
                 u <= 0 -> -u to -l
                 else -> 0.0 to max(-l, u)
@@ -270,6 +336,44 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
             if (!dry) arr[i0 + j] = if (n == 0) EMPTY else keep!!.copyOf(n)
         }
         return removed * dz
+    }
+
+    /**
+     * 몸통 껍질 [body] 가 덮는 반경(축 아래는 |x| 로 접음) 가운데 인서트 껍질 [cut] 이 깎는 범위(공구 쪽 [side] — [cutHull]) 밖에 있는 소재 넓이(mm²)
+     */
+    private fun touchHull(body: List<Pt>, cut: List<Pt>, arr: Array<DoubleArray>, side: Int): Double {
+        val b = span(body) ?: return 0.0
+        val c = span(cut)
+        var sum = 0.0
+        for (j in b.lo.indices) {
+            val l = b.lo[j]
+            val u = b.hi[j]
+            if (l > u) continue
+            val col = arr[b.i0 + j]
+            if (col.isEmpty()) continue
+            val f0 = if (l >= 0) l else if (u <= 0) -u else 0.0
+            val f1 = if (l >= 0) u else if (u <= 0) -l else max(-l, u)
+            // 이 이동이 그 열에서 깎는 범위
+            var c0 = Double.POSITIVE_INFINITY
+            var c1 = Double.NEGATIVE_INFINITY
+            val cj = if (c == null) -1 else b.i0 + j - c.i0
+            if (c != null && cj in c.lo.indices && c.lo[cj] <= c.hi[cj]) {
+                if (side > 0 && c.hi[cj] > 0) {
+                    c0 = max(c.lo[cj], 0.0)
+                    c1 = c.hi[cj]
+                } else if (side < 0 && c.lo[cj] < 0) {
+                    c0 = max(-c.hi[cj], 0.0)
+                    c1 = -c.lo[cj]
+                }
+            }
+            for (s in 0 until col.size / 2) {
+                val s0 = max(col[2 * s], f0)
+                val s1 = min(col[2 * s + 1], f1)
+                if (s1 <= s0) continue
+                sum += (s1 - s0) - max(min(s1, c1) - max(s0, c0), 0.0)
+            }
+        }
+        return sum * dz
     }
 
     private fun put(buf: DoubleArray?, n: Int, a: Double, b: Double, cap: Int): DoubleArray {
@@ -559,6 +663,9 @@ class StockSim(val spec: StockSpec, val run: SimRun, private val tools: Map<Int,
 
         /** 급송 깎음 · G40 옮김 깎음으로 보는 넓이(mm²) */
         const val RAPID_AREA = 0.001
+
+        /** 몸통 닿음으로 보는 넓이(mm²) */
+        const val BODY_AREA = 0.001
 
         /** G40 옮김이 앞 블록 면 쪽으로 들어간다고 보는 깊이(옮김 · nₑ, mm) 의 r 배 — 계산 오차만 넘으면 */
         private const val DIG_IN = 1e-6

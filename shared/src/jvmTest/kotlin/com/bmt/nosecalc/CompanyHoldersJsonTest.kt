@@ -29,6 +29,7 @@ import kotlin.test.fail
  *  4. holders 의 보링바 · 소경 항목은 모두 프리셋에 있다(빠진 것 없음).
  *  5. 시뮬레이터 '홀더 고르기' 줄은 holders 의 17 품번 전부이고, 줄마다 종류 · 묶음 · 인서트 모양 · κr · 제조사가 holders 와 같다
  *     (κr 은 그 홀더에 simulator 칸이 있으면 그 값 — DCKNL 의 KAPR 75° 는 정면 이송 기준이라 빈칸).
+ *     바 지름은 보링바 = DCON, 슬리브 = DCB(끼우는 바), 그 밖(외경 · 나사 · 계열 이름)은 없음.
  */
 class CompanyHoldersJsonTest {
     private fun findUp(rel: String): File {
@@ -150,7 +151,14 @@ class CompanyHoldersJsonTest {
                     val v = makers.single { short(it.str("maker")!!) == m }.obj("values")
                     assertEquals(v.str("insertShape"), r.insert?.name, "$code $m 인서트")
                     assertEquals(if (sim != null) sim.num("kappa") else v.num("KAPR"), r.kappa, "$code $m κr")
+                    val bar = when (group) {
+                        HolderGroup.BORING -> assertNotNull(v.num("DCON"), "$code $m DCON")
+                        HolderGroup.SMALL -> v.num("DCB")
+                        else -> null
+                    }
+                    assertEquals(bar, r.bar, "$code $m 바 지름")
                 }
+                if (r.makers.isEmpty()) assertEquals(null, r.bar, "$code: 제조사를 모르면 바 지름도 없다")
             }
         }
     }

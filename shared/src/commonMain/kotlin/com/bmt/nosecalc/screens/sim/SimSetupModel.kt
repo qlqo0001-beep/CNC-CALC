@@ -8,6 +8,7 @@ import com.bmt.nosecalc.calc.sim.RapidPath
 import com.bmt.nosecalc.calc.sim.SimRun
 import com.bmt.nosecalc.calc.sim.StockAuto
 import com.bmt.nosecalc.calc.sim.StockSpec
+import com.bmt.nosecalc.calc.sim.ToolOffset
 
 /** 시뮬레이션 설정의 소재 칸(설계 7.8 '소재') */
 internal enum class StockField(val key: String) { DIA("dia"), LENGTH("len"), FACE("face"), BORE("bore"), CHUCK("chuck") }
@@ -73,6 +74,97 @@ internal object SetupText {
         val i = it.indexOf('=')
         if (i <= 0) null else it.substring(0, i) to it.substring(i + 1)
     }.toMap()
+}
+
+/**
+ * 프로그램에 딸린 설정 한 벌(2026-11-10 피드백 3 — 설계 20.2): 공구표 · 고른 홀더 이름표 · 소재 칸. '저장' 은 `sim/prog/<번호>/setup` 에,
+ * 작업 중 값은 `sim/draft/setup` 에 쓴다. 글은 첫 줄 `v1` 과 끝 줄 `end` 사이에 `tools=`([SimState.encodeTools]) · `holders=번호=홀더 id;…` · `stock=`([SetupText]).
+ * 쓰기는 값 그대로(읽으면 `==` — 소재는 빈 칸만 빠짐), '고침' · "바뀌었나" 는 [canonical] 끼리 견준다.
+ */
+internal data class ProgramSetup(
+    val tools: Map<Int, ToolOffset> = emptyMap(),
+    val holders: Map<Int, String> = emptyMap(),
+    val stock: Map<StockField, String> = emptyMap(),
+) {
+    fun encode(): String = listOf(
+        VERSION,
+        "tools=" + SimState.encodeTools(tools),
+        "holders=" + holders.entries.filter { oneLine(it.value) }.sortedBy { it.key }.joinToString(";") { "${it.key}=${it.value}" },
+        "stock=" + SetupText.encode(stock.entries.filter { oneLine(it.value) }.sortedBy { it.key }.associate { it.key.key to it.value }),
+        END,
+    ).joinToString("\n")
+
+    /** 견주기 꼴: 기본값 공구 줄(없는 줄과 같게 돈다) · 빈 홀더 id · 빈 소재 칸(자동)을 뺀 것 */
+    fun canonical(): ProgramSetup = ProgramSetup(
+        tools.filterValues { it != ToolOffset() },
+        holders.filterValues { it.isNotEmpty() },
+        stock.filterValues { it.isNotBlank() },
+    )
+
+    val isEmpty: Boolean get() = canonical() == ProgramSetup()
+
+    companion object {
+        const val VERSION = "v1"
+        const val END = "end"
+        const val MAX_CHARS = 100_000
+
+        private fun oneLine(v: String) = v.none { it == ';' || it == '=' || it == '\n' }
+
+        /**
+         * 읽기 — 던지지 않는다. null = 읽지 못함(모르는 버전 · 잘림(`end` 없음) · 10만 자 넘음). 모르는 줄 · 틀린 공구 · 홀더 줄은 그 줄만,
+         * 범위 밖 공구 칸 · 키패드 글이 아닌 소재 칸은 그 칸만 버린다(디스크의 글은 사람이 고칠 수 있다)
+         */
+        fun decode(s: String): ProgramSetup? {
+            if (s.length > MAX_CHARS) return null
+            val lines = s.trimEnd().split('\n')
+            if (lines.size < 2 || lines.first().trim() != VERSION || lines.last().trim() != END) return null
+            var r = ProgramSetup()
+            for (line in lines.subList(1, lines.size - 1)) {
+                val i = line.indexOf('=')
+                if (i <= 0) continue
+                val v = line.substring(i + 1)
+                when (line.substring(0, i)) {
+                    "tools" -> r = r.copy(tools = SimState.decodeTools(v).filterKeys { it in 1..99 }.mapValues { it.value.inRange() })
+                    "holders" -> r = r.copy(
+                        holders = v.split(';').mapNotNull { row ->
+                            val n = row.substringBefore('=', "").toIntOrNull()?.takeIf { it in 1..99 } ?: return@mapNotNull null
+                            row.substringAfter('=').takeIf { it.isNotEmpty() }?.let { n to it }
+                        }.toMap(),
+                    )
+                    "stock" -> {
+                        val m = SetupText.decode(v)
+                        r = r.copy(stock = StockField.entries.mapNotNull { f -> m[f.key]?.takeIf(::keypadText)?.let { f to it } }.toMap())
+                    }
+                }
+            }
+            return r
+        }
+
+        /** 숫자 키패드 글인가(숫자 · `.` · `-`, 16자까지). 범위 밖 수는 그대로 둔다 — 화면이 빨간 칸으로 알린다([stockOf]) */
+        private fun keypadText(v: String) = v.isNotEmpty() && v.length <= 16 && v.all { it in '0'..'9' || it == '.' || it == '-' }
+
+        /** 공구 설정 칸이 받는 범위([ToolRange]) 밖이면 빈칸 — 팁이 0~9 밖이면 팁 고르기 그림이 던진다. 바 지름은 [SimState.decodeTools] 가 거른다 */
+        private fun ToolOffset.inRange() = copy(
+            noseR = noseR?.takeIf(ToolRange::noseR),
+            tip = tip?.takeIf(ToolRange::tip),
+            kappaDeg = kappaDeg?.takeIf(ToolRange::kappa),
+            width = width?.takeIf(ToolRange::width),
+            threadDeg = threadDeg?.takeIf(ToolRange::threadDeg),
+            dieDia = dieDia?.takeIf(ToolRange::dieDia),
+            diePitch = diePitch?.takeIf(ToolRange::diePitch),
+        )
+    }
+}
+
+/** 공구 설정 칸이 받는 범위 — 칸(SimSettingsSheet)과 저장 글 읽기([ProgramSetup])가 같이 쓴다(한쪽만 바꾸면 저장한 값이 다시 켤 때 빈칸이 된다). 바 지름은 `ToolShape.barOk` */
+internal object ToolRange {
+    fun noseR(v: Double) = v >= 0 && v <= 50
+    fun tip(v: Int) = v in 0..9
+    fun kappa(v: Double) = v > 0 && v < 180
+    fun width(v: Double) = v > 0 && v <= 100
+    fun threadDeg(v: Double) = v > 0 && v < 180
+    fun dieDia(v: Double) = v > 0 && v <= 200
+    fun diePitch(v: Double) = v > 0 && v <= 20
 }
 
 /** 칸 글 → 값. 빈칸 = null(자동), 숫자가 아니거나 범위 밖 = [Bad] */

@@ -55,6 +55,7 @@ import com.bmt.nosecalc.ui.theme.AppType
  */
 @Composable
 internal fun ProgramSheet(sim: SimState, onDismiss: () -> Unit) {
+    val app = LocalAppState.current
     val c = AppTheme.colors
     val progs = remember(sim.listVersion) { sim.programs.list() }
     BottomSheet(onDismiss, maxHeightFraction = 0.85f) {
@@ -79,7 +80,7 @@ internal fun ProgramSheet(sim: SimState, onDismiss: () -> Unit) {
                 SavedRow(
                     info,
                     current = (sim.origin as? Origin.Saved)?.number == info.number,
-                    onOpen = { sim.request(Pending.Load(info.number)) },
+                    onOpen = { sim.request(Pending.Load(info.number))?.let { app.toast(it) } },
                     onDelete = { sim.ask = SimAsk.Delete(info.number) },
                 )
             }
@@ -270,11 +271,18 @@ internal fun SimAskModal(sim: SimState) {
                 PillButton("덮어쓰기", null, { toast(sim.save(a.number)) }, danger = true)
             }
         }
-        is SimAsk.Unsaved -> Modal("저장하지 않은 글", { sim.ask = null }) {
-            Body("편집기 글이 저장되지 않았습니다. 버리면 지금 글은 되돌릴 수 없습니다. 남기려면 취소하고 '저장' 을 누르세요.")
+        is SimAsk.Unsaved -> Modal(if (sim.textModified && sim.editor.text.isNotBlank()) "저장하지 않은 글" else "저장하지 않은 설정", { sim.ask = null }) {
+            Body(
+                if (sim.textModified && sim.editor.text.isNotBlank()) {
+                    "편집기 글이 저장되지 않았습니다. 버리면 지금 글은 되돌릴 수 없습니다. 남기려면 취소하고 '저장' 을 누르세요." +
+                        if (sim.setupModified) " 고친 공구 · 소재 설정도 저장되지 않았습니다." else ""
+                } else {
+                    "공구 · 소재 설정을 고친 뒤 저장하지 않았습니다. 버리면 고친 설정은 이 프로그램에 남지 않습니다. 남기려면 취소하고 '저장' 을 누르세요."
+                },
+            )
             Buttons {
                 PillButton("취소", null, { sim.ask = null })
-                PillButton(if (a.then == Pending.New) "버리고 새로" else "버리고 열기", null, { sim.perform(a.then) }, danger = true)
+                PillButton(if (a.then == Pending.New) "버리고 새로" else "버리고 열기", null, { toast(sim.perform(a.then)) }, danger = true)
             }
         }
         is SimAsk.Delete -> Modal("프로그램 지우기", { sim.ask = null }) {

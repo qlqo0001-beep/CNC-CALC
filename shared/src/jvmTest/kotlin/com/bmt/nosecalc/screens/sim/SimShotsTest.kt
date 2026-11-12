@@ -4,6 +4,7 @@ import androidx.compose.runtime.remember
 import com.bmt.nosecalc.AppHost
 import com.bmt.nosecalc.Feature
 import com.bmt.nosecalc.Shots
+import com.bmt.nosecalc.calc.sim.ToolOffset
 import kotlin.test.Test
 
 /**
@@ -118,6 +119,19 @@ class SimShotsTest {
         original09()
         editor.insert("G04 X1.\n")
         ask = SimAsk.Unsaved(Pending.Example(1))
+    }
+
+    /** 저장한 프로그램에서 공구 · 소재만 고친 채 다른 것을 열 때(2026-11-10 피드백 3 — 설계 20.2) */
+    @Test
+    fun askUnsavedSetup() {
+        val prep: SimState.() -> Unit = {
+            programs.save(1001, exampleList[0].text)
+            perform(Pending.Load(1001))
+            tools = tools + (1 to ToolOffset(0.8, 3))
+            ask = SimAsk.Unsaved(Pending.Example(1))
+        }
+        shot("sim-ask-unsaved-setup", prep = prep)
+        shot("sim-ask-unsaved-setup-fs130-w360", widthDp = 360, fontScale = 1.3f, prep = prep)
     }
 
     /** 큰 글꼴 · 좁은 폰 · PC 넓은 창 */
