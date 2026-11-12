@@ -393,13 +393,14 @@ class VerifyG4xHandTest {
 
         // ---- 너머가 빈 단면 시작: 뒤집기 외경 형상 2(칸 T1 X50 Z-5 · T2 X40 Z0), 시작 X60 · 끝 X30, 0.8R T3. F = (Z-5, 반경 30), u = −X, n = +Z
         // 회사 꼴: 진입점 = 단면 연장선 X62 Z-5, 첫 깎는 줄은 단면과 한 직선이라 노즈가 F 의 법선(Z-4.2, 반경 30) — 접점 = F 라 어깨 위 끝에 살이 안 남는다
-        // (직접 보정의 첫 노즈는 인선이 F 라 반경 30.8)
+        // (직접 보정의 첫 노즈는 인선이 F 라 반경 30.8). 뒤집은 진입(2026-11-12 통합 고침): 전에는 `Z-5.` 급송 끝 노즈(Z-4.2, 반경 30.2)가 어깨 위 끝에서
+        // 0.025 였다 — 급송은 진입점에서 공구 쪽(+Z)으로 2r + c = 2.6 인 Z-2.4 에서 멈추고(급송 끝 노즈 틈 √(2.6² + 0.2²) − r = 1.808) `G1Z-5.F.1` → `X60.`
         run {
             val r = 0.8
             val s = TaperCalc.calc(TaperInput(false, 2, false, r, null, 50.0, -5.0, 40.0, 0.0, null, 1.0, start = 60.0, end = 30.0, flip = true)).solution!!
             val g4 = s.ncG41G42
-            val k = g4.indexOfFirst { it.endsWith("F.1") }
-            assertEquals(listOf("G41", "G0X62.Z20.", "Z-5.", "G1X60.F.1"), g4.take(k + 1))
+            val k = g4.indexOfFirst { it.endsWith("F.1") } + 1
+            assertEquals(listOf("G41", "G0X62.Z20.", "Z-2.4", "G1Z-5.F.1", "X60."), g4.take(k + 1))
             val f = Pt(-5.0, 30.0)
             for (run in forms(g4, r, 3)) {
                 assertNull(run.stop, "${run.stop}")

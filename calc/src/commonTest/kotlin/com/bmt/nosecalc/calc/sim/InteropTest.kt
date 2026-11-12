@@ -2,10 +2,12 @@ package com.bmt.nosecalc.calc.sim
 
 import com.bmt.nosecalc.calc.DoubleTaperInput
 import com.bmt.nosecalc.calc.Fmt
+import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.TaperCalc
 import com.bmt.nosecalc.calc.TaperInput
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
+import com.bmt.nosecalc.calc.ncWords
 import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.tan
@@ -16,7 +18,7 @@ import kotlin.test.assertTrue
  * 테이퍼 계산기가 낸 NC 를 시뮬레이터로(`docs/simulator-design.md` 9.3 InteropTest).
  * G41/G42 글(도면 좌표 — 회사 꼴, 계획 단계 4)을 넣으면, 형상 블록 사이 이음점의 실제 인선 = 직접 보정 글(ncG40)의 점이어야 한다.
  * 첫 깎는 줄(F.1) 끝과 마지막 형상 블록 끝은 뺀다 — 처음 · 끝은 진입 · 빼는 줄과의 관계로 정해진다(`calc-design.md` '진입점과 NC' —
- * 그 자리는 SimVerifyTest · TaperCalcTest 가 본다).
+ * 그 자리는 SimVerifyTest · TaperCalcTest 가 본다). 뒤집은 진입(2026-11-12 통합 고침)은 F.1 뒤 첫 깎는 점까지 이송 줄이 하나 더 있어 그 줄 끝도 뺀다.
  * 같은 사례 묶음은 TaperCalcTest.g41g42ProgramCompensatesToDirectProgram 과 같다. 테이퍼에서 STOP 이 나오면 실패.
  * 글은 0.001 로 반올림돼 있어(도면 · 직접 보정 모두) 허용 0.002.
  */
@@ -94,8 +96,20 @@ class InteropTest {
         val iFirst = lines.indexOfFirst { it.endsWith("F.1") }
         val iExit = lines.indexOfFirst { "F.3" in it }
         assertTrue(iFirst > 0 && iExit > iFirst + 1, "$tag 회사 꼴이 아님 $lines")
+        // 첫 깎는 점(도면의 첫 깎는 요소 처음)에 닿는 줄 — 뒤집은 진입이면 F.1 다음 이송 줄
+        val fc = s.drawing.segs[if (s.fromStart) 0 else 1].start
+        var x = 0.0
+        var z = 0.0
+        val at = lines.map { l ->
+            for (w in ncWords(l)) when (w[0]) {
+                'X' -> x = w.drop(1).toDouble() / 2
+                'Z' -> z = w.drop(1).toDouble()
+            }
+            Pt(z, x)
+        }
+        val iCut = (iFirst until iExit).firstOrNull { (at[it] - fc).length < 1e-3 } ?: iFirst
         var n = 0
-        for (i in iFirst + 1 until iExit - 1) {
+        for (i in iCut + 1 until iExit - 1) {
             val line = pre.size + i + 1
             val tip = run.ghosts.last { it.line == line }.tip
             val d = pts.minOf { (it - tip).length }

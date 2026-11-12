@@ -1,7 +1,6 @@
 package com.bmt.nosecalc.screens.taper
 
 import com.bmt.nosecalc.AngleRef
-import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.GrooveCalc
 import com.bmt.nosecalc.calc.GrooveInput
 import com.bmt.nosecalc.calc.GrooveWarning
@@ -185,7 +184,9 @@ class TaperWarningsTest {
     /**
      * 내경 형상 4(큰 내경 → 테이퍼 → 안쪽 단면)의 바닥 단면을 중심(끝 X0)까지 — 두 프로그램이 다르게 중심을 넘어 글이 둘을 나눠 말한다(검증 2026-11-04).
      * 기계 보정: 바닥 단면(Z−5)을 X −2r = −0.8 까지 쓰고 공구 쪽(+Z)으로 c = max(Z 여유 1, r 0.4) = 1 → Z−4.(F.3). G40 자리 규칙 0.986 — 가장 가까운 소재는
-     * 바닥 단면(과 축 너머 같은 면)에서 1.0. 직접 보정: 끝 단면을 이어서 c 더(calc '진입점과 NC' 후퇴 — 단면이면 그대로 이어서) — 끝점′ 에서 같은 Z 로 X 를 2c 줄인 G0
+     * 바닥 단면(과 축 너머 같은 면)에서 1.0. 직접 보정: 노즈 중심이 축에 서는 끝점′(표준 팁 2 는 인선 X +2r = X.8 — 인선 X0 이면 노즈 중심이 축 너머 r 이라 좁은 바닥에서
+     * 맞은편 경사를 팠다, 검증 F1 2026-11-13)에 온 뒤 공구 쪽(+Z)으로 c 를 G0 로(2026-11-12 통합 고침 — 전에는 같은 Z 로 X 를 2c 줄인 G0 가 축 너머로 가 노즈가
+     * 맞은편을 팠다, 검증 V7-2). 팁 2 의 인선 길은 바닥 Z−5 그대로(노즈 중심 Z−4.6 − 팁 벡터 0.4)
      */
     @Test
     fun pastAxisTextForInnerBottomToCenter() {
@@ -194,12 +195,24 @@ class TaperWarningsTest {
         assertTrue(TaperWarning.ENTRY_PAST_AXIS in res.warnings)
         val t = taperWarningText(TaperWarning.ENTRY_PAST_AXIS, bottom)
         assertTrue(t.startsWith("바닥 단면을 중심(X0)까지 깎아") && "Z 여유를 줄이세요" !in t, t)
-        assertTrue("기계 보정(G41/G42)은 X−0.8 까지 간 뒤 Z 로 빠지고" in t && "직접 보정(G40)은 같은 높이로 중심 너머까지" in t, t)
+        assertTrue("기계 보정(G41/G42)은 X−0.8 까지, 직접 보정(G40)은 노즈 중심이 중심에 서는 데까지(표준 팁이면 인선 X0.8) 간 뒤 Z 로 빠집니다" in t, t)
         val s = res.solution!!
         assertEquals(listOf("X-.8", "Z-4.F.3", "G40", "G0Z200."), s.ncG41G42.takeLast(4))
-        val endX = s.ncG40[s.ncG40.size - 2].substringAfter("X").toDouble()
-        assertEquals("G0X${Fmt.word(endX - 2 * 1.0)}", s.ncG40.last())
-        assertTrue(endX - 2 * 1.0 < 0)
+        assertEquals(listOf("X.8", "G0Z-4."), s.ncG40.takeLast(2))
+    }
+
+    /**
+     * 뒤집은 내경 작은 구멍(바닥 Ø6 → 입구 Ø10 · 깊이 8, 노즈 1.2 · Z 여유 0 — 검증 F4 2026-11-13): G41/G42 진입이 급송을 소재에서 c 떼려고 일부러 축 너머(`G0X-3.6Z20.`)로
+     * 돌아 들어가 ENTRY_PAST_AXIS 가 난다 — 글은 Z 여유를 줄이라고만 하지 않고 그 진입과 기계 X− 한계를 말한다. 화면 역방향 + 뒤집기(부품 앞에서 들어옴)는 전 글
+     */
+    @Test
+    fun pastAxisTextForFlippedEntry() {
+        val small = form(TaperKind.INNER, 2, listOf(6.0, 10.0), listOf(-8.0, 0.0), r = 1.2, zClear = 0.0).copy(flip = true)
+        val res = TaperSolve.solve(small)
+        assertTrue(TaperWarning.ENTRY_PAST_AXIS in res.warnings, "${res.warnings} ${res.solution?.ncG41G42}")
+        val t = taperWarningText(TaperWarning.ENTRY_PAST_AXIS, small)
+        assertTrue(t.startsWith("진입점이나 후퇴점이 중심(X0)을 넘습니다. 뒤집어 구멍 안에서 시작하면") && "기계가 X− 로 그만큼 갈 수 있는지" in t, t)
+        assertEquals("진입점이나 후퇴점이 중심(X0)을 넘습니다. Z 여유를 줄이세요.", taperWarningText(TaperWarning.ENTRY_PAST_AXIS, small.copy(reverse = true)))
     }
 
     @Test

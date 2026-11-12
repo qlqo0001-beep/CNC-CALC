@@ -531,9 +531,8 @@ class Verify1110ArcSimTest {
         val p = probe(moves.filter { it.line > firstMove }, cut, surf, must, r)
         if (p.gouge > tol) {
             val m = p.gougeBy!!
-            // 내경 직접 보정 끝의 축 너머 후퇴(마지막 G0 — 노즈가 맞은편 = 같은 회전면을 팜)는 T1–T2 직선에도 있는 기존 규칙이라(V7-2, 고침 단계에서 미룸) 따로 센다
-            val pastAxis = f.kind.inner && m.kind != MoveKind.FEED && m.line == pre.size + nc.size && m.nose.end.x < 0
-            t.fail(if (m.kind == MoveKind.FEED) "D_GOUGE_FEED" else "D_GOUGE_RAPID" + (if (pastAxis) "(축 너머 후퇴 — 기존 · 미룸)" else "")) {
+            // 내경 직접 보정 끝의 축 너머 후퇴(V7-2 — 전에는 따로 세던 무른 갈래)는 2026-11-12 통합 고침에서 Z 로 빼게 고쳐 다른 파고듦과 같이 센다
+            t.fail(if (m.kind == MoveKind.FEED) "D_GOUGE_FEED" else "D_GOUGE_RAPID") {
                 "${m.line - pre.size}줄 '${nc.getOrNull(m.line - pre.size - 1)}' 노즈 ${xz(m.nose.start)} → ${xz(m.nose.end)} 이 도면을 ${p.gouge} 팜\n${text()}"
             }
             return

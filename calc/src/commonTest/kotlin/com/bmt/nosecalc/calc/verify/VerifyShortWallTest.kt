@@ -128,10 +128,10 @@ class VerifyShortWallTest {
         // 시작 요소 Z−11.2 ~ −10.828 = 0.372 < r: 노즈가 시작 벽(노즈 중심 Z ≥ −11.2 + 0.8 = −10.4)에서 R 처음 법선(Z−10.828)으로 가면 −Z 로 되돌아간다
         assertTrue(zs < -11.2 + r)
         val iCut = nc.indexOfFirst { it.endsWith("F.1") }
-        // 시작 요소를 빼고 R 처음(X40. Z−10.828)에 공구 쪽(+X)에서 직각으로 — Z20. 에서 Z 로 곧장 내려와 G1 X40.
-        assertEquals("Z-10.828", nc[iCut - 1], nc.joinToString(" / "))
-        assertEquals("G1X40.F.1", nc[iCut], nc.joinToString(" / "))
-        assertEquals("G2X38.828Z-9.414R2.", nc[iCut + 1], nc.joinToString(" / "))
+        // 시작 요소를 빼고 R 처음(X40. Z−10.828)에 공구 쪽(+X)에서 직각으로 — 뒤집은 진입(2026-11-12 통합 고침): 급송은 R 처음에서 공구 쪽 2r + c = 2.6
+        // (X45.2) · 앞으로 r + c = 1.8(Z−9.028)에서 멈추고 `G1Z-10.828F.1`(벽 쪽으로) → `X40.`(벽을 따라 내려옴). 급송 노즈 밑(반경 22.6 − 2r = 21.0)이 R 꼭대기(20)에서 c,
+        // 급송 끝 노즈의 척 쪽 끝(Z−9.028 − r = −9.828)이 시작 벽 Z−11.2 에서 1.372
+        assertEquals(listOf("G0X45.2Z20.", "Z-9.028", "G1Z-10.828F.1", "X40.", "G2X38.828Z-9.414R2."), nc.subList(iCut - 2, iCut + 3), nc.joinToString(" / "))
         assertFalse(nc.any { it.contains("Z-11.2") }, nc.joinToString(" / "))
         assertTrue(TaperWarning.SHORT_END_PAST !in res.warnings && TaperWarning.ENTRY_NOT_FOUND !in res.warnings, "${res.warnings}")
         // 뺀 시작 요소(Z−11.2 ~ −10.828)는 깎이지 않는다 — 화면에 알린다(2026-11-05)
@@ -141,16 +141,12 @@ class VerifyShortWallTest {
         // 교점 각 atan2(2.683282, 0.8) = 73.40° — R 은 90° 에서 45° 로(시계) 돌아 노즈가 R 위로 2.8·28.40° = 1.388 간다
         val aHit = atan2(sqrt(7.2), r) * 180 / PI
         assertTrue(aHit in 45.0..90.0 && 2.8 * (aHit - 45) * PI / 180 >= 0.05)
-        // 진입점: c = 1 이면 X42. 인데 Z 줄(−Z) → 첫 깎는 줄(−X) 안쪽 꺾임 노즈가 X(21 − 0.8) = 20.2 로 교점(20.683282)보다 낮아 거꾸로 간다 →
-        // 첫 깎는 줄 노즈 이동 0.05 가 되게 물린다: X 반경 = 20.683282 + 0.05 + 0.8 = 21.533282 → X43.067. 그 Z 줄의 노즈(X20.733282 에서 Z−10.028427 까지)는
-        // R 중심에서 √(0.8² + 2.733282²) = 2.848 — R 보정 원 2.8 밖이라 R 을 파지 않는다
-        assertEquals("G0X${Fmt.nc(2 * (want.x + 0.05 + r))}Z20.", nc[iCut - 2], nc.joinToString(" / "))
-        assertEquals("G0X43.067Z20.", nc[iCut - 2])
-        assertTrue(sqrt(0.8 * 0.8 + (want.x + 0.05 - 18) * (want.x + 0.05 - 18)) > 2.8)
+        // 급송 줄 X = 2 · (R 꼭대기 반경 20 + 2r + c) — 벽을 따라 내려오는 `X40.` 줄 끝 노즈가 교점(전에는 첫 깎는 줄 `G1X40.F.1` 끝)
+        assertEquals("G0X${Fmt.nc(2 * (20 + 2 * r + 1.0))}Z20.", nc[iCut - 2])
         for (form in listOf(CompStartup.AB, CompStartup.C)) for (tip in 0..9) {
             val run = sim(nc, r, tip, form)
             assertNull(run.stop, "형식 $form 팁 $tip: ${run.stop}\n${nc.joinToString(" / ")}")
-            val g1 = run.steps.filterIsInstance<MoveStep>().last { it.line == line(iCut) }.nose
+            val g1 = run.steps.filterIsInstance<MoveStep>().last { it.line == line(iCut + 1) }.nose
             assertEquals(want.z, g1.end.z, 2e-3, "형식 $form 팁 $tip 첫 깎는 줄 끝 노즈")
             assertEquals(want.x, g1.end.x, 2e-3, "형식 $form 팁 $tip 첫 깎는 줄 끝 노즈")
             // 노즈 중심이 시작 벽 Z−11.2 에서 r 안(Z < −10.4)으로 가지 않는다

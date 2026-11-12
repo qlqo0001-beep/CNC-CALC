@@ -819,17 +819,18 @@ class VerifyG4xSimTest {
                 val m0a = mv0["직선"]
                 if (s.toEnd && m4a != null && m0a != null) {
                     // 회사 꼴: 마지막 형상 블록은 첫 빼는 줄(F.3) 앞. 막힌 끝(짧지 않음)은 공구 쪽 직각 빼기의 교점(노즈 끝이 끝좌표에서 멈춤) → 팁 벡터·u − r,
-                    // 외경 단면 X0 끝은 X −2r 까지 쓰고 직각(노즈 중심이 축 — 직접 보정도 노즈 중심을 축까지) → min(0, 팁 벡터·u), 그 밖(빈 끝 · 짧은 막힌 끝 ·
-                    // 내경 바닥 X0 — 곧게 또는 끝 법선)은 팁 벡터·u
+                    // 단면 X0 끝(외경 · 내경 바닥 — 내경은 2026-11-12 통합 고침부터 직접 보정이 축 너머로 이어 가지 않고 Z 로 빠져 노즈 중심을 축까지)은 X −2r 까지 쓰고
+                    // 직각(노즈 중심이 축 — 직접 보정도 노즈 중심을 축까지) → 외경 min(0, 팁 벡터·u) · 내경 0(어느 팁이든 노즈 중심이 축 — 검증 F1 2026-11-13),
+                    // 그 밖(빈 끝 · 짧은 막힌 끝 — 곧게 또는 끝 법선)은 팁 벡터·u
                     val end4 = m4a.last { it.blk < iExit }.seg.end
                     val end0 = m0a.last { !it.rapid }.seg.end
                     val tvu = tv dot g.uB
                     val got = (end4 - end0) dot g.uB
-                    val outerAxis = !horiz(g.uB) && !c.inner && g.uB.x < 0 && g.l.x <= 1e-9
+                    val outerAxis = !horiz(g.uB) && g.uB.x < 0 && g.l.x <= 1e-9
                     // 짧은 막힌 끝 요소를 계산기가 뺐으면(마지막 형상 줄 끝이 끝좌표가 아님 — 앞 요소가 직선일 때, calc-design '진입점과 NC' 2026-11-04) 노즈는 그 요소에
                     // 닿지 않고 앞 요소 끝 둘레에서 멈춘다 — 문서 식 대신 노즈가 벽(끝좌표의 법선)에서 r 이상 앞인지 본다
                     val skipped = shortEnd && g.endWall && (parse(nc4).last { it.idx < iExit }.p - g.l).length > 1e-3
-                    val want = if (g.endWall && !shortEnd) tvu - r else if (outerAxis) min(0.0, tvu) else tvu
+                    val want = if (g.endWall && !shortEnd) tvu - r else if (outerAxis) (if (c.inner) 0.0 else min(0.0, tvu)) else tvu
                     val onLine = abs(((end4 - g.l) dot g.nB) - r) <= tol
                     val ahead = (end4 - g.l) dot g.uB
                     val ok = if (skipped) ahead <= -r + tol else abs(got - want) <= tol && onLine

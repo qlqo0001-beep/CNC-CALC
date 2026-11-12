@@ -464,8 +464,10 @@ class GeometricVerifyTest {
         val end = pts[pts.size - 2]
         if (sol.toEnd) {
             val lu = drawing.last().tangent(0.0)
-            val toAxis = !inner && drawing.last() is Ln && abs(lu.z) < 1e-9 && lu.x < 0 && drawing.last().b.x <= 1e-9
-            val want = if (toAxis) e0 + lu * max(0.0, (e0 - tv).x) else e0
+            // 단면을 중심(X0)까지 — 내경 바닥도(2026-11-12 통합 고침: 직접 보정이 축 너머로 이어 가지 않고 Z 로 빠지므로 노즈 중심을 축까지). 외경은 팁 벡터가 축 쪽을
+            // 보는 팁만 더 가고, 내경은 어느 팁이든 노즈 중심이 축에 선다 — 표준 팁 2 · 1 은 인선이 X +2r 에서 멈춘다(검증 F1 2026-11-13)
+            val toAxis = drawing.last() is Ln && abs(lu.z) < 1e-9 && lu.x < 0 && drawing.last().b.x <= 1e-9
+            val want = if (toAxis) e0 + lu * (if (inner) (e0 - tv).x else max(0.0, (e0 - tv).x)) else e0
             if ((end - want).len > NC_TOL) rep.bad(id, "끝점", "NC 끝 점 $end, 인선을 끝점에 둔 점은 $e0 (중심까지 깎으면 노즈 중심이 중심선에 닿는 $want)  NC=${sol.ncG40.legacy}")
         } else {
             val l = drawing.last()
@@ -509,14 +511,22 @@ class GeometricVerifyTest {
         }
         // 형상 줄 = 첫 깎는 줄 뒤 ~ 첫 빼는 줄 앞. 진입 G0 · 첫 깎는 줄 · 빼는 줄도 요소로(F 낱말은 뺀다)
         val els = parseNc(nc.subList(1, iG40).map { it.replace(Regex(" F[0-9.]+"), "") })
-        val approach = els.subList(0, iCut - 2)
-        val firstEl = els[iCut - 2]
-        val shape = els.subList(iCut - 1, iExit - 2)
+        val approach0 = els.subList(0, iCut - 2)
+        var firstEl = els[iCut - 2]
+        var shape = els.subList(iCut - 1, iExit - 2)
         val exits = els.subList(iExit - 2, els.size)
-        for (k in 1 until approach.size) {
-            val e = approach[k - 1]
+        for (k in 1 until approach0.size) {
+            val e = approach0[k - 1]
             if (e.a.x != e.b.x && e.a.z != e.b.z) rep.bad(id, "G41/G42", "진입 G0 이 두 축을 함께 움직인다  NC=$nc")
         }
+        // 뒤집은 진입(2026-11-12 통합 고침): 급송 끝 → `G1 P F.1` → 첫 깎는 점. 첫 깎는 줄 끝 P 가 도면 밖이면 그 뒤 도면 밖에서 시작하는 이송 줄까지 진입 몫이다
+        val lead = mutableListOf<El>()
+        while (shape.size > 1 && drawing.minOf { it.dist(shape.first().a) } > NC_TOL) {
+            lead += firstEl
+            firstEl = shape.first()
+            shape = shape.drop(1)
+        }
+        val approach = approach0 + lead
         val d0 = drawing.first()
         for (e in shape) {
             val n = max(20, ceil(e.length / STEP).toInt())

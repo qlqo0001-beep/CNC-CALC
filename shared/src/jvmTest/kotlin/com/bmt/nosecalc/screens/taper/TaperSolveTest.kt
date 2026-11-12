@@ -378,7 +378,9 @@ class TaperSolveTest {
         // 처음 꺾임 노즈 = (−5.6, x − 0.4). 반경 x 를 0.4 씩 늘려 찾으면 26.4 는 26.166 − 26.0 = −0.166(거꾸로), 26.8 은 26.4 − 26.166 = 0.234 → X53.6.
         // 끝은 비워(끝 요소 깎지 않음) 면취를 따라 Z 로 c 더 → (Z1, 19) = X38 Z1(F.3). G40 자리 규칙 (1 + √2)·0.4 + 0.02 = 0.986: 가장 가까운 소재는
         // 끝 단면(Z0)에서 1.0, 물러남 띠(+Z)도 1.0 — 빼는 줄 하나로 G40 · G0Z200.
-        assertEquals(listOf("G41", "G0X53.6Z20.", "Z-6.", "X52.", "G1X50.Z-5.F.1", "X40.Z0.", "X38.Z1.F.3", "G40", "G0Z200."), sol.ncG41G42)
+        // 2026-11-12 통합 고침(뒤집은 진입 — 척 쪽에서 시작): 그 진입은 급송 끝 노즈(−5.6, 26.166)가 외경에서 0.766 으로 c 보다 가까워, 급송은 e 에서 면취 연장선의
+        // 공구 쪽 법선 (1, 1)/√2 으로 2r + c = 1.8 인 (Z−4.727, X54.546)에서 멈추고 `G1X52.Z-6.F.1`(e 로) → T1 — 손 계산은 calc VerifyFlipTest.handOuterType1Flip
+        assertEquals(listOf("G41", "G0X54.546Z20.", "Z-4.727", "G1X52.Z-6.F.1", "X50.Z-5.", "X40.Z0.", "X38.Z1.F.3", "G40", "G0Z200."), sol.ncG41G42)
         assertEquals(listOf("G0X52.Z1.", "Z-6.234", "G1X50.Z-5.234", "X39.531Z0.", "G0Z1."), sol.ncG40)
         assertEquals("T1 위 → T2 아래 · G41", travelText(TaperKind.OUTER, 1, false, true))
         assertEquals("T1 아래 → T2 위 · G42", travelText(TaperKind.OUTER, 1, false, false))
@@ -547,6 +549,18 @@ class TaperSolveTest {
         val e = rapids.last()
         val d = e - rapids[rapids.size - 2]
         return Triple(e, cut!!, d * (1 / d.length))
+    }
+
+    /** 뒤집은 진입(2026-11-12 통합 고침)의 둘째 이송 줄(첫 깎는 줄 F.1 다음 줄) 끝 */
+    private fun leadEnd(nc: List<String>): Pt {
+        var x = 0.0
+        var z = 0.0
+        val k = nc.indexOfFirst { it.endsWith("F.1") } + 1
+        for (line in nc.take(k + 1)) for (w in ncWords(line)) when (w[0]) {
+            'X' -> x = w.drop(1).toDouble() / 2
+            'Z' -> z = w.drop(1).toDouble()
+        }
+        return Pt(z, x)
     }
 
     /** 요소 처음의 진행 방향(단위) — 원호는 그 점의 접선 */
@@ -775,13 +789,17 @@ class TaperSolveTest {
                 // 기계 보정(회사 꼴)의 첫 깎는 줄(F.1)은 진입점(마지막 G0 점)에서 첫 도면 점까지 — 그 끝이 첫 깎는 점이다
                 val first = s.drawing.segs[skip]
                 val (e4, s4, uIn) = firstCut(s.ncG41G42)
-                assertTrue((s4 - first.start).length < 1e-3, "$what 첫 깎는 줄 끝 = 첫 도면 점 ${s.ncG41G42}")
+                // 뒤집은 진입(2026-11-12 통합 고침 — 실제 척 쪽 · 구멍 안에서 시작): 급송 끝 → `G1 P F.1` → 첫 도면 점이면 P 가 아래 진입점 몫이다(그 규칙 · 급송 여유는
+                // calc 의 TaperCalcTest · TaperFlipEntryTest 가 본다 — 여기서는 이송 줄 끝이 첫 도면 점인지만)
+                val lead = flip && !rev && (s4 - first.start).length >= 1e-3
+                if (lead) assertTrue((leadEnd(s.ncG41G42) - first.start).length < 1e-3, "$what 진입 이송 줄 끝 = 첫 도면 점 ${s.ncG41G42}")
+                else assertTrue((s4 - first.start).length < 1e-3, "$what 첫 깎는 줄 끝 = 첫 도면 점 ${s.ncG41G42}")
                 // G41/G42 진입점은 첫 깎는 점에서 c(calc '진입점과 NC'): 첫 깎는 줄이 시작 요소 · 단면 · 수평 보정선을 따라가거나 넣은 시작에 직각이면
                 // 그 줄 길이가 c, 볼록 첫 꺾임의 경사 연장선이면 큰 축으로 c(45° 넘는 경사는 X 로 — 2026-11-04). 아니면 첫 깎는 줄 동안 노즈 이동(보정 중 꺾임 교점 사이)이 0.05(CompFrame MIN_MOVE)에
                 // 모자라 그 줄을 따라 더 물린 것이어야 한다 — 그때 노즈 이동은 꼭 0.05(0.001 반올림 안). Z 여유 ≤ 노즈R 의 단면 시작 · R 시작이 그렇다
                 val len = (s4 - e4).length
                 val major = max(abs(s4.z - e4.z), abs(s4.x - e4.x))
-                if (abs(len - c) > 2e-3 && abs(major - c) > 2e-3) {
+                if (!lead && abs(len - c) > 2e-3 && abs(major - c) > 2e-3) {
                     val mv = noseMove(e4, s4, uIn, startDir(first), s.side, r)
                     assertTrue(len > c && abs(mv - 0.05) < 2e-3, "$what G41/G42 진입 ${e4} · 첫 깎는 줄 $len · 노즈 이동 $mv ${s.ncG41G42}")
                 }
@@ -792,7 +810,7 @@ class TaperSolveTest {
                     val p0 = s.program.segs[0].start
                     assertEquals(p0.z, s.entry.z, 1e-9, "$what 직접 보정 ${s.ncG40}")
                     assertEquals(c, abs(s.entry.x - p0.x), 1e-9, "$what 직접 보정 ${s.ncG40}")
-                    if (!rev) assertEquals(first.start.z, e4.z, 1e-3, "$what G41/G42 ${s.ncG41G42}")
+                    if (!rev) assertEquals(first.start.z, (if (lead) s4 else e4).z, 1e-3, "$what G41/G42 ${s.ncG41G42}")
                 } else if (flip) {
                     // 뒤집으면 쪽은 시작 요소가 정한다: 단면은 공구 쪽(척 반대쪽), 수평 · 경사 연장선은 진행 반대쪽 — 거리만 본다
                     assertEquals(c, abs(s.entry.z - s.program.segs[skip].start.z), 1e-9, "$what 직접 보정 ${s.ncG40}")
