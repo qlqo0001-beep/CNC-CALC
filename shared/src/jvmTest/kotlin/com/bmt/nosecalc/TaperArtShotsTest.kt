@@ -57,6 +57,42 @@ class TaperArtShotsTest {
     fun angleRef() {
         Shots.both("art-taper-ref", heightDp = 3250, widthDp = 720) { AppHost(it) { RefGallery() } }
     }
+
+    /**
+     * T1–T2 원호(피드백 2026-11-10): 외경 · 내경 형상 1~5 와 역방향 몇을 볼록 · 오목 · 볼록 + T1 ⇄ T2 로 나란히, 줄 끝은 요약 칸(132dp, R 칸 입력 중) 볼록 · 오목.
+     * 볼록은 살이 남는 쪽(외경은 위, 내경은 구멍 쪽 = 아래)으로 부풀고 소재 면이 호를 따른다. 각도 호 · 기준 점선 대신 "R"
+     */
+    @Test
+    fun arc() {
+        Shots.both("art-taper-arc", heightDp = 2900, widthDp = 920) { AppHost(it) { ArcGallery() } }
+    }
+}
+
+/** 원호 그림 줄: 종류, 역방향, 형상 */
+private val arcRows = (1..5).map { Triple(TaperKind.OUTER, false, it) } + (1..5).map { Triple(TaperKind.INNER, false, it) } +
+    listOf(Triple(TaperKind.OUTER, true, 1), Triple(TaperKind.OUTER, true, 3), Triple(TaperKind.INNER, true, 1))
+
+@Composable
+private fun ArcGallery() {
+    val c = AppTheme.colors
+    val shape = RoundedCornerShape(12.dp)
+    Column(Modifier.fillMaxSize().padding(Space.gutter), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        arcRows.forEach { (kind, reverse, type) ->
+            Text("${kind.label}${if (reverse) " · 역방향" else ""} 형상 $type — 볼록 · 오목 · 볼록 + T1 ⇄ T2 · 요약 칸(R 입력 중) 볼록 · 오목", style = AppType.caption, color = c.textMuted)
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                for ((convex, flip) in listOf(true to false, false to false, true to true)) {
+                    Box(Modifier.width(199.dp).aspectRatio(1.08f).clip(shape).background(c.subtle).border(1.dp, c.lineCard, shape)) {
+                        TypeArt(kind, type, reverse, flip = flip, arc = convex)
+                    }
+                }
+                for (convex in listOf(true, false)) {
+                    Box(Modifier.width(132.dp).aspectRatio(1.08f).clip(RoundedCornerShape(8.dp)).background(c.subtle).border(1.5.dp, c.lineStrong, RoundedCornerShape(8.dp))) {
+                        TypeArt(kind, type, reverse, compact = true, focus = "arcR", arc = convex)
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** 각도 기준 비교 줄: 종류, 역방향, 형상, 뒤집기 */

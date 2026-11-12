@@ -110,10 +110,14 @@ import kotlin.math.sqrt
 /**
  * B 화면 맨 위: 고른 형상의 작은 그림(요약 꼴 — 글 12sp · 각도 글 없이) + 종류·형상 번호·이름·방향/팁 + 형상 다시 고르기.
  * 그림을 눌러도 형상을 다시 고른다. flip = 가공 방향 뒤집기(그림의 T 이름 · 이송 화살과 이름의 순서가 반대 끝부터),
- * angleRef = 그림의 각도 호 기준(테이퍼 화면은 AppState.angleRef 를 넘긴다 — 홈은 각도가 없다)
+ * angleRef = 그림의 각도 호 기준(테이퍼 화면은 AppState.angleRef 를 넘긴다 — 홈은 각도가 없다),
+ * arc = T1–T2 를 원호로 냈으면 그 꼴(null 직선 · true 볼록 · false 오목 — [TypeArt])
  */
 @Composable
-internal fun SummaryCard(kind: TaperKind, type: Int, mirrored: Boolean, info: String, flip: Boolean = false, angleRef: AngleRef = AngleRef.X, onBack: () -> Unit) {
+internal fun SummaryCard(
+    kind: TaperKind, type: Int, mirrored: Boolean, info: String, flip: Boolean = false, angleRef: AngleRef = AngleRef.X, arc: Boolean? = null,
+    onBack: () -> Unit,
+) {
     val c = AppTheme.colors
     AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -125,7 +129,7 @@ internal fun SummaryCard(kind: TaperKind, type: Int, mirrored: Boolean, info: St
                     .clickable(onClick = onBack)
                     .semantics { contentDescription = "형상 다시 고르기" },
             ) {
-                TypeArt(kind, type, mirrored, compact = true, flip = flip, angleRef = angleRef)
+                TypeArt(kind, type, mirrored, compact = true, flip = flip, angleRef = angleRef, arc = arc)
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
@@ -237,6 +241,44 @@ internal fun AngleRefSwitch(ref: AngleRef, onPick: (AngleRef) -> Unit, modifier:
                         layout(p.width, p.height) { p.place(0, 0) }
                     }
                     Text(sub, color = fg, fontSize = 11.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, lineHeight = 14.sp)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * T1–T2 원호의 볼록 · 오목 고르기(R 칸 옆 반 줄 — [AngleRefSwitch] 와 같은 꼴 · 같은 높이): "볼록 / 덜 깎음" · "오목 / 더 깎음".
+ * 볼록 = 소재가 불룩(직선으로 이은 것보다 살이 남는다), 오목 = 움푹(더 깎는다). 외경 · 내경 모두 소재 기준이라 그림의 위아래와 헷갈리지 않게
+ * 아랫줄에 깎는 양으로 다시 적는다
+ */
+@Composable
+internal fun ArcSideSwitch(concave: Boolean, onPick: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    val c = AppTheme.colors
+    Column(modifier) {
+        FieldLabel("볼록 · 오목")
+        Spacer(Modifier.height(6.dp))
+        val shape = RoundedCornerShape(9.dp)
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 52.dp).height(IntrinsicSize.Min)
+                .clip(shape).background(c.segTrack).border(1.dp, c.lineCard, shape).padding(3.dp),
+        ) {
+            listOf(false to ("볼록" to "덜 깎음"), true to ("오목" to "더 깎음")).forEach { (v, t) ->
+                val on = v == concave
+                val fg = if (on) c.onFill(c.teal) else c.textMuted
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(if (on) c.teal else Color.Transparent)
+                        .selectable(on, role = Role.RadioButton) { onPick(v) }
+                        .padding(horizontal = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(t.first, color = if (on) fg else c.textBody, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, lineHeight = 18.sp)
+                    Text(t.second, color = fg, fontSize = 11.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, lineHeight = 14.sp)
                 }
             }
         }

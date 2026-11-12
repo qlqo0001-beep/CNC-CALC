@@ -20,6 +20,68 @@ class TaperWarningsTest {
 
     private fun stop(f: SlopeForm): TaperWarning = TaperSolve.solve(f).warnings.single()
 
+    /**
+     * T1–T2 원호(피드백 2026-11-10)의 멈춤 · 안내: R 이 작으면 그 두 점의 최소 R 을 적고 R 칸을 짚는다, R 빈칸 · 0(치는 중)은 파란 안내,
+     * 각도 칸은 읽지 않는다(수평 · 수직은 좌표 칸을 짚는다), 오목 R < 노즈R 은 R 칸도. 직선의 글은 한 글자도 안 바뀐다
+     */
+    @Test
+    fun arcWarnings() {
+        val base = form(TaperKind.OUTER, 1, listOf(40.0, 50.0), listOf(0.0, -5.0)).copy(arc = true, arcR = 4.0)
+        assertEquals(5.0, base.arcMinR!!, 1e-12)
+        assertEquals(TaperWarning.ARC_R_TOO_SMALL, stop(base))
+        assertEquals(setOf("arcR"), taperWarningFields(TaperWarning.ARC_R_TOO_SMALL, base))
+        val small = taperWarningText(TaperWarning.ARC_R_TOO_SMALL, base)
+        assertTrue("R 5.000 이상" in small && "7.071" in small && "모서리 R" in small, small)
+        assertFalse(base.waiting)
+        // R 빈칸 → 값이 모자란 안내(R 을 적는다), 0 은 치는 중
+        val blank = base.copy(arcR = null)
+        assertEquals(TaperWarning.MISSING_INPUT, stop(blank))
+        assertTrue("R" in taperWarningText(TaperWarning.MISSING_INPUT, blank) && "네 좌표" in taperWarningText(TaperWarning.MISSING_INPUT, blank))
+        assertTrue(base.copy(arcR = 0.0).waiting)
+        assertEquals(TaperWarning.BAD_INPUT, stop(base.copy(arcR = 0.0)))
+        // 좌표 하나가 비면 각도가 있어도 모자람(원호는 네 좌표를 모두)
+        assertEquals(TaperWarning.MISSING_INPUT, stop(base.copy(x = listOf(40.0, null), angle = 45.0, arcR = 10.0)))
+        // 음수 · 한도 밖 R
+        for (bad in listOf(-1.0, 123456.0)) {
+            val f = base.copy(arcR = bad)
+            assertEquals(TaperWarning.BAD_INPUT, stop(f))
+            assertEquals(setOf("arcR"), taperWarningFields(TaperWarning.BAD_INPUT, f))
+            assertTrue("원호" in taperWarningText(TaperWarning.BAD_INPUT, f))
+        }
+        // 각도 칸은 읽지 않는다 — 점과 안 맞는 각도 · 범위 밖 각도가 남아 있어도 풀린다
+        assertTrue(TaperSolve.solve(base.copy(arcR = 10.0, angle = 12.0)).solution != null)
+        assertTrue(TaperSolve.solve(base.copy(arcR = 10.0, angle = 95.0)).solution != null)
+        // 수평으로 놓인 두 점: 좌표 칸을 짚는다(각도 칸이 범위 밖이어도 각도 칸이 아니라)
+        val flat = base.copy(x = listOf(40.0, 40.0), arcR = 10.0, angle = 95.0)
+        assertEquals(TaperWarning.BAD_ANGLE, stop(flat))
+        assertEquals(setOf("x1", "x2", "z1", "z2"), taperWarningFields(TaperWarning.BAD_ANGLE, flat))
+        assertTrue("각도" !in taperWarningText(TaperWarning.BAD_ANGLE, flat))
+        // 오목 원호 R < 노즈R: 멈추고 노즈R · R 칸을 짚는다
+        val tight = form(TaperKind.OUTER, 1, listOf(40.0, 41.0), listOf(0.0, -0.5), r = 0.8).copy(arc = true, arcR = 0.6, arcConcave = true)
+        assertEquals(TaperWarning.NOSE_UNREACHABLE, stop(tight))
+        assertEquals(setOf("noseR", "arcR"), taperWarningFields(TaperWarning.NOSE_UNREACHABLE, tight))
+        assertTrue("원호" in taperWarningText(TaperWarning.NOSE_UNREACHABLE, tight))
+        // 모서리 R 이 원호에 안 들어감
+        val corner = base.copy(arcR = 10.0, corners = listOf(30.0, 0.0))
+        assertEquals(TaperWarning.CORNER_R_TOO_BIG, stop(corner))
+        assertEquals(setOf("r1"), taperWarningFields(TaperWarning.CORNER_R_TOO_BIG, corner))
+        assertTrue("원호" in taperWarningText(TaperWarning.CORNER_R_TOO_BIG, corner))
+        // 직선의 글은 그대로(원호를 켰을 때만 다른 글)
+        val straight = base.copy(arc = false)
+        assertEquals("값을 넣으면 바로 계산합니다 — X1 · Z1 · X2 · Z2 · 각도 가운데 넷.", taperWarningText(TaperWarning.MISSING_INPUT, straight))
+        for (w in TaperWarning.entries) {
+            // 원호 글이 따로 없는 경고는 직선 글 그대로
+            if (w !in listOf(
+                    TaperWarning.MISSING_INPUT, TaperWarning.BAD_ANGLE, TaperWarning.BAD_INPUT, TaperWarning.CORNER_R_TOO_BIG, TaperWarning.ARC_R_TOO_SMALL,
+                    TaperWarning.NOSE_UNREACHABLE, TaperWarning.NOSE_GT_SLOPE, TaperWarning.CONCAVE_R_LE_NOSE,
+                )
+            ) {
+                assertEquals(taperWarningText(w, straight), taperWarningText(w, base), w.name)
+            }
+            assertTrue(taperWarningText(w, base).isNotBlank() && taperWarningText(w, straight).isNotBlank())
+        }
+    }
+
     @Test
     fun contradictionFlagsFiveValues() {
         // taper-b-error: 두 점은 45° 인데 각도 30

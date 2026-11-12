@@ -63,6 +63,13 @@ object NoseComp {
     private const val JOIN = 1e-7
 
     /**
+     * 거의 접해서 이어지는 볼록 이음(직선–원호가 1e-5 rad 쯤 꺾임 — 테이퍼의 T1–T2 호를 가장 작은 R 의 0.001 올림 값으로 넣었을 때)의 두 보정선 끝 사이 틈을
+     * 이만큼(mm)까지 그대로 잇는다. 그 꺾임은 늘인 교점이 [Intersect] 의 접점 허용으로 접점 하나로 뭉개져 '교점이 두 구간 안' 도 '늘인 교점' 도 아니게 된다.
+     * 틈은 r × 꺾인 각이라 NC 자릿수(0.001)보다 한참 작다
+     */
+    private const val NEAR_JOIN = 1e-4
+
+    /**
      * 노즈 중심에서 가상 인선으로 가는 벡터. x 도 반경값이다.
      * 1 = X+Z+, 2 = X+Z−, 3 = X−Z−, 4 = X−Z+, 5 = Z+, 6 = X+, 7 = Z−, 8 = X−, 0·9 = 중심.
      * 출처: Haas ST/TL 프로그래밍 워크북 59·69~70쪽 "TOOL TIP DIRECTION" 표 — 방향은
@@ -187,6 +194,11 @@ object NoseComp {
                     start[j] = p
                     continue
                 }
+            }
+            // 이웃한 두 요소가 거의 접해서 이어진다 — 전에는 아래에서 '이을 수 없다' 로 멈추던 꼴만 여기 온다
+            if (j == i + 1 && (e - s).length <= NEAR_JOIN) {
+                start[j] = e
+                continue
             }
             require(j > i + 1) {
                 "노즈R 보정 불가: ${i}번과 ${j}번 요소의 보정선을 이을 수 없다(볼록 모서리면 꼭짓점을 도는 원호가 필요하다)"

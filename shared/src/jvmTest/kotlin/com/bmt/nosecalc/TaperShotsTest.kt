@@ -189,11 +189,59 @@ class TaperShotsTest {
     }
 
     /**
-     * 각도 칸(taper-b 의 (114, 635)dp — T1 ⇄ T2 바꾸기 줄 아래)을 눌러 연 키패드: 처음 기준(X축)의 안내 줄(단면에서 잰 각 · 가로선 · 꼭지각은 Z축으로) · 그림의 세로 점선 호 · '비우기 · 자동 계산'.
+     * T1–T2 원호(피드백 2026-11-10 — 골든 UiGoldenTest.taperArc 와 같은 상태): 점 줄 아래 고르기 'T1–T2 직선 | T1–T2 원호 R', 그 아래 R 칸 + 볼록 · 오목 스위치와
+     * '최소 R' 한 줄(각도 줄 자리), 요약 그림의 호(볼록은 살이 남는 쪽으로 부풂), 결과 카드의 호 줄(방향 · 도면 R → 보정 R), 뷰어의 호와 R 표시, NC 의 G2/G3.
+     * 기계 보정(볼록 · 오목 · 내경), 직접 보정(모서리 R + 시작 · 끝), R 과소(빨간 띠에 최소 R · R 칸 빨간 테), 좌표 빈칸(파란 안내), R 칸 키패드(그림의 호가 굵게),
+     * 좁은 폰 · 큰 글꼴, 고르기 화면(호를 켠 형상 카드는 호로)
+     */
+    @Test
+    fun arc() {
+        fun arc(s: TaperState, r: String, concave: Boolean = false) = s.apply {
+            setArc(true)
+            setPoint("arcR", r)
+            setArcConcave(concave)
+        }
+        shot("taper-b-arc", 2640) { arc(TaperState(type = 1, open = true).example(), "10") }
+        shot("taper-b-arc-concave", 2640) { arc(TaperState(type = 1, open = true).example(), "10", concave = true) }
+        shot("taper-b-arc-direct", 2900, comp = CompMode.DIRECT) {
+            arc(TaperState(type = 1, open = true).example(), "10").apply {
+                setPoint("r1", "1")
+                setPoint("r2", "2")
+                setPoint("start", "30")
+                setPoint("end", "-12")
+            }
+        }
+        shot("taper-b-arc-inner", 2640) { arc(TaperState(TaperKind.INNER, type = 1, open = true).example(), "10").apply { setPoint("end", "-20") } }
+        shot("taper-b-arc-flip", 2800, comp = CompMode.DIRECT) {
+            arc(TaperState(type = 3, open = true).example(), "8", concave = true).apply {
+                setPoint("r1", "1")
+                setPoint("r2", "1.5")
+                toggleFlip()
+            }
+        }
+        shot("taper-b-arc-error", 1300) { arc(TaperState(type = 1, open = true).example(), "4") }
+        shot("taper-b-arc-empty", 1300) { TaperState(type = 1, open = true).apply { setArc(true) } }
+        shot("taper-b-arc-keypad", frames = 150, frameMs = 16) { arc(TaperState(type = 1, open = true).example(), "10").apply { editing = "arcR" } }
+        Shots.both("taper-b-arc-w360", heightDp = 3300, widthDp = 360, fontScale = 1.3f) {
+            AppHost(it) { TaperScreen(arc(TaperState(type = 1, open = true).example(), "10", concave = true)) }
+        }
+        // 고르기 화면: 형상 1 은 볼록 호, 형상 3 은 오목 호로 켜 둔 상태
+        shot("taper-a-arc") {
+            TaperState(type = 3).apply {
+                setArc(true)
+                setArcConcave(true)
+                type = 1
+                setArc(true)
+            }
+        }
+    }
+
+    /**
+     * 각도 칸(taper-b 의 (114, 691)dp — T1 ⇄ T2 바꾸기 줄 · 점 줄 · 'T1–T2 직선 | 원호' 고르기 줄 아래)을 눌러 연 키패드: 처음 기준(X축)의 안내 줄(단면에서 잰 각 · 가로선 · 꼭지각은 Z축으로) · 그림의 세로 점선 호 · '비우기 · 자동 계산'.
      * 묶음 키패드라 칸이 시트 위로 올라온다 — 폰 프레임(16ms)으로 찍는다
      */
     @Test
-    fun keypadHint() = Shots.both("taper-b-keypad-ang", frames = 150, frameMs = 16, tapDp = Offset(114f, 635f)) {
+    fun keypadHint() = Shots.both("taper-b-keypad-ang", frames = 150, frameMs = 16, tapDp = Offset(114f, 691f)) {
         AppHost(it) { TaperScreen(TaperState(type = 1, open = true).example()) }
     }
 

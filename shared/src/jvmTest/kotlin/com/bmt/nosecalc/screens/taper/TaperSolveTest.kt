@@ -81,7 +81,10 @@ class TaperSolveTest {
                 near(p.prog, q.prog, "$what T${i + 1} 보정")
             }
             assertEquals(a.corner?.cw, b.corner?.cw, "$what T${i + 1} 원호 방향")
-            assertEquals(a.corner?.progR, b.corner?.progR, "$what T${i + 1} 보정 R")
+            // 원호에 끼운 모서리 R(원과 직선의 교점)은 거울 풀이와 끝자리가 다를 수 있다 — 1e-9 까지
+            val pa = a.corner?.progR
+            val pb = b.corner?.progR
+            if (pa != null && pb != null) assertEquals(pa, pb, 1e-9, "$what T${i + 1} 보정 R") else assertEquals(pa, pb, "$what T${i + 1} 보정 R")
         }
     }
 
@@ -140,6 +143,141 @@ class TaperSolveTest {
                 }
             }
         }
+    }
+
+    /**
+     * T1–T2 원호(피드백 2026-11-10)도 화면 역방향(거울 풀이) = 계산기 reverse 에 같은 R · 볼록/오목을 넣은 것 — 숫자 · 두 NC 글자(G2/G3 포함)까지.
+     * 볼록 · 오목 · R 은 형상의 성질이라 거울 · 뒤집기에 그대로 넘기고, 결과의 호 방향 · 중심은 거울로 되돌린다(Mirror.solution)
+     */
+    @Test
+    fun arcReverseMatchesCalcReverse() {
+        var solved = 0
+        for (inner in listOf(false, true)) {
+            val kind = if (inner) TaperKind.INNER else TaperKind.OUTER
+            for ((uiType, calcType) in listOf(3 to 5, 5 to 3)) {
+                val up = if (inner == (uiType == 5)) 1.0 else -1.0
+                for (deg in listOf(20, 45, 70)) for (r in listOf(0.4, 0.8)) for (convex in listOf(true, false)) for (k in listOf(1.3, 4.0)) {
+                    val x1 = 60.0
+                    val x2 = Fmt.nc(x1 + up * 2 * 4 * tan(deg * PI / 180)).toDouble()
+                    val z1 = -30.0
+                    val z2 = -26.0
+                    val arcR = Fmt.nc(TaperCalc.arcMinR(x1, z1, x2, z2)!! * k).toDouble()
+                    for ((cr, legs) in listOf(listOf(0.0, 0.0) to null, listOf(0.5, 0.3) to (-36.0 to -20.0))) for (flip in listOf(false, true)) {
+                        val f = form(kind, uiType, true, listOf(x1, x2), listOf(z1, z2), r, corners = cr, start = legs?.first, end = legs?.second)
+                            .copy(arc = true, arcR = arcR, arcConcave = !convex)
+                            .let { if (flip) it.flipped() else it }
+                        val ui = TaperSolve.solve(f)
+                        val ref = TaperCalc.calc(
+                            TaperInput(
+                                inner, calcType, true, r, null, f.x[1], f.z[1], f.x[0], f.z[0],
+                                cornerR1 = f.corners[1], cornerR2 = f.corners[0], start = f.end, end = f.start, flip = flip,
+                                arc = true, arcR = arcR, arcConvex = convex,
+                            ),
+                        )
+                        val what = "${kind.label} 화면 형상 $uiType ${deg}° r$r 원호 R$arcR 볼록 $convex 모서리 $cr 시작·끝 $legs 뒤집기 $flip"
+                        same(ui, ref, listOf(1, 0), what)
+                        val a = ui.solution?.arc ?: continue
+                        val b = ref.solution!!.arc!!
+                        assertEquals(b.cw, a.cw, "$what 호 방향")
+                        near(b.center, a.center, "$what 호 중심")
+                        assertEquals(b.r, a.r, 1e-9, what)
+                        assertEquals(b.progR!!, a.progR!!, 1e-9, what)
+                        assertEquals(b.index, a.index, what)
+                        // 화면의 보정 쪽 규칙: 왼쪽 공구(G41) + 시계 = 볼록
+                        assertEquals(convex, (ui.solution!!.side == Side.G41) == a.cw, what)
+                        solved++
+                    }
+                }
+            }
+        }
+        assertTrue(solved > 300, "푼 사례 $solved")
+    }
+
+    /**
+     * 화면의 T1–T2 원호 G02/G03(설계 손 계산 예 1 의 점 — 외경 형상 1 X40 Z0 → X50 Z−5 R10): 볼록은 G42 면 G03 · G41 이면 G02, 오목은 반대.
+     * T1 ⇄ T2 와 화면 역방향은 보정 쪽을 바꾸므로 호 방향도 바뀐다(R · 볼록/오목 칸은 그대로)
+     */
+    @Test
+    fun arcDirectionOnScreen() {
+        fun g(inner: Boolean, reverse: Boolean, flip: Boolean, concave: Boolean): String {
+            val kind = if (inner) TaperKind.INNER else TaperKind.OUTER
+            val z = if (reverse) listOf(-30.0, -25.0) else listOf(0.0, -5.0)
+            val f = form(kind, 1, reverse, listOf(40.0, if (inner) 30.0 else 50.0), z).copy(arc = true, arcR = 10.0, arcConcave = concave)
+            val s = TaperSolve.solve(if (flip) f.flipped() else f).solution
+            assertNotNull(s, "$inner $reverse $flip $concave")
+            assertEquals(screenSide(inner, reverse, flip), s.side)
+            val word = if (s.arc!!.cw) "G2" else "G3"
+            assertTrue(s.ncG41G42.any { it.startsWith(word) && it.endsWith("R10.") }, "${s.ncG41G42}")
+            return "${s.side} ${if (s.arc!!.cw) "G02" else "G03"}"
+        }
+        assertEquals("G42 G03", g(inner = false, reverse = false, flip = false, concave = false))
+        assertEquals("G42 G02", g(inner = false, reverse = false, flip = false, concave = true))
+        assertEquals("G41 G02", g(inner = false, reverse = false, flip = true, concave = false))
+        assertEquals("G41 G02", g(inner = true, reverse = false, flip = false, concave = false))
+        assertEquals("G41 G03", g(inner = true, reverse = false, flip = false, concave = true))
+        assertEquals("G42 G03", g(inner = true, reverse = false, flip = true, concave = false))
+        assertEquals("G41 G02", g(inner = false, reverse = true, flip = false, concave = false))
+        assertEquals("G42 G03", g(inner = false, reverse = true, flip = true, concave = false))
+        assertEquals("G42 G03", g(inner = true, reverse = true, flip = false, concave = false))
+    }
+
+    /**
+     * T1–T2 원호의 화면 상태: 처음은 직선(옛 저장 값도), 종류 · 형상 · 방향마다 따로, T1 ⇄ T2 를 눌러도 R · 볼록/오목은 그대로, 저장 · 복원,
+     * 직선으로 돌아가도 R · 각도 칸 값이 남는다, 2중 테이퍼 · 홈은 늘 직선
+     */
+    @Test
+    fun arcStateSurvives() {
+        val s = TaperState(type = 1, open = true).example()
+        s.setPoint("ang", "45")
+        assertFalse(s.arc)
+        assertNull(s.arcShape(1))
+        s.setArc(true)
+        s.setPoint("arcR", "10")
+        assertTrue(s.arc && !s.arcConcave)
+        assertEquals(true, s.arcShape(1))
+        s.setArcConcave(true)
+        assertEquals(false, s.arcShape(1))
+        assertNull(s.arcShape(2))
+        // R 칸은 다섯 값(자동 칸 기억)에 끼지 않는다
+        assertEquals("ang", s.lastAuto)
+        s.toggleFlip()
+        assertTrue(s.arc && s.arcConcave && s.flip)
+        assertEquals("10", s.point("arcR"))
+        assertEquals("50", s.point("x1"))
+        val back = with(TaperState.Saver) {
+            restore(androidx.compose.runtime.saveable.SaverScope { true }.save(s)!!)!!
+        }
+        assertTrue(back.arc && back.arcConcave && back.flip)
+        assertEquals("10", back.point("arcR"))
+        // 다른 형상 · 방향 · 종류는 직선
+        back.type = 2
+        assertFalse(back.arc)
+        back.type = 1
+        back.reverse = true
+        assertFalse(back.arc)
+        back.reverse = false
+        back.kind = TaperKind.INNER
+        assertFalse(back.arc)
+        back.kind = TaperKind.OUTER
+        assertTrue(back.arc)
+        // 직선으로 돌아가도 값은 남는다
+        back.setArc(false)
+        assertFalse(back.arc)
+        assertNull(back.arcShape(1))
+        assertEquals("10", back.point("arcR"))
+        assertEquals("45", back.point("ang"))
+        back.setArc(true)
+        assertEquals(false, back.arcShape(1))
+        // 2중 테이퍼 · 홈은 켜도 직선
+        for (kind in listOf(TaperKind.OUTER_DOUBLE, TaperKind.INNER_DOUBLE, TaperKind.GROOVE)) {
+            val d = TaperState(kind, type = 1, open = true)
+            d.setArc(true)
+            assertFalse(d.arc, kind.label)
+            assertNull(d.arcShape(1), kind.label)
+        }
+        // 각도 기준을 바꿔도(각도 칸만 보각으로) R 칸은 그대로
+        back.complementAngles()
+        assertEquals("10", back.point("arcR"))
     }
 
     /** 2중 테이퍼는 형상이 그림뿐이라 화면 역방향 = 계산기 reverse 에 점 순서만 뒤집은 것(뒤집기도 같은 규칙) */
