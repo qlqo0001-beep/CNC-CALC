@@ -100,6 +100,21 @@ class RoundShotsTest {
     @Test
     fun dock() = shot("round-b-top") { roundExample(1, open = true) }
 
+    /**
+     * 가공 방향 바꾸기(2026-11-10 피드백 2): 외경 형상 3 기계 보정(G41 — 척 쪽 끝 직선에서 Z+ 로) · 직접 보정(접근 줄 · 노즈가 시작 좌표에 닿는 첫 보정점),
+     * 내경 돔 + 바 A(G42 — 바닥 축에서, 보링바 검사 안 함 안내), 3점호(끝점부터). 좁은 폰 · 큰 글꼴에서 스위치 글이 잘리지 않는지도(round-b3-flip-narrow)
+     */
+    @Test
+    fun flip() {
+        shot("round-b3-flip", 2900) { roundExample(3, open = true).apply { setFlipped(3, true) } }
+        shot("round-b3-flip-direct", 3320, comp = CompMode.DIRECT) { roundExample(3, open = true).apply { setFlipped(3, true) } }
+        shot("round-inner-b3-flip", 4300) { roundInnerDomeA().apply { setFlipped(3, true) } }
+        shot("round-manual-flip", 2900) { roundExample(MANUAL, open = true).apply { manualFlip = true } }
+        Shots.both("round-b3-flip-narrow", 1500, setup = { it.open(Feature.ROUND) }, widthDp = 360, fontScale = 1.3f) {
+            AppHost(it) { RoundScreen(roundInnerExample(3).apply { setFlipped(3, true) }) }
+        }
+    }
+
     /** 도움말 묶음: 고르기 화면은 '형상 고르기' 부터, 입력 화면은 '치수 넣기'(그림 먼저)부터, 내경 입력 화면은 '보링바 간섭' 부터 */
     @Test
     fun help() {

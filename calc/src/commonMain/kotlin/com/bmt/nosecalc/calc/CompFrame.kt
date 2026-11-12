@@ -425,13 +425,16 @@ internal object CompFrame {
      * [outward] = 도면 바깥 X 쪽(외경 +1 · 내경 −1), [zTop] = 도면의 부품 앞 쪽 끝 Z([front] > 0 이면 가장 큰 Z, < 0 이면 가장 작은 Z),
      * [front] = 부품 앞 Z 쪽(화면 역방향의 거울 풀이는 −1 — 진입 · 물러남이 계산기 −Z 쪽).
      * 첫 깎는 줄의 노즈 이동이 [MIN_MOVE] 보다 짧으면 진입점을 그 줄을 따라 더 물린다. [firstArc] = 첫 깎는 요소가 원호면 그것(첫 깎는 점의 꺾임 노즈를
-     * 그 보정 원과의 교점으로 — [junction])
+     * 그 보정 원과의 교점으로 — [junction]).
+     * [clear] = 진입 급송(G0 줄들)의 노즈가 소재에서 더 떨어져야 하는 거리(mm) — 급송 노즈 중심이 소재에서 r + clear 이상인 길만 받는다(첫 깎는 줄은 그대로 r).
+     * 기본 0 = 닿지만 않으면 된다. 뒤집은 라운드는 척 쪽 · 구멍 안에서 시작해 급송이 깎을 면 위를 지나므로 Z 여유를 준다(검증 2026-11-11)
      */
     fun entry(
         mat: FrameMaterial, side: Side, r: Double, outward: Double, e0: Pt, s: Pt, u1: Pt, zTop: Double, front: Double = 1.0, firstArc: Arc? = null,
+        clear: Double = 0.0,
     ): Approach =
-        if (front > 0) entry0(mat, side, r, outward, e0, s, u1, zTop, firstArc)
-        else entry0(mat.flipped(), side.other(), r, outward, fz(e0), fz(s), fz(u1), -zTop, firstArc?.flippedZ() as Arc?).let { a -> Approach(a.points.map(::fz), a.found) }
+        if (front > 0) entry0(mat, side, r, outward, e0, s, u1, zTop, firstArc, clear)
+        else entry0(mat.flipped(), side.other(), r, outward, fz(e0), fz(s), fz(u1), -zTop, firstArc?.flippedZ() as Arc?, clear).let { a -> Approach(a.points.map(::fz), a.found) }
 
     /**
      * 진입 명령점들([entry])과 도면을 파지 않는 길을 찾았는지. [found] = false 면 어느 길도 맞추지 못해 곧장 내려간 길이 도면에 닿거나 판다(또는 찾은 길이
@@ -440,22 +443,23 @@ internal object CompFrame {
      */
     class Approach(val points: List<Pt>, val found: Boolean)
 
-    private fun entry0(mat: FrameMaterial, side: Side, r: Double, outward: Double, e0: Pt, s: Pt, u1: Pt, zTop: Double, firstArc: Arc?): Approach {
+    private fun entry0(mat: FrameMaterial, side: Side, r: Double, outward: Double, e0: Pt, s: Pt, u1: Pt, zTop: Double, firstArc: Arc?, clear: Double): Approach {
         val uG = (s - e0).unit()
         val zDir = Pt(-1.0, 0.0)
         // 첫 깎는 점의 꺾임 노즈 — 없으면(보정선끼리 못 만남) 이 첫 깎는 줄로는 간섭 알람이라 어느 길도 안 된다
         val sNose = junction(s, uG, u1, side, r, arcB = firstArc)
         fun moved(prev: Pt, e: Pt) = ((sNose ?: e) - corner(e, prev, uG, side, r)) dot uG
         fun shifted(prev: Pt): Pt = moved(prev, e0).let { if (it >= MIN_MOVE || sNose == null) e0 else e0 - uG * (MIN_MOVE - it) }
-        fun ok(a: Pt, b: Pt, tol: Double = TOUCH_TOL) = mat.dist(Line(a, b)) >= r - tol
-        fun g1Ok(prev: Pt, e: Pt, tol: Double = TOUCH_TOL) = sNose != null && ok(corner(e, prev, uG, side, r), sNose, tol)
+        // 급송 노즈 길(소재에서 r + clear 이상) · 첫 깎는 줄의 노즈 길(r 이상)
+        fun ok(a: Pt, b: Pt, tol: Double = TOUCH_TOL) = mat.dist(Line(a, b)) >= r + clear - tol
+        fun g1Ok(prev: Pt, e: Pt, tol: Double = TOUCH_TOL) = sNose != null && mat.dist(Line(corner(e, prev, uG, side, r), sNose)) >= r - tol
         val zApp = approachZ(max(zTop, e0.z))
         // Z 줄 노즈: 시작은 그 줄의 법선, 끝은 다음 줄과의 꺾임
         // 노즈가 도면 선에 안 닿아도 소재 속을 지날 수 있다(외경 밑 · 내경 벽 너머) — 그 Z 구간의 도면보다 바깥(외경 위 · 내경 축 쪽)이어야 한다
         fun outside(x: Double, z0: Double, tol: Double): Boolean {
             val nose = x + normal(zDir, side).x * r
-            return if (outward > 0) nose - r >= mat.extremeX(z0, zApp, max = true) - tol
-            else nose + r <= mat.extremeX(z0, zApp, max = false) + tol
+            return if (outward > 0) nose - r >= mat.extremeX(z0, zApp, max = true) + clear - tol
+            else nose + r <= mat.extremeX(z0, zApp, max = false) - clear + tol
         }
         fun zOk(x: Double, end: Pt, next: Pt, tol: Double = TOUCH_TOL): Boolean {
             val stop = corner(end, zDir, next, side, r)
@@ -478,7 +482,7 @@ internal object CompFrame {
             val step = max(r, 0.25)
             // 먼저 그 Z 구간 도면 바깥(+ 2r)부터 — 멀면 걸음으로는 못 간다
             val edge = mat.extremeX(e.z, zApp, max = sgn > 0)
-            val far = if (edge.isFinite()) edge + sgn * (2 * r + step) else e.x
+            val far = if (edge.isFinite()) edge + sgn * (2 * r + max(step, clear)) else e.x
             val starts = listOf(far).filter { (it - e.x) * sgn > step }
             for (k in 1..SEARCH_STEPS + starts.size) {
                 var x = if (k <= starts.size) starts[k - 1] else e.x + sgn * step * (k - starts.size)
@@ -511,7 +515,7 @@ internal object CompFrame {
                 val xDir = Pt(0.0, -sgn)
                 if ((xDir dot toE) < -DIR_TOL) continue
                 val edge = mat.extremeX(p3.z, zApp, max = sgn > 0)
-                val far = if (edge.isFinite()) edge + sgn * (2 * r + max(r, 0.25)) else p3.x
+                val far = if (edge.isFinite()) edge + sgn * (2 * r + max(max(r, 0.25), clear)) else p3.x
                 for (k in 0..SEARCH_STEPS) {
                     var x = (if (k == 0) far else p3.x + sgn * max(r, 0.25) * k)
                     if (x < xLow && p3.x >= 0) x = xLow

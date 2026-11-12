@@ -721,6 +721,85 @@ class RoundStateTest {
         }
     }
 
+    /** 상태의 모든 글(Saver 가 내는 목록 — 형상 · 열림 뒤의 key · value 쌍)을 맵으로 */
+    private fun stored(s: RoundState): Map<String, String> =
+        (with(RoundState.Saver) { SaverScope { true }.save(s)!! } as List<*>).filterIsInstance<String>().drop(2).chunked(2).associate { it[0] to it[1] }
+
+    /**
+     * 가공 방향 바꾸기(사용자 요청 2026-11-10 — "G41 에서 값을 다 넣었으면 G42 로 바꿀 때 그 값을 이어받을 것"): 켜고 꺼도 치수 · 노즈R · 팁 · Z 여유 ·
+     * 끝 직선 · 보링바 칸이 그대로이고 보정 쪽만 바뀐다. 형상 · 외경/내경마다 따로, Saver 로 남는다. 외경 ⇄ 내경 · 형상 왕복에서도 칸 값은 남는다
+     */
+    @Test
+    fun flipKeepsEveryValue() {
+        val s = roundInnerStep().withA16()
+        s.setShared("noseR", "0.8")
+        s.setShared("zClear", "2")
+        s.tip = 2
+        s.setHolder("ovh", "45")
+        val before = stored(s)
+        val base = s.input(5)
+        assertFalse(base.flip)
+        assertEquals(Side.G41, RoundCalc.calc(base).solution?.side)
+
+        s.setFlipped(5, true)
+        assertTrue(s.flipped(5))
+        val flipped = s.input(5)
+        assertEquals(base.copy(flip = true), flipped)
+        assertEquals(Side.G42, RoundCalc.calc(flipped).solution?.side)
+        assertEquals(Side.G42, RoundCalc.machine(flipped).solution?.side)
+        // 스위치 글만 더해졌다 — 다른 칸은 한 글자도 안 바뀐다
+        assertEquals(before, stored(s) - "flip/t5/in")
+        assertEquals(s.holderBar(), roundInnerStep().withA16().apply { setHolder("ovh", "45") }.holderBar())
+        // 다른 형상 · 외경은 따로
+        assertFalse(s.flipped(3))
+        s.typeInner = false
+        assertFalse(s.flipped(5))
+        assertFalse(s.input(5).flip)
+        // 외경으로 갔다 와도(팁만 외경 · 내경 따로) 치수 · 공구 칸은 그대로, 내경의 바꾼 방향도 남는다
+        assertEquals(base.copy(inner = false, through = false, tip = null), s.input(5))
+        s.typeInner = true
+        assertEquals(base.copy(flip = true), s.input(5))
+        // 형상을 바꿨다 와도
+        s.type = 3
+        s.type = 5
+        assertEquals(base.copy(flip = true), s.input(5))
+        // Saver(프로세스가 죽었다 살아도)
+        val back = with(RoundState.Saver) { restore(SaverScope { true }.save(s)!!)!! }
+        assertTrue(back.flipped(5))
+        assertEquals(base.copy(flip = true), back.input(5))
+        // 끄면 처음과 같은 입력
+        s.setFlipped(5, false)
+        assertEquals(base, s.input(5))
+
+        // 3점호: 점 칸은 그대로, 보정 쪽만
+        val m = roundExample(MANUAL, open = true)
+        val arc = m.arc3()
+        m.manualFlip = true
+        assertEquals(arc.copy(flip = true), m.arc3())
+        assertEquals(Side.G41, RoundCalc.arc3(m.arc3()).solution?.side)
+        assertEquals(3, RoundCalc.arc3(m.arc3()).solution?.tip)
+        assertTrue(with(RoundState.Saver) { restore(SaverScope { true }.save(m)!!)!! }.manualFlip)
+        assertEquals("P3 → P1 · G41", manualTravelText(inner = false, reverse = false, flip = true))
+        assertEquals("입구 → 구멍 바닥 (Z−) · G41", roundTravelText(inner = true, flip = false))
+        assertEquals("구멍 바닥 → 입구 (Z+) · G42", roundTravelText(inner = true, flip = true))
+        assertEquals("척 쪽 끝 → 앞 끝 (Z+) · G41", roundTravelText(inner = false, flip = true))
+    }
+
+    /** 가공 방향을 바꾼 내경은 보링바 검사를 하지 않는다(검사 안 함 FLIPPED — 화면이 안내 띠를 낸다). 바꾼 방향의 경고 글은 방향을 말한다 */
+    @Test
+    fun flippedInnerSkipsHolderCheckAndExplains() {
+        val s = roundInnerDomeA().apply { setFlipped(3, true) }
+        val input = s.input(3)
+        val sol = assertNotNull(RoundCalc.calc(input).solution)
+        val plan = HolderStop.plan(sol, RoundCalc.machine(input).solution, input.noseR, true, s.holderBar()!!, s.holderSafe())
+        assertEquals(HolderSkip.FLIPPED, plan.result.skip)
+        assertTrue("가공 방향" in roundWarningText(RoundWarning.AGAINST_TOOL, 3, inner = true, flip = true))
+        assertTrue("가공 방향" in roundWarningText(RoundWarning.NOSE_UNREACHABLE, 3, flip = true))
+        // 바꾸지 않은 글은 그대로
+        assertFalse("가공 방향" in roundWarningText(RoundWarning.AGAINST_TOOL, 3, inner = true))
+        assertFalse("가공 방향" in roundWarningText(RoundWarning.NOSE_UNREACHABLE, 3))
+    }
+
     @Test
     fun stateSurvivesSaver() {
         val s = RoundState(type = 2, open = true)

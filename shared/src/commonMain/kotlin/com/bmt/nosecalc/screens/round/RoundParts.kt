@@ -440,10 +440,11 @@ private fun holderPoses(hits: List<HolderHit>, res: HolderResult, sol: RoundSolu
 }
 
 /**
- * 진입점에서 첫 점까지의 이송: 직접 보정은 한 줄, 기계 보정(회사 꼴)은 Z20. 자리부터 진입 명령점([RoundSolution.approach])을 거친 줄들(NC 그대로)
+ * 진입점에서 첫 점까지의 이송: 직접 보정은 한 줄, 기계 보정(회사 꼴)은 Z20. 자리부터 진입 명령점([RoundSolution.approach])을 거친 줄들(NC 그대로) —
+ * 가공 방향을 바꾼 기계 보정은 진입점 뒤 이송으로 거치는 점([RoundSolution.leadIn] — 벽 쪽으로 간 자리 등)도
  */
 internal fun entryMoves(path: RoundSolution): List<Seg> {
-    val pts = (path.approach.ifEmpty { listOf(path.entry) }) + path.program.segs.first().start
+    val pts = (path.approach.ifEmpty { listOf(path.entry) }) + path.leadIn + path.program.segs.first().start
     return pts.zipWithNext { a, b -> Line(a, b) }
 }
 

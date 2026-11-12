@@ -176,6 +176,20 @@ class UiGoldenTest {
         manual("round-manual-back-stop", roundManualBackBoring())
     }
 
+    /**
+     * 가공 방향 바꾸기(2026-11-10 피드백 2 — 같은 값으로 반대 보정 쪽): 외경 형상 1~6(G41 — 척 쪽 끝 직선에서 Z+ 로, 술통은 뒷면의 축에서),
+     * 내경 돔(G42 — 바닥 축에서, 바 값이 있어도 보링바 검사 안 함) · 관통 단차(D1 구멍 끝에서) · 막힌 단차(바닥 면 축에서), 3점호(끝점부터 — 외경 · 내경 입구 R)
+     */
+    @Test
+    fun roundFlip() {
+        for (t in 1..6) roundType("round-b$t-flip", roundExample(t, open = true).apply { setFlipped(t, true) }, t)
+        roundType("round-inner-b3-flip", roundInnerDomeA().apply { setFlipped(3, true) }, 3)
+        roundType("round-inner-b5-through-flip", roundInnerStep().apply { setFlipped(5, true) }, 5)
+        roundType("round-inner-b5-blind-flip", roundInnerStep().apply { through = false; setFlipped(5, true) }, 5)
+        manual("round-manual-flip", roundExample(MANUAL, open = true).apply { manualFlip = true })
+        manual("round-manual-inner-flip", roundManualInnerMouth().apply { manualFlip = true })
+    }
+
     @Test
     fun triangle() {
         triangle("triangle-empty", TriangleState())

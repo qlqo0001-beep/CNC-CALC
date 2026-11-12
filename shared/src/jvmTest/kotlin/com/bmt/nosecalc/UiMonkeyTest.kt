@@ -1174,6 +1174,12 @@ class UiMonkeyTest {
                 } to shallow,
             )
             add(screen("라운드 극단: 3점 한 줄", Feature.ROUND) { RoundScreen(roundExample(MANUAL, open = true).apply { setPoint("x2", "40"); setPoint("z2", "-5") }) } to shallow)
+            // 2026-11-10 피드백 1: 풀린 화면 + Z 여유 빈칸(화면 처음 값). 예시(roundExample)는 Z 여유가 1.0 이라 노즈 R 키패드의 0 이 진입 거리 0 을 만들지 못했다
+            add(
+                screen("라운드 형상 5 자동 L2 · Z 여유 빈칸", Feature.ROUND) {
+                    RoundScreen(RoundState(5, open = true).apply { mapOf("mainR" to "30", "d2" to "50", "d1" to "30", "l1" to "10").forEach { (k, v) -> setDim(5, k, v) } })
+                } to mid,
+            )
         },
         cfgShift = 2,
     )

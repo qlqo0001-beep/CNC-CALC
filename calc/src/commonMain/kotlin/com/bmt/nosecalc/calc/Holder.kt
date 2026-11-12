@@ -32,8 +32,11 @@ data class BoringBar(
 /** 소재에 닿는 부분: 인서트, 바(헤드 · 자루), 공구대(돌출 길이가 모자람), 최소 가공경(헤드가 DMIN 보다 좁은 곳에 들어감) */
 enum class HolderPart { INSERT, BAR, TURRET, MIN_BORE }
 
-/** 검사를 안 한 까닭: 보링바 값이 틀림, 윤곽이 Z 로 되돌아감 */
-enum class HolderSkip { BAD_INPUT, NOT_MONOTONE }
+/**
+ * 검사를 안 한 까닭: 보링바 값이 틀림, 윤곽이 Z 로 되돌아감, 가공 방향을 뒤집은 풀이([RoundSolution.flip] — 안전 끝점 · 잘린 NC 는 입구에서 들어가며 깎는
+ * 기본 방향으로만 센다. 뒤집은 풀이를 그대로 보면 도면이 Z+ 로 가서 뒤보링(역보링 바)으로 잘못 본다)
+ */
+enum class HolderSkip { BAD_INPUT, NOT_MONOTONE, FLIPPED }
 
 /** 틀린 보링바 칸 */
 enum class BarField { DIA, F, EDGE, KAPPA, OVERHANG, DMIN }

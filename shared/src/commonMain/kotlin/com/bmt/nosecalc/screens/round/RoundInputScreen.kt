@@ -53,12 +53,14 @@ import com.bmt.nosecalc.calc.HolderPlan
 import com.bmt.nosecalc.calc.HolderSkip
 import com.bmt.nosecalc.calc.HolderStop
 import com.bmt.nosecalc.calc.L2Ref
+import com.bmt.nosecalc.calc.Line
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.RoundCalc
 import com.bmt.nosecalc.calc.RoundSolution
 import com.bmt.nosecalc.calc.RoundWarning
 import com.bmt.nosecalc.screens.taper.CompModeSwitch
 import com.bmt.nosecalc.screens.taper.FieldLabel
+import com.bmt.nosecalc.screens.taper.FlipSwitch
 import com.bmt.nosecalc.screens.taper.NcCard
 import com.bmt.nosecalc.screens.taper.NcFact
 import com.bmt.nosecalc.screens.taper.NoseRPicker
@@ -82,6 +84,7 @@ import com.bmt.nosecalc.ui.rememberFieldChain
 import com.bmt.nosecalc.ui.rememberViewerState
 import com.bmt.nosecalc.ui.theme.AppTheme
 import com.bmt.nosecalc.ui.theme.Space
+import kotlin.math.abs
 import kotlinx.coroutines.launch
 
 /**
@@ -96,6 +99,8 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
     val comp = LocalAppState.current.compMode == CompMode.DIRECT
     val input = s.input(type)
     val inner = input.inner
+    // 가공 방향 바꾸기: 같은 바이트로 반대 끝부터(외경 G41 · 내경 G42) — 칸 값은 그대로
+    val flip = input.flip
     val standard = NoseComp.standardTip(inner, false)
     val tip = s.tip ?: standard
     val result = remember(input) { RoundCalc.calc(input) }
@@ -137,8 +142,9 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
     }
 
     Page(dock, chain.sheetOpen) { anchor ->
-        RoundSummary(type, "${if (inner) "내경" else "외경"} · 정방향 가공 (Z−) · ${toolText(s, tip)}", inner) { s.open = false }
-        if (sol == null) Banners(warnings, type, solved = false, empty, anchor, inner) { s.setDim(type, it, "") }
+        // 바꾸면 바이트는 그대로이고 가는 Z 쪽만 반대(한 줄에 들게 짧게 — 길면 '노즈 R0.4' 가 글자 사이에서 꺾였다)
+        RoundSummary(type, "${if (inner) "내경" else "외경"} · ${if (flip) "반대 끝부터 가공 (Z+)" else "정방향 가공 (Z−)"} · ${toolText(s, tip)}", inner) { s.open = false }
+        if (sol == null) Banners(warnings, type, solved = false, empty, anchor, inner, flip) { s.setDim(type, it, "") }
 
         // 치수 · 공구 카드와 보링바 카드의 칸이 한 키패드 묶음
         FieldChainHost(chain) {
@@ -151,13 +157,26 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
                     // ▲ 는 그림의 Z0 표와 같은 색. 큰 글꼴에서 '으 / 로' 처럼 쪼개지지 않게 어절 이음(keepWords), '으로' 는 '(왼쪽)' 에 붙여(NBSP)
                     buildAnnotatedString {
                         withStyle(SpanStyle(color = c.drawT1)) { append("▲") }
-                        append(keepWords(if (inner) " Z0 = 구멍 입구 끝면 · X 는 지름 · 보링바는 Z− (왼쪽)\u00A0으로" else " Z0 = 오른쪽 끝면 · X 는 지름 · 바이트는 Z− (왼쪽)\u00A0으로"))
+                        // 가공 방향을 바꾸면 같은 바이트가 반대 끝에서 Z+ 로 간다
+                        append(
+                            keepWords(
+                                when {
+                                    inner && flip -> " Z0 = 구멍 입구 끝면 · X 는 지름 · 보링바는 Z+ (입구)\u00A0쪽으로"
+                                    inner -> " Z0 = 구멍 입구 끝면 · X 는 지름 · 보링바는 Z− (왼쪽)\u00A0으로"
+                                    flip -> " Z0 = 오른쪽 끝면 · X 는 지름 · 바이트는 Z+ (오른쪽)\u00A0으로"
+                                    else -> " Z0 = 오른쪽 끝면 · X 는 지름 · 바이트는 Z− (왼쪽)\u00A0으로"
+                                },
+                            ),
+                        )
                     },
                     Modifier.fillMaxWidth().padding(top = 6.dp),
                     color = c.textMuted,
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center,
                 )
+                Spacer(Modifier.height(10.dp))
+                // 가공 방향 바꾸기(테이퍼의 T1 ⇄ T2 와 같은 스위치): 같은 형상 · 같은 값으로 반대 보정 쪽(G41 ⇄ G42) 프로그램 — 칸 값은 그대로 남는다
+                FlipSwitch("가공 방향 바꾸기", roundTravelText(inner, flip), flip) { s.setFlipped(type, !flip) }
                 Spacer(Modifier.height(14.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     dims(type).chunked(2).forEach { row ->
@@ -259,6 +278,7 @@ internal fun ManualScreen(s: RoundState) {
     val standard = s.manualStandardTip()
     val tip = s.manualTip ?: standard
     val reverse = s.manualReverse()
+    val flip = input.flip
     // 3점호는 입구 끝면을 모른다 — 시작 접선을 거꾸로 늘인다(입구 R 이면 끝면)
     val holder = holderOf(s, sol, drawn, input.noseR, s.inner, faceAtStart = false)
     val dock = roundDock(sol, warnings, MANUAL, comp, name = c.textStrong, holderContact = holder?.needsCare == true)
@@ -266,13 +286,15 @@ internal fun ManualScreen(s: RoundState) {
     val chain = rememberFieldChain(s.editing)
 
     Page(dock, chain.sheetOpen) { anchor ->
+        // 바꾸면 바이트(정 · 역)는 넣은 점 순서 그대로이고 끝점(P3)부터 깎는다
         val dir = when {
             sol == null -> "방향은 점으로 정해짐"
+            flip -> if (reverse) "끝점부터 가공 (Z−)" else "끝점부터 가공 (Z+)"
             reverse -> "역방향 가공 (Z+)"
             else -> "정방향 가공 (Z−)"
         }
         RoundSummary(MANUAL, "${if (s.inner) "내경" else "외경"} · $dir · ${toolText(s, tip)}") { s.open = false }
-        if (sol == null) Banners(warnings, MANUAL, solved = false, modifier = anchor)
+        if (sol == null) Banners(warnings, MANUAL, solved = false, modifier = anchor, flip = flip)
 
         FieldChainHost(chain) {
             AppCard(Modifier.fillMaxWidth(), padding = 14.dp) {
@@ -296,6 +318,19 @@ internal fun ManualScreen(s: RoundState) {
                     }
                 }
                 Hint("CAD 에서 원호 위 세 점을 가공 순서(시작 → 가운데 → 끝)로 찍어 넣습니다. 가운데 점은 원호 위 아무 곳이나 됩니다. 끝 Z 가 시작보다 크면 역방향(역바이트)입니다.")
+                Spacer(Modifier.height(12.dp))
+                // 가공 방향 바꾸기: 같은 바이트로 끝점(P3)부터 — 점 칸은 그대로(G41 ⇄ G42)
+                FlipSwitch("가공 방향 바꾸기", manualTravelText(s.inner, reverse, flip), flip) { s.manualFlip = !flip }
+                // 3점호는 원호 너머 윤곽을 모른다 — 바꿔서 끝점(P3)에서 Z+ 로 깎으면 P3 너머가 척 · 구멍 안쪽이라 급송은 P3 앞 · 공구 쪽에서 멈추고 이송으로 닿는다
+                // (calc '뒤집은 시작' — 노즈는 P3 에서 접선 연장선에 닿는다). 점을 역방향으로 넣고 바꾸면(Z− 로 깎음) 전처럼 P3 앞에서 접선으로 들어온다
+                if (flip && !reverse) {
+                    Hint(
+                        "바꾸면 같은 바이트로 끝점(P3)부터 깎습니다. 급송은 P3 너머(척 · 구멍 안쪽)로 가지 않고 P3 앞 · 공구 쪽으로 Z 여유만큼 떨어진 자리에서 멈춘 뒤 이송으로 닿습니다. " +
+                            "3점호는 원호 너머 모양을 모르므로 노즈가 P3 에서 접선 연장선(P3 뒤로 이어지는 면)에 닿습니다 — 그 자리에 턱 · 척이 없는지 확인하세요.",
+                    )
+                } else if (flip) {
+                    Hint("바꾸면 같은 바이트로 끝점(P3)부터 깎습니다. 3점호는 원호 너머 모양을 모르므로 P3 너머에서 접선으로 Z 여유만큼 떨어져 들어옵니다 — 그 자리에 턱 · 척이 없는지 확인하세요.")
+                }
                 Divider()
                 ToolInputs(s, standard, tip, { s.manualTip = it }, leg = null, preview = preview)
             }
@@ -412,7 +447,7 @@ private fun warnLevel(w: RoundWarning, type: Int, solved: Boolean): WarnLevel = 
     else -> WarnLevel.Warn
 }
 
-/** 경고 띠([warnLevel] 색). 값 부족은 넣을 칸 이름을 들고, 모순으로 멈췄으면 비울 수 있는 칸마다 '… 비우기' 단추. inner = 내경 형상 */
+/** 경고 띠([warnLevel] 색). 값 부족은 넣을 칸 이름을 들고, 모순으로 멈췄으면 비울 수 있는 칸마다 '… 비우기' 단추. inner = 내경 형상, flip = 가공 방향을 바꾼 상태 */
 @Composable
 private fun Banners(
     warnings: List<RoundWarning>,
@@ -421,6 +456,7 @@ private fun Banners(
     empty: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
     inner: Boolean = false,
+    flip: Boolean = false,
     onBlank: (String) -> Unit = {},
 ) {
     if (warnings.isEmpty()) return
@@ -429,10 +465,10 @@ private fun Banners(
         warnings.forEach { w ->
             val level = warnLevel(w, type, solved)
             WarningBanner(
-                roundWarningText(w, type, empty, inner),
+                roundWarningText(w, type, empty, inner, flip),
                 level = level,
                 collapsedText = if (w == RoundWarning.AGAINST_TOOL && level == WarnLevel.Info) {
-                    "바이트 반대쪽 면 있음 (${if (inner) "입구" else "척"} 쪽 면) — 눌러서 자세히"
+                    if (flip) "바이트와 반대 (면 · 방향) — 눌러서 자세히" else "바이트 반대쪽 면 있음 (${if (inner) "입구" else "척"} 쪽 면) — 눌러서 자세히"
                 } else {
                     null
                 },
@@ -502,11 +538,17 @@ private fun Results(
     if (sol == null) return
     CompModeSwitch(sol.side)
     if (type == MANUAL) ArcCard(sol)
-    Banners(warnings, type, solved = true, inner = inner)
+    Banners(warnings, type, solved = true, inner = inner, flip = sol.flip)
     val bar = holder?.bar
     val plan = holder?.plan
     when {
         holder == null -> {}
+        // 가공 방향을 바꾼 프로그램은 보링바 검사를 하지 않는다(calc HolderSkip.FLIPPED — 안전 끝점 · 잘린 NC 는 입구에서 들어가는 기본 방향만).
+        // 바 값을 넣었으면 검사를 기대하므로 노랑, 아니면 파란 안내
+        sol.flip -> WarningBanner(
+            "가공 방향을 바꾼 프로그램은 보링바 간섭 검사 · 안전 끝점(잘린 NC)을 하지 않습니다. 보링바가 닿는지는 '가공 방향 바꾸기' 를 끄고 확인하세요 — 깎는 길은 같은 자리를 지납니다.",
+            level = if (bar != null) WarnLevel.Warn else WarnLevel.Info,
+        )
         bar == null || plan == null -> WarningBanner("보링바 값을 넣으면 공구가 소재에 닿는지 봅니다.", level = WarnLevel.Info)
         plan.result.skip == HolderSkip.NOT_MONOTONE -> WarningBanner("원호가 Z 로 되돌아가는 모양이라 보링바 간섭 검사를 하지 않습니다.", level = WarnLevel.Info)
         // 값이 틀리면(BAD_INPUT) 칸이 빨갛다 — 카드 없음
@@ -537,7 +579,12 @@ private fun Results(
         viewer, focus, Modifier.bringIntoViewRequester(bring),
     )
     // 내경 3~6 은 끝 직선이 입구 구멍(처음)이라 마지막 줄은 바닥
-    val legNote = if (type in 2..6 && !(inner && type != 2)) " 마지막 줄은 끝 직선의 끝(끝 직선 길이)까지입니다." else ""
+    // 가공 방향을 바꾸면 그 끝 직선의 끝에서 시작한다
+    val legNote = when {
+        !(type in 2..6 && !(inner && type != 2)) -> ""
+        sol.flip -> " 첫 깎는 점은 끝 직선의 끝(끝 직선 길이)입니다."
+        else -> " 마지막 줄은 끝 직선의 끝(끝 직선 길이)까지입니다."
+    }
     val r = Fmt.nc(noseR).removeSuffix(".")
     when {
         holder != null -> HolderNc(sol, drawn, comp, noseR, r, legNote, rows, stop, full, focus) { full = it }
@@ -554,14 +601,45 @@ private const val MACHINE_NAME = "기계 보정(G41/\u2060G42) 프로그램"
 
 private fun directNote(sol: RoundSolution, legNote: String) =
     "가상 인선 팁 ${sol.tip}번 기준 프로그램 좌표입니다 — 기계의 노즈R 보정은 쓰지 않습니다(G40). 원호 R 은 합성 R(볼록 R + r · 오목 R − r)이고, " +
-        "90° 넘는 원호는 나눠 썼습니다. 첫 줄 주석이 그 노즈 R · 팁을 적어 둡니다(기계는 주석을 건너뜁니다). 이송 F 는 넣지 않았습니다.$legNote"
+        "90° 넘는 원호는 나눠 썼습니다. 첫 줄 주석이 그 노즈 R · 팁을 적어 둡니다(기계는 주석을 건너뜁니다). 이송 F 는 넣지 않았습니다.$legNote" +
+        // 가공 방향을 바꾼 프로그램(TYPE · 끝점에서 Z+ 로 깎는 3점호): 척 쪽 · 구멍 안에서 시작하므로 앞 끝면 바깥에서 X 를 맞추고 Z 로 들어가는 G0 줄이 앞에 있다
+        if (sol.flip && sol.approach.isNotEmpty()) {
+            " 가공 방향을 바꿔 척 쪽 · 구멍 안에서 시작하므로, 앞 끝면 바깥에서 X 를 맞추고 Z 로 들어가는 접근 줄(G0)을 앞에 넣었습니다 — 급송은 깎을 면에서 Z 여유만큼 떨어져 지납니다." +
+                when {
+                    wallStart(sol) -> " 척 · 구멍 바닥 쪽 끝 직선에서 시작하면 급송은 그 시작 좌표 앞 Z 여유에서 멈추고 비스듬한 이송 한 줄로 닿습니다. " +
+                        "노즈가 시작 좌표를 넘지 않게 닿는 자리가 첫 보정점입니다.$CORNER_NOTE"
+                    sol.filled == null -> " 급송은 끝점(P3) 앞 · 공구 쪽으로 Z 여유만큼 떨어진 자리에서 멈추고 비스듬한 이송 한 줄로 첫 보정점에 닿습니다."
+                    else -> ""
+                }
+        } else {
+            ""
+        }
+
+/** 가공 방향을 바꿔 척 · 구멍 바닥 쪽 끝 직선(Z+ 로 가는 누운 직선)에서 시작하는 풀이인가 — calc 의 '막힌 시작' */
+private fun wallStart(sol: RoundSolution): Boolean {
+    val first = sol.drawing.segs.first()
+    return sol.flip && sol.filled != null && first is Line && first.end.z > first.start.z && abs(first.end.x - first.start.x) < 1e-9
+}
+
+/** 막힌 시작의 구석: 노즈가 시작 좌표를 넘지 않아 그 끝의 노즈R 구간에 노즈 둥근 부분만큼(가장 크게 (√2 − 1)·r) 남는다 — 검증 2026-11-11 */
+private const val CORNER_NOTE =
+    " 그래서 시작 좌표 쪽 끝의 노즈R 구간은 구석이 조금(노즈R 의 0.41 배까지) 남습니다 — 그 끝까지 치수대로 깎으려면 끝 직선(관통 구멍)을 노즈R 넘게 길게 넣으세요."
 
 private fun machineNote(sol: RoundSolution, r: String, legNote: String) =
     "도면(접점) 좌표에 ${sol.side} 를 걸어 기계가 노즈R 을 보정합니다(공구 보정 화면에 R$r · T${sol.tip}). 회사 꼴입니다 — ${sol.side} 혼자 줄 → G0 로 Z20. 에서 X 를 맞추고 " +
         "진입점까지 Z 로 → 첫 점 G1 F.1 → 형상 → 보정 켠 채 공기로 빼는 줄 F.3 → G40 혼자 줄 → G0Z200. 입니다. 보정 줄이 움직임 없는 혼자 줄이라 " +
         "깎는 줄의 노즈는 기계의 보정 시작 · 취소 형식(No.5003#1 SUV)과 팁 번호에 상관없습니다. 끝은 척 · 바닥 쪽 직선이면 공구 쪽으로 직각(노즈가 끝 점에서 멈춤), " +
         "축에서 끝나면 노즈 중심이 축을 지난 뒤, 원호 끝이면 접선으로 곧게 뺍니다 — 원호 바로 뒤에는 G40 을 두지 않습니다(G02/G03 모드의 취소는 FANUC 알람). " +
-        "G40 줄은 둘레 (1 + √2) × 노즈R 안에 도면이 없는 자리에 둡니다(형식 C 기계는 그 줄에서 공구가 움직입니다).$legNote"
+        "G40 줄은 둘레 (1 + √2) × 노즈R 안에 도면이 없는 자리에 둡니다(형식 C 기계는 그 줄에서 공구가 움직입니다).$legNote" +
+        // 가공 방향을 바꾼 프로그램의 진입(calc '뒤집은 시작의 급송 여유'): 급송은 깎을 면 · 시작 좌표에서 Z 여유만큼 떨어진 자리에서 멈추고 이송으로 닿는다
+        when {
+            wallStart(sol) -> " 가공 방향을 바꿔 척 · 구멍 바닥 쪽 끝 직선에서 시작하므로, 급송은 깎을 면과 시작 좌표에서 Z 여유만큼 떨어진 자리에서 멈추고 " +
+                "G1 두 줄(시작 좌표 쪽으로 Z → 벽을 따라 X)로 닿습니다.$CORNER_NOTE"
+            sol.flip && sol.filled != null -> " 가공 방향을 바꿔 축에서 시작하므로, 급송은 첫 깎는 면에서 Z 여유 넘게 떨어진 자리에서 멈추고 이송으로 닿습니다."
+            sol.flip && sol.approach.isNotEmpty() -> " 가공 방향을 바꾼 3점호라 급송은 끝점(P3) 너머로 가지 않습니다 — P3 앞 · 공구 쪽 Z 여유 자리에서 멈춘 뒤 " +
+                "G1 로 P3 바로 뒤 자리 위 → 접선 연장선 → 접선 한 줄로 P3 에 들어갑니다(노즈가 P3 에서 원호를 탑니다)."
+            else -> ""
+        }
 
 private fun directFacts() = listOf(NcFact("G41/G42 걸지 말 것 (이중 보정)", WarnLevel.Error), NcFact("원호 = 합성 R"), NcFact("이송 F 없음"))
 

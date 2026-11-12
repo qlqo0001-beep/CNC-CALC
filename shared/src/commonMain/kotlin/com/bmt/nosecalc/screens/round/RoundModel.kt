@@ -21,6 +21,7 @@ import com.bmt.nosecalc.calc.RoundInput
 import com.bmt.nosecalc.calc.RoundResult
 import com.bmt.nosecalc.calc.RoundSolution
 import com.bmt.nosecalc.calc.RoundWarning
+import com.bmt.nosecalc.calc.Side
 
 /** 수동(CAD 3점호) 카드의 번호. TYPE 1~6 다음 */
 internal const val MANUAL = 7
@@ -116,6 +117,20 @@ internal class RoundState(
         get() = values["through"] == "true"
         set(v) { values["through"] = v.toString() }
 
+    /**
+     * TYPE 화면의 가공 방향 바꾸기(사용자 요청 2026-11-10 — "G41 말고 G42 계산법도"): 같은 형상 · 같은 치수를 같은 바이트로 반대 끝부터 깎는다
+     * (외경 G42 → G41, 내경 G41 → G42 — calc 의 RoundInput.flip). 형상마다, 외경 · 내경마다 따로 둔다(테이퍼의 T1 ⇄ T2 처럼 — 한 형상에서 켠 것이
+     * 다른 형상의 프로그램을 말없이 뒤집지 않게). 켜고 꺼도 칸 값(치수 · 노즈R · 팁 · Z 여유 · 끝 직선 · 보링바)은 그대로다
+     */
+    fun flipped(type: Int): Boolean = values[flipKey(type)] == "1"
+    fun setFlipped(type: Int, v: Boolean) { values[flipKey(type)] = if (v) "1" else "" }
+    private fun flipKey(type: Int) = "flip/t$type/${if (typeInner && type != 1) "in" else "out"}"
+
+    /** 수동(3점호)의 가공 방향 바꾸기: 같은 바이트(넣은 점 순서의 표준 팁)로 끝점(P3)부터 — calc 의 Arc3Input.flip */
+    var manualFlip: Boolean
+        get() = values["m/flip"] == "1"
+        set(v) { values["m/flip"] = if (v) "1" else "" }
+
     /** 보링바 칸(dia · f · shape · edge · kr · ovh · dmin · safe): 쓴 그대로, 처음은 빈칸 — 안전 여유(safe)만 0.5 */
     fun holder(name: String): String = values["h/$name"] ?: if (name == "safe") Fmt.nc(HolderStop.SAFE_DEFAULT) else ""
     fun setHolder(name: String, v: String) { values["h/$name"] = v }
@@ -191,6 +206,7 @@ internal class RoundState(
             legLen = shared("leg").toDoubleOrNull() ?: 5.0,
             inner = typeInner && type != 1,
             through = typeInner && through && type in 5..6,
+            flip = flipped(type),
         )
     }
 
@@ -205,6 +221,7 @@ internal class RoundState(
         x3 = point("x3").toDoubleOrNull(),
         z3 = point("z3").toDoubleOrNull(),
         zClear = shared("zClear").toDoubleOrNull() ?: 0.0,
+        flip = manualFlip,
     )
 
     /** 수동: 끝 Z 가 시작보다 크면 역방향 */
@@ -236,6 +253,21 @@ internal object RoundDefaults {
         else -> ""
     }
 }
+
+/**
+ * 가공 방향 스위치 아래 한 줄(TYPE 화면): 지금 깎아 가는 쪽과 보정 쪽 — 예 "입구 → 구멍 바닥 (Z−) · G41", 바꾸면 "구멍 바닥 → 입구 (Z+) · G42"
+ */
+internal fun roundTravelText(inner: Boolean, flip: Boolean): String {
+    val way = when {
+        inner -> if (flip) "구멍 바닥 → 입구 (Z+)" else "입구 → 구멍 바닥 (Z−)"
+        else -> if (flip) "척 쪽 끝 → 앞 끝 (Z+)" else "앞 끝 → 척 쪽 (Z−)"
+    }
+    return "$way · ${Side.of(inner, flip)}"
+}
+
+/** 가공 방향 스위치 아래 한 줄(3점호): 점 순서와 보정 쪽 — 예 "P1 → P3 · G42", 바꾸면 "P3 → P1 · G41". reverse = 넣은 순서가 역방향(끝 Z 가 큼) */
+internal fun manualTravelText(inner: Boolean, reverse: Boolean, flip: Boolean): String =
+    "${if (flip) "P3 → P1" else "P1 → P3"} · ${Side.of(inner, reverse != flip)}"
 
 /** 치수 칸 key(mainR · cr1 · cr2 · d1 · d2 · l1 · l2)의 값 */
 internal fun RoundInput.dim(key: String): Double? = when (key) {
@@ -274,9 +306,9 @@ internal fun roundWarningFields(w: RoundWarning, type: Int): Set<String> = when 
 
 /**
  * 경고 글. 계산을 멈춘 것은 빨강, 숫자와 함께 나온 것은 노랑, 값 부족은 파란 안내. type = [MANUAL] 이면 3점호.
- * empty = 아직 안 넣은(빈칸 · 0) 치수 칸 key — 값 부족 안내에 넣을 칸 이름을 든다. inner = 내경(구멍) 형상
+ * empty = 아직 안 넣은(빈칸 · 0) 치수 칸 key — 값 부족 안내에 넣을 칸 이름을 든다. inner = 내경(구멍) 형상, flip = 가공 방향을 바꾼 상태
  */
-internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = emptySet(), inner: Boolean = false): String {
+internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = emptySet(), inner: Boolean = false, flip: Boolean = false): String {
     val names = dims(type).associate { it.key to it.label }
     val blanks = blankable(type).joinToString(" · ") { names.getValue(it) }
     return when (w) {
@@ -292,7 +324,9 @@ internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = e
             "값을 넣으면 바로 계산합니다." + if (need.isEmpty()) "" else " 넣을 값: ${need.joinToString(", ")}."
         }
         RoundWarning.BAD_INPUT ->
-            "입력이 잘못됐습니다. 길이 · 지름 · R 은 0 보다 크고, 모서리 R · 노즈R · Z 여유는 0 이상, ${legLabel(type, inner)}는 0 보다 커야 합니다. X 는 0 이상, 모든 값은 ±${MAX_MM.toInt()} mm 안입니다."
+            // 노즈R 0 + Z 여유 0(빈칸)은 진입 거리가 없어 멈춘다(테이퍼와 같은 글) — 노즈R 칸을 키패드로 고치는 동안 0 을 지나간다
+            "입력이 잘못됐습니다. 길이 · 지름 · R 은 0 보다 크고, 모서리 R · 노즈R · Z 여유는 0 이상, ${legLabel(type, inner)}는 0 보다 커야 합니다" +
+                "(노즈R 이 0 이면 Z 여유를 넣으세요 — 진입 거리가 없습니다). X 는 0 이상, 모든 값은 ±${MAX_MM.toInt()} mm 안입니다."
         RoundWarning.CONTRADICTION ->
             "치수가 서로 맞지 않습니다(0.001 mm 넘게). 주 R 은 중심이 축 위인 구라서 $blanks 가운데 하나는 나머지로 정해집니다. 하나를 비우면 계산합니다."
         RoundWarning.SHAPE_MISMATCH -> when (type) {
@@ -306,11 +340,24 @@ internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = e
         }
         RoundWarning.CORNER_R_TOO_BIG -> "모서리 R 이 너무 커서 이웃 요소를 다 먹습니다(닿을 자리가 없음). 모서리 R 을 줄이세요."
         RoundWarning.NOSE_UNREACHABLE ->
-            if (type == MANUAL) "오목 원호의 R 이 노즈R 보다 작아 공구가 들어가지 못하거나, 축 가까이에서 노즈 중심이 축을 넘어 부품 반대쪽을 팝니다. 노즈R 을 줄이세요."
+            // 가공 방향을 바꾼 3점호는 끝점(P3) 쪽으로 들어가는 급송 길을 재서 원호에 걸리거나 여유가 없으면 멈춘다(calc '뒤집은 시작' — 검증 2026-11-11)
+            if (type == MANUAL && flip) "오목 원호의 R 이 노즈R 보다 작아 공구가 들어가지 못하거나, 축 가까이에서 노즈 중심이 축을 넘어 부품 반대쪽을 팝니다. " +
+                "가공 방향을 바꾼 상태라 부품 앞에서 끝점(P3) 쪽으로 들어가는 급송 길이 원호에 걸리거나 여유가 없는 것일 수도 있습니다 — " +
+                "가공 방향을 되돌려 보고, 되돌려도 같은 경고면 노즈R 을 줄이세요."
+            else if (type == MANUAL) "오목 원호의 R 이 노즈R 보다 작아 공구가 들어가지 못하거나, 축 가까이에서 노즈 중심이 축을 넘어 부품 반대쪽을 팝니다. 노즈R 을 줄이세요."
+            // 가공 방향을 바꾸면 척 · 구멍 바닥 쪽 끝 직선에서 시작한다 — 노즈가 그 시작 좌표를 넘지 않고 닿으려면 그 직선이 노즈R 쯤보다 길어야 한다(calc '뒤집은 시작').
+            // 기본 방향도 못 닿는 꼴(좁은 구멍 · 짧은 요소)이면 방향을 되돌려도 같다 — 그때는 노즈R 을 줄이라고 한다(검증 2026-11-11)
+            else if (flip) "노즈R 에 비해 요소가 너무 짧거나 좁아 공구가 닿지 못합니다. 가공 방향을 바꾸면 척 · 구멍 바닥 쪽 끝 직선에서 시작하는데, " +
+                "노즈가 그 시작 좌표를 넘지 않고 닿으려면 그 직선이 노즈R 보다 길어야 합니다 — 그 직선(끝 직선 · 관통 구멍)을 늘리거나 가공 방향을 되돌려 보세요. " +
+                "되돌려도 같은 경고면 형상에 비해 노즈R 이 큰 것이니 노즈R 을 줄이세요."
             else "노즈R 에 비해 요소가 너무 짧거나 좁아 공구가 닿지 못합니다. 도면 형상이 안 나옵니다 — 노즈R 을 줄이세요."
         RoundWarning.CONCAVE_R_LE_NOSE ->
             "오목 R 이 노즈R 이하입니다(R − r ≤ 0). 그 자리의 보정 원호가 없어집니다. R = r 이면 정확하지만, R < r 이면 도면보다 큰 R(= 노즈R)이 남습니다."
-        RoundWarning.AGAINST_TOOL -> if (inner) {
+        // 가공 방향을 바꾸면 외경 · 구멍처럼 누운 면을 바이트의 Z 와 반대로(Z+) 깎는다(calc backTravel — 테이퍼 뒤집기와 같은 글)
+        RoundWarning.AGAINST_TOOL -> if (flip) {
+            "가공 방향이나 형상 일부가 바이트와 반대입니다 — 가공 방향을 바꿔서 외경 · 구멍처럼 누운 면을 바이트 반대쪽(Z+)으로 깎습니다. " +
+                "실제 바이트의 끝날 여유각이 맞아야 깎입니다. 바이트 방향과 '가공 방향 바꾸기' 를 확인하세요."
+        } else if (inner) {
             "형상 일부가 바이트 방향과 반대입니다(구멍 입구 쪽을 향한 면 — 언더컷). 아래 '보링바 (홀더)' 칸에 바 치수를 넣어 인서트 · 바가 닿는지 확인하세요."
         } else {
             "형상 일부가 바이트 방향과 반대입니다(왼쪽 면 · 공의 뒤쪽 등 척 쪽을 향한 면). 그 부분은 35° 인서트 · 역바이트 · 절단 등으로 깎이는지 따로 확인하세요."
@@ -320,7 +367,8 @@ internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = e
             "끝 직선(척 · 구멍 바닥 쪽으로 깎아 끝나는 직선)이 노즈R 보다 짧은데, 그 앞 요소에 벽을 따라 뺄 자리가 없어 기계 보정(G41/G42) 프로그램이 그 요소를 뺄 수 없습니다. " +
                 "끝 접선으로 곧게 빼므로 노즈가 끝 좌표 너머(벽 속)로 갑니다. 직접 보정 프로그램을 쓰거나 노즈R 을 줄이세요."
         RoundWarning.ENTRY_NOT_FOUND ->
-            "기계 보정(G41/G42) 프로그램의 진입 길을 도면에 닿지 않게 짜지 못했습니다(Z20. 에서 내려오는 길이 도면에 닿거나, 두 축으로 가는 진입 G0 이 급송 속도 비에 따라 꺾여 닿습니다). 진입 줄을 손으로 고치거나 직접 보정 프로그램을 쓰세요."
+            "기계 보정(G41/G42) 프로그램의 진입 길을 도면에 닿지 않게 짜지 못했습니다(Z20. 에서 내려오는 길이 도면에 닿거나, 두 축으로 가는 진입 G0 이 급송 속도 비에 따라 꺾여 닿습니다). " +
+                "이대로 돌리면 기계가 보정 알람(간섭 · 꺾임)으로 멈출 수도 있습니다. 진입 줄을 손으로 고치거나 직접 보정 프로그램을 쓰세요."
         // 빼는 길 못 찾음(calc 라운드 '기계 보정 프로그램' — G40 자리 규칙 · 물러남 띠 · 빼는 줄 노즈 길 · 바깥 90° 이하 꺾임을 함께 못 맞춤)
         RoundWarning.EXIT_NOT_FOUND ->
             "기계 보정(G41/G42) 프로그램의 빼는 길(빼는 줄 · G40 · G0Z200.)을 도면에서 넉넉히 떨어지게 짜지 못했습니다(노즈에 비해 좁은 구멍 · 깊은 언더컷 등). " +

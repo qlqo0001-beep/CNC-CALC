@@ -401,6 +401,45 @@ class CompanyFrameVerifyTest {
         return out
     }
 
+    /**
+     * 뒤집은 라운드(가공 방향 뒤집기 — 2026-11-10 피드백 2)와 같은 입력의 기본 방향. 척 · 구멍 바닥 쪽 끝 직선에서 Z+ 로 시작하면 막힌 시작 —
+     * 노즈가 시작 좌표의 법선(벽)을 넘지 않는지 본다
+     */
+    private fun flippedRoundCases(seed: Int, count: Int): List<Pair<Frame, Frame>> {
+        val rnd = Random(seed)
+        val g = GeometricVerifyTest()
+        val out = mutableListOf<Pair<Frame, Frame>>()
+        repeat(count) {
+            val inner = rnd.nextBoolean()
+            val type = if (inner) 2 + rnd.nextInt(5) else 1 + rnd.nextInt(6)
+            val base = g.randomRound(type, rnd, inner).input
+            val inp = base.copy(flip = true)
+            val f = roundFrame(inp.toString(), RoundCalc.machine(inp), RoundCalc.calc(inp), inner, inp.noseR) ?: return@repeat
+            val b = roundFrame(base.toString(), RoundCalc.machine(base), RoundCalc.calc(base), inner, base.noseR) ?: return@repeat
+            val first = f.drawing.first()
+            val u = (first.end - first.start).let { it * (1 / it.length) }
+            val wall = if (first is Line && abs(u.z) > abs(u.x) && u.z > 0) first.start to u * -1.0 else null
+            out += Frame(f.tag, f.nc, f.r, f.drawing, f.inner, f.end, f.endP, f.endU, wall, f.shapeAlarm) to b
+        }
+        return out
+    }
+
+    /** 깎는 줄(첫 깎는 줄 ~ 첫 빼는 줄)의 노즈 길 — 형식 C · 팁 3(② 가 형식 · 팁과 상관없음을 본다). 멈추면 null */
+    private fun cutNoses(f: Frame): List<Seg>? {
+        val run = run(f, 3, CompStartup.C)
+        if (run.stop != null) return null
+        val iCut = f.nc.indexOfFirst { it.endsWith("F.1") }
+        val iExit = f.nc.indexOfFirst { it.contains("F.3") }
+        val lines = (pre.size + iCut + 1)..(pre.size + iExit + 1)
+        return run.steps.filterIsInstance<MoveStep>().filter { it.line in lines && it.kind == MoveKind.FEED }.map { it.nose }
+    }
+
+    /** 요소 위 점(0.05 mm 마다) */
+    private fun dense(s: Seg): List<Pt> = when (s) {
+        is Line -> max(2, ((s.end - s.start).length / 0.05).toInt()).let { n -> (0..n).map { s.start + (s.end - s.start) * (it.toDouble() / n) } }
+        is Arc -> samples(s)
+    }
+
     /** 3점호: 원 위 세 점(볼록 · 오목, 바깥 · 안, 정 · 역방향) */
     private fun arc3Cases(seed: Int, count: Int): List<Frame> {
         val rnd = Random(seed)
@@ -446,6 +485,43 @@ class CompanyFrameVerifyTest {
         println(t.report())
         t.fails.take(5).forEach(::println)
         assertTrue(t.cases > 900, t.report())
+        assertEquals(0, t.fails.size, t.report() + "\n" + t.fails.take(5).joinToString("\n\n"))
+    }
+
+    /**
+     * 뒤집은 라운드 TYPE 1~6(바깥 · 안 · 관통)의 기계 보정 글: ①~④ 에 더해 ⑤ 깎는 줄이 같은 입력의 기본 방향 글만큼 도면에 닿는다(덜 깎임 0 —
+     * 도면 위 점마다 노즈 길까지의 거리가 기본 방향보다 멀지 않다. 두 방향 모두 척 쪽 벽 앞에서 노즈가 벽의 법선에 서므로 구석도 같다)
+     */
+    @Test
+    fun randomFlippedRoundsFollowCompanyFrame() {
+        val t = Tally("라운드 뒤집기 기계 보정")
+        var compared = 0
+        var worst = 0.0
+        var walls = 0
+        for ((f, base) in flippedRoundCases(20261110, 700)) {
+            val before = t.kinds.values.sum()
+            val narrow = t.narrow
+            check(f, t)
+            if (f.startWall != null) walls++
+            if (t.kinds.values.sum() != before || t.narrow != narrow || f.shapeAlarm) continue
+            val a = cutNoses(f) ?: continue
+            val b = cutNoses(base) ?: continue
+            var lack = 0.0
+            var at = f.drawing.first().start
+            for (s in f.drawing) for (p in dense(s)) {
+                val d = a.minOf { distTo(it, p) } - b.minOf { distTo(it, p) }
+                if (d > lack) {
+                    lack = d
+                    at = p
+                }
+            }
+            compared++
+            worst = max(worst, lack)
+            if (lack > tol) t.fail("${f.tag}: UNDERCUT ${xz(at)} 에서 기본 방향보다 덜 깎음($lack)\n${f.nc.joinToString("\n")}\n-- 기본 방향\n${base.nc.joinToString("\n")}")
+        }
+        println(t.report() + " · 막힌 시작 $walls · 덜 깎임 견줌 $compared 건(가장 큰 차 $worst)")
+        t.fails.take(5).forEach(::println)
+        assertTrue(t.cases > 450 && walls > 200 && compared > 250, t.report() + " walls $walls compared $compared")
         assertEquals(0, t.fails.size, t.report() + "\n" + t.fails.take(5).joinToString("\n\n"))
     }
 }
