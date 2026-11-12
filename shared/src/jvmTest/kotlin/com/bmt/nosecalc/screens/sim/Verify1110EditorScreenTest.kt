@@ -198,7 +198,7 @@ class Verify1110EditorScreenTest {
 
     /**
      * 블록 없는 한 줄(`O1234`)을 ⌫ 로 다 지운 빈 편집기: 문제 띠가 없어야 한다.
-     * [2026-11-11 검증에서 찾아 고침] '안내 1 — 프로그램: M30 / M02 없이 끝납니다' 띠가 빈 편집기에 남았다(설계 20.5)
+     * [2026-11-11 검증에서 찾아 고침] '안내 1 — 프로그램: M30 / M02 없이 끝납니다' 띠가 빈 편집기에 남았다(설계 21.5)
      */
     @Test
     fun realScreenClearedEditorShowsNoStrip() = stage("O1234", real = true) {

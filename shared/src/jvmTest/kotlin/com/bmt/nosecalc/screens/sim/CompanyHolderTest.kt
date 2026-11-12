@@ -69,6 +69,41 @@ class CompanyHolderTest {
         assertTrue(s.holderOf(2)!!.edited(s.tools[2]!!.copy(kind = ToolKind.ROUND)))
     }
 
+    /**
+     * 보링바 · 슬리브는 바 지름도 채운다(2026-11-10 피드백 4): 품번의 자루 지름(슬리브는 끼우는 바), 고치면 '수정됨', 직접 넣은 값은 홀더를 다시 고르면
+     * 홀더 값으로 바뀌고, 바 지름이 없는 홀더(외경 · 나사 · 계열 이름)를 고르면 빈칸(자동)이 된다
+     */
+    @Test
+    fun pickFillsBarDiameter() {
+        val s = SimState(store())
+        s.tools = mapOf(2 to ToolOffset(noseR = 0.2, tip = 2, barDia = 4.5))
+        for ((code, bar) in listOf("C08K-SCLCR06" to 8.0, "C10K-SCLCR06" to 10.0, "C12M-SCLCR09" to 12.0, "C16R-SCLCR09" to 16.0, "S10K-STFCR09" to 10.0, "SH0516-100" to 5.0, "SH0616-100" to 6.0)) {
+            s.pickHolder(2, holder(code))
+            assertEquals(bar, s.tools[2]!!.barDia, code)
+            assertFalse(s.holderOf(2)!!.edited(s.tools[2]!!), code)
+        }
+        for (h in COMPANY_HOLDERS) assertEquals(h.group == HolderGroup.BORING || h.code.startsWith("SH"), h.bar != null, h.code)
+        // 직접 고치면 수정됨 — 비워도(자동) 수정됨, 같은 값으로 돌리면 아님
+        s.pickHolder(2, holder("C08K-SCLCR06"))
+        s.tools = s.tools + (2 to s.tools[2]!!.copy(barDia = 9.0))
+        assertTrue(s.holderOf(2)!!.edited(s.tools[2]!!))
+        s.tools = s.tools + (2 to s.tools[2]!!.copy(barDia = null))
+        assertTrue(s.holderOf(2)!!.edited(s.tools[2]!!))
+        s.tools = s.tools + (2 to s.tools[2]!!.copy(barDia = 8.0))
+        assertFalse(s.holderOf(2)!!.edited(s.tools[2]!!))
+        // 바 지름이 없는 홀더: 빈칸(자동)으로 — 그 뒤 넣은 값은 고친 것이 아니다
+        for (code in listOf("PICCO", "SNR0020L09A", "PCLNL2525M12")) {
+            s.tools = s.tools + (2 to s.tools[2]!!.copy(barDia = 7.0))
+            s.pickHolder(2, holder(code))
+            assertNull(s.tools[2]!!.barDia, code)
+            assertFalse(s.holderOf(2)!!.edited(s.tools[2]!!.copy(barDia = 7.0)), code)
+        }
+        // 고르지 않음으로 돌려도 칸 값은 그대로
+        s.pickHolder(2, holder("S16R-STFCR11", "대구텍"))
+        s.pickHolder(2, null)
+        assertEquals(16.0, s.tools[2]!!.barDia)
+    }
+
     @Test
     fun labelsSurviveSaverAndExampleClearsThem() {
         val kv = store()

@@ -263,7 +263,7 @@ private fun ToggleRow(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
  * 종류(바이트 · 홈 · 나사 · 둥근 · 다이스 — [toolKindLabel]) → [노즈 R] [팁 번호](테이퍼의 팁 번호 시트를 그대로 부른다) → 바이트: 인서트 C · D · V · T + [절입각 κr] /
  * 홈: [폭] / 나사: [각도] / 다이스(설계 19절): [다이스 지름] [다이스 피치] [나사 각도] — 노즈 R · 팁은 G41/G42 를 쓰는 번호일 때만 보인다.
  * G41/G42 를 쓰는 번호인데 노즈 R · 팁이 빈칸이면 빨간 테 + '보정에 필요합니다'(TOOL_DATA_MISSING).
- * 칸 글은 시트를 연 동안 쓴 그대로 두고, 고칠 때마다 숫자로 공구표에 넣는다(공구표는 앱을 켠 동안만 — 14.2-13).
+ * 칸 글은 시트를 연 동안 쓴 그대로 두고, 고칠 때마다 숫자로 공구표에 넣는다(공구표는 저장소에 남고 프로그램과 함께 저장 — 설계 20.2).
  */
 @Composable
 internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit) {
@@ -272,10 +272,17 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
     val all = used + sim.tools.keys.filter { it !in used }.sorted()
     val toolNo = remember(run) { run.steps.filterIsInstance<ToolStep>().associate { it.offset to it.toTool } }
     val texts = remember { mutableStateMapOf<String, String>() }
+    // 바 지름의 자동 값: 그 번호가 지나는 가장 작은 지름(설계 20절)
+    val fits = remember(run) { ToolShape.barFit(run) }
     // 쓴 글이 있으면 그대로(“0.” 처럼 치는 중인 글), 없으면 공구표 값
     fun text(n: Int, k: String, v: Double?): String = texts["$n.$k"] ?: v?.let(::numText) ?: ""
     fun update(n: Int, f: (ToolOffset) -> ToolOffset) {
         sim.tools = sim.tools + (n to f(sim.tools[n] ?: ToolOffset()))
+    }
+    // 바 지름 칸: 틀린 글(0 · 음수 · 숫자 아님 · 500 초과)은 공구표에 넣지 않는다(빈칸 = 자동으로 돈다) — 칸은 빨강
+    fun setBar(n: Int, v: String) {
+        texts["$n.bar"] = v
+        update(n) { it.copy(barDia = fieldValue(v, ToolShape::barOk).orNull()) }
     }
     BottomSheet(onDismiss, maxHeightFraction = 0.92f) {
         SheetTitle("공구 설정", action = { PillButton("닫기", AppIcons.Close, onDismiss) })
@@ -310,10 +317,11 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                             if (comp) Text("G41/G42", color = c.textMuted, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.height(8.dp))
-                        // 회사 홀더를 고르면 종류 · 인서트 · κr 을 채운다(치던 κr 글은 버린다 — 새 값이 보이게)
+                        // 회사 홀더를 고르면 종류 · 인서트 · κr · 바 지름을 채운다(치던 κr · 바 지름 글은 버린다 — 새 값이 보이게)
                         val holder = sim.holderOf(n)
                         HolderBox(holder, holder?.edited(t) == true) { h ->
                             texts.remove("$n.k")
+                            texts.remove("$n.bar")
                             sim.pickHolder(n, h)
                         }
                         Spacer(Modifier.height(10.dp))
@@ -331,7 +339,7 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                                     "노즈 R (공구 반경)", text(n, "r", t.noseR),
                                     { v ->
                                         texts["$n.r"] = v
-                                        update(n) { it.copy(noseR = v.toDoubleOrNull()?.takeIf { r -> r >= 0 && r <= 50 }) }
+                                        update(n) { it.copy(noseR = v.toDoubleOrNull()?.takeIf(ToolRange::noseR)) }
                                     },
                                     Modifier.weight(1f), unit = "mm", error = missing && t.noseR == null,
                                     hint = "인서트 날끝 반경(기계 공구 보정 화면의 R)", blankable = true, id = "t$n.r",
@@ -355,12 +363,13 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                                         "절입각 κr", text(n, "k", t.kappaDeg),
                                         { v ->
                                             texts["$n.k"] = v
-                                            update(n) { it.copy(kappaDeg = v.toDoubleOrNull()?.takeIf { k -> k > 0 && k < 180 }) }
+                                            update(n) { it.copy(kappaDeg = v.toDoubleOrNull()?.takeIf(ToolRange::kappa)) }
                                         },
                                         Modifier.weight(1f), unit = "°", autoValue = numText(ToolShape.kappaOf(t.insert)),
                                         hint = "주절삭날과 이송 방향 사이 각(카탈로그 KAPR). 빈칸 = C 95° · D · V · T 93°(가정)", blankable = true, id = "t$n.k",
                                     )
-                                    Spacer(Modifier.weight(1f))
+                                    if (ToolShape.inner(t)) BarField(n, t, fits[n], text(n, "bar", t.barDia), Modifier.weight(1f)) { setBar(n, it) }
+                                    else Spacer(Modifier.weight(1f))
                                 }
                             }
                             ToolKind.GROOVE -> {
@@ -370,12 +379,13 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                                         "홈 폭", text(n, "w", t.width),
                                         { v ->
                                             texts["$n.w"] = v
-                                            update(n) { it.copy(width = v.toDoubleOrNull()?.takeIf { w -> w > 0 && w <= 100 }) }
+                                            update(n) { it.copy(width = v.toDoubleOrNull()?.takeIf(ToolRange::width)) }
                                         },
                                         Modifier.weight(1f), unit = "mm", autoValue = "",
                                         hint = "홈 인서트 날 폭. 팁 3 = 왼쪽 모서리 기준 · 팁 4 = 오른쪽", blankable = true, id = "t$n.w",
                                     )
-                                    Spacer(Modifier.weight(1f))
+                                    if (ToolShape.inner(t)) BarField(n, t, fits[n], text(n, "bar", t.barDia), Modifier.weight(1f)) { setBar(n, it) }
+                                    else Spacer(Modifier.weight(1f))
                                 }
                             }
                             ToolKind.THREAD -> {
@@ -385,12 +395,13 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                                         "나사 각도", text(n, "a", t.threadDeg),
                                         { v ->
                                             texts["$n.a"] = v
-                                            update(n) { it.copy(threadDeg = v.toDoubleOrNull()?.takeIf { a -> a > 0 && a < 180 }) }
+                                            update(n) { it.copy(threadDeg = v.toDoubleOrNull()?.takeIf(ToolRange::threadDeg)) }
                                         },
                                         Modifier.weight(1f), unit = "°", autoValue = "60",
                                         hint = "나사 인서트 끝각(미터 60° · 관용 55°)", blankable = true, id = "t$n.a",
                                     )
-                                    Spacer(Modifier.weight(1f))
+                                    if (ToolShape.inner(t)) BarField(n, t, fits[n], text(n, "bar", t.barDia), Modifier.weight(1f)) { setBar(n, it) }
+                                    else Spacer(Modifier.weight(1f))
                                 }
                             }
                             ToolKind.ROUND -> {}
@@ -401,7 +412,7 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                                         "다이스 지름", text(n, "dd", t.dieDia),
                                         { v ->
                                             texts["$n.dd"] = v
-                                            update(n) { it.copy(dieDia = v.toDoubleOrNull()?.takeIf { d -> d > 0 && d <= 200 }) }
+                                            update(n) { it.copy(dieDia = v.toDoubleOrNull()?.takeIf(ToolRange::dieDia)) }
                                         },
                                         Modifier.weight(1f), unit = "mm", autoValue = "",
                                         hint = "나사 호칭 지름 d(M12 = 12 · 1/2-20 UNF = 12.7). 나사 모양을 그리는 데만 씁니다", blankable = true, id = "t$n.dd",
@@ -410,7 +421,7 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                                         "다이스 피치", text(n, "dp", t.diePitch),
                                         { v ->
                                             texts["$n.dp"] = v
-                                            update(n) { it.copy(diePitch = v.toDoubleOrNull()?.takeIf { p -> p > 0 && p <= 20 }) }
+                                            update(n) { it.copy(diePitch = v.toDoubleOrNull()?.takeIf(ToolRange::diePitch)) }
                                         },
                                         Modifier.weight(1f), unit = "mm", autoValue = "",
                                         hint = "체이서 피치 P(20산 = 1.27) — 그린 나사의 리드. 프로그램의 이송 F 와 따로입니다", blankable = true, id = "t$n.dp",
@@ -422,7 +433,7 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                                         "나사 각도", text(n, "a", t.threadDeg),
                                         { v ->
                                             texts["$n.a"] = v
-                                            update(n) { it.copy(threadDeg = v.toDoubleOrNull()?.takeIf { a -> a > 0 && a < 180 }) }
+                                            update(n) { it.copy(threadDeg = v.toDoubleOrNull()?.takeIf(ToolRange::threadDeg)) }
                                         },
                                         Modifier.weight(1f), unit = "°", autoValue = "60",
                                         hint = "60°(미터 · 유니파이) 또는 55°(관용) — 그 밖의 각은 나사 모양을 그리지 않습니다", blankable = true, id = "t$n.a",
@@ -430,6 +441,12 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                                     Spacer(Modifier.weight(1f))
                                 }
                             }
+                        }
+                        if (ToolShape.inner(t) && barBad(texts["$n.bar"])) {
+                            Text(
+                                keepWords("바 지름은 0 보다 크고 500 mm 이하로 넣으세요 — 지금은 자동 값으로 그립니다"),
+                                Modifier.padding(top = 8.dp), color = c.error.label, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            )
                         }
                         if (missing) {
                             Text("보정에 필요합니다 — G41/G42 를 쓰는 번호입니다", Modifier.padding(top = 8.dp), color = c.error.label, fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -451,11 +468,31 @@ internal fun ToolSettingsSheet(sim: SimState, run: SimRun, onDismiss: () -> Unit
                 }
             }
             Text(
-                keepWords("공구표는 앱을 켠 동안만 기억합니다. 홀더 몸통은 보지 않고 인서트 모양만으로 소재를 깎습니다."),
+                keepWords(
+                    "공구표 · 소재 칸은 앱을 꺼도 남습니다. 프로그램을 '저장' 하면 함께 저장되고, 그 프로그램을 열면 저장된 값으로 바뀝니다. 소재는 인서트 모양으로 깎습니다. 안쪽 공구(팁 1 · 2, 나사는 6 도)는 바 지름으로 몸통을 그리고, " +
+                        "구멍보다 굵으면 깎지 않고 '몸통 닿음' 으로 알립니다. 바깥 공구의 홀더 몸통은 보지 않습니다.",
+                ),
                 Modifier.padding(bottom = 12.dp), color = c.textMuted, fontSize = 12.5.sp, lineHeight = 18.sp,
             )
         }
     }
+}
+
+/** 바 지름 칸의 글이 틀렸나(0 · 음수 · 숫자 아님 · 500 초과 — 빈칸은 자동이라 틀린 것이 아니다) */
+internal fun barBad(text: String?): Boolean = fieldValue(text, ToolShape::barOk) == FieldValue.Bad
+
+/**
+ * 바 지름 칸(안쪽 공구만 — 2026-11-10 피드백 4, 설계 20절): 빈칸 = 자동 값([ToolShape.barOf] — 그 공구가 지나는 가장 작은 구멍에 맞춤, [fit]).
+ * 틀린 글은 빨강(카드 아래 안내 한 줄) — 값은 자동으로 돈다
+ */
+@Composable
+private fun BarField(n: Int, t: ToolOffset, fit: Double?, text: String, modifier: Modifier, onChange: (String) -> Unit) {
+    NumberField(
+        "바 지름 Ø", text, onChange, modifier, unit = "mm",
+        autoValue = ToolShape.barOf(t.copy(barDia = null), fit)?.let(::numText) ?: "", error = barBad(text),
+        hint = "보링바 굵기(날끝에서 바 등까지). 빈칸 = 이 공구가 지나는 가장 작은 구멍에 맞춤. 구멍보다 굵으면 '몸통 닿음' 으로 알립니다",
+        blankable = true, id = "t$n.bar",
+    )
 }
 
 /** 팁 번호 칸: 빈칸이면 '—'(처음은 빈칸 — 사용자 결정). 누르면 테이퍼의 팁 번호 시트(표준을 고르면 그 번호) */

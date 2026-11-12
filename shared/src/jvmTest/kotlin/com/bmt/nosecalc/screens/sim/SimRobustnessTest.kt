@@ -326,6 +326,8 @@ class SimRobustnessTest {
         threadDeg = listOf(null, 0.1, 29.0, 55.0, 60.0, 179.9).random(rnd),
         dieDia = listOf(null, 0.001, 12.0, 200.0).random(rnd),
         diePitch = listOf(null, 0.01, 1.27, 1.75, 20.0).random(rnd),
+        // 바 지름은 받는 범위(0 초과 ~ 500) 밖의 값도 — 엔진이 자동으로 돌려야 한다
+        barDia = listOf(null, null, 0.001, 3.0, 8.0, 16.0, 500.0, 0.0, -1.0, 1e9, Double.NaN).random(rnd),
     )
 
     private val fieldNums = listOf("", "", "", "0", "-5", "0.001", "10", "18", "30", "60", "68", "90", "200", "10000", "10000.001", "-10000", "1.", ".", "-", "99999999")

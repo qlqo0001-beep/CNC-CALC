@@ -111,7 +111,7 @@ internal fun HolderSheet(current: CompanyHolder?, onPick: (CompanyHolder?) -> Un
         SheetTitle("홀더 고르기", "회사 사용")
         Text(
             keepWords(
-                "고르면 종류 · 인서트 모양 · 절입각 κr 을 제조사 카탈로그 값으로 채웁니다(고칠 수 있음). " +
+                "고르면 종류 · 인서트 모양 · 절입각 κr · 바 지름(보링바)을 제조사 카탈로그 값으로 채웁니다(고칠 수 있음). " +
                     "노즈 R(인서트 코너) · 팁 번호(기계 터렛 방향) · 나사 각(인서트)은 홀더가 정하지 않아 그대로 둡니다.",
             ),
             Modifier.padding(bottom = 8.dp),
@@ -133,13 +133,14 @@ internal fun HolderSheet(current: CompanyHolder?, onPick: (CompanyHolder?) -> Un
     }
 }
 
-/** 시트 줄의 값: 채우는 것(종류 · 인서트 · κr)과 제조사(없으면 '제조사 확인 필요') */
+/** 시트 줄의 값: 채우는 것(종류 · 인서트 · κr · 바 지름)과 제조사(없으면 '제조사 확인 필요') */
 private fun holderSub(h: CompanyHolder, makers: Boolean): String = buildList {
     add(toolKindLabel(h.kind))
     if (h.kind == ToolKind.TURN) {
         add(h.insert?.let { "${it.name} ${it.epsDeg.toInt()}°" } ?: "인서트 직접")
         add(h.kappa?.let { "κr ${numText(it)}°" } ?: "κr 직접")
     }
+    h.bar?.let { add("바 Ø${numText(it)}") }
     if (makers) add(if (h.makers.isEmpty()) "제조사 확인 필요" else h.makers.joinToString(" · "))
 }.joinToString(" · ")
 

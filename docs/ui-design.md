@@ -756,6 +756,7 @@
 - 화면 글은 한글, G코드 · 주소 글자 · 단위는 그대로. 번호를 묻는 칸만 숫자 칸(`NumberField` + 칸 묶음, 처음 빈칸) — 나머지 입력은 CNC 키패드.
 - 색: 구문 색(라이트 = 09, 대비가 모자란 X·Z·U·W · P·Q·L 은 짙게), 키 색은 키 종류라 원본 그대로(⌫ 빨강 · , - . 노랑 — 상태 색 아님). 켜진 것 = 청록(찾기), SHIFT 는 09 의 보라.
 - 공구표는 앱을 켠 동안만(C10 대기) — 공구 설정 창이 생기기 전에는 사용자가 쓴 G41/G42 글이 '공구 설정에 넣어 주세요' 로 멈춘다.
+  → 2026-11-10 피드백 3 으로 정해짐: 공구표 · 홀더 이름표 · 소재 칸은 앱을 꺼도 남고 프로그램 '저장' 에 딸려 간다(Saver 는 나르지 않음 — `simulator-design.md` 20.2).
 - 테스트: `EditorStateTest` · `SyntaxTest`(09 낱말 색 · 대비) · `SimStateTest`(저장 · 불러오기 · 임시 글 · 공구표 글) · `PcKeyTest` · `SimGoldenTest`(골든 `sim-editor-errors` · `sim-editor-examples` · `sim-issue-texts`) ·
   `SimShotsTest`: `sim-editor`(09 꼴) · `-closed` · `-shift` · `-shift-lock`(360dp) · `-errors` · `-issues` · `-find` · `-empty` · `sim-programs` · `sim-more` · `sim-ask-delete` · `-number` · `-unsaved`,
   `-w360` · `-fs130` · `sim-editor-errors-w360` · `sim-editor-closed-fs130-w360`, PC `pc-wide-sim`(1280 × 720) · `pc-short-sim`(412 × 640).
@@ -775,6 +776,7 @@
 - 색: `SimColors` 의 `layer` · `ghost` · `part2d` · `partEdge` · `chuck` · `valueSf` · `valueTime` · `focusPill`(대비표는 KDoc). 켜진 단추 = 청록, 닫기 · 리셋 · 기장여유 = 중립(원본의 빨강 · 주황 · 노랑 대신).
   3D 는 `Sim3DColors`(두 테마 같은 색 — 바탕 `viewport3d` 가 어두움): tag 마다 음영 띠(금속 · 단면 한 단계 밝게 · 척 몸통 남색 · 턱), 바닥 격자, 안내 칩(05 — 어두운 바탕 + 초록 테), 어두운 켬/끔 단추 회전 · 자유.
 - 설정 저장: 기계 · 읽기 · 보기는 `sim/machine` · `sim/view`(앱 전체, 다음에 켜도 그대로), 소재 칸 · 공구표(고른 홀더 이름표 `toolHolders` — Saver 목록 9번째 `n=id;…`) · 속도 · 싱글 블록 · M01 은 화면 Saver(앱을 켠 동안).
+  → 2026-11-10 피드백 3 으로 정해짐: 공구표 · 홀더 이름표 · 소재 칸은 앱을 꺼도 남고 프로그램 '저장' 에 딸려 간다(Saver 는 나르지 않음 — `simulator-design.md` 20.2).
 - **홀더 고르기**(사용자 10-29 "회사에서 사용하는 팁홀더도 찾아서 홀더 종류에 추가"): 공구 카드 머리 아래 '홀더 (선택)' 칸(이름 옆 '수정됨' · 칸에는 품번과 '고르기 ⌄' 만 —
   360dp · 글꼴 1.3 에서도 품번이 줄지 않게, 아랫줄에 묶음 · 제조사(제조사로 나뉜 줄은 그 제조사 하나)와 까닭) → 시트 '홀더 고르기 · 회사 사용': 고르지 않음 →
   외경 바이트(DCKNL2525M12 · MVJNR2525M16 · PCLNL2525M12) · 나사(SNR0020L09A · THCER2525M16) · 보링바(SCLCR 다섯 · STFCR 넷, 지름 순) · 소경 보링(SH0516-100 · SH0616-100 · PICCO)
@@ -820,7 +822,7 @@
   실제 창에서 실제 키보드로 누르는 확인은 하지 않았다(손 확인 대기).
 
 ### 5. 편집기: 쓰는 중인 줄에는 오류를 띄우지 않는다
-- `simulator-design.md` 20절(쓰는 줄 · 검사 글 · 줄을 끝내는 일 · 시험). 위 '시뮬레이터 편집기' 표의 "0.3초 뒤 백그라운드 실행" 은 그 절이 고친다 — **줄을 끝낸 뒤** 0.3초(쓰는 동안은 다시 돌지 않는다),
+- `simulator-design.md` 21절(쓰는 줄 · 검사 글 · 줄을 끝내는 일 · 시험). 위 '시뮬레이터 편집기' 표의 "0.3초 뒤 백그라운드 실행" 은 그 절이 고친다 — **줄을 끝낸 뒤** 0.3초(쓰는 동안은 다시 돌지 않는다),
   궤적 창을 열 때는 쓰던 줄을 끝내고 바로. 스크린샷 `sim-editor-writing` · `sim-editor-writing-left`.
 
 ## 2026-11-10 피드백 — 라운드
@@ -846,3 +848,17 @@
 - 도움말 '치수 넣기' 에 한 항목. 스크린샷 `round-b3-flip`(기계) · `round-b3-flip-direct` · `round-inner-b3-flip`(보링바 안내) · `round-manual-flip` ·
   `round-b3-flip-narrow`(360dp · 글꼴 1.3 — 스위치 글이 잘리지 않음), 숫자 · NC 골든 `round-b1…6-flip` · `round-inner-b3-flip` · `round-inner-b5-through-flip` ·
   `round-inner-b5-blind-flip` · `round-manual-flip` · `round-manual-inner-flip`.
+
+---
+
+## 2026-11-10 피드백 — 시뮬레이터 공구
+
+- **바 지름 칸**(피드백 4 — `simulator-design.md` 20절): 공구 설정 카드의 바이트 [절입각 κr] · 홈 [홈 폭] · 나사 [나사 각도] 줄 오른쪽 빈자리에 [바 지름 Ø](mm, `BarField` — `SimSettingsSheet.kt`).
+  안쪽 공구(팁 1 · 2, 나사는 6 도)일 때만 보이고, 빈칸이면 자동 값(그 공구가 지나는 가장 작은 구멍에 맞춤)을 '자동' 표와 함께 보인다. 틀린 글은 빨간 칸 + 카드 아래 안내 한 줄(값은 자동으로 돈다).
+- 닿음 띠에 '○줄: 공구 몸통(바)이 소재에 닿습니다 … — 바 지름을 확인하세요'(노랑, G40 옮김과 급송 사이 차례) + [공구 설정](11-12 검증 뒤 — 예전 [편집기로] · 글 '공구 설정의 바 지름을…'). 2D 의 지금 공구는 바 지름까지의 몸통을 그린다.
+- 홀더 고르기: 보링바 · 슬리브 줄에 '바 Ø8', 고르면 바 지름 칸을 채운다(`CompanyHolder.bar`).
+- 스크린샷: `sim-tools-bar`(자동 5) · `sim-tools-bar-fs130-w360` · `sim-tools-bar-holder`(C08K → 8) · `sim-tools-bar-bad`(0 을 넣은 빨간 칸) · `sim-2d-bar`(자동) · `sim-2d-bar-hit`(바 8 — 노란 띠 · ▲) · `sim-2d-bar-hit-end`.
+- **공구 저장**(피드백 3 — `simulator-design.md` 20.2): '저장' 토스트 'O1001 저장했습니다 — 공구 · 소재 설정도 함께', 저장한 프로그램을 열 때 설정이 바뀌면 토스트
+  'O1001 열었습니다 — 공구 · 소재 설정도 저장된 값으로 바꿨습니다'(읽지 못하면 '… 지금 설정을 그대로 둡니다'). 공구 · 소재만 고쳐도 프로그램 줄이 '● 고침', 그 채 다른 것을 열면
+  묻는 창 '저장하지 않은 설정'(본문 '공구 · 소재 설정을 고친 뒤 저장하지 않았습니다. …', 단추는 그대로). 공구 설정 시트 아래 첫 문장 '공구표 · 소재 칸은 앱을 꺼도 남습니다. …'.
+  스크린샷: `sim-ask-unsaved-setup` · `sim-ask-unsaved-setup-fs130-w360`.
