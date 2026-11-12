@@ -13,7 +13,8 @@ import kotlin.math.sqrt
  * 그 함수는 private 이라 부를 수 없고, 테이퍼 파일은 이 가지에서 고치지 않기로 해서 옮겼다(결정 목록).
  * 구현의 Pt · Intersect · NoseComp · GComp 를 쓰지 않는다. 고친 것 둘: 결과에서 G40 접근 줄(pre)은 뺐고,
  * '접해서 이어짐' 의 꺾임 한도를 1e-9 대신 시뮬레이터와 같은 min(1e-3, 0.0005/r)(NC 0.001 반올림 자국 — GComp 주석)로 했다.
- * 바깥 꺾임 > 90°(dt < 0)는 원본처럼 4점 꺾은선을 낸다 — 시뮬레이터는 그 자리에서 멈추므로 비교에서 빠진다.
+ * 바깥 꺾임 > 90°(dt < 0)는 원본처럼 4점 꺾은선을 낸다 — 시뮬레이터는 그 자리에서 멈추거나, 아주 조금 넘는 것은 늘인 교점으로 받으므로(설계 22.2 · 22.4)
+ * 비교에서 빠진다(그런 이음은 [run] 의 acute 에 모은다).
  */
 internal object RefG4x {
     data class P(val z: Double, val x: Double) {
@@ -101,9 +102,9 @@ internal object RefG4x {
     /**
      * 기계 보정 흉내. all = G40 접근 줄들 · G41/G42 시작(직선) · 보정 블록 · G40 취소(직선) · (G40 상태 줄들) — 노즈 중심 경로(시작 블록부터).
      * 이동 없는 G40 한 줄이면 앞 블록 끝 법선에 서고 다음 이동에서 벡터를 지운다(FF 5.4.4 그림 5.4.4(e) 204쪽 형식 A·B, F0 14.3.4 228쪽 — 2026-10-28 더함).
-     * 오목 원호가 R < r 이면 null
+     * 오목 원호가 R < r 이면 null. [acute] 가 있으면 4점 꺾은선을 낸 이음(바깥 꺾임 > 90°)의 차례를 모은다
      */
-    fun run(all: List<Blk>, tv: P, r: Double): List<Pc>? {
+    fun run(all: List<Blk>, tv: P, r: Double, acute: MutableList<Int>? = null): List<Pc>? {
         val k0 = all.indexOfFirst { it.comp != null }
         val kc = (k0 + 1 until all.size).first { all[it].comp == 40 }
         val alone = (all[kc].p - all[kc - 1].p).len < 1e-9
@@ -146,6 +147,7 @@ internal object RefG4x {
             return if (dt >= 0) {
                 listOf(meet(a, bb, na, nb, e, r, if (cancel) null else bb.c?.let { rho(bb) }, if (startup) null else a.c?.let { rho(a) }))
             } else {
+                acute?.add(ia)
                 listOf(e + na * r, e + na * r + ta * r, e + nb * r - tb * r, e + nb * r)
             }
         }

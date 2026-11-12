@@ -5,6 +5,7 @@ import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.Line
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.Pt
+import com.bmt.nosecalc.calc.Side
 import com.bmt.nosecalc.calc.sim.SimKit.has
 import com.bmt.nosecalc.calc.sim.SimKit.moves
 import com.bmt.nosecalc.calc.sim.SimKit.near
@@ -15,6 +16,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -248,6 +250,7 @@ class CompTest {
         val rnd = Random(20261028)
         var compared = 0
         var stopped = 0
+        var overNinety = 0
         repeat(2000) { k ->
             val r = listOf(0.2, 0.4, 0.8, 1.2)[rnd.nextInt(4)]
             val tip = rnd.nextInt(10)
@@ -279,9 +282,15 @@ class CompTest {
             val cancel = if (rnd.nextInt(3) == 0) listOf("G40", put("G01", c)) else listOf("G40 " + put("G01", c))
             val prog = listOf("G00 X${f(entry.xDia)} Z${f(entry.z)}", start) + body + cancel
             val sim = SimKit.run(listOf("T0101", "G97 S1000 M03", "G99 F0.2") + prog + "M30", mapOf(1 to ToolOffset(r, tip)), ab)
-            val ref = RefG4x.run(RefG4x.parse(prog), NoseComp.tipVector(tip, r).let { RefG4x.P(it.z, it.x) }, r)
+            val acute = mutableListOf<Int>()
+            val ref = RefG4x.run(RefG4x.parse(prog), NoseComp.tipVector(tip, r).let { RefG4x.P(it.z, it.x) }, r, acute)
             if (sim.stop != null) {
                 stopped++
+                return@repeat
+            }
+            // 바깥 90° 를 아주 조금 넘는 이음: 시뮬레이터는 늘인 교점(설계 22.2 · 22.4), 기준은 4점 꺾은선이라 비교하지 않는다
+            if (acute.isNotEmpty()) {
+                overNinety++
                 return@repeat
             }
             assertTrue(ref != null, "$k 기준이 R < r 인데 시뮬레이터는 통과: $prog")
@@ -295,7 +304,7 @@ class CompTest {
             assertEquals(refArcs, simArcs, "$k 원호 수 $prog")
             compared++
         }
-        println("randomAgainstReference compared=$compared stopped=$stopped")
+        println("randomAgainstReference compared=$compared stopped=$stopped overNinety=$overNinety")
         assertTrue(compared >= 600, "비교 $compared · 멈춤 $stopped")
     }
 
@@ -453,5 +462,78 @@ class CompTest {
         // 원호 끝(오목 — 보정선 R5 − 0.4)에서 바꾼 쪽 보정선(Z-10.4)이 만나지 않음
         val arc = stops(pre + listOf("G42 G01 X40. Z0. F0.1", "G01 Z-5.", "G02 X50. Z-10. R5.", "G41", "G01 X60.", "G40 G00 X70."), IssueCode.COMP_SWITCH, 8)
         assertEquals(listOf("6"), arc.stop!!.args)
+    }
+
+    /**
+     * 90° 를 아주 조금 넘는 바깥 꺾임(2026-11-12 통합 고침 S2 — 테이퍼 원호 검증 V7-4): 형식 C 가 끼우는 토막(e + nA·r + tA·r → e + nB·r − tB·r)이
+     * 늘인 교점에서 0.001 mm 안이면 90° 처럼 교점으로 받는다. 직선끼리는 그 차이가 r·(tan(θ/2) − 1). 그보다 크면 예전처럼 COMP_ACUTE_OUTER.
+     * 산 꼭대기(X46.6 Z-3.3)에서 G42 공구가 바깥으로 꺾인다. 좌표는 새로 쓴 것.
+     */
+    @Test
+    fun outerCornerJustOver90() {
+        val prog = { b: String -> SimKit.PRE + listOf("G00 X44. Z1.", "G42 G01 X40. Z0. F0.1", "G01 X46.6 Z-3.3", b, "G01 Z-20.", "G40 G00 X44.", "M30") }
+        val e = Pt.ofDia(-3.3, 46.6)
+        val ta = (e - Pt.ofDia(0.0, 40.0)).unit()
+        // 꼭 90° 인 도면이 0.1 + 0.2 꼴 소수 잡음으로 내적 < 0(전에는 이것도 멈췄다)
+        assertTrue((ta dot (Pt.ofDia(-6.6, 40.0) - e).unit()) < 0)
+        val na = Pt(ta.x, -ta.z) // G42 = 진행 오른쪽
+        for (m in listOf(MachineSetup(), ab)) for (r in listOf(0.4, 0.8)) {
+            val exact = ok(prog("G01 X40. Z-6.6"), tool(r, 3), m)
+            near(Pt(-3.3, 23.3 + r * sqrt(2.0)), exact.ghosts.last { it.line == 6 }.nose, 1e-9, "꼭 90° r $r")
+            // 90.05°: 차이 0.00036(r 0.4) · 0.00073(r 0.8) — 받고, 노즈는 끼운 토막 첫 점 e + nA·r + tA·r 에서 0.001 안
+            val over = ok(prog("G01 X39.994 Z-6.597"), tool(r, 3), m)
+            near(e + na * r + ta * r, over.ghosts.last { it.line == 6 }.nose, 1e-3, "90.05° r $r")
+            for ((a, b) in moves(over).zipWithNext()) near(a.nose.end, b.nose.start)
+            // 91°: 0.007 · 0.014 — 멈춤
+            stops(prog("G01 X39.886 Z-6.542"), IssueCode.COMP_ACUTE_OUTER, 7, tool(r, 3), m)
+        }
+        // 0.57° 를 넘으면 r 이 아주 작아 차이가 0.001 안이어도 멈춘다(아주 조금 넘는 것만)
+        stops(prog("G01 X39.886 Z-6.542"), IssueCode.COMP_ACUTE_OUTER, 7, tool(0.05, 3))
+
+        // 원호 이음(독립 검증 V12-1 뒤 고침): 0.001 은 90° 를 넘은 몫(끝 접선을 늘인 교점과 끼운 토막의 차이 r·(tan(θ/2) − 1))에만 —
+        // 보정선(원)이 휘는 몫(≈ r²/2ρ)은 꼭 90° 에서도 생기는 볼록 꼭짓점 밖 공기라 따지지 않는다. 90.05° 는 R5 도 받고(노즈 = 원과 직선 보정선의 교점), 90.2° 는 멈춘다
+        val g = GComp(0.8, 3, Side.G42)
+        val p = Pt(0.0, 20.0)
+        val a = Line(Pt(10.0, 20.0), p)
+        fun arcAfter(deg: Double, radius: Double, concave: Boolean): Arc {
+            val f = deg * PI / 180
+            val t = Pt(-cos(f), -sin(f)) // −Z 진행을 왼쪽(G42 의 바깥)으로 deg 만큼 돌린 접선
+            val n = g.normal(t)
+            val c = if (concave) p + n * radius else p - n * radius
+            val s = if (concave) -PI / 6 else PI / 6
+            val v = p - c
+            return Arc(p, c + Pt(v.z * cos(s) - v.x * sin(s), v.z * sin(s) + v.x * cos(s)), c, cw = concave)
+        }
+        for (concave in listOf(true, false)) {
+            val big = arcAfter(90.05, 5000.0, concave)
+            near(Pt(-cos(90.05 * PI / 180), -sin(90.05 * PI / 180)), GComp.tanAt(big, p), 1e-9, "접선 오목 $concave")
+            assertTrue(g.junction(a, big, startup = false, cancel = false) is GComp.Ok, "R5000 오목 $concave")
+            val small = arcAfter(90.05, 5.0, concave)
+            val j = g.junction(a, small, startup = false, cancel = false)
+            assertTrue(j is GComp.Ok, "R5 오목 $concave — $j")
+            // 노즈는 A 의 보정선(반경 20 + r — G42 외경 위쪽)과 B 의 보정 원(반지름 ρ = R ∓ r) 위
+            assertEquals(20.8, j.p.x, 1e-9, "R5 오목 $concave — A 보정선")
+            assertEquals(if (concave) 4.2 else 5.8, (j.p - small.center).length, 1e-9, "R5 오목 $concave — B 보정 원")
+            assertEquals(GComp.Bad(IssueCode.COMP_ACUTE_OUTER), g.junction(a, arcAfter(90.2, 5.0, concave), startup = false, cancel = false), "90.2° R5 오목 $concave")
+            assertEquals(GComp.Bad(IssueCode.COMP_ACUTE_OUTER), g.junction(a, arcAfter(90.2, 5000.0, concave), startup = false, cancel = false), "90.2° R5000 오목 $concave")
+        }
+    }
+
+    /**
+     * 독립 검증 V12-1: 계산기 테이퍼 원호의 실제 꼴(가장 작은 R5 의 1/4 오목 호가 볼록 꼭짓점에 직각으로 닿음)이 시뮬레이터에서 멈추지 않는다 —
+     * 꼭 R5(원호 → 직선 · 직선 → 원호 둘 다 — 소수 잡음의 부호와 상관없이)와 받는 띠 R4.999(90.011°). 형식 C · A/B, 노즈 0.2 · 0.4 · 0.8. 좌표는 새로 쓴 것.
+     */
+    @Test
+    fun calculatorArcAtSquareOuterCornerRuns() {
+        val forms = listOf(
+            listOf("G42", "G00 X30. Z20.", "Z-1.", "G01 Z-2. F0.1", "G02 X40. Z-7. R5.", "G01 Z-10.", "X42. F0.3", "G40", "G00 Z200."),
+            listOf("G42", "G00 X30. Z20.", "Z-1.", "G01 Z-2. F0.1", "G02 X40. Z-7. R4.999", "G01 Z-10.", "X42. F0.3", "G40", "G00 Z200."),
+            listOf("G42", "G00 X24. Z20.", "Z-1.", "G01 Z-2. F0.1", "X30.", "G02 X40. Z-7. R5.", "G01 X42. F0.3", "G40", "G00 Z200."),
+            listOf("G42", "G00 X24. Z20.", "Z-1.", "G01 Z-2. F0.1", "X30.", "G02 X40. Z-7. R4.999", "G01 X42. F0.3", "G40", "G00 Z200."),
+        )
+        for (f in forms) for (m in listOf(MachineSetup(), ab)) for (r in listOf(0.2, 0.4, 0.8)) {
+            val run = ok(SimKit.PRE + f + "M30", tool(r, 3), m)
+            for ((a, b) in moves(run).zipWithNext()) near(a.nose.end, b.nose.start)
+        }
     }
 }

@@ -22,6 +22,7 @@ import kotlin.math.min
  * - 이음점(블록 A 끝 = B 처음 e, 접선 tA · tB, 공구 쪽 법선 nA · nB):
  *   접해서 이어짐 → e + nA·r · 안쪽 모서리 → 두 보정선의 교점(e + (nA + nB)·r/2 에 가까운 것) ·
  *   바깥 꺾임 ≤ 90° → 두 보정선을 늘인 교점 · 바깥 꺾임 > 90° → 지원 안 함(COMP_ACUTE_OUTER — 제어기가 끼우는 토막을 출처로 확인 못 함).
+ *   다만 90° 를 아주 조금 넘고 넘은 몫(끝 접선을 늘인 교점과 형식 C 가 끼우는 토막의 차이)이 0.001 mm 안이면 90° 처럼 교점([OUTER_SIN] · [OUTER_TOL] — 설계 22절).
  *   시작 블록 끝이 바깥이면 e + nB·r, 취소 블록 앞이 바깥이면 e + nA·r(형식 A).
  * - 보정 중 G41 ↔ G42 바꿈: 두 쪽 보정선의 교점, 없으면 B 처음 법선([switchTo] — FF 5.4.3).
  * - 간섭: 이음점 사이 보정 토막이 거꾸로 가면 COMP_INTERFERENCE(H 61), 오목 원호 R < r 은 COMP_ARC_SMALL.
@@ -84,8 +85,12 @@ internal class GComp(val r: Double, val tip: Int, val side: Side) {
         val typeAB = r * abs(cr) / (1 + dt) > REVERSE
         if (startup) return Ok(e + nb * r, typeAB)
         if (cancel) return Ok(e + na * r, typeAB)
-        if (dt < 0) return Bad(IssueCode.COMP_ACUTE_OUTER)
+        if (dt < -OUTER_SIN) return Bad(IssueCode.COMP_ACUTE_OUTER)
         val p = meet(a, b, e, na, nb, guess) ?: return Bad(IssueCode.COMP_ACUTE_OUTER)
+        // 90° 를 아주 조금 넘음(꼭 90° 도면의 소수 잡음 · 계산기 글의 받는 띠): 넘은 몫 — 끝 접선을 늘인 교점과 형식 C 가 끼우는 토막
+        // e + nA·r + tA·r → e + nB·r − tB·r 의 두 끝 사이 거리 r·(tan(θ/2) − 1) = r·((1 − tA·tB)/|tA × tB| − 1) — 이 OUTER_TOL 안일 때만 교점으로.
+        // 원호는 보정선이 휘는 몫(≈ r²/2ρ)만큼 교점이 더 떨어지지만 꼭 90° 에서도 생기는 볼록 꼭짓점 밖 공기라 따지지 않는다(설계 22.4)
+        if (dt < 0 && r * ((1 - dt) / abs(cr) - 1) > OUTER_TOL) return Bad(IssueCode.COMP_ACUTE_OUTER)
         return Ok(p, false)
     }
 
@@ -173,6 +178,10 @@ internal class GComp(val r: Double, val tip: Int, val side: Side) {
     companion object {
         /** 거꾸로 가도 간섭으로 보지 않는 길이(mm) */
         const val REVERSE = 5e-4
+
+        /** 90° 를 넘는 바깥 꺾임을 교점으로 받는 끝(넘은 각의 sin — 0.57°) · 그때 넘은 몫(끝 접선을 늘인 교점과 형식 C 가 끼우는 토막의 차이) 한도(mm) — [junction], 설계 22절 */
+        const val OUTER_SIN = 1e-2
+        const val OUTER_TOL = 1e-3
 
         /** 요소 s 의 점 p 에서 진행 방향 단위 접선 */
         fun tanAt(s: Seg, p: Pt): Pt = when (s) {
