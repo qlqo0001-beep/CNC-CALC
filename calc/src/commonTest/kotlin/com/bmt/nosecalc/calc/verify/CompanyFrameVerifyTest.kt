@@ -362,6 +362,61 @@ class CompanyFrameVerifyTest {
         return out
     }
 
+    /**
+     * 씨앗 고정 무작위 T1–T2 원호 테이퍼(피드백 2026-11-10 — `TaperInput.arc`): [taperCases] 의 홑테이퍼와 같은 꼴(바깥 · 안 · 뒤집기 · 계산기 역방향 · 거울 ·
+     * 모서리 R · 시작 · 끝)에 호를 켠 것. R 은 가장 작은 R(0.001 올림 — 앞뒤 요소에 거의 접함) · 그 1~1.5 배 · 1.5~4 배 · 4~40 배, 볼록 · 오목
+     */
+    private fun taperArcCases(seed: Int, count: Int): List<Frame> {
+        val rnd = Random(seed)
+        val out = mutableListOf<Frame>()
+        fun <T> pick(l: List<T>): T = l[rnd.nextInt(l.size)]
+        fun u(a: Double, b: Double) = a + (b - a) * rnd.nextDouble()
+        repeat(count) {
+            val inner = rnd.nextBoolean()
+            val reverse = rnd.nextInt(3) == 0
+            val flip = rnd.nextBoolean()
+            val mirror = !reverse && rnd.nextInt(4) == 0
+            val r = pick(listOf(0.2, 0.4, 0.4, 0.5, 0.8, 0.8, 1.0, 1.2, 1.6))
+            val tip: Int? = if (rnd.nextInt(5) < 2) null else 1 + rnd.nextInt(9)
+            val zc = pick(listOf(0.0, 0.3, 0.5, 1.0, 1.0, 2.0, 5.0))
+            fun cr() = if (rnd.nextInt(3) != 0) 0.0 else pick(listOf(0.1, 0.2, r, 0.5, 1.0, 1.5, 2.0, 3.0))
+            fun legLen() = r3(if (rnd.nextInt(3) == 0) u(0.05, 1.0) else u(1.0, 15.0))
+            val x1 = r3(u(if (inner) 12.0 else 8.0, 120.0))
+            val z1 = r3(u(-5.0, 5.0))
+            val type = 1 + rnd.nextInt(5)
+            val up = if (inner == (type == 5)) 1.0 else -1.0
+            val deg = u(5.0, 85.0)
+            val dz = r3(u(0.3, 12.0))
+            val x2 = r3(x1 + up * 2 * dz * tan(deg * PI / 180))
+            if (x2 < 1.0 || x2 > 400.0) return@repeat
+            val z2 = r3(z1 - dz)
+            val minR = TaperCalc.arcMinR(x1, z1, x2, z2) ?: return@repeat
+            val k = when (rnd.nextInt(4)) {
+                0 -> 1.0
+                1 -> u(1.0, 1.5)
+                2 -> u(1.5, 4.0)
+                else -> u(4.0, 40.0)
+            }
+            val arcR = kotlin.math.ceil(minR * k * 1000 - 1e-6) / 1000
+            val convex = rnd.nextBoolean()
+            val frontFace = type <= 2
+            val backFace = type == 2 || type == 4
+            val start = if (rnd.nextBoolean()) null else if (frontFace) {
+                if (!inner && rnd.nextInt(5) == 0) 0.0 else max(0.0, r3(x1 - up * 2 * legLen()))
+            } else r3(z1 + legLen())
+            val end = if (rnd.nextBoolean()) null else if (backFace) {
+                if (inner && rnd.nextInt(5) == 0) 0.0 else max(0.0, r3(x2 + up * 2 * legLen()))
+            } else r3(z2 - legLen())
+            var inp = TaperInput(
+                inner, type, reverse, r, tip, x1, z1, x2, z2, null, zc, cr(), cr(), start = start, end = end, approach = !mirror,
+                arc = true, arcR = arcR, arcConvex = convex,
+            )
+            if (flip) inp = inp.copy(x1 = inp.x2, z1 = inp.z2, x2 = inp.x1, z2 = inp.z1, cornerR1 = inp.cornerR2, cornerR2 = inp.cornerR1, start = inp.end, end = inp.start, flip = true)
+            taperFrame(inp.toString(), TaperCalc.calc(inp), inner, mirror, r)?.let { out += it }
+        }
+        return out
+    }
+
     // ================================================================ 라운드
 
     private fun roundFrame(tag: String, machine: com.bmt.nosecalc.calc.RoundResult, direct: com.bmt.nosecalc.calc.RoundResult, inner: Boolean, r: Double): Frame? {
@@ -436,6 +491,17 @@ class CompanyFrameVerifyTest {
         println(t.report())
         t.fails.take(5).forEach(::println)
         assertTrue(t.cases > 1000, t.report())
+        assertEquals(0, t.fails.size, t.report() + "\n" + t.fails.take(5).joinToString("\n\n"))
+    }
+
+    /** T1–T2 를 원호로 낸 테이퍼(피드백 2026-11-10)도 같은 기준 ①~④ 로 */
+    @Test
+    fun randomArcTapersFollowCompanyFrame() {
+        val t = Tally("테이퍼 T1–T2 원호 G41/G42")
+        for (f in taperArcCases(20261110, 2500)) check(f, t)
+        println(t.report())
+        t.fails.take(5).forEach(::println)
+        assertTrue(t.cases > 1200, t.report())
         assertEquals(0, t.fails.size, t.report() + "\n" + t.fails.take(5).joinToString("\n\n"))
     }
 

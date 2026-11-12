@@ -26,6 +26,8 @@ import com.bmt.nosecalc.screens.taper.TaperSolve
 import com.bmt.nosecalc.screens.taper.TaperState
 import com.bmt.nosecalc.screens.taper.cutEnd
 import com.bmt.nosecalc.screens.taper.example
+import com.bmt.nosecalc.screens.taper.taperWarningFields
+import com.bmt.nosecalc.screens.taper.taperWarningText
 import com.bmt.nosecalc.screens.thread.ThreadFamily
 import com.bmt.nosecalc.screens.thread.ThreadField
 import com.bmt.nosecalc.screens.thread.ThreadState
@@ -127,6 +129,81 @@ class InputRobustnessTest {
             }
         }
         assertTrue(solved > 10_000, "결과가 나온 사례가 너무 적다: $solved")
+    }
+
+    /**
+     * T1–T2 원호(피드백 2026-11-10): 홑테이퍼에 호를 켜고 점 · 모서리 R · 시작 · 끝 · R · 볼록/오목 · 노즈R 을 흔든다. 예외 0, 찍는 숫자 유한,
+     * 경고 글 · 짚는 칸 · 최소 R 도 만들어 본다(화면이 그리는 것). 이 시험만의 난수라 위 [taper] 의 사례는 그대로다
+     */
+    @Test
+    fun taperArc() {
+        val shake = Random(20261110)
+        var arcs = 0
+        repeat(40_000) {
+            val kind = if (shake.nextBoolean()) TaperKind.OUTER else TaperKind.INNER
+            val st = TaperState(kind, shake.nextBoolean(), 1 + shake.nextInt(5), open = true).example()
+            if (shake.nextBoolean()) st.toggleFlip()
+            st.setArc(true)
+            st.setArcConcave(shake.nextBoolean())
+            // R: 흔한 값 · 가장 작은 R 언저리(예시 치수는 5) · 치는 중(빈칸 · 0 · 점 · 부호) · 극단 값
+            st.setPoint(
+                "arcR",
+                when (shake.nextInt(10)) {
+                    0 -> pick()
+                    1 -> listOf("", "0", ".", "-", "0.", "-5")[shake.nextInt(6)]
+                    2 -> listOf("5", "5.001", "4.999", "4.99", "3.536", "3.535")[shake.nextInt(6)]
+                    else -> (shake.nextInt(3000, 60_000) / 1000.0).toString()
+                },
+            )
+            val names = listOf("x1", "z1", "r1", "x2", "z2", "r2", "ang", "start", "end")
+            for (name in names) if (shake.nextInt(4) == 0) st.setPoint(name, nudge(st.point(name)))
+            if (shake.nextInt(3) == 0) st.setShared("noseR", nudge(st.shared("noseR")))
+            if (shake.nextInt(5) == 0) st.setShared("zClear", nudge(st.shared("zClear")))
+            if (shake.nextInt(5) == 0) st.tip = shake.nextInt(10)
+            val f = SlopeForm(
+                kind, st.type!!, st.reverse,
+                st.shared("noseR").toDoubleOrNull() ?: Double.NaN,
+                st.tip,
+                (1..2).map { st.point("x$it").toDoubleOrNull() },
+                (1..2).map { st.point("z$it").toDoubleOrNull() },
+                st.point("ang").toDoubleOrNull(),
+                st.shared("zClear").toDoubleOrNull() ?: 0.0,
+                (1..2).map { st.point("r$it").toDoubleOrNull() ?: 0.0 },
+                st.point("start").toDoubleOrNull(),
+                st.point("end").toDoubleOrNull(),
+                st.flip,
+                angleRef = AngleRef.X,
+                arc = st.arc,
+                arcR = st.point("arcR").toDoubleOrNull(),
+                arcConcave = st.arcConcave,
+            )
+            check("테이퍼 원호 $f") {
+                f.arcMinR?.let { show(it) }
+                f.waiting
+                val res = TaperSolve.solve(f)
+                res.warnings.forEach {
+                    assertTrue(taperWarningText(it, f).isNotBlank())
+                    taperWarningFields(it, f)
+                }
+                val s = res.solution ?: return@check
+                arcs++
+                val a = s.arc ?: fail("호가 없다")
+                show(a.r)
+                a.progR?.let { show(it) }
+                show(a.center)
+                s.points.forEach { p ->
+                    show(p.vertex)
+                    p.nodes.forEach { show(it.drawn); show(it.prog); show(it.dXDia, it.dZ) }
+                    p.corner?.let { c -> show(c.r); c.progR?.let { show(it) } }
+                }
+                show(s.entry)
+                show(s.exit)
+                s.approach.forEach { show(it) }
+                show(s.cutEnd)
+                assertTrue((s.ncG40 + s.ncG41G42).none { "NaN" in it || "Infinity" in it })
+            }
+        }
+        assertTrue(arcs > 5_000, "호 결과가 나온 사례가 너무 적다: $arcs")
     }
 
     @Test
@@ -252,11 +329,40 @@ class InputRobustnessTest {
                     },
                 )
             }
+            // T1–T2 원호: R 칸 · 점 칸에 극단 값
+            draw { TaperScreen(TaperState(type = 1, open = true).example().apply { setArc(true); setPoint("arcR", v) }) }
+            draw { TaperScreen(TaperState(TaperKind.INNER, type = 3, open = true).example().apply { setArc(true); setArcConcave(true); setPoint("arcR", "10"); setPoint("x2", v) }) }
             draw { TaperScreen(TaperState(TaperKind.OUTER_DOUBLE, type = 1, open = true).example().apply { setPoint("z3", v) }) }
             draw { TaperScreen(TaperState(TaperKind.GROOVE, type = 1, open = true).example().apply { setShared("width", v) }) }
             draw { RoundScreen(roundExample(3, open = true).apply { setDim(3, "mainR", v) }) }
             draw { RoundScreen(roundExample(MANUAL, open = true).apply { setPoint("x2", v) }) }
             draw { TriangleScreen(TriangleState(mapOf("angA" to "25")).apply { set(TriField.A_SIDE, v) }) }
+        }
+        // T1–T2 원호의 R 을 치는 중간 상태(빈칸 · 0 · 점 · 부호) · 가장 작은 R 언저리 · R 과소 · 아주 큰 R, 볼록 · 오목, 두 보정 방식
+        for (v in listOf("", "0", ".", "-", "0.", "5", "4.999", "4", "3.5", "9999", "10000.5")) for (concave in listOf(false, true)) {
+            draw {
+                TaperScreen(
+                    TaperState(type = 1, open = true).example().apply {
+                        setArc(true)
+                        setArcConcave(concave)
+                        setPoint("arcR", v)
+                        setPoint("r1", "0.5")
+                    },
+                )
+            }
+        }
+        // 좌표를 다 넣기 전(같은 점 · 수평 · 빈칸)
+        for ((x2, z2) in listOf("40" to "0", "40" to "-5", "50" to "0", "" to "-5", "50" to "")) {
+            draw {
+                TaperScreen(
+                    TaperState(type = 1, open = true).example().apply {
+                        setArc(true)
+                        setPoint("arcR", "10")
+                        setPoint("x2", x2)
+                        setPoint("z2", z2)
+                    },
+                )
+            }
         }
     }
 }

@@ -103,6 +103,43 @@ class UiGoldenTest {
     }
 
     /**
+     * T1–T2 원호(피드백 2026-11-10 — 스크린샷 TaperShotsTest.arc 와 같은 상태): 외경 형상 1 볼록 · 오목 R10(설계 손 계산 예 1), 모서리 R 1 · 2 + 시작 X30 · 끝 Z−12(예 5),
+     * 뒤집기(외경 3 오목 R8 + 모서리 R), 내경 1 + 끝 Z−20, 내경 역방향(거울 풀이), 가장 작은 R(외경 3 오목 R5 — T1 에서 앞 요소에 접하고 T2 는 바깥 90°), R 과소(멈춤).
+     * 머리에 고른 R · 볼록/오목 · 최소 R, 점 뒤에 호의 방향 · 도면 R → 보정 R · 중심
+     */
+    @Test
+    fun taperArc() {
+        fun arc(s: TaperState, r: String, concave: Boolean = false) = s.apply {
+            setArc(true)
+            setPoint("arcR", r)
+            setArcConcave(concave)
+        }
+        slope("taper-b-arc", arc(TaperState(type = 1, open = true).example(), "10"))
+        slope("taper-b-arc-concave", arc(TaperState(type = 1, open = true).example(), "10", concave = true))
+        slope(
+            "taper-b-arc-corner",
+            arc(TaperState(type = 1, open = true).example(), "10").apply {
+                setPoint("r1", "1")
+                setPoint("r2", "2")
+                setPoint("start", "30")
+                setPoint("end", "-12")
+            },
+        )
+        slope(
+            "taper-b-arc-flip",
+            arc(TaperState(type = 3, open = true).example(), "8", concave = true).apply {
+                setPoint("r1", "1")
+                setPoint("r2", "1.5")
+                toggleFlip()
+            },
+        )
+        slope("taper-b-arc-inner1", arc(TaperState(TaperKind.INNER, type = 1, open = true).example(), "10").apply { setPoint("end", "-20") })
+        slope("taper-b-arc-reverse", arc(TaperState(TaperKind.INNER, reverse = true, type = 1, open = true).example(), "10"))
+        slope("taper-b-arc-tangent", arc(TaperState(type = 3, open = true).example(), "5", concave = true))
+        slope("taper-b-arc-error", arc(TaperState(type = 1, open = true).example(), "4"))
+    }
+
+    /**
      * 각도 기준(사용자 결정 2026-10-28, 처음 X축): 사용자 예 [userAngleExample] — 같은 칸(각도 30)을 X축 기준이면 Z1 −25.619, Z축 기준이면 −29.256.
      * 다른 골든은 처음 값(X축)으로 각도 줄만 X축 각이 된다
      */
@@ -206,11 +243,16 @@ class UiGoldenTest {
             s.point("end").toDoubleOrNull(),
             s.flip,
             angleRef = ref,
+            arc = s.arc,
+            arcR = s.point("arcR").toDoubleOrNull(),
+            arcConcave = s.arcConcave,
         )
         val r = TaperSolve.solve(form)
         val text = buildString {
             // 뒤집은 상태만 머리에 한 줄 더(안 뒤집은 골든은 그대로)
             if (s.flip) line("T1 ⇄ T${n} 바꿈 · ${travelText(kind, type, s.reverse, true)}")
+            // T1–T2 를 원호로 낸 상태만 한 줄 더(직선 골든은 그대로)
+            if (form.arc) line("T1–T2 원호 R${s.point("arcR")} ${if (form.arcConcave) "오목" else "볼록"} · 최소 R ${form.arcMinR?.let(::f)}")
             line("표준 팁 T${NoseComp.standardTip(kind.inner, s.reverse)} · ${Side.of(kind.inner, s.reverse != s.flip)}")
             line("경고 ${r.warnings}")
             val sol = r.solution ?: return@buildString
@@ -222,6 +264,7 @@ class UiGoldenTest {
                     line("  모서리 ${if (it.cw) "G02" else "G03"} R${f(it.r)} → 보정 R${f(it.progR)} 중심 ${xz(it.center)}")
                 }
             }
+            sol.arc?.let { line("T1–T2 원호 ${if (it.cw) "G02" else "G03"} R${f(it.r)} → 보정 R${f(it.progR)} 중심 ${xz(it.center)}") }
             line("각도 ${ref.label} ${sol.shownAngles(ref).map(::f)}")
             line("진입점 ${xz(sol.entry)} 후퇴점 ${xz(sol.exit)}")
             // 뒤집어 척 쪽에서 시작할 때만(안 뒤집은 골든은 그대로)

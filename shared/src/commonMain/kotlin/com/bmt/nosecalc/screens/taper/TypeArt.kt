@@ -54,6 +54,8 @@ import kotlin.math.sin
  * flip = 가공 방향 뒤집기(T1 ⇄ 마지막 T): 형상 · 바이트는 그대로, T 이름 · 이송 화살 · 시작/끝 표가 반대 끝부터. 각도 호는 그 경사 그대로
  * (2중은 각1 · 각2 이름만 칸 순서로).
  * angleRef = 각도 기준(화면 스위치): X 는 세로(X 방향) 점선과 경사 사이, Z 는 가로(Z 방향) 점선과 경사 사이에 호를 긋는다(홈은 상관없음).
+ * arc = T1–T2 사이를 원호로(홑테이퍼만 — null 직선 · true 볼록 · false 오목): 경사 토막을 곡선으로 그리고(볼록은 살이 남는 쪽 = 공기 쪽으로 부푼다 — 소재 면도
+ * 그 곡선을 따른다), 각도 호 · 기준 점선 대신 호 곁에 "R"(입력 중인 칸이 arcR 이면 호를 굵게 · R 에 알약).
  */
 @Composable
 internal fun TypeArt(
@@ -65,6 +67,7 @@ internal fun TypeArt(
     focus: String? = null,
     flip: Boolean = false,
     angleRef: AngleRef = AngleRef.X,
+    arc: Boolean? = null,
 ) {
     val c = AppTheme.colors
     val measurer = rememberTextMeasurer()
@@ -72,9 +75,12 @@ internal fun TypeArt(
     Canvas(modifier) {
         val (ks, kt) = artScale(size.width, 199.dp)
         val pen = Pen(this, c, measurer, sans, ks, kt, kind.inner, mirrored, compact, focus)
-        if (kind.groove) pen.groove(type) else pen.slope(art(kind, type), kind.double, flip, angleRef == AngleRef.X)
+        if (kind.groove) pen.groove(type) else pen.slope(art(kind, type), kind.double, flip, angleRef == AngleRef.X, arc.takeIf { !kind.double })
     }
 }
+
+/** T1–T2 원호 그림이 현에서 부푼 높이(현 길이 비율). 1/4 원이 0.207 — 그보다 조금 얕게(양 끝 접선이 그림의 앞뒤 요소를 넘지 않는다) */
+private const val ARC_BOW = .16f
 
 /**
  * 꺾은선(카드 비율: x = 폭, y = 높이, 왼쪽부터), T1·T2(·T3) 의 점 번호, 라벨 가운데 자리(점에서, 02 카드 폭 비율 — 글 배율을 따른다),
@@ -200,9 +206,10 @@ private class Pen(
     /**
      * flip = 가공 방향 뒤집기: T 이름 · 라벨 자리 · 이송 화살 · 시작/끝을 반대 끝부터. 기준 점선 · 각도 호는 그림 순서 그대로.
      * xRef = 각도 기준: 경사(오른쪽 점 P → 왼쪽 점 Q)와 두 축 방향 선이 만드는 직각삼각형 P–Q–C(C = Q 의 Z, P 의 X) 안쪽에 호를 둔다 —
-     * Z 기준은 P 에서 가로(Z) 점선과 경사 사이(전과 같다), X 기준은 Q 에서 세로(X) 점선과 경사 사이. 두 호가 경사의 같은 쪽이라 이송 화살(반대쪽)과 겹치지 않는다
+     * Z 기준은 P 에서 가로(Z) 점선과 경사 사이(전과 같다), X 기준은 Q 에서 세로(X) 점선과 경사 사이. 두 호가 경사의 같은 쪽이라 이송 화살(반대쪽)과 겹치지 않는다.
+     * arc = T1–T2 를 원호로(true 볼록 · false 오목, 홑테이퍼만): 경사 토막을 2차 곡선으로, 각도 호 · 기준 점선 대신 "R"
      */
-    fun slope(a: Art, double: Boolean, flip: Boolean = false, xRef: Boolean = false) {
+    fun slope(a: Art, double: Boolean, flip: Boolean = false, xRef: Boolean = false, arc: Boolean? = null) {
         val pts = a.pts.map(::at)
         // 그림 순서(오른쪽 점부터)와 칸 순서(T1 = 먼저 깎는 점). 라벨 자리는 점 자리를 따라간다
         val order = if (flip) a.t.indices.reversed() else a.t.indices
@@ -220,23 +227,57 @@ private class Pen(
             if (xRef) Triple(q, Offset(0f, if (p.y > q.y) 1f else -1f), p - q) else Triple(p, left, q - p)
         }
         val arcR = maxOf((if (double) .10f else .135f) * w, dp(22f))
+        // T1–T2 원호: 2차 곡선의 조절점(화면 점). 볼록은 공기 쪽(외경은 화면 위, 내경은 뒤집혀 아래)으로, 오목은 소재 쪽으로 현 길이 × ARC_BOW 만큼 부푼다
+        val bow = arc?.let { convex ->
+            val u = tp[1] - tp[0]
+            var n = Offset(-u.y, u.x) / u.getDistance()
+            if ((n.y < 0) == flipY) n = -n
+            (tp[0] + tp[1]) / 2f + n * (u.getDistance() * 2 * ARC_BOW * (if (convex) 1f else -1f))
+        }
+        // 그 곡선(꺾은선 번호로 a.t[1] → a.t[0] — 왼쪽 점에서 오른쪽 점)
+        fun Path.bowTo(from: Offset, to: Offset) = if (bow == null) lineTo(to.x, to.y) else quadraticTo(bow.x, bow.y, to.x, to.y)
         // 맨 밑에 소재 면(빗금)과 회전축(1점 쇄선, 외경·내경 모두 아래). 기준 점선도 꺾은선 밑에 깐다
-        fillStock(stock(a.pts))
+        if (bow == null) {
+            fillStock(stock(a.pts))
+        } else {
+            // 소재 면도 곡선을 따른다(볼록 = 살이 남는다): 곡선 위 점들을 카드 비율로 되돌려 꺾은선 사이에 끼운다
+            val (i0, i1) = a.t[1] to a.t[0]
+            val on = (1..15).map { k ->
+                val s = k / 16f
+                (pts[i0] * ((1 - s) * (1 - s)) + bow * (2 * s * (1 - s)) + pts[i1] * (s * s)).let {
+                    Offset((it.x / w).let { x -> if (flipX) 1 - x else x }, (it.y / h).let { y -> if (flipY) 1 - y else y })
+                }
+            }
+            fillStock(stock(a.pts.subList(0, i0 + 1) + on + a.pts.subList(i1, a.pts.size)))
+        }
         d.centerLine(Offset(0f, .94f * h), Offset(w, .94f * h), c.drawRef, ks)
-        for ((at, dir) in refs) {
-            d.drawLine(
-                c.drawRef, at, at + dir * refLen, dp(1.1f),
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(dp(4f), dp(3f))),
-            )
+        if (bow == null) {
+            for ((at, dir) in refs) {
+                d.drawLine(
+                    c.drawRef, at, at + dir * refLen, dp(1.1f),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(dp(4f), dp(3f))),
+                )
+            }
         }
         d.drawPath(
             Path().apply {
                 moveTo(pts[0].x, pts[0].y)
-                pts.drop(1).forEach { lineTo(it.x, it.y) }
+                pts.drop(1).forEachIndexed { i, p -> if (bow != null && i + 1 == a.t[0]) bowTo(pts[i], p) else lineTo(p.x, p.y) }
             },
             c.drawProfile,
             style = profile,
         )
+        // R 칸 입력 중: 그 호만 굵게
+        if (bow != null && focus == "arcR") {
+            d.drawPath(
+                Path().apply {
+                    moveTo(tp[1].x, tp[1].y)
+                    bowTo(tp[1], tp[0])
+                },
+                c.lineFocus,
+                style = Stroke(profile.width + dp(1.6f), cap = StrokeCap.Round),
+            )
+        }
         // 내경 역방향(뒤보링)이고 +Z 쪽(화면 오른쪽 = 꺾은선 왼쪽 끝)이 가로로 열려 있으면 바는 구멍을 지나 +Z 로 나간다.
         // 자루가 그림을 가로지르므로 점 · 이름보다 먼저 그린다(이름이 바 위에 보이게)
         val back = flipY && flipX && a.pts[0].y == a.pts[1].y
@@ -248,12 +289,26 @@ private class Pen(
             // 뒤집은 내경도 자루가 시작 끝 곁에서 오른쪽 끝까지 꺾은선 밑을 가로지른다 — 뒤보링처럼 이름보다 먼저
             boringBar(barTop(a, back = false, x = toolX), back = false, x = toolX)
         }
-        refs.forEachIndexed { i, (at, dir, slope) ->
-            // 2중의 각 이름은 칸 순서(결과 카드의 각1 = T1–T2): 뒤집으면 그림 오른쪽 경사가 각2
-            val label = if (double) "각${if (flip) tp.size - 1 - i else i + 1}" else "각도"
-            angle(at, dir, slope, arcR, label, if (double) 11f else 11.5f, hot = focus == "ang")
+        if (bow == null) {
+            refs.forEachIndexed { i, (at, dir, slope) ->
+                // 2중의 각 이름은 칸 순서(결과 카드의 각1 = T1–T2): 뒤집으면 그림 오른쪽 경사가 각2
+                val label = if (double) "각${if (flip) tp.size - 1 - i else i + 1}" else "각도"
+                angle(at, dir, slope, arcR, label, if (double) 11f else 11.5f, hot = focus == "ang")
+            }
+            feed(t[0], t[1], left)
+        } else {
+            // 이송 화살은 호가 그쪽으로 부풀었으면 부푼 만큼 더 띄우고, "R" 은 호 가운데에서 화살 반대쪽(각도 글이 서던 쪽)에
+            val mid = (t[0] + t[1]) / 2f
+            val n = feedNormal(t[0], t[1], left)
+            val sag = (bow - mid) / 2f
+            val toward = sag.x * n.x + sag.y * n.y
+            feed(t[0], t[1], left, extra = maxOf(0f, toward))
+            if (!compact || focus == "arcR") {
+                val hot = focus == "arcR"
+                val box = text("R", mid + sag - n * (.075f * unit), if (hot) c.lineFocus else c.drawAngle, 12.5f, FontWeight.Bold)
+                if (hot) pill(box)
+            }
         }
-        feed(t[0], t[1], left)
         // 시작 · 끝: T1 · 마지막 T 와 이웃한 자유 끝(배열 순서가 아니라 이웃으로 — 어느 쪽이 첫 점이어도 맞다)
         val startLast = tIdx.first() == a.pts.lastIndex - 1
         val ends = if (startLast) listOf(pts.last(), pts.first()) else listOf(pts.first(), pts.last())
@@ -325,15 +380,21 @@ private class Pen(
      * 이송 화살(T1 → T2): 선분 가운데 절반을 9dp 띄워 나란히, T2 끝에 채운 촉. 띄우는 쪽은 각도 호가 없는 쪽 —
      * 보통 공기 쪽이고, 호가 공기 쪽에 서는 그림(역테이퍼 · 2중 골 · 2중 형상 4)은 소재 쪽
      */
-    private fun feed(a: Offset, b: Offset, left: Offset) {
+    private fun feed(a: Offset, b: Offset, left: Offset, extra: Float = 0f) {
         val u = (b - a) / (b - a).getDistance()
-        var n = Offset(-u.y, u.x)
-        if (n.x * left.x > 0) n = -n
-        val off = n * dp(9f)
+        val n = feedNormal(a, b, left)
+        val off = n * (dp(9f) + extra)
         val head = dp(5f)
         val tip = a + (b - a) * .75f + off
         d.drawLine(c.textMuted, a + (b - a) * .25f + off, tip - u * head, dp(1.6f), cap = StrokeCap.Round)
         d.arrowHead(tip, u, c.textMuted, head)
+    }
+
+    /** 이송 화살을 띄우는 쪽(단위 법선) — [feed] */
+    private fun feedNormal(a: Offset, b: Offset, left: Offset): Offset {
+        val u = (b - a) / (b - a).getDistance()
+        val n = Offset(-u.y, u.x)
+        return if (n.x * left.x > 0) -n else n
     }
 
     /**

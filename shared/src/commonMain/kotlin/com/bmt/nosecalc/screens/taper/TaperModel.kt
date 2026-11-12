@@ -27,6 +27,7 @@ import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
 import com.bmt.nosecalc.calc.ncWords
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.round
 
 /** 가공 종류. 순서 = 02 의 탭 번호(1줄 3칸 + 2줄 2칸) */
@@ -162,6 +163,24 @@ internal class TaperState(
         values["flip/${kind.name}/$type/$dir"] = if (flip) "" else "1"
     }
 
+    /**
+     * T1–T2 사이를 직선(테이퍼 · 면취) 대신 원호로(피드백 2026-11-10 — 홑테이퍼만, 점 칸처럼 종류 · 형상 · 방향마다. 처음은 직선 — 이 열쇠가 없던 옛 저장 값도 직선).
+     * 그 호의 R 은 점 칸 "arcR"([point]), 볼록 · 오목은 [arcConcave]. 형상의 성질이라 T1 ⇄ T2([toggleFlip])로 바뀌지 않는다.
+     * 직선으로 돌아가도 R · 각도 칸 값은 남는다
+     */
+    val arc: Boolean get() = arcOn(type)
+
+    /** 형상 t 의 T1–T2 원호 켬(A 화면 카드 그림이 형상마다 읽는다) */
+    fun arcOn(t: Int?): Boolean = !kind.double && !kind.groove && values["arc/${kind.name}/$t/$dir"] == "1"
+    fun setArc(on: Boolean) { values["arc/${kind.name}/$type/$dir"] = if (on) "1" else "" }
+
+    /** 그 호가 오목(소재가 움푹 — 직선보다 더 깎음)인가. 처음은 볼록(소재가 불룩 — 덜 깎음) */
+    val arcConcave: Boolean get() = values["arcIn/${kind.name}/$type/$dir"] == "1"
+    fun setArcConcave(v: Boolean) { values["arcIn/${kind.name}/$type/$dir"] = if (v) "1" else "" }
+
+    /** 형상 t 의 그림에 그릴 T1–T2 원호: null = 직선, true = 볼록, false = 오목 */
+    fun arcShape(t: Int?): Boolean? = if (arcOn(t)) values["arcIn/${kind.name}/$t/$dir"] != "1" else null
+
     /** 팁 번호 직접 지정(종류·방향마다). null = 표준 */
     var tip: Int?
         get() = values["tip/${kind.name}/$dir"]?.toIntOrNull()
@@ -239,6 +258,12 @@ internal data class SlopeForm(
     val flip: Boolean = false,
     /** [angle] 을 잰 축(화면 스위치 AppState.angleRef). 기본이 없다 — 부르는 쪽이 늘 밝힌다(calc 에는 [zAngle]) */
     val angleRef: AngleRef,
+    /** T1–T2 사이를 직선 대신 원호로(홑테이퍼만 — calc 의 TaperInput.arc). 그때 [angle] 은 읽지 않고 네 좌표와 [arcR] 을 모두 넣는다 */
+    val arc: Boolean = false,
+    /** 그 호의 R(빈칸 = null) */
+    val arcR: Double? = null,
+    /** 오목(더 깎음). false = 볼록(덜 깎음) */
+    val arcConcave: Boolean = false,
 ) {
     /** calc 의 각(Z 축에서 잰 각). X 기준이면 90° − 각도 칸 */
     val zAngle: Double? get() = angle?.let(angleRef::toZ)
@@ -247,7 +272,14 @@ internal data class SlopeForm(
      * 도면 치수를 아직 다 넣지 않았다: X(직경) 0 인 점이 있거나 두 점 이상이 Z 0 에 겹친다(예전 처음 값 0 을 그대로 둔 상태 · 0 을 치는 중).
      * 이때 계산이 멈춘 것은 빨간 멈춤이 아니라 "값을 넣으면 계산합니다" 안내로 보인다. 빈칸(지금 처음 값)은 계산기의 MISSING_INPUT 이 같은 안내를 낸다
      */
-    val waiting: Boolean get() = x.any { it == 0.0 } || z.count { it == 0.0 } > 1
+    val waiting: Boolean get() = x.any { it == 0.0 } || z.count { it == 0.0 } > 1 || (arc && arcR == 0.0)
+
+    /** T1–T2 원호의 가장 작은 R(0.001 로 올림 — 칸 아래 안내 · 경고 글). 두 점을 아직 다 안 넣었거나 수평 · 수직이면 null */
+    val arcMinR: Double?
+        get() {
+            val v = listOf(x[0], z[0], x[1], z[1]).map { it ?: return null }
+            return TaperCalc.arcMinR(v[0], v[1], v[2], v[3])?.let { ceil(it * 1000 - 1e-6) / 1000 }
+        }
 
     /**
      * Z 가 방향과 거꾸로 간다: 정방향은 척 쪽(Z−)으로 깎으니 마지막 Z 가 T1 보다 크면, 역방향은 작으면.
@@ -294,6 +326,8 @@ internal object TaperSolve {
                 TaperInput(
                     f.kind.inner, f.type, false, f.noseR, tip, f.x[0], zz(f.z[0]), f.x[1], zz(f.z[1]), f.zAngle, f.zClear,
                     cornerR1 = c[0], cornerR2 = c[1], start = start, end = end, flip = f.flip, approach = !m,
+                    // 볼록 · 오목 · R 은 형상의 성질이라 거울(역방향)에도 그대로
+                    arc = f.arc, arcR = f.arcR, arcConvex = !f.arcConcave,
                 ),
             )
         }
@@ -425,6 +459,7 @@ internal object Mirror {
         drawing = contour(s.drawing),
         center = contour(s.center),
         program = contour(s.program),
+        arc = s.arc?.let { it.copy(cw = !it.cw, center = pt(it.center)) },
     )
 }
 
@@ -432,12 +467,47 @@ internal object Mirror {
  * 경고 글. 계산을 멈춘 것(solution = null)은 빨강, 나머지는 노랑. 값이 모자란 것(MISSING_INPUT)은 파란 안내 글.
  * 형상 불일치가 Z 를 거꾸로 넣은 탓이면([SlopeForm.zBackward]) 방향마다 Z 가 어느 쪽으로 가는지 예를 든다
  */
-internal fun taperWarningText(w: TaperWarning, f: SlopeForm): String = when (w) {
+internal fun taperWarningText(w: TaperWarning, f: SlopeForm): String = if (f.arc) arcWarningText(w, f) ?: straightWarningText(w, f) else straightWarningText(w, f)
+
+/**
+ * T1–T2 를 원호로 냈을 때([SlopeForm.arc]) 글이 달라지는 경고(나머지는 null — 직선 글 그대로). 직선의 '경사' · '각도' 말을 원호 · R 로 바꾸고,
+ * R 이 작아 멈춘 것(ARC_R_TOO_SMALL)은 이 두 점의 가장 작은 R 을 적는다
+ */
+private fun arcWarningText(w: TaperWarning, f: SlopeForm): String? = when (w) {
+    TaperWarning.MISSING_INPUT -> "값을 넣으면 바로 계산합니다 — X1 · Z1 · X2 · Z2 와 R (원호는 네 좌표를 모두 넣습니다)."
+    TaperWarning.BAD_ANGLE -> "두 점이 같은 자리이거나 수평 · 수직으로 놓였습니다. T1 · T2 는 그림처럼 X · Z 가 모두 달라야 합니다."
+    TaperWarning.BAD_INPUT ->
+        "입력이 잘못됐습니다. 지름과 T1–T2 원호의 R 은 0 보다 크고, 노즈R·모서리 R·Z 여유는 0 이상이어야 합니다(노즈R 이 0 이면 Z 여유를 넣으세요 — 진입 거리가 없습니다). " +
+            "좌표·치수는 ±${MAX_MM.toInt()} mm 안이어야 합니다."
+    TaperWarning.CORNER_R_TOO_BIG ->
+        "모서리 R 이 들어가지 않습니다. 접점이 T1–T2 원호나 앞뒤 요소(시작·끝점까지)를 넘거나, 두 R 의 접점이 원호 위에서 겹칩니다. 모서리 R 을 줄이세요."
+    TaperWarning.ARC_R_TOO_SMALL -> {
+        val min = f.arcMinR
+        val x1 = f.x[0]
+        val z1 = f.z[0]
+        val x2 = f.x[1]
+        val z2 = f.z[1]
+        val len = if (x1 != null && z1 != null && x2 != null && z2 != null) Pt((z2 - z1), (x2 - x1) / 2).length else null
+        "R 이 너무 작습니다. " +
+            (if (min != null && len != null) "이 두 점 사이 원호는 R ${Fmt.fixed3(min)} 이상이어야 합니다(두 점 사이 거리 ${Fmt.fixed3(len)}). " else "") +
+            "그보다 작으면 호가 T1 · T2 너머로 부풀어 앞뒤 요소를 넘습니다. 꼭짓점을 둥글리는 R 은 점 줄의 '모서리 R' 칸에 넣으세요."
+    }
+    TaperWarning.NOSE_UNREACHABLE ->
+        "노즈R 에 비해 T1–T2 원호(또는 앞뒤 요소)가 짧거나 오목 원호의 R 이 작아 공구가 닿지 못합니다. 도면 형상이 안 나옵니다 — 노즈R 을 줄이거나 원호의 R 을 키우세요."
+    TaperWarning.NOSE_GT_SLOPE -> "노즈R 이 T1–T2 사이 거리보다 큽니다. 숫자는 맞지만 오목 모서리 쪽에 노즈R 이 남아 원호가 거의 안 남을 수 있습니다. 도면을 확인하세요."
+    TaperWarning.CONCAVE_R_LE_NOSE ->
+        "오목 R(모서리 R · T1–T2 원호)이 노즈R 이하입니다. 같으면 꼭 맞고, 작으면 그 자리에 노즈R 만큼의 R 이 남습니다. G41/G42 프로그램은 기계가 간섭 알람을 낼 수 있습니다."
+    else -> null
+}
+
+private fun straightWarningText(w: TaperWarning, f: SlopeForm): String = when (w) {
     TaperWarning.MISSING_INPUT ->
         if (f.kind.double) "세 점의 X · Z 를 모두 넣으면 바로 계산합니다."
         else "값을 넣으면 바로 계산합니다 — X1 · Z1 · X2 · Z2 · 각도 가운데 넷."
     TaperWarning.CONTRADICTION -> "다섯 값이 모두 찼고 서로 맞지 않습니다. 하나를 비워 계산하세요."
     TaperWarning.BAD_ANGLE -> "각도는 0° 보다 크고 90° 보다 작아야 합니다. 두 점이 수평·수직으로 놓이면 경사가 아닙니다."
+    // T1–T2 원호에서만 난다(글은 arcWarningText)
+    TaperWarning.ARC_R_TOO_SMALL -> "T1–T2 원호의 R 이 너무 작습니다. 호가 T1 · T2 너머로 부풉니다."
     TaperWarning.SHAPE_MISMATCH -> when {
         !f.zBackward -> "값이 고른 형상 그림과 맞지 않습니다. 점의 좌우 순서(그림의 T1·T2 자리)와 X 가 커지는 쪽을 확인하세요."
         f.flip && f.reverse -> "Z 부호 · 순서를 확인하세요. T1 ⇄ T${f.x.size} 를 바꿔 T1 이 척 반대쪽이라 Z 가 작아집니다 (예: Z1 −25 → Z${f.x.size} −30)."
@@ -515,8 +585,8 @@ internal fun taperWarningFields(w: TaperWarning, f: SlopeForm): Set<String> {
     fun big(v: Double?) = v != null && abs(v) > MAX_MM
     return when (w) {
         TaperWarning.CONTRADICTION -> setOf("x1", "z1", "x2", "z2", "ang")
-        // 각도 칸이 범위 밖이 아니면 두 점이 수평 · 수직으로 놓인 것
-        TaperWarning.BAD_ANGLE -> if (f.angle.let { it != null && (it <= 0 || it >= 90) }) setOf("ang") else (xs + zs).toSet()
+        // 각도 칸이 범위 밖이 아니면 두 점이 수평 · 수직으로 놓인 것(원호는 각도 칸을 읽지 않는다)
+        TaperWarning.BAD_ANGLE -> if (!f.arc && f.angle.let { it != null && (it <= 0 || it >= 90) }) setOf("ang") else (xs + zs).toSet()
         TaperWarning.SHAPE_MISMATCH -> if (f.zBackward) zs.toSet() else (xs + zs).toSet()
         TaperWarning.BAD_INPUT -> buildSet {
             f.x.forEachIndexed { i, v -> if (v != null && (v <= 0 || big(v))) add(xs[i]) }
@@ -526,12 +596,15 @@ internal fun taperWarningFields(w: TaperWarning, f: SlopeForm): Set<String> {
             if (f.zClear < 0 || big(f.zClear) || (f.zClear == 0.0 && f.noseR == 0.0)) add("zClear")
             if (big(f.start)) add("start")
             if (big(f.end)) add("end")
+            if (f.arc && f.arcR.let { it != null && (it <= 0 || big(it)) }) add("arcR")
         }
         // 넣은 쪽만(둘 다 비었으면 둘 다)
         TaperWarning.BAD_LEG ->
             listOfNotNull("start".takeIf { f.start != null }, "end".takeIf { f.end != null }).ifEmpty { listOf("start", "end") }.toSet()
         TaperWarning.CORNER_R_TOO_BIG -> f.corners.indices.filter { f.corners[it] > 0 }.map { "r${it + 1}" }.toSet()
-        TaperWarning.NOSE_UNREACHABLE -> setOf("noseR")
+        // 오목 원호의 R 이 노즈R 보다 작아 멈춘 것이면 그 R 칸도
+        TaperWarning.NOSE_UNREACHABLE -> if (f.arc && f.arcConcave && f.arcR.let { it != null && it < f.noseR }) setOf("noseR", "arcR") else setOf("noseR")
+        TaperWarning.ARC_R_TOO_SMALL -> setOf("arcR")
         else -> emptySet()
     }
 }

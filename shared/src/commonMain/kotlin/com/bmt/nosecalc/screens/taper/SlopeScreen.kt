@@ -44,6 +44,7 @@ import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.Line
 import com.bmt.nosecalc.calc.NoseComp
 import com.bmt.nosecalc.calc.Pt
+import com.bmt.nosecalc.calc.Side
 import com.bmt.nosecalc.calc.TaperPoint
 import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperSolution
@@ -62,6 +63,7 @@ import com.bmt.nosecalc.ui.LegendGlyph
 import com.bmt.nosecalc.ui.LegendItem
 import com.bmt.nosecalc.ui.MarkKind
 import com.bmt.nosecalc.ui.NumberField
+import com.bmt.nosecalc.ui.Segmented
 import com.bmt.nosecalc.ui.ShapeViewerCard
 import com.bmt.nosecalc.ui.ViewerLine
 import com.bmt.nosecalc.ui.ViewerMark
@@ -115,7 +117,13 @@ internal fun SlopeScreen(s: TaperState) {
         end.toDoubleOrNull(),
         flip,
         angleRef = angleRef,
+        arc = s.arc,
+        arcR = s.point("arcR").toDoubleOrNull(),
+        arcConcave = s.arcConcave,
     )
+    // T1–T2 사이를 원호로(홑테이퍼만): 그림에 그릴 꼴(null 직선 · true 볼록 · false 오목)
+    val arcOn = form.arc
+    val arcShape = if (arcOn) !form.arcConcave else null
     val result = remember(form) { TaperSolve.solve(form) }
     val sol = result.solution
     val tip = s.tip ?: standard
@@ -134,7 +142,7 @@ internal fun SlopeScreen(s: TaperState) {
     val chain = rememberFieldChain(s.editing)
     // 키패드 그림: 요약 칸 그림에서 그 칸의 점 · 치수만 짚는다
     fun figure(key: String): @Composable (Modifier) -> Unit = { m ->
-        TypeArt(kind, type, s.reverse, m.aspectRatio(199f / 184f), compact = true, focus = key, flip = flip, angleRef = angleRef)
+        TypeArt(kind, type, s.reverse, m.aspectRatio(199f / 184f), compact = true, focus = key, flip = flip, angleRef = angleRef, arc = arcShape)
     }
 
     TaperPage(dock, chain.sheetOpen) { anchor ->
@@ -145,7 +153,7 @@ internal fun SlopeScreen(s: TaperState) {
             else -> "정방향 바이트 · 반대 끝부터 (Z+)"
         }
         // 좁은 폰에서 '노즈 R' · '팁 3번' 이 쪼개지지 않게(라운드 toolText 와 같은 붙임 공백 · 낱말 이음)
-        SummaryCard(kind, type, s.reverse, "$dir · 노즈\u00A0R$r · 팁\u00A0${tip}\u2060번", flip, angleRef) { s.open = false }
+        SummaryCard(kind, type, s.reverse, "$dir · 노즈\u00A0R$r · 팁\u00A0${tip}\u2060번", flip, angleRef, arcShape) { s.open = false }
         // 멈춘 까닭은 입력 카드 위에(폰 첫 화면 안에). 다섯 값이 어긋나면 비울 칸을 단추로 권한다
         if (waiting) {
             WarningBanner(taperWarningText(TaperWarning.MISSING_INPUT, form), level = WarnLevel.Info)
@@ -169,8 +177,8 @@ internal fun SlopeScreen(s: TaperState) {
                 // 가공 방향 뒤집기: T1 = 먼저 깎는 점. 바꾸면 칸 값이 같은 실제 점에 남게 맞바뀐다(TaperState.toggleFlip)
                 FlipSwitch("T1 ⇄ T$n 바꾸기", travelText(kind, type, s.reverse, flip), flip, s::toggleFlip)
                 Spacer(Modifier.height(Space.fieldGap))
-                // 단일 테이퍼는 다섯 값 가운데 하나를 비워 계산한다(키패드 '비우기 · 자동 계산')
-                val blankable = !kind.double
+                // 단일 테이퍼는 다섯 값 가운데 하나를 비워 계산한다(키패드 '비우기 · 자동 계산') — T1–T2 를 원호로 내면 네 좌표를 모두 넣는다
+                val blankable = !kind.double && !arcOn
                 Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                     for (i in 0 until n) {
                         val p = sol?.points?.get(i)?.vertex
@@ -197,6 +205,27 @@ internal fun SlopeScreen(s: TaperState) {
                         }
                     }
                     if (!kind.double) {
+                        // T1–T2 사이의 선: 직선(테이퍼 · 면취) | 원호(피드백 2026-11-10). 꼭짓점을 둥글리는 모서리 R(점 줄)과 다르다 — 그 선 자체가 호이고
+                        // 모서리 R 은 그 호에도 그대로 걸린다. 원호면 각도 줄 자리에 R 칸과 볼록 · 오목(각도 칸 값은 지우지 않고 숨긴다)
+                        Segmented(
+                            listOf("T1–T2 직선", "T1–T2 원호 R"), if (arcOn) 1 else 0, { s.setArc(it == 1) }, Modifier.fillMaxWidth(),
+                            color = c.teal, height = 44.dp, fontSize = 15,
+                        )
+                    }
+                    if (arcOn) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
+                            NumberField(
+                                "R (T1–T2 원호)", s.point("arcR"), { s.setPoint("arcR", it) }, Modifier.weight(1f),
+                                error = "arcR" in flagged, hint = "T1 과 T2 를 잇는 원호의 반지름 · 꼭짓점을 둥글리는 R 은 점 줄의 '모서리 R'",
+                                id = "arcR", figure = figure("arcR"), preview = preview,
+                            )
+                            ArcSideSwitch(form.arcConcave, s::setArcConcave, Modifier.weight(1f))
+                        }
+                        // 이 두 점을 이을 수 있는 가장 작은 R — 그보다 작으면 호가 T1 · T2 너머로 부푼다(calc ARC_R_TOO_SMALL)
+                        form.arcMinR?.let {
+                            Text(keepWords("이 두 점의 최소 R ${Fmt.fixed3(it)} — 더 작으면 호가 두 점 너머로 부풉니다"), style = AppType.caption, color = c.textMuted)
+                        }
+                    } else if (!kind.double) {
                         // 각도 칸 옆 반 줄에 기준 스위치 — 바꾸면 칸 값이 같은 경사의 새 기준 값으로(30 → 60), 빈칸(자동)은 새 기준으로 다시 보인다
                         Row(horizontalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                             NumberField(
@@ -240,10 +269,14 @@ internal fun SlopeScreen(s: TaperState) {
                 }
                 ExpandableHint(
                     if (kind.double) "세 점의 X · Z 를 모두 넣습니다. 각도는 결과로 나옵니다."
+                    else if (arcOn) "T1 · T2 의 X · Z 와 원호의 R 을 넣습니다 (원호는 네 좌표를 모두 넣음)."
                     else "빈칸 하나는 나머지 넷으로 자동 계산합니다 (보통 각도를 비움).",
                     (
                         if (kind.double) ""
-                        else "X1·Z1·X2·Z2·각도 가운데 하나를 비우면(키패드의 '비우기 · 자동 계산') 나머지 넷으로 계산합니다. 보통 각도를 비워 둡니다. "
+                        else if (arcOn) {
+                            "T1 과 T2 를 직선 대신 반지름 R 의 원호로 잇습니다. 볼록은 소재가 불룩(직선보다 덜 깎음), 오목은 움푹(더 깎음)입니다 — G02/G03 은 앱이 정합니다. " +
+                                "R 은 '최소 R' 이상이어야 합니다(그 값이면 호가 앞뒤 요소에 접합니다). 꼭짓점을 둥글리는 R 은 점 줄의 모서리 R 칸이고, 이 원호와 함께 쓸 수 있습니다. "
+                        } else "X1·Z1·X2·Z2·각도 가운데 하나를 비우면(키패드의 '비우기 · 자동 계산') 나머지 넷으로 계산합니다. 보통 각도를 비워 둡니다. "
                         ) +
                         "모서리 R 은 비우면 0(날카로운 꼭짓점). 시작점·끝점은 앞뒤 요소의 바깥 끝 좌표(단면이면 X, 수평이면 Z)로, 넣었을 때만 그 요소를 깎습니다 — " +
                         "끝점을 비우면 마지막 T 점에서 끝나고, 넣으면 인선이 그 좌표까지 갑니다. 시작점을 비우면 첫 T 점에서 시작합니다.",
@@ -312,14 +345,15 @@ internal fun SlopeScreen(s: TaperState) {
                 if (direct) {
                     "앱이 계산한 가상 인선 ${sol.tip}번 좌표입니다 — 기계의 노즈R 보정 없이(G40) 그대로 깎습니다. 이 좌표에 G41/G42 를 또 걸면 " +
                         "노즈R 만큼 두 번 밀립니다(첫 줄 주석이 그 노즈 R · 팁을 적어 둡니다 — 기계는 주석을 건너뜁니다). " +
-                        "모서리 원호는 보정 R(볼록 R + r · 오목 R − r), 인선은 끝좌표에 멈춥니다. 이송 F 는 넣지 않았습니다."
+                        (if (sol.arc != null) "원호(T1–T2 원호 · 모서리 R)는" else "모서리 원호는") + " 보정 R(볼록 R + r · 오목 R − r), 인선은 끝좌표에 멈춥니다. 이송 F 는 넣지 않았습니다."
                 } else {
                     "도면 좌표에 ${sol.side} ${eulReul("${sol.side}")} 걸어 기계가 노즈R 을 보정합니다(공구 보정 화면에 R$r · T${sol.tip}). " +
                         "회사 꼴입니다 — ${sol.side} 혼자 줄 → G0 로 Z20. 에서 X 를 맞추고 진입점까지 Z 로 → 첫 깎는 점 G1 F.1 → 형상 → " +
                         "보정 켠 채 공기로 빼는 줄 F.3 → G40 혼자 줄 → G0Z200. 입니다. 보정 줄이 움직임 없는 혼자 줄이라 깎는 줄의 노즈는 기계의 보정 시작 · 취소 형식" +
                         "(No.5003#1 SUV)과 팁 번호에 상관없습니다. 척 쪽 · 바닥 쪽으로 깎아 끝나면 벽을 따라 공구 쪽으로 빼서 노즈가 끝좌표에서 멈추고, " +
                         "앞 끝 쪽으로 깎아 끝나면 끝좌표 너머로 곧게 조금 더 갑니다. G40 줄은 둘레 (1 + √2) × 노즈R 안에 도면이 없는 자리에 둡니다" +
-                        "(형식 C 기계는 그 줄에서 공구가 움직입니다)."
+                        "(형식 C 기계는 그 줄에서 공구가 움직입니다)." +
+                        if (sol.arc != null) " T1–T2 원호는 도면 R 그대로 G2/G3 한 줄입니다." else ""
                 },
                 programName = if (direct) "직접 보정(G40) 프로그램" else "기계 보정(G41/G42) 프로그램",
                 facts = if (direct) {
@@ -450,6 +484,24 @@ private fun MachineCard(sol: TaperSolution, noseR: Double, angleRef: AngleRef, o
 private fun Angles(sol: TaperSolution, entry: Boolean, angleRef: AngleRef, onRef: (AngleRef) -> Unit) {
     val size = AppType.numLarge.fontSize
     val at = "X${Fmt.fixed3(sol.entry.xDia)}  Z${Fmt.fixed3(sol.entry.z)}"
+    // T1–T2 를 원호로 냈으면 각도 대신 그 호: 볼록 · 오목, 방향, 도면 R(직접 보정은 → 보정 R). 모서리 R 줄과 같은 꼴
+    val arc = sol.arc
+    if (arc != null) {
+        // 왼쪽 공구(G41) + 시계 = 볼록(calc 의 규칙 — 거울로 푼 역방향도 둘이 함께 뒤집혀 그대로)
+        val convex = (sol.side == Side.G41) == arc.cw
+        SmallLabel("T1–T2 원호 · ${if (convex) "볼록 (덜 깎음)" else "오목 (더 깎음)"}")
+        Text(
+            keepWords(
+                "${if (arc.cw) "G02 시계" else "G03 반시계"} · 도면 R${Fmt.fixed3(arc.r)}" +
+                    if (!entry) "" else " → 보정 R" + (arc.progR?.let { Fmt.fixed3(it) } ?: " 없음"),
+            ),
+            Modifier.padding(top = 2.dp),
+            style = AppType.label,
+            color = AppTheme.colors.simArc,
+        )
+        if (entry) LabeledValue("G00 진입점", at, Modifier.padding(top = 10.dp), size = size)
+        return
+    }
     val angles = sol.shownAngles(angleRef)
     Row {
         angles.forEachIndexed { i, a ->
@@ -582,6 +634,13 @@ private fun SlopeViewer(sol: TaperSolution, r: Double, rText: String, inner: Boo
                 val text = "R${Fmt.fixed3(k.r)} " + if (!direct) g else k.progR?.let { "→ ${Fmt.fixed3(it)} $g" } ?: "$g · 보정 R 없음"
                 add(ViewerMark(k.center, c.simArc, text, MarkKind.Cross, arc = Arc(p.nodes.first().drawn, p.nodes.last().drawn, k.center, k.cw)))
             }
+        }
+        // T1–T2 원호: 호 가운데 점에 R(직접 보정은 → 보정 R)과 방향. 중심에는 표시를 두지 않는다 — 큰 R 의 중심이 맞춤 범위에 들면 도면이 점으로 줄어든다
+        sol.arc?.let { k ->
+            val a = sol.drawing.segs[k.index] as Arc
+            val mid = a.center + (a.start + a.end - a.center * 2.0).let { it * (a.radius / it.length) }
+            val g = if (k.cw) "G02" else "G03"
+            add(ViewerMark(mid, c.simArc, "R${Fmt.fixed3(k.r)} " + if (!direct) g else k.progR?.let { "→ ${Fmt.fixed3(it)} $g" } ?: g, MarkKind.Dot))
         }
         if (direct) {
             add(ViewerMark(sol.entry, c.viewRapid, "진입", MarkKind.Square))
