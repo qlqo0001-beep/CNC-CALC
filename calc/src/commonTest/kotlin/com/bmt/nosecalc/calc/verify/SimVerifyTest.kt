@@ -20,6 +20,7 @@ import com.bmt.nosecalc.calc.TaperResult
 import com.bmt.nosecalc.calc.TaperSolution
 import com.bmt.nosecalc.calc.TaperWarning
 import com.bmt.nosecalc.calc.legacy
+import com.bmt.nosecalc.calc.ncWords
 import com.bmt.nosecalc.calc.sim.CompStartup
 import com.bmt.nosecalc.calc.sim.DecimalMode
 import com.bmt.nosecalc.calc.sim.DwellStep
@@ -811,8 +812,20 @@ class SimVerifyTest {
             checkDirect(tag, s.ncG40, tools, cen, direct, s.drawing.segs)
             val lines = s.ncG41G42
             // 회사 꼴(계획 단계 4): 첫 깎는 줄(F.1)이 '시작 블록' 자리(그 끝 노즈 = 첫 깎는 점), 첫 빼는 줄(F.3)이 '취소 블록' 자리
-            // (마지막 형상 블록과의 이음점이 끝 노즈 — 막힌 끝은 공구 쪽 직각이라 안쪽 교점, 빈 끝은 곧게라 끝 법선)
-            val iStart = lines.indexOfFirst { it.endsWith("F.1") }
+            // (마지막 형상 블록과의 이음점이 끝 노즈 — 막힌 끝은 공구 쪽 직각이라 안쪽 교점, 빈 끝은 곧게라 끝 법선).
+            // 뒤집은 진입(2026-11-12 통합 고침)은 F.1 뒤 첫 깎는 점(도면 요소의 처음 — 짧은 막힌 시작을 뺐으면 그다음 요소)까지 이송 줄이 하나 더 — 그 줄이 시작 블록 자리다
+            val starts = s.drawing.segs.map { it.start }
+            var px = 0.0
+            var pz = 0.0
+            val at = lines.map { l ->
+                for (w in ncWords(l)) when (w[0]) {
+                    'X' -> px = w.drop(1).toDouble() / 2
+                    'Z' -> pz = w.drop(1).toDouble()
+                }
+                Pt(pz, px)
+            }
+            val iF1 = lines.indexOfFirst { it.endsWith("F.1") }
+            val iStart = (iF1 until lines.size).firstOrNull { k -> starts.any { (at[k] - it).length < 1e-3 } } ?: iF1
             val iCut = lines.indexOfFirst { "F.3" in it }
             // 넣은 끝좌표 너머가 막힌 끝: 척 쪽(−Z)으로 깎아 끝난 수평, 재료 쪽(외경 X− · 내경 X+)으로 깎아 끝난 단면(외경 X0 빼고) — 이 사례는 화면 역방향(거울)이 없다
             val endSeg = s.drawing.segs.last()

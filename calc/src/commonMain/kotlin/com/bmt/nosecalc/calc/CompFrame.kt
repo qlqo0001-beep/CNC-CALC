@@ -428,13 +428,17 @@ internal object CompFrame {
      * 그 보정 원과의 교점으로 — [junction]).
      * [clear] = 진입 급송(G0 줄들)의 노즈가 소재에서 더 떨어져야 하는 거리(mm) — 급송 노즈 중심이 소재에서 r + clear 이상인 길만 받는다(첫 깎는 줄은 그대로 r).
      * 기본 0 = 닿지만 않으면 된다. 뒤집은 라운드는 척 쪽 · 구멍 안에서 시작해 급송이 깎을 면 위를 지나므로 Z 여유를 준다(검증 2026-11-11)
+     * [lastResort] = false 면 세 길을 다 못 찾았을 때 마지막 길(곧장 · 바깥에서 X 맞춤 — Z 줄 꺾임으로 물린 진입점)을 '찾음' 으로 내지 않는다(found = false).
+     * 그 길은 X 로 오면서 Z 줄 꺾임으로 진입점을 물려 완만한 경사에서는 진입점이 경사 연장선을 따라 수십 mm 척 쪽으로 간다 — 뒤집은 테이퍼가 진입 후보를 고를 때
+     * (2026-11-12 통합 고침). 기본 true = 전과 같다
      */
     fun entry(
         mat: FrameMaterial, side: Side, r: Double, outward: Double, e0: Pt, s: Pt, u1: Pt, zTop: Double, front: Double = 1.0, firstArc: Arc? = null,
-        clear: Double = 0.0,
+        clear: Double = 0.0, lastResort: Boolean = true,
     ): Approach =
-        if (front > 0) entry0(mat, side, r, outward, e0, s, u1, zTop, firstArc, clear)
-        else entry0(mat.flipped(), side.other(), r, outward, fz(e0), fz(s), fz(u1), -zTop, firstArc?.flippedZ() as Arc?, clear).let { a -> Approach(a.points.map(::fz), a.found) }
+        if (front > 0) entry0(mat, side, r, outward, e0, s, u1, zTop, firstArc, clear, lastResort)
+        else entry0(mat.flipped(), side.other(), r, outward, fz(e0), fz(s), fz(u1), -zTop, firstArc?.flippedZ() as Arc?, clear, lastResort)
+            .let { a -> Approach(a.points.map(::fz), a.found) }
 
     /**
      * 진입 명령점들([entry])과 도면을 파지 않는 길을 찾았는지. [found] = false 면 어느 길도 맞추지 못해 곧장 내려간 길이 도면에 닿거나 판다(또는 찾은 길이
@@ -443,7 +447,9 @@ internal object CompFrame {
      */
     class Approach(val points: List<Pt>, val found: Boolean)
 
-    private fun entry0(mat: FrameMaterial, side: Side, r: Double, outward: Double, e0: Pt, s: Pt, u1: Pt, zTop: Double, firstArc: Arc?, clear: Double): Approach {
+    private fun entry0(
+        mat: FrameMaterial, side: Side, r: Double, outward: Double, e0: Pt, s: Pt, u1: Pt, zTop: Double, firstArc: Arc?, clear: Double, lastResort: Boolean,
+    ): Approach {
         val uG = (s - e0).unit()
         val zDir = Pt(-1.0, 0.0)
         // 첫 깎는 점의 꺾임 노즈 — 없으면(보정선끼리 못 만남) 이 첫 깎는 줄로는 간섭 알람이라 어느 길도 안 된다
@@ -536,6 +542,7 @@ internal object CompFrame {
         // 닿거나 파면 found = false — 부르는 쪽이 경고한다. 다만 첫 깎는 요소가 오목 R ≤ r(보정 원이 없음 — 도면 알람 꼴, 경고 CONCAVE_R_LE_NOSE)이면
         // 첫 깎는 점에 노즈가 닿을 자리가 없어 제어기가 그 원호에서 멈춘다 — 그 탓인 첫 깎는 줄은 빼고 진입 G0 만 본다(진입 길 탓이 아니다)
         loose?.let { return Approach(it, false) }
+        if (!lastResort) return Approach(listOf(Pt(zApp, direct.x), direct), false)
         val tol = 1e-3
         val gone = firstArc != null && (normal(u1, side) dot (firstArc.center - s)) > 0 && firstArc.radius - r <= EPS
         if (uG.z <= DIR_TOL) return Approach(listOf(Pt(zApp, direct.x), direct), zOk(direct.x, direct, uG, tol) && (gone || g1Ok(zDir, direct, tol)))

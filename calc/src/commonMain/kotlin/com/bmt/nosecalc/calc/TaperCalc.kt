@@ -78,7 +78,8 @@ enum class TaperWarning {
 
     /**
      * 진입점이나 후퇴점이 중심(X0)을 넘는다(가는 핀 끝·좁은 구멍의 가파른 경사를 그 연장으로 드나들 때) — Z 여유를 줄일 것.
-     * 외경 끝 단면을 중심(X0)까지 깎으면 노즈 중심이 중심선에 닿게 인선이 일부러 중심 너머(X −2r)까지 가서도 난다(그 뒤 Z 로 빠진다. 화면 글이 둘을 나눈다)
+     * 외경 끝 단면 · 내경 바닥 단면을 중심(X0)까지 깎으면 노즈 중심이 중심선에 닿게 인선(G41/G42 는 도면 점)이 일부러 중심 너머(X −2r)까지 가서도 난다
+     * (그 뒤 Z 로 빠진다 — 내경 직접 보정도 2026-11-12 부터 축 너머로 더 가지 않고 Z 로. 화면 글이 둘을 나눈다)
      */
     ENTRY_PAST_AXIS,
 
@@ -537,13 +538,15 @@ object TaperCalc {
             if (((e0 - segs.last().start) dot uB) < -EPS || ((e0 - tv - last.start) dot uB) < -EPS) stop(TaperWarning.BAD_LEG)
             val face = !isHorizontal(uB)
             val inward = face && (uB.x < 0) != inner
-            val leave = if (!face || inward) nB else uB
+            // 내경 바닥 단면을 중심(X0)까지(너머가 빈 끝이지만 축 너머는 같은 면): G41/G42 도 외경처럼 단면을 X −2r 까지 쓰고 공구 쪽으로(노즈 중심이 축에)
+            val axisIn = face && inner && uB.x < 0 && last.end.x <= EPS
+            // 직접 보정의 그 끝도 공구 쪽(구멍 입구 쪽 Z)으로 뺀다 — 전에는 같은 높이로 축 너머 c 를 G0 로 이어 가 노즈가 맞은편(같은 회전면의 경사 · 모서리 R ·
+            // 구멍 벽)을 팠다(검증 V7-2 — Z 여유 5 · 노즈 0.8 에서 0.11~0.16, 통합 고침 2026-11-12). 빼기 전 끝점′ 은 노즈 중심이 축에 서는 자리(아래)
+            val leave = if (!face || inward || axisIn) nB else uB
             // 외경 단면을 중심(X0)까지: 노즈 중심이 중심선에 닿아야 중심에 살이 안 남는다. 직접 보정은 인선을 그만큼(T3 이면 X−2r) 더,
             // G41/G42 는 단면을 중심 너머 r(X−2r)까지 쓰고 공구 쪽(Z)으로 빼는 줄 — 안쪽 꺾임이라 제어기가 교점(노즈 중심 = 중심선)을 잡는다.
             // 너머는 이미 깎은 같은 면이지만 급송은 단면에서 떨어지는 Z 로만(검증 2026-10-27, 현장 안전)
             val toAxis = inward && !inner && last.end.x <= EPS
-            // 내경 바닥 단면을 중심(X0)까지(너머가 빈 끝이지만 축 너머는 같은 면): G41/G42 도 외경처럼 단면을 X −2r 까지 쓰고 공구 쪽으로(노즈 중심이 축에)
-            val axisIn = face && inner && uB.x < 0 && last.end.x <= EPS
             // 넣은 끝좌표 너머가 막힌 쪽인가 — 척 · 구멍 바닥 쪽으로 깎아 끝난 수평 끝(거울이면 계산기 +Z 쪽), 재료 쪽으로 깎아 끝난 단면 끝(보스 — 외경 X0 은 빼고).
             // calc-design '넣은 시작·끝점 너머로 넘지 않기'
             val wall = if (face) inward && !toAxis else if (mirror) uB.z > 0 else uB.z < 0
@@ -559,7 +562,11 @@ object TaperCalc {
                     ?.takeIf { (arcIdx == null || it > arcIdx) && !turnsBack(CompFrame.endDir(drawing.segs[it - 1]), nB) }
                 shortPast = keepLast == null
             }
+            // 노즈 중심이 축에 닿게: 이제 축 너머로 이어 가지 않으니 직접 보정도 여기서 중심을 다 깎는다. 외경은 팁 벡터가 축 쪽을 보는 팁만 더 보낸다(너머는 같은 면).
+            // 내경 바닥은 어느 팁이든 노즈 중심을 축에 세운다 — 표준 팁(2 · 1)은 인선이 X0 이면 중심이 축 너머 r 이라 좁은 바닥에서 그 이송이 맞은편 경사를 팠다
+            // (검증 F1 2026-11-13: Ø6 → Ø2 · 노즈 0.8 에서 0.357). 그래서 표준 팁은 인선 X +2r 에서 멈추고, 비표준 팁(3 · 4 · 8)은 X −2r 까지 간다
             if (toAxis) e0 += uB * max(0.0, tv dot uB)
+            if (axisIn) e0 += uB * (tv dot uB)
             if (toAxis || axisIn) endD = last.end + uB * r
             toAxisEnd = toAxis
             segs[segs.lastIndex] = Line(segs.last().start, e0)
@@ -725,10 +732,111 @@ object TaperCalc {
         val front = if (mirror) -1.0 else 1.0
         val outward = if (inner) -1.0 else 1.0
         val ends = drawing.segs.flatMap { listOf(it.start, it.end) }
-        val approachG4 = CompFrame.entry(
-            mat, side, r, outward, e0D, startD, CompFrame.startDir(drawing.segs[fromSegG4]),
-            if (mirror) ends.minOf { it.z } else ends.maxOf { it.z }, front, drawing.segs[fromSegG4] as? Arc,
-        )
+        val zTopG4 = if (mirror) ends.minOf { it.z } else ends.maxOf { it.z }
+        val u1 = CompFrame.startDir(drawing.segs[fromSegG4])
+        val arc1 = drawing.segs[fromSegG4] as? Arc
+        // 진입 한 벌: 급송으로 진입점 e 까지 → 이송으로 cmds 를 차례로(마지막이 첫 깎는 점 startD) → 형상. [stop] = 급송 끝 노즈와 소재 사이 틈
+        class Start(val cmds: List<Pt>, val app: CompFrame.Approach, val ok: Boolean, val stop: Double)
+        // [turns] = 진입 줄끼리 · 첫 이송 줄과의 꺾임(바깥 90° 넘음 · 거꾸로 가는 보정 블록)과 둘째 이송 줄부터의 노즈 길(소재에서 r 이상 · 줄마다 MIN_MOVE 이상)도 본다
+        // (`CompFrame.entry` 가 길을 못 찾고 내는 마지막 길은 닿는지만 본다 — 라운드 뒤집기와 같다)
+        // 뒤집은 진입 후보([turns])는 `CompFrame.entry` 의 마지막 길을 받지 않는다(`lastResort` — 진입점이 경사 연장선을 따라 척 쪽으로 멀리 물려 간다)
+        fun start(m: FrameMaterial, e: Pt, cmds: List<Pt>, clear: Double, turns: Boolean = true): Start {
+            val u = if (cmds.size > 1) (cmds[1] - cmds[0]).unit() else u1
+            val app = CompFrame.entry(m, side, r, outward, e, cmds[0], u, zTopG4, front, if (cmds.size == 1) arc1 else null, clear, lastResort = !turns)
+            val pts = app.points + cmds[0]
+            val ds = pts.zipWithNext { a, b -> (b - a).unit() }
+            val ns = CompFrame.noses(pts, side, r, then = u)
+            var ok = app.found
+            if (ok && turns) {
+                ok = (ds + u).zipWithNext().none { (a, b) -> CompFrame.acuteOuter(a, b, side) } &&
+                    ns.zipWithNext().withIndex().all { (k, n) -> ((n.second - n.first) dot ds[k]) > 0 }
+            }
+            if (ok && turns && cmds.size > 1) {
+                val dirs = cmds.zipWithNext { a, b -> (b - a).unit() }
+                val noses = cmds.indices.map { k ->
+                    val uA = if (k == 0) ds.last() else dirs[k - 1]
+                    if (k < cmds.lastIndex) CompFrame.corner(cmds[k], uA, dirs[k], side, r) else CompFrame.junction(cmds[k], uA, u1, side, r, arcB = arc1)
+                }
+                ok = noses.zipWithNext().withIndex().all { (k, n) ->
+                    val (a, b) = n
+                    a != null && b != null && ((b - a) dot dirs[k]) >= CompFrame.MIN_MOVE - 1e-9 && m.dist(Line(a, b)) >= r - 1e-7
+                }
+            }
+            return Start(cmds, app, ok, m.dist(ns[ns.size - 2]) - r)
+        }
+        // 뒤집은 진입(통합 고침 2026-11-12 — 라운드 V1 과 같은 꼴, `RoundCalc.machineFrame` 의 뒤집은 시작): 척 쪽 · 구멍 안에서 시작해 G41/G42 가 걸린 채 가는
+        // 급송이 깎을 면 위를 지난다 — 노즈 중심이 명령선에서 r, 노즈 밑은 2r 밀린다. 전에는 막힌 시작의 진입점이 startD + 공구 쪽 c 라 급송 틈이 c − 2r 이고 급송 끝이
+        // 벽 평면에 틈 0 이었고(골든 taper-b-flip-outer3 `G0X52.Z20.` `Z-20.` `G1X50.F.1` — 0.2), 비운 수평 시작은 X 급송 끝의 노즈가 시작 요소에 틈 0 으로
+        // 내려앉았다. 그래서 급송 노즈가 소재(+ 외경도 축 거울)에서 g 이상 떨어지게 짠다 — 진입 줄은 startD 로 들어오는 줄(방향 uIn)의 앞 점 P 에서 공구 쪽으로
+        // 떨어진 A 까지 급송, 이송으로 P → startD(첫 깎는 줄이 둘):
+        // - 막힌 시작: uIn = 공구 쪽에서 직각, P = startD + 공구 쪽 2r + g, A = P + 앞으로 r + g — 노즈 밑이 깎을 면에서 g, 노즈의 벽 쪽 끝이 벽에서 g
+        //   (`G41` `G0X53.6Z20.` `Z-18.6` `G1Z-20.F.1` `X50.` …)
+        // - 그 밖(비운 시작 · 너머가 공기인 시작 · 거울): 전 진입점(첫 깎는 줄과 한 직선)의 급송이 g 를 지키면 그대로, 아니면 P = 전 진입점(노즈가 다음 이음에서
+        //   MIN_MOVE 이상 남게 더 물림), A = P + 공구 쪽 h(2r + g · r + g · g — 아래 `flipped`)
+        // - 막힌 수평 시작 앞에 끝 직선이 짧아 벽과 이웃 요소(경사 · 모서리 R · 호) 사이에 그 자리가 없으면 이웃 요소보다 바깥(외경 위 · 내경 축 쪽) 높이에서
+        //   벽 쪽으로 이송해 벽을 따라 내려온다(라운드 `overTop` 과 같다)
+        // (급송 끝 틈, 가는 길 여유)를 (c, c) (c, c/2) (c, c/4) (c/2, c/2) (c/2, c/4) (c/4, c/4) → 가는 길 여유 0(닿지만 않으면) 차례로 — 하나마다 제자리 ·
+        // 이웃 위 높이 차례로 — 찾고, 못 찾으면 전 규칙(급송 끝 노즈가 소재를 파면 ENTRY_NOT_FOUND)
+        val matIn = if (inner) mat else FrameMaterial(mat.segs + drawing.segs.map(FrameMaterial::mirror), mat.walls)
+        // 막힌 수평 시작에서 앞으로 [len] 안(Z 구간)의 도면 가장 바깥 X 가 시작 좌표보다 바깥으로 나온 만큼. 원호는 구간 끝 Z 의 점까지 본다(`extremeX` 는 양 끝 · 사분점만)
+        fun overTop(len: Double): Double {
+            val lo = min(startD.z, startD.z + uF.z * len)
+            val hi = max(startD.z, startD.z + uF.z * len)
+            var edge = FrameMaterial(drawing.segs).extremeX(lo, hi, max = !inner)
+            for (a in drawing.segs.filterIsInstance<Arc>()) for (z in listOf(lo, hi)) {
+                val dz = z - a.center.z
+                if (abs(dz) > a.radius) continue
+                val h = sqrt(a.radius * a.radius - dz * dz)
+                for (x in listOf(a.center.x + h, a.center.x - h)) if (x >= -EPS && onArc(a, Pt(z, x))) edge = if (inner) min(edge, x) else max(edge, x)
+            }
+            return if (edge.isFinite()) max(0.0, (edge - startD.x) * outward) else 0.0
+        }
+        fun flipped(g: Double, clear: Double, over: Boolean): Start? {
+            val gg = max(g, CompFrame.MIN_MOVE)
+            if (blockedStart) {
+                if (over && !isHorizontal(uF)) return null
+                // 이웃 위 높이: 급송 끝 노즈(벽에서 r + g · 앞으로 노즈 지름까지)와 그 둘레 g 가 걸칠 구간에서 잰다
+                val p = startD + nF * ((if (over) overTop(3 * r + 2 * gg) else 0.0) + 2 * r + gg)
+                return start(matIn, p + uF * (r + gg), listOf(p, startD), clear)
+            }
+            if (over) return null
+            start(matIn, e0D, listOf(startD), clear).takeIf { it.ok && it.stop >= g - 1e-7 }?.let { return it }
+            val uIn = (startD - e0D).unit()
+            val nIn = CompFrame.normal(uIn, side)
+            val j = CompFrame.junction(startD, uIn, u1, side, r, arcB = arc1) ?: return null
+            // P 까지 거리: 전 진입점까지, 안 되면 2r + g 더(단면을 따라 들어오는데 바로 앞 경사가 거의 누워 그 높이로 오는 급송이 경사 위를 c 안으로 지날 때 —
+            // P 를 그만큼 띄워 급송 노즈 밑이 거기서 g). 축에서 시작하는 단면(내경 바닥 · 외경 X0 — 너머는 축 너머 같은 면)은 전 진입점이 축 너머 c 라 좁은 구멍에서
+            // 맞은편을 지나므로 축 너머 r 도(라운드 `faceStart` 와 같다). 노즈가 다음 이음에서 MIN_MOVE 이상 남게
+            val back = (startD - e0D).length
+            val least = r + CompFrame.MIN_MOVE - ((j - startD - nIn * r) dot uIn)
+            // 그래도 안 되면 전 진입점과 least 사이를 4 등분해 먼 것부터 — 구멍이 c 보다 좁으면(뒤집은 내경 작은 구멍을 바닥에서) 위 자리가 다 맞은편 벽 위 · 속이다
+            // (검증 F2 2026-11-13: 바닥 Ø6 · Z 여유 5 에서 전 규칙으로 떨어져 급송 `Z-8.` 의 노즈가 맞은편 Ø6 벽 · 모서리 R 을 0.055 팠다)
+            val near = if (back > least) (1..4).map { back - (back - least) * it / 4 } else emptyList()
+            val lens = listOf(back, back + 2 * r + gg) + (if (cutFirst && startD.x <= EPS && !isHorizontal(uF)) listOf(r) else emptyList()) + near
+            // A 를 P 에서 띄우는 거리: 급송이 그 선 쪽으로 밀려 오면(노즈가 명령선에서 r) 2r + g, 나란히 오면 r + g, 반대쪽으로 밀려 오면 g 로 넉넉하다 —
+            // 좁은 자리(단면과 막힌 끝 사이 등)에서는 뒤의 것만 맞는다. 급송 끝 노즈 틈은 `start` 가 잰다
+            return lens.asSequence().flatMap { len ->
+                val p = startD - uIn * max(len, least)
+                listOf(2 * r + gg, r + gg, gg).asSequence().map { start(matIn, p + nIn * it, listOf(p, startD), clear) }
+            }.firstOrNull { it.ok && it.stop >= g - 1e-7 }
+        }
+        val tight = listOf(c to c, c to c / 2, c to c / 4, c / 2 to c / 2, c / 2 to c / 4, c / 4 to c / 4)
+        val loose = listOf(c to 0.0, c / 2 to 0.0, c / 4 to 0.0)
+        // 같은 (급송 끝 틈, 가는 길 여유)에서 이웃 위 높이도 본 뒤에 줄인다 — 이웃 위로 오면 c 를 지키는데 c/4 까지 먼저 줄여 급송이 경사 위 0.25(c 1)로
+        // 지났다(검증 F3 2026-11-13: 외경 형상 5 뒤집기 · 시작 Z−6 · 경사가 Z−5 부터)
+        fun pick(gaps: List<Pair<Double, Double>>) = gaps.firstNotNullOfOrNull { (g, clear) ->
+            listOf(false, true).firstNotNullOfOrNull { over -> flipped(g, clear, over)?.takeIf { it.ok && it.stop >= g - 1e-7 } }
+        }
+        // 뒤집기(화면의 T1 ⇄ T2)로 실제 척 쪽 · 구멍 안에서 시작할 때만. 계산기 역방향 + 뒤집기(화면은 안 씀)와 화면 역방향(거울) + 뒤집기는 실제로는 부품 앞에서
+        // 들어와(정방향과 같은 쪽 — 두 쪽은 서로 거울이라 같은 글이어야 한다, TaperSolveTest) 전 규칙 그대로
+        val flipStart = flip && !reverse && !mirror
+        val picked = if (flipStart) pick(tight) ?: pick(loose) else null
+        val begin = picked ?: start(mat, e0D, listOf(startD), 0.0, turns = false)
+        // 그 뒤집은 시작이 전 규칙으로 떨어졌는데 급송 끝 노즈가 소재를 파면 진입 길을 못 찾은 것으로 알린다 — 전에는 '찾음'으로 와 경고 없이 급송이 맞은편
+        // 벽 · 모서리 R 을 팠다(검증 F2 2026-11-13). 틈 0(노즈가 깎지 않는 시작 요소 연장선에 얹힘 — 전 규칙의 한 직선 진입)은 알리지 않는다(헛경고 —
+        // VerifyShortWallTest.entryNotFoundIsCountedAndHonest)
+        val entryGouges = flipStart && picked == null && begin.stop < -1e-3
+        val approachG4 = begin.app
         val outG4 = CompFrame.exit(
             mat, side, r, outward, if (cutLast) endD else last.start, CompFrame.endDir(drawing.segs[toSegG4 - 1]), x1D, awayD, front,
             lastArc = drawing.segs[toSegG4 - 1] as? Arc,
@@ -749,12 +857,12 @@ object TaperCalc {
         // G41/G42 진입 Z 줄은 노즈 중심이 축에 서는 X(`CompFrame.axisLow` — 보정 쪽에 따라 축 너머 r)까지 찾는다 — 그 안은 노즈가 축을 넘지 않아 알리지 않는다
         // (검증 2026-11-05: 내경 역방향 겹테이퍼의 `G0X-1.874Z20.` 이 노즈 중심 반경 0.163 인데 'Z 여유를 줄이세요' 가 떴다)
         val axisG4 = CompFrame.axisLow(side, r, front)
-        if ((listOf(entry, exit, endD) + approachG40 + exitsG4).any { it.x < -EPS } || approachG4.points.any { it.x < axisG4 - EPS }) {
+        if ((listOf(entry, exit, endD) + approachG40 + exitsG4).any { it.x < -EPS } || (approachG4.points + begin.cmds.dropLast(1)).any { it.x < axisG4 - EPS }) {
             warnings += TaperWarning.ENTRY_PAST_AXIS
         }
         if (shortPast) warnings += TaperWarning.SHORT_END_PAST
         if (keepLast != null || dropFirst != null) warnings += TaperWarning.SHORT_END_SKIPPED
-        if (!approachG4.found) warnings += TaperWarning.ENTRY_NOT_FOUND
+        if (!begin.ok || entryGouges) warnings += TaperWarning.ENTRY_NOT_FOUND
         if (!outG4.found) warnings += TaperWarning.EXIT_NOT_FOUND
 
         val ncG40 = NcLines().apply {
@@ -768,7 +876,9 @@ object TaperCalc {
         // 회사 꼴(CompFrame): G41/G42 혼자 → G0 X…Z20. → (X 맞춤) → Z 진입점 → G1 첫 깎는 점 F.1 → 형상(도면 좌표, 모서리 R 은 G2/G3 도면 R) →
         // 빼는 줄 F.3 → G40 혼자 → G0Z200.
         val ncG41G42 = NcLines().apply {
-            CompFrame.write(this, side, approachG4.points, startD, {
+            CompFrame.write(this, side, approachG4.points, begin.cmds.first(), {
+                // 뒤집은 진입의 둘째 이송 줄(P → 첫 깎는 점)
+                for (q in begin.cmds.drop(1)) move("G1", q)
                 for (s in drawing.segs.subList(fromSegG4, toSegG4)) if (s is Arc) arc(s) else move("G1", if (s === last) endD else s.end)
             }, exitsG4, front = front)
         }.lines

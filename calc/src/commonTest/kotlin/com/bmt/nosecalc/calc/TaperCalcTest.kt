@@ -113,11 +113,15 @@ class TaperCalcTest {
 
     /**
      * 회사 꼴 틀로 나눈 G41/G42 글: [approach] = 보정 혼자 줄 뒤 G0 점들(첫 점이 X…Z20.), [first] = 첫 깎는 줄(G1 … F.1) 끝 = 첫 깎는 점,
-     * [shape] = 형상 줄(G1 · G2 · G3), [exits] = 빼는 줄 끝점들(첫 줄에 F.3), 그 뒤 `G40` 혼자 · `G0Z…`(X 그대로) — 틀이 아니면 실패
+     * [shape] = 형상 줄(G1 · G2 · G3), [exits] = 빼는 줄 끝점들(첫 줄에 F.3), 그 뒤 `G40` 혼자 · `G0Z…`(X 그대로) — 틀이 아니면 실패.
+     * [lead] = 뒤집은 진입(2026-11-12 통합 고침)의 이송 점: 급송 끝 → `G1 P F.1` → (첫 깎는 점) — [firstCut] 을 주고 첫 깎는 줄 끝이 그 점이 아니면
+     * 그 점에 닿는 줄까지를 진입 이송으로 떼어 낸다([first] = 첫 깎는 점)
      */
-    private class G4Frame(val side: String, val approach: List<Pt>, val first: Pt, val shape: List<FLine>, val exits: List<Pt>, val retractZ: Double)
+    private class G4Frame(
+        val side: String, val approach: List<Pt>, val first: Pt, val shape: List<FLine>, val exits: List<Pt>, val retractZ: Double, val lead: List<Pt> = emptyList(),
+    )
 
-    private fun frameOf(nc: List<String>, tag: String): G4Frame {
+    private fun frameOf(nc: List<String>, tag: String, firstCut: Pt? = null): G4Frame {
         val ls = frameLines(nc)
         val iCut = ls.indexOfFirst { it.f == 0.1 }
         val iExit = ls.indexOfFirst { it.f == 0.3 }
@@ -132,8 +136,11 @@ class TaperCalcTest {
         assertEquals("G40", ls[iG40].text, "$tag G40 은 혼자 줄 $nc")
         val last = ls.last()
         assertTrue(last.g == 0 && Regex("""G0Z-?[0-9.]+""").matches(last.text), "$tag 물러남은 G0Z… 한 줄 $nc")
+        val k = if (firstCut == null || near(ls[iCut].p!!, firstCut)) iCut else (iCut + 1 until iExit).firstOrNull { ls[it].g == 1 && near(ls[it].p!!, firstCut) }
+        assertTrue(k != null, "$tag 첫 깎는 점 $firstCut 에 닿는 이송 줄이 없다 $nc")
         return G4Frame(
-            ls[0].text, ls.subList(1, iCut).map { it.p!! }, ls[iCut].p!!, ls.subList(iCut + 1, iExit), ls.subList(iExit, iG40).map { it.p!! }, last.p!!.z,
+            ls[0].text, ls.subList(1, iCut).map { it.p!! }, ls[k!!].p!!, ls.subList(k + 1, iExit), ls.subList(iExit, iG40).map { it.p!! }, last.p!!.z,
+            ls.subList(iCut, k).map { it.p!! },
         )
     }
 
@@ -316,7 +323,7 @@ class TaperCalcTest {
             app40.map { "G00" } + listOf("G00") + g40.drop(1).map { "G01" } + (if (s.toEnd) listOf("G01", "G00") else listOf("G00")),
             s.ncG40.legacy.map { it.take(3) }, tag,
         )
-        checkFrame(s, order, inner, leftFirst, r, c, tag, slopeEntry, slopeExit)
+        checkFrame(s, order, inner, leftFirst, flip, r, c, tag, slopeEntry, slopeExit)
     }
 
     /**
@@ -330,10 +337,15 @@ class TaperCalcTest {
      *   비운 끝은 볼록이면 경사를 큰 축으로 c, 아니면 끝 요소를 따라 c — 노즈 이동이 0.05 보다 짧으면 그만큼 더.
      * - G40 자리 규칙: 마지막 빼는 줄 끝에서 (1 + √2)·r + 0.02 안에 도면이 없고, 거기서 +Z 로 물러나는 띠에도 없다.
      * - 진입 · 빼는 줄의 노즈(보정 중, 따로 짠 모형)가 도면에 r 보다 가까이 가지 않고, 빼는 줄마다 노즈가 0.05 이상 앞으로 간다(거꾸로 가면 간섭 알람)
+     * - 뒤집기(2026-11-12 통합 고침 — 척 쪽 · 구멍 안에서 시작): 위 진입점의 급송이 c 를 못 지키면 급송은 그 앞 점 P 에서 공구 쪽으로 떨어진 A 에서 멈추고
+     *   `G1 P F.1` → 첫 깎는 점(두 이송 줄 — A → P 와 P → 첫 깎는 점은 직각). 막힌 시작은 늘 그 꼴(P = 첫 깎는 점 + 공구 쪽 2r + g 이상, A = P + 앞으로 r + g).
+     *   어느 쪽이든 급송 노즈가 도면에서 c/4 이상(시뮬레이터로 잰 격자는 `TaperFlipEntryTest`)
      */
-    private fun checkFrame(s: TaperSolution, order: List<Pt>, inner: Boolean, leftFirst: Boolean, r: Double, c: Double, tag: String, slopeEntry: Boolean, slopeExit: Boolean) {
+    private fun checkFrame(
+        s: TaperSolution, order: List<Pt>, inner: Boolean, leftFirst: Boolean, flip: Boolean, r: Double, c: Double, tag: String, slopeEntry: Boolean, slopeExit: Boolean,
+    ) {
         val nc = s.ncG41G42
-        val f = frameOf(nc, tag)
+        val f = frameOf(nc, tag, if (s.fromStart) order.first() else order[1])
         val side = expectedSide(inner, leftFirst)
         assertEquals(side, f.side, "$tag 보정 쪽 $nc")
         val st = order.first()
@@ -369,10 +381,24 @@ class TaperCalcTest {
         val e = app.last()
         val prev = (e - app[app.size - 2]).unit()
         val uG = (firstCut - e0).unit()
-        // 첫 깎는 줄의 노즈 이동 = 첫 깎는 점의 꺾임 노즈 − 진입점의 꺾임 노즈(진입 G0 → 첫 깎는 줄)
-        val moved = (noseAt(firstCut, uG, u0.takeIf { s.fromStart } ?: (order[2] - order[1]).unit(), side, r) - noseAt(e0, prev, uG, side, r)) dot uG
-        val eWant = if (moved >= 0.05) e0 else e0 - uG * (0.05 - moved)
-        assertTrue(near(e, eWant), "$tag 진입점 $e ≠ 손 $eWant(첫 깎는 점에서 c${if (moved < 0.05) " + 노즈 이동 0.05 까지" else ""}) $nc")
+        if (f.lead.isEmpty()) {
+            // 첫 깎는 줄의 노즈 이동 = 첫 깎는 점의 꺾임 노즈 − 진입점의 꺾임 노즈(진입 G0 → 첫 깎는 줄)
+            val moved = (noseAt(firstCut, uG, u0.takeIf { s.fromStart } ?: (order[2] - order[1]).unit(), side, r) - noseAt(e0, prev, uG, side, r)) dot uG
+            val eWant = if (moved >= 0.05) e0 else e0 - uG * (0.05 - moved)
+            assertTrue(near(e, eWant), "$tag 진입점 $e ≠ 손 $eWant(첫 깎는 점에서 c${if (moved < 0.05) " + 노즈 이동 0.05 까지" else ""}) $nc")
+        } else {
+            // 뒤집은 진입의 두 이송 줄: P 는 전 진입점의 줄(첫 깎는 점으로 들어오는 방향 uG) 위 그보다 멀리, A → P 는 그 줄에 직각으로 공구 쪽에서 c/4 이상
+            assertTrue(flip && f.lead.size == 1, "$tag 진입 이송 줄은 뒤집기에서 하나 $nc")
+            val p = f.lead.single()
+            val back = firstCut - p
+            val blocked = s.fromStart && (if (horiz(u0)) u0.z > 0 else (u0.x > 0) != inner && !(!inner && st.x <= 1e-9))
+            assertTrue(
+                abs(back.unit() cross uG) < 2e-3 && (back dot uG) >= (if (blocked) 2 * r + c / 4 else (firstCut - e0).length) - 2e-3,
+                "$tag P $p 가 전 진입점 $e0 의 줄 밖 $nc",
+            )
+            val up = e - p
+            assertTrue(abs(up.unit() dot uG) < 2e-3 && (up dot sideN(uG, side)) >= c / 4 - 2e-3, "$tag 급송 끝 $e 가 P 의 공구 쪽 직각이 아니다 $nc")
+        }
         // 첫 빼는 줄
         val nB = sideN(uB, side)
         val uLast = (lastCut - order[order.indexOf(lastCut) - 1]).unit()
@@ -403,6 +429,8 @@ class TaperCalcTest {
         assertTrue(polySegDist(q, Pt(200.0, q.x), order) >= g40Room(r) - 0.0015, "$tag 물러남 띠 $nc")
         assertEquals(200.0, f.retractZ, 1e-12, "$tag G0Z200. $nc")
         val (inNoses, outNoses) = frameNoses(f, (want.first() - firstCut).unit(), uLast, side, r)
+        // 뒤집으면(계산기 역방향 + 뒤집기는 정방향과 같은 쪽이라 빼고) 급송 노즈(Z20. 부터 급송 끝까지)가 도면에서 c/4 이상
+        if (flip && leftFirst) for (k in 0 until app.size - 1) assertTrue(polySegDist(inNoses[k], inNoses[k + 1], order) >= r + c / 4 - 1e-3, "$tag 급송 노즈가 도면에 c/4 안 $nc")
         for ((a, b) in inNoses.drop(1).zipWithNext()) assertTrue(polySegDist(a, b, order) >= r - 1e-3, "$tag 진입 노즈가 도면에 닿는다 $a → $b $nc")
         val outDirs = (listOf(lastCut) + f.exits).zipWithNext { a, b -> (b - a).unit() }
         for ((k, ab) in outNoses.zipWithNext().withIndex()) {
@@ -417,7 +445,7 @@ class TaperCalcTest {
      * 빼기 = 마지막 깎는 점(마지막 형상 요소 끝 접선 [uLast]) + 빼는 점들(마지막은 법선)
      */
     private fun frameNoses(f: G4Frame, uFirst: Pt, uLast: Pt, side: String, r: Double): Pair<List<Pt>, List<Pt>> {
-        val inPts = f.approach + f.first
+        val inPts = f.approach + f.lead + f.first
         val inDirs = inPts.zipWithNext { a, b -> (b - a).unit() }
         val inNoses = inPts.indices.map { k ->
             when (k) {
@@ -601,7 +629,10 @@ class TaperCalcTest {
         assertEquals("0.000", Fmt.fixed3(t2.prog.z))
         assertEquals(45.0, s.anglesDeg.single(), 1e-12)
         assertEquals(listOf("G00 X52. Z1.", "G00 Z-6.234", "G01 X50. Z-5.234", "G01 X39.531 Z0.", "G00 Z1."), s.ncG40.legacy)
-        assertEquals(listOf("G41", "G0X53.6Z20.", "Z-6.", "X52.", "G1X50.Z-5.F.1", "X40.Z0.", "X38.Z1.F.3", "G40", "G0Z200."), s.ncG41G42)
+        // G41/G42 진입(2026-11-12 통합 고침 — 뒤집기): 전 진입(X53.6 에서 Z, 진입점 X52 Z-6 으로 X)은 급송 끝 노즈(−5.6, 26.166)가 외경에서 0.766(c = 1 미만) —
+        // 급송은 진입점 P(X52 Z-6)에서 면취 연장선의 공구 쪽 법선 (1, 1)/√2 으로 2r + c = 1.8 인 A(Z−4.727, X54.546)에서 멈추고 `G1 P F.1` → T1(X50 Z-5).
+        // A 로는 Z 줄로 곧장(급송 → P 줄이 안쪽 꺾임), 급송 끝 노즈 (−4.5615, 26.8728)는 외경 끝에서 1.923(틈 1.523) — 손 계산은 VerifyFlipTest.handOuterType1Flip
+        assertEquals(listOf("G41", "G0X54.546Z20.", "Z-4.727", "G1X52.Z-6.F.1", "X50.Z-5.", "X40.Z0.", "X38.Z1.F.3", "G40", "G0Z200."), s.ncG41G42)
         assertEquals(listOf(Pt.ofDia(1.0, 52.0)), s.approach)
         // 안 뒤집은 것과 같은 실제 점: 직접 보정 X39.531 Z0 → X50 Z-5.234 가 X50 Z-5.234 → X39.531 Z0 으로 순서만 바뀐다
         val fwd = ok(TaperCalc.calc(TaperInput(x1 = 40.0, z1 = 0.0, x2 = 50.0, z2 = -5.0)))
@@ -619,12 +650,13 @@ class TaperCalcTest {
         val e = ok(TaperCalc.calc(flip.copy(end = 30.0)))
         assertEquals(emptyList(), TaperCalc.calc(flip.copy(end = 30.0)).warnings)
         assertEquals(listOf("G00 X52. Z1.", "G00 Z-6.234", "G01 X50. Z-5.234", "G01 X39.531 Z0.", "G01 X30.", "G00 Z1."), e.ncG40.legacy)
-        assertEquals(listOf("G41", "G0X53.6Z20.", "Z-6.", "X52.", "G1X50.Z-5.F.1", "X40.Z0.", "X30.", "Z1.F.3", "X31.971", "G40", "G0Z200."), e.ncG41G42)
-        // Z 여유 0 이면 c = r = 0.4: 진입점 X50.8 Z-5.4(면취 연장), X 는 바깥 도면(외경 25) + 2r + 0.4 = 반경 26.2(X52.4)에서 맞춘다(X 줄 노즈 0.234 앞으로).
+        assertEquals(listOf("G41", "G0X54.546Z20.", "Z-4.727", "G1X52.Z-6.F.1", "X50.Z-5.", "X40.Z0.", "X30.", "Z1.F.3", "X31.971", "G40", "G0Z200."), e.ncG41G42)
+        // Z 여유 0 이면 c = r = 0.4: 진입점 X50.8 Z-5.4(면취 연장)로 X 줄이 오면 급송 끝 노즈(Z−5, 반경 25.566)가 외경에서 0.166 — c 미만이라(2026-11-12 통합 고침)
+        // 급송은 진입점 P(X50.8 Z-5.4)에서 면취 연장선의 공구 쪽 법선 (1, 1)/√2 으로 2r + c = 1.2 인 A(Z−4.551, X52.497)에서 멈추고 `G1 P F.1` → T1.
         // 첫 빼는 줄 Z0.4 는 r 이라 두 안쪽 꺾임 노즈(단면 → 빼는 줄: Z0.4 · 반경 15.4, 빼는 줄 → +X: Z0 · 반경 15.4)가 0.4 거꾸로 — 0.05 앞으로 가게 0.45 더(Z.85).
         // G40 자리: Z0.4 에서 +X 로 단면 위 끝 X40 Z0 · 면취를 0.986 비킬 때까지 — 면취 보정선 (0.4 + x − 20)/√2 = 0.986 → 반경 20.994(X41.988), 그 줄도 같이 Z.85 로
         assertEquals(
-            listOf("G41", "G0X52.4Z20.", "Z-5.4", "X50.8", "G1X50.Z-5.F.1", "X40.Z0.", "X30.", "Z.85F.3", "X41.988", "G40", "G0Z200."),
+            listOf("G41", "G0X52.497Z20.", "Z-4.551", "G1X50.8Z-5.4F.1", "X50.Z-5.", "X40.Z0.", "X30.", "Z.85F.3", "X41.988", "G40", "G0Z200."),
             ok(TaperCalc.calc(flip.copy(end = 30.0, zClear = 0.0))).ncG41G42,
         )
         // 끝점 = 단면 X0(중심까지): 인선(T3, 노즈 중심보다 r 앞)을 X0 에 멈추면 노즈 중심이 반경 0.4 에 서서 중심에 살(법선 0.166)이 남는다 —
@@ -635,17 +667,18 @@ class TaperCalcTest {
         val ax = TaperCalc.calc(flip.copy(end = 0.0))
         assertEquals(listOf(TaperWarning.ENTRY_PAST_AXIS), ax.warnings)
         assertEquals(listOf("G00 X52. Z1.", "G00 Z-6.234", "G01 X50. Z-5.234", "G01 X39.531 Z0.", "G01 X-0.8", "G00 Z1."), ok(ax).ncG40.legacy)
-        assertEquals(listOf("G41", "G0X53.6Z20.", "Z-6.", "X52.", "G1X50.Z-5.F.1", "X40.Z0.", "X-.8", "Z1.F.3", "G40", "G0Z200."), ok(ax).ncG41G42)
+        assertEquals(listOf("G41", "G0X54.546Z20.", "Z-4.727", "G1X52.Z-6.F.1", "X50.Z-5.", "X40.Z0.", "X-.8", "Z1.F.3", "G40", "G0Z200."), ok(ax).ncG41G42)
         assertPt(Pt(0.4, 0.0), ok(ax).center.segs.last().end, msg = "노즈 중심이 중심선(반경 0)에")
         // 시작점 = 외경 Z-10(외경부터): 외경을 Z+ 로 깎는다 — 바이트(T3, 척 쪽으로 깎는 날)와 반대라 AGAINST_TOOL.
         // Z-10 너머(척 쪽)는 날 앞이라 외경 연장선(Z-11)으로 넘어 들어가지 않고 공구 쪽(외경 위 X52)에서 Z-10 에 직각으로 들어간다.
-        // G41/G42 도 막힌 시작이라 진입점은 공구 쪽 X52 Z-10. 첫 깎는 줄이 −X 라 Z 줄로 곧장(Z 줄 노즈 반경 25.6 — 아래 끝 25.2 가 외경 위, 꺾임 노즈 Z-9.6 은
-        // Z-10 벽에서 r). 첫 깎는 줄(X52 → X50)은 다음 블록(외경 Z+)과 안쪽 꺾임이라 노즈 중심 X50.8 Z-9.6 = 직접 보정의 인선 X50 Z-10 − 팁 벡터
+        // G41/G42 도 막힌 시작(2026-11-12 통합 고침 — 전에는 진입점 X52 Z-10 이라 급송 노즈 밑이 외경 위 0.2, 급송 끝이 Z-10 벽에 틈 0): 급송은 공구 쪽 2r + c = 1.8
+        // (X53.6) · 앞으로 r + c = 1.4(Z-8.6)에서 멈추고 `G1Z-10.F.1` → `X50.`. 벽을 따라 내려오는 줄(X53.6 → X50)은 다음 블록(외경 Z+)과 안쪽 꺾임이라
+        // 노즈 중심 X50.8 Z-9.6 = 직접 보정의 인선 X50 Z-10 − 팁 벡터
         val st = TaperCalc.calc(flip.copy(start = -10.0))
         val sf = ok(st)
         assertEquals(listOf(TaperWarning.AGAINST_TOOL), st.warnings)
         assertEquals(listOf("G00 X52. Z1.", "G00 Z-10.", "G01 X50.", "G01 Z-5.234", "G01 X39.531 Z0.", "G00 Z1."), sf.ncG40.legacy)
-        assertEquals(listOf("G41", "G0X52.Z20.", "Z-10.", "G1X50.F.1", "Z-5.", "X40.Z0.", "X38.Z1.F.3", "G40", "G0Z200."), sf.ncG41G42)
+        assertEquals(listOf("G41", "G0X53.6Z20.", "Z-8.6", "G1Z-10.F.1", "X50.", "Z-5.", "X40.Z0.", "X38.Z1.F.3", "G40", "G0Z200."), sf.ncG41G42)
         assertPt(Pt.ofDia(-10.0, 52.0), sf.entry)
     }
 
@@ -665,17 +698,19 @@ class TaperCalcTest {
         val s = ok(TaperCalc.calc(i1.copy(start = -20.0)))
         assertEquals(Side.G42, s.side)
         assertEquals(listOf("G00 X32. Z1.", "G00 Z-20.", "G01 X34.", "G01 Z-2.186"), s.ncG40.legacy.take(4))
-        // G41/G42: 진입점 = 구멍 바닥 쪽 시작 Z-20 의 공구 쪽(축 쪽) X32. 첫 깎는 줄이 +X 라 Z20. 에서 Z 줄로 곧장 — Z 줄 노즈(G42 · −Z 진행은 +X 쪽, 반경 16.4)의
-        // 위 끝 16.8 이 구멍(17) 안이고, 꺾임 노즈 Z-19.6 은 Z-20 에서 r
-        assertEquals(listOf("G42", "G0X32.Z20.", "Z-20.", "G1X34.F.1", "Z-2."), s.ncG41G42.take(5))
+        // G41/G42: 막힌 시작(구멍 바닥 쪽 Z-20) — 2026-11-12 통합 고침 전에는 진입점이 공구 쪽(축 쪽) X32 라 Z 줄 노즈(G42 · −Z 진행은 +X 쪽, 반경 16.4)의
+        // 위 끝 16.8 이 구멍 벽(17)에서 0.2, 급송 끝이 Z-20 벽에 틈 0. 이제 급송은 축 쪽 2r + c = 1.8(X30.4) · 앞으로 r + c = 1.4(Z-18.6)에서 멈추고
+        // `G1Z-20.F.1` → `X34.`(Z 줄 노즈 위 끝 16.0 — 벽에서 c)
+        assertEquals(listOf("G42", "G0X30.4Z20.", "Z-18.6", "G1Z-20.F.1", "X34.", "Z-2."), s.ncG41G42.take(6))
         // 시작을 비우면(06.jpg 를 구멍 쪽부터): T1 이 볼록이라 진입점은 면취 연장선을 큰 축으로 c — 경사가 Z 2 · 반경 3 이라 반경으로 1: 반경 17 − 1 = 16(X32),
         // Z −2 − 2/3 = −2.667(2026-11-04 고침 전에는 Z 로 c — X31 Z-3). 첫 깎는 줄이 +Z 라 Z 줄로 곧장 못 오고 축 쪽 X 에서 Z 를 맞춘다 — 걸음 0.4:
         // 반경 15.6 은 X 줄이 r 이라 두 안쪽 꺾임 노즈(Z−2.267 · 반경 16.0 → 면취 보정선 위 반경 15.879 = 진입점 + (0.4, −0.121))가 0.121 거꾸로,
-        // 반경 15.2(X30.4)은 0.279 앞으로
-        assertEquals(listOf("G42", "G0X30.4Z20.", "Z-2.667", "X32.", "G1X34.Z-2.F.1"), ok(TaperCalc.calc(i1)).ncG41G42.take(5))
+        // 반경 15.2(X30.4)은 0.279 앞으로 — 그 급송 끝 노즈는 구멍(17)에서 c 보다 가까워(2026-11-12 통합 고침) 급송은 진입점 P(X32 Z-2.667)에서 면취 연장선의
+        // 공구 쪽(G42 — 진행 오른쪽) 법선 (0.832, −0.555) 으로 2r + c = 1.8 인 Z-1.169 · 반경 15.0015(X30.003)에서 멈추고 `G1 P F.1` → T1
+        assertEquals(listOf("G42", "G0X30.003Z20.", "Z-1.169", "G1X32.Z-2.667F.1", "X34.Z-2."), ok(TaperCalc.calc(i1)).ncG41G42.take(5))
         val o3 = ok(TaperCalc.calc(TaperInput(type = 3, x1 = 50.0, z1 = -5.0, x2 = 40.0, z2 = 0.0, start = -20.0, flip = true)))
         assertEquals(listOf("G00 X52. Z1.", "G00 Z-20."), o3.ncG40.legacy.take(2))
-        assertEquals(listOf("G41", "G0X52.Z20.", "Z-20.", "G1X50.F.1"), o3.ncG41G42.take(4))
+        assertEquals(listOf("G41", "G0X53.6Z20.", "Z-18.6", "G1Z-20.F.1", "X50."), o3.ncG41G42.take(5))
         val e1 = ok(TaperCalc.calc(i1.copy(end = 50.0)))
         assertEquals(listOf("G01 X50.", "G00 Z1."), e1.ncG40.legacy.takeLast(2))
         // G41/G42: 공구 쪽(+Z) 직각 c(Z1) — G40 자리가 벽 너머 반평면(반경 > 25)에 붙어 −X 로 0.986 더(반경 24.014 = X48.029, 단면 Z0 에서 1.0)
@@ -688,15 +723,16 @@ class TaperCalcTest {
         // 그 바깥 X50 + 2c = X52 로 Z 를 맞춘 뒤 X 로 내려간다(세 줄)
         val o5 = ok(TaperCalc.calc(TaperInput(type = 5, x1 = 40.0, z1 = -5.0, x2 = 50.0, z2 = 0.0, start = -20.0, flip = true)))
         assertEquals(listOf("G00 X52. Z1.", "G00 Z-20.", "G00 X42.", "G01 X40."), o5.ncG40.legacy.take(4))
-        // G41/G42: 진입점 X42 Z-20(공구 쪽 c). Z 줄을 X42 로 오면 노즈(반경 20.6)가 오른쪽 큰 외경(25 — 비운 끝 요소의 반직선으로 +Z 쪽까지)을 지나므로
-        // 그 바깥(25 + 2r + 0.4 = 반경 26.2, X52.4)에서 Z 를 맞추고 X 로 내려간다(X 줄은 첫 깎는 줄과 한 직선)
-        assertEquals(listOf("G41", "G0X52.4Z20.", "Z-20.", "X42.", "G1X40.F.1"), o5.ncG41G42.take(5))
+        // G41/G42(막힌 시작 — 2026-11-12 통합 고침): 급송 끝 A = 공구 쪽 2r + c = 1.8(X43.6) · 앞으로 r + c = 1.4(Z-18.6). Z 줄을 X43.6 으로 오면 노즈(반경 21.4)가
+        // 오른쪽 큰 외경(25)을 지나므로 그 바깥(25 + 2r + c = 반경 26.8, X53.6)에서 Z 를 맞추고 X 로 내려간 뒤 `G1Z-20.F.1` → `X40.`
+        assertEquals(listOf("G41", "G0X53.6Z20.", "Z-18.6", "X43.6", "G1Z-20.F.1", "X40."), o5.ncG41G42.take(6))
         assertEquals(listOf(Pt.ofDia(1.0, 52.0), Pt.ofDia(-20.0, 52.0)), o5.approach)
         // 화면 역방향(그림을 Z 로 뒤집어 푼다 — 계산기의 +Z 가 실제 척 쪽)은 접근 줄을 끈다
         val mi = ok(TaperCalc.calc(i1.copy(start = -20.0, approach = false)))
         assertEquals("G0X32.Z-20.", mi.ncG40.first())
         // G41/G42 는 계산기 −Z 가 부품 앞이라 Z-20 너머(계산기 −Z)가 빈 시작 — 구멍 연장선 Z-21 에서 한 직선으로. 진입 Z 는 계산기 −Z 쪽: 진입점이
-        // 부품 앞 끝에서 21 이라 올림 21 + 20 = 41 → Z-41., 물러남 Z-200.(화면이 Z 를 되돌린다)
+        // 부품 앞 끝에서 21 이라 올림 21 + 20 = 41 → Z-41., 물러남 Z-200.(화면이 Z 를 되돌린다). 실제로는 부품 앞에서 들어오는 진입이라 2026-11-12 뒤집은 진입
+        // 고침(척 쪽 · 구멍 안에서 시작할 때만)을 받지 않는다 — 계산기 역방향 + 뒤집기와 같은 글
         assertEquals(listOf("G42", "G0X34.Z-41.", "Z-21.", "G1Z-20.F.1"), mi.ncG41G42.take(4))
         assertEquals("G0Z-200.", mi.ncG41G42.last())
         // 계산기 역방향(화면은 안 씀)도 앞 단면을 X− 로 깎아 끝나면 같다: X48 로 이어 가지 않고 공구 쪽(+Z)으로 c = 1. 0.8R 이라 c < 2r — 두 안쪽 꺾임
@@ -714,7 +750,7 @@ class TaperCalcTest {
     /**
      * 회사 꼴 G41/G42 의 시작 · 끝(계획 단계 4 — 2026-10-28 의 FANUC 시작 · 취소 손 예를 같은 도형으로 다시, 손 계산). 보정 시작 · 취소 줄이
      * 이동 없는 혼자 줄이라 깎는 줄의 노즈는 형식 A · B / C 와 팁에 상관없이 보정 중 규칙(안쪽 = 두 보정선의 교점, 한 직선 = 법선)으로 선다 — 시뮬레이터로도 본다.
-     * - 뒤집기 외경 형상 3, 끝점 = 작은 외경 Z5(부품 앞 끝, 너머가 빈 끝): 진입은 뒤집기 외경 형상 1 과 같다(T1 볼록 — X53.6 에서 Z, X52 로).
+     * - 뒤집기 외경 형상 3, 끝점 = 작은 외경 Z5(부품 앞 끝, 너머가 빈 끝): 진입은 뒤집기 외경 형상 1 과 같다(T1 볼록 — 2026-11-12 뒤집은 진입: X54.546 Z-4.727 에서 진입점 X52 Z-6 으로 이송).
      *   빈 끝은 끝 좌표 너머로 곧게 c(Z6, 사용자 결정 ③) — 끝 블록 노즈가 Z5 의 법선(Z5 · 반경 20.4)에 서서 접점 = 끝좌표, 그 뒤 더 간다.
      *   Z6 X40 에서 작은 외경 끝까지 1.0 ≥ 0.986 이라 한 줄.
      * - 같은 형상을 정방향, 끝점 = 큰 외경 Z-10(척 쪽, 너머가 벽): 공구 쪽 직각 c(X52) — 안쪽 꺾임 교점 노즈 = 직접 보정의 끝 노즈(팁 벡터·u = r).
@@ -724,7 +760,7 @@ class TaperCalcTest {
      *   끝(비움, 볼록 T2)은 경사를 큰 축으로 c 늘인 X46 Z-7 — G40 자리 (1 + √2)·0.8 + 0.02 = 1.951 이 구멍 반직선(반경 24)에서 1 이라 −X 로 0.951 더(반경 22.049, X44.097).
      *   +Z 물러남 띠는 T2 에서 1.951(경사 쪽 발은 그 선분 밖).
      * - 너머가 빈 단면 시작(뒤집기 외경 형상 2, 시작 = 어깨 바깥 X60, 0.8R 표준 팁 3): 단면을 바깥으로 깎기 시작하는 게 아니라 안쪽으로라 빈 시작 — 진입점은
-     *   단면 연장선 X62 Z-5(c = 1). 첫 깎는 줄이 −X 라 Z 줄로 곧장(Z 줄 노즈 반경 30.2 — 아래 끝 29.4 가 면취(Z-4.2 에서 반경 24.2) 위, 어깨 위 끝 X60 Z-5 에서 0.825).
+     *   단면 연장선 X62 Z-5(c = 1). 첫 깎는 줄이 −X 라 Z 줄로 곧장(Z 줄 노즈 반경 30.2 — 아래 끝 29.4 가 면취(Z-4.2 에서 반경 24.2) 위, 어깨 위 끝 X60 Z-5 에서 0.825 — 그 급송 끝 노즈 틈 0.025 가 c 보다 작아 2026-11-12 부터 급송은 공구 쪽 Z 로 2r + c = 2.6 인 Z-2.4 에서 멈추고 `G1Z-5.F.1`).
      *   첫 깎는 줄은 단면과 한 직선이라 노즈가 X60 의 법선(Z-4.2 · 반경 30)에 서서 접점 = 시작 좌표 — 어깨 위 끝에 살이 안 남는다.
      *   끝(X30, 막힌 끝)은 공구 쪽 c = 1 이 2r 보다 짧아 두 안쪽 꺾임 노즈(Z0.8 · 반경 15.8 → Z0.2 · 반경 15.8)가 0.6 거꾸로 — 0.65 더(Z1.65).
      *   G40 자리 1.951: +X 로 단면(Z0 까지 1)을 지나 면취 보정선까지 (1 + x − 20)/√2 = 1.951 → 반경 21.759(X43.519, 면취 위 발).
@@ -737,7 +773,7 @@ class TaperCalcTest {
     @Test
     fun fanucStartAndCancelNumbers() {
         val f3 = ok(TaperCalc.calc(TaperInput(type = 3, x1 = 50.0, z1 = -5.0, x2 = 40.0, z2 = 0.0, end = 5.0, flip = true)))
-        assertEquals(listOf("G41", "G0X53.6Z20.", "Z-6.", "X52.", "G1X50.Z-5.F.1", "X40.Z0.", "Z5.", "Z6.F.3", "G40", "G0Z200."), f3.ncG41G42)
+        assertEquals(listOf("G41", "G0X54.546Z20.", "Z-4.727", "G1X52.Z-6.F.1", "X50.Z-5.", "X40.Z0.", "Z5.", "Z6.F.3", "G40", "G0Z200."), f3.ncG41G42)
         assertEquals("G00 X42.", f3.ncG40.legacy.last(), "직접 보정 후퇴는 그대로")
         for (form in CompStartup.values()) assertPt(Pt(5.0, 20.4), simNoses(f3.ncG41G42, 0.4, 3, form).getValue(6), 1e-6, "f3 $form 끝 블록 노즈 = Z5 의 법선")
         val w3 = ok(TaperCalc.calc(TaperInput(type = 3, x1 = 40.0, z1 = 0.0, x2 = 50.0, z2 = -5.0, end = -10.0)))
@@ -753,10 +789,10 @@ class TaperCalcTest {
         }
         val f2 = ok(TaperCalc.calc(TaperInput(false, 2, false, 0.8, null, 50.0, -5.0, 40.0, 0.0, null, 1.0, start = 60.0, end = 30.0, flip = true)))
         assertEquals(
-            listOf("G41", "G0X62.Z20.", "Z-5.", "G1X60.F.1", "X50.", "X40.Z0.", "X30.", "Z1.65F.3", "X43.519", "G40", "G0Z200."),
+            listOf("G41", "G0X62.Z20.", "Z-2.4", "G1Z-5.F.1", "X60.", "X50.", "X40.Z0.", "X30.", "Z1.65F.3", "X43.519", "G40", "G0Z200."),
             f2.ncG41G42,
         )
-        for (form in CompStartup.values()) assertPt(Pt(-4.2, 30.0), simNoses(f2.ncG41G42, 0.8, 3, form).getValue(3), 1e-6, "f2 $form 첫 깎는 점 노즈 = X60 의 법선")
+        for (form in CompStartup.values()) assertPt(Pt(-4.2, 30.0), simNoses(f2.ncG41G42, 0.8, 3, form).getValue(4), 1e-6, "f2 $form 첫 깎는 점 노즈 = X60 의 법선")
         val w6 = ok(TaperCalc.calc(TaperInput(false, 3, false, 1.0, 6, 40.66, 4.331, 42.058, 2.033, null, 2.0, end = -7.877)))
         assertEquals(listOf("Z-7.877", "X46.158F.3", "Z3.823", "G40", "G0Z200."), w6.ncG41G42.takeLast(5))
         for (form in CompStartup.values()) {
@@ -804,8 +840,8 @@ class TaperCalcTest {
                 val s = TaperCalc.calc(if (flip) base.flipped() else base).solution ?: continue
                 val tv = NoseComp.tipVector(s.tip, r)
                 fun reach(p: Pt, o: Pt) = ((p - tv) dot o) + r
-                val f4 = frameOf(s.ncG41G42, "$inner $type $reverse $flip")
                 val shape4 = s.drawing.segs.drop(if (s.fromStart) 0 else 1).dropLast(if (s.toEnd) 0 else 1)
+                val f4 = frameOf(s.ncG41G42, "$inner $type $reverse $flip", shape4.first().start)
                 val (in4, out4) = frameNoses(f4, startTangent(shape4.first()), endTangent(shape4.last()), s.side.name, r)
                 val path = s.approach + listOf(s.entry, s.program.segs.first().start) + s.program.segs.map { it.end } + s.exit
                 val tag = "${if (inner) "내경" else "외경"} TYPE$type ${if (reverse) "역" else "정"}${if (flip) " 뒤집기" else ""} ${deg}° r$r R$r1/$r2 여유$zc"
@@ -1288,9 +1324,9 @@ class TaperCalcTest {
                 assertEquals(c, abs(s.entry.z - first.z), 1e-9, "$tag 직접 보정 진입 Z ${s.ncG40.legacy}")
             }
             // G41/G42 진입점(손 규칙)
-            val f = frameOf(s.ncG41G42, tag)
-            val side = s.side.name
             val firstD = s.drawing.segs[skip].start
+            val f = frameOf(s.ncG41G42, tag, firstD)
+            val side = s.side.name
             val d1 = s.drawing.segs[1]
             val u1 = startTangent(s.drawing.segs[skip])
             val nF = sideN(u0, side)
@@ -1306,12 +1342,25 @@ class TaperCalcTest {
             val e = f.approach.last()
             val prev = (e - f.approach[f.approach.size - 2]).unit()
             val uG = (firstD - e0).unit()
-            val moved = (noseAt(firstD, uG, u1, side, r) - noseAt(e0, prev, uG, side, r)) dot uG
-            val eWant = if (moved >= 0.05) e0 else e0 - uG * (0.05 - moved)
-            assertTrue(
-                abs(e.xDia - eWant.xDia) <= 0.0011 && abs(e.z - eWant.z) <= 0.0011,
-                "$tag G41/G42 진입점 $e ≠ 손 $eWant(${if (blocked) "막힌 시작 — 공구 쪽 직각" else if (s.fromStart) "빈 시작 — 한 직선" else if (convex) "볼록 — 경사 연장" else "시작 요소 선 위"}) ${s.ncG41G42}",
-            )
+            if (f.lead.isEmpty()) {
+                val moved = (noseAt(firstD, uG, u1, side, r) - noseAt(e0, prev, uG, side, r)) dot uG
+                val eWant = if (moved >= 0.05) e0 else e0 - uG * (0.05 - moved)
+                assertTrue(
+                    abs(e.xDia - eWant.xDia) <= 0.0011 && abs(e.z - eWant.z) <= 0.0011,
+                    "$tag G41/G42 진입점 $e ≠ 손 $eWant(${if (blocked) "막힌 시작 — 공구 쪽 직각" else if (s.fromStart) "빈 시작 — 한 직선" else if (convex) "볼록 — 경사 연장" else "시작 요소 선 위"}) ${s.ncG41G42}",
+                )
+            } else {
+                // 뒤집은 진입(2026-11-12 통합 고침): 급송 끝 A → `G1 P F.1` → 첫 깎는 점. P 는 위 진입점의 줄(방향 uG) 위 — 막힌 시작은 공구 쪽 2r + c/4 이상,
+                // 그 밖은 위 진입점보다 멀리 — A 는 P 에서 그 줄에 직각으로 공구 쪽 c/4 이상
+                assertTrue(flip && f.lead.size == 1, "$tag 진입 이송 줄은 뒤집기에서 하나 ${s.ncG41G42}")
+                val p = f.lead.single()
+                val back = firstD - p
+                assertTrue(
+                    abs(back.unit() cross uG) < 2e-3 && (back dot uG) >= (if (blocked) 2 * r + c / 4 else (firstD - e0).length) - 2e-3,
+                    "$tag G41/G42 P $p 가 손 진입점 $e0 의 줄 밖 ${s.ncG41G42}",
+                )
+                assertTrue(abs((e - p).unit() dot uG) < 2e-3 && ((e - p) dot sideN(uG, side)) >= c / 4 - 2e-3, "$tag G41/G42 급송 끝 $e 가 P 의 공구 쪽 직각이 아니다 ${s.ncG41G42}")
+            }
             if (blocked) pulled++
             checked++
         }
@@ -1558,7 +1607,7 @@ class TaperCalcTest {
 
     private fun compareNc(s: TaperSolution, tag: String, inner: Boolean, r: Double) {
         val side = s.side.name
-        val f = frameOf(s.ncG41G42, tag)
+        val f = frameOf(s.ncG41G42, tag, s.drawing.segs[if (s.fromStart) 0 else 1].start)
         assertEquals(side, f.side, tag)
         val tv = NoseComp.tipVector(s.tip, r)
         val d = s.drawing.segs
@@ -1582,7 +1631,9 @@ class TaperCalcTest {
         // 보정할 윤곽(반올림 전 도면 + 글의 진입 · 빼는 점 — 도면 요소와 한 직선이거나 공구 쪽 직각이면 그 방향으로 맞춘다)
         val u1 = startTangent(shape.first())
         val uL = endTangent(shape.last())
-        val e = f.approach.last()
+        // 뒤집은 진입(2026-11-12)은 급송 끝 → P 이송 줄 뒤 P → 첫 깎는 점이 첫 깎는 줄과 같은 몫이다
+        val inPts = f.approach + f.lead
+        val e = inPts.last()
         val eLen = (firstCut - e).length
         val eDir = listOf(u1, sideN(u1, side) * -1.0).firstOrNull { abs((firstCut - e).unit() cross it) < 1e-3 && ((firstCut - e) dot it) > 0 }
         val eX = if (eDir != null) firstCut - eDir * eLen else e
@@ -1603,7 +1654,7 @@ class TaperCalcTest {
         val tips = comp.path.segs.map { it.end }
         // 첫 깎는 줄 · 첫 빼는 줄의 노즈 이동 ≥ 0.05 — 진입 G0 → 첫 깎는 줄, 첫 빼는 줄 → 다음 빼는 줄 꺾임의 노즈는 따로 짠 모형
         val uG = (firstCut - eX).unit()
-        val noseE = noseAt(eX, (eX - f.approach[f.approach.size - 2]).unit(), uG, side, r)
+        val noseE = noseAt(eX, (eX - inPts[inPts.size - 2]).unit(), uG, side, r)
         assertTrue(((tips[0] - tv - noseE) dot uG) >= 0.05 - 1e-3, "$tag 첫 깎는 줄 노즈 이동 ${s.ncG41G42}")
         val uX = (x1X - lastCut).unit()
         val noseX = noseAt(x1X, uX, if (f.exits.size > 1) (f.exits[1] - x1).unit() else uX, side, r)

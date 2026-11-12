@@ -53,9 +53,11 @@ class VerifyFlipTest {
      *   그 점이 척 쪽(앞 끝면 Z0 보다 왼쪽)이라 앞에 접근 줄(현장 안전 원칙 2026-10-27): 앞 끝면 + c = Z1 에서 X52 를 맞추고 Z 로만.
      *   X52 는 오른쪽 도면(가장 높은 X50)보다 위라 그 X 로 온다.
      * - 후퇴: 마지막 꺾임(면취–단면)이 볼록 → G41/G42 는 면취를 Z 로 1 더 늘인 (Z1, X38), 직접 보정은 단면 공구 쪽(+Z)으로 1.
-     * - G41/G42 는 회사 꼴(계획 단계 4): 첫 깎는 줄(진입점 X52 Z-6 → T1)이 +Z 라 Z20. 에서 Z 줄로 곧장 못 오고 바깥 X53.6 에서 Z 를 맞춘 뒤 X 로
-     *   (반경 26.4 는 X 줄이 r 이라 노즈가 거꾸로 0.166 — TaperCalcTest.flippedOuterType1Numbers 의 손 계산). 진입점의 노즈 = X 줄(−X, 공구 쪽 +Z) 보정선
-     *   z = −5.6 과 면취 보정선 x + z = 20 + 0.4√2 의 교점 (−5.6, 26.166). 빼는 줄 X38 Z1 은 G40 자리 규칙 0.986 을 맞춘다(단면까지 1.0).
+     * - G41/G42 는 회사 꼴(계획 단계 4). 뒤집은 진입(2026-11-12 통합 고침 — 척 쪽에서 시작): 전 진입(바깥 X53.6 에서 Z, X52 Z-6 으로 X)은 급송 끝 노즈
+     *   (X 줄 보정선 z = −5.6 과 면취 보정선의 교점 (−5.6, 26.166))가 외경(반경 25)에서 0.766 — c = 1 보다 가깝다. 그래서 급송은 진입점 P = (Z−6, X52)에서
+     *   면취 연장선의 공구 쪽 법선 n = (1, 1)/√2 으로 2r + c = 1.8 떨어진 A = (−4.7272, 27.2728)(X54.546 Z-4.727)에서 멈추고 `G1X52.Z-6.F.1` → `X50.Z-5.`.
+     *   A 로는 Z 줄로 곧장(급송 → P 줄이 안쪽 꺾임): 급송 끝 노즈 = Z 줄 보정선 x = 27.2728 − 0.4 와 A → P 줄 보정선의 교점 (−4.5615, 26.8728) —
+     *   외경 끝(−5, 25)까지 1.923(틈 1.523 ≥ c). 빼는 줄 X38 Z1 은 G40 자리 규칙 0.986 을 맞춘다(단면까지 1.0).
      */
     @Test
     fun handOuterType1Flip() {
@@ -71,7 +73,10 @@ class VerifyFlipTest {
         assertEquals(Side.G41, s.side)
         assertEquals(3, s.tip)
         assertEquals(listOf("G00 X52. Z1.", "G00 Z-6.234", "G01 X50. Z-5.234", "G01 X39.531 Z0.", "G00 Z1."), s.ncG40.legacy)
-        assertEquals(listOf("G41", "G0X53.6Z20.", "Z-6.", "X52.", "G1X50.Z-5.F.1", "X40.Z0.", "X38.Z1.F.3", "G40", "G0Z200."), s.ncG41G42)
+        val a = P(-6.0, 26.0) + P(1.0, 1.0) * (1.8 / sqrt(2.0))
+        assertEquals("54.546", f3(2 * a.x))
+        assertEquals("-4.727", f3(a.z))
+        assertEquals(listOf("G41", "G0X54.546Z20.", "Z-4.727", "G1X52.Z-6.F.1", "X50.Z-5.", "X40.Z0.", "X38.Z1.F.3", "G40", "G0Z200."), s.ncG41G42)
 
         // 제어기 흉내: 첫 깎는 줄(면취와 한 직선) 끝의 노즈 중심 = (−5, 25) + r(1, 1)/√2, 첫 빼는 줄(면취와 한 직선) 앞 = (0, 20) + r(1, 1)/√2
         val drawing = fillet(listOf(P(0.0, 15.0), P(0.0, 20.0), P(-5.0, 25.0), P(-10.0, 25.0)), listOf(0.0, 0.0))!!
@@ -81,10 +86,11 @@ class VerifyFlipTest {
         val q = r / sqrt(2.0)
         assertTrue(g.centers.any { (it.b - P(-5 + q, 25 + q)).len < 1e-3 }, "첫 깎는 줄 끝의 노즈 중심")
         assertTrue(g.centers.any { (it.b - P(q, 20 + q)).len < 1e-3 }, "첫 빼는 줄 앞 노즈 중심")
-        // 진입점의 노즈 중심 (−5.6, 26.166): 면취 보정선을 T1 너머로 늘인 선 위(면취 선분의 발은 T1 너머라 가장 가까운 것은 외경 선) — 외경선(반경 25)까지 1.166
-        val ne = P(-5.6, 20 + 0.4 * sqrt(2.0) + 5.6)
-        assertTrue(g.centers.any { (it.b - ne).len < 1e-3 }, "진입점(X 줄 → 첫 깎는 줄 안쪽 꺾임) 노즈 중심")
-        assertEquals(ne.x - 25.0, bnd.sd(ne), 1e-9)
+        // 급송 끝 노즈 중심: Z 줄 보정선 x = a.x − r 과 A → P 줄(방향 (−1, −1)/√2, 공구 쪽 (1, −1)/√2) 보정선 (q − a)·(1, −1)/√2 = r 의 교점 —
+        // 외경 끝 (−5, 25)에서 노즈R + c 넘게 떨어진다
+        val ne = P(a.z + (-r) + r * sqrt(2.0), a.x - r)
+        assertTrue(g.centers.any { (it.b - ne).len < 1e-3 }, "급송 끝(Z 줄 → A → P 줄 안쪽 꺾임) 노즈 중심 $ne")
+        assertTrue(bnd.sd(ne) >= r + 1.0, "급송 끝 노즈 틈 ${bnd.sd(ne) - r}")
         val d = simDirect(parse(s.ncG40), tv)
         assertTrue(minSd(d, bnd).first >= r - 1e-3)
         assertTrue(minSd(g.centers, bnd).first >= r - 1e-3)
@@ -101,7 +107,7 @@ class VerifyFlipTest {
         val r = 0.4
         val s = TaperCalc.calc(TaperInput(x1 = 50.0, z1 = -5.0, x2 = 40.0, z2 = 0.0, end = 0.0, flip = true)).solution!!
         assertEquals(listOf("G00 X52. Z1.", "G00 Z-6.234", "G01 X50. Z-5.234", "G01 X39.531 Z0.", "G01 X-0.8", "G00 Z1."), s.ncG40.legacy)
-        assertEquals(listOf("G41", "G0X53.6Z20.", "Z-6.", "X52.", "G1X50.Z-5.F.1", "X40.Z0.", "X-.8", "Z1.F.3", "G40", "G0Z200."), s.ncG41G42)
+        assertEquals(listOf("G41", "G0X54.546Z20.", "Z-4.727", "G1X52.Z-6.F.1", "X50.Z-5.", "X40.Z0.", "X-.8", "Z1.F.3", "G40", "G0Z200."), s.ncG41G42)
         val tv = tipVec(3, r)
         // 그림 오른쪽부터: 단면 끝 X0 → T(X40 Z0) → T(X50 Z-5) → 외경(비움, 5)
         val drawing = fillet(listOf(P(0.0, 0.0), P(0.0, 20.0), P(-5.0, 25.0), P(-10.0, 25.0)), listOf(0.0, 0.0))!!

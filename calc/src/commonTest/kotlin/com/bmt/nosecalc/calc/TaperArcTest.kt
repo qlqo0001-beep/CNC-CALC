@@ -757,10 +757,13 @@ class TaperArcTest {
             // 직접 보정 형상 줄 = 첫 G1 부터 마지막 G0(후퇴) 앞까지. 앞줄과 같은 축 값 · G 를 빼는 표기는 풀어서(모달) 견준다
             val i40 = s.ncG40.indexOfFirst { it.startsWith("G1") }
             assertEquals(spelled(e.g40), spelled(s.ncG40).subList(i40, s.ncG40.size - 1), "$tag 직접 보정 ${s.ncG40}")
-            // G41/G42 형상 줄 = 첫 깎는 줄(F.1)부터 첫 빼는 줄(F.3) 앞까지
+            // G41/G42 형상 줄 = 첫 깎는 점에 닿는 줄부터 첫 빼는 줄(F.3) 앞까지. 뒤집으면 급송 끝 → 전 진입점 P 의 이송 줄(F.1)이 하나 앞에 더 있을 수 있다
+            // (2026-11-12 통합 고침 — 그때 G41/G42 진입점은 P)
             val nc = s.ncG41G42
-            val iCut = nc.indexOfFirst { it.endsWith("F.1") }
             val iExit = nc.indexOfFirst { it.contains("F.3") }
+            val iCut = iExit - e.g4x.size
+            val lead = iCut - nc.indexOfFirst { it.endsWith("F.1") }
+            assertTrue(lead == 0 || (lead == 1 && e.input.flip), "$tag 진입 이송 줄 $lead $nc")
             assertEquals(spelled(e.g4x), spelled(nc).subList(iCut, iExit), "$tag G41/G42 $nc")
             assertEquals(e.side.name, nc.first(), tag)
             val at = ncPoints(nc)
