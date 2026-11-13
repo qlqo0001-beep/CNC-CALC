@@ -5,6 +5,7 @@ import com.bmt.nosecalc.calc.GrooveCalc
 import com.bmt.nosecalc.calc.GrooveInput
 import com.bmt.nosecalc.calc.GrooveWarning
 import com.bmt.nosecalc.calc.TaperWarning
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -35,11 +36,28 @@ class TaperWarningsTest {
         // R 빈칸 → 값이 모자란 안내(R 을 적는다), 0 은 치는 중
         val blank = base.copy(arcR = null)
         assertEquals(TaperWarning.MISSING_INPUT, stop(blank))
-        assertTrue("R" in taperWarningText(TaperWarning.MISSING_INPUT, blank) && "네 좌표" in taperWarningText(TaperWarning.MISSING_INPUT, blank))
+        assertTrue("R" in taperWarningText(TaperWarning.MISSING_INPUT, blank) && "가운데 셋" in taperWarningText(TaperWarning.MISSING_INPUT, blank))
         assertTrue(base.copy(arcR = 0.0).waiting)
         assertEquals(TaperWarning.BAD_INPUT, stop(base.copy(arcR = 0.0)))
-        // 좌표 하나가 비면 각도가 있어도 모자람(원호는 네 좌표를 모두)
-        assertEquals(TaperWarning.MISSING_INPUT, stop(base.copy(x = listOf(40.0, null), angle = 45.0, arcR = 10.0)))
+        // 좌표 둘이 비면 각도가 있어도 모자람(각도로 채우지 않는다)
+        assertEquals(TaperWarning.MISSING_INPUT, stop(base.copy(x = listOf(40.0, null), z = listOf(0.0, null), angle = 45.0, arcR = 10.0)))
+        // 좌표 하나는 호가 앞뒤 요소에 접하는 자리로(사용자 피드백 2026-11-14): 외경 형상 1 볼록 R10 의 X2 → T2 에서 외경에 접함
+        val x2 = TaperSolve.solve(base.copy(x = listOf(40.0, null), arcR = 10.0)).solution!!.points[1].vertex.xDia
+        assertEquals(40 + 2 * (10 - sqrt(75.0)), x2, 1e-9)
+        // 사용자 화면: 내경 형상 3 · T1 ⇄ T2 · Z1 빈칸 · 오목 R3.75 → Z1 = −10.1 − √(0.6 × 6.9)
+        val seat = form(TaperKind.INNER, 3, listOf(6.3, 7.5), listOf(null, -10.1)).copy(flip = true, arc = true, arcR = 3.75, arcConcave = true)
+        assertEquals(-10.1 - sqrt(0.6 * 6.9), TaperSolve.solve(seat).solution!!.points[0].vertex.z, 1e-9)
+        // 접할 요소가 없는 꼴(형상 1 의 오목): 멈추고 네 좌표를 모두 넣으라고
+        val none = base.copy(z = listOf(0.0, null), arcR = 10.0, arcConcave = true)
+        assertEquals(TaperWarning.ARC_NO_TANGENT, stop(none))
+        val noneText = taperWarningText(TaperWarning.ARC_NO_TANGENT, none)
+        assertTrue("오목" in noneText && "네 좌표" in noneText, noneText)
+        // 넣은 반경 차(5)가 R 보다 크다 — 그 차를 적고 R 칸을 짚는다
+        val short = base.copy(z = listOf(0.0, null), arcR = 4.0)
+        assertEquals(TaperWarning.ARC_R_TOO_SMALL, stop(short))
+        assertEquals(setOf("arcR"), taperWarningFields(TaperWarning.ARC_R_TOO_SMALL, short))
+        val shortText = taperWarningText(TaperWarning.ARC_R_TOO_SMALL, short)
+        assertTrue("반경 차 5.000" in shortText, shortText)
         // 음수 · 한도 밖 R
         for (bad in listOf(-1.0, 123456.0)) {
             val f = base.copy(arcR = bad)
@@ -72,7 +90,7 @@ class TaperWarningsTest {
             // 원호 글이 따로 없는 경고는 직선 글 그대로
             if (w !in listOf(
                     TaperWarning.MISSING_INPUT, TaperWarning.BAD_ANGLE, TaperWarning.BAD_INPUT, TaperWarning.CORNER_R_TOO_BIG, TaperWarning.ARC_R_TOO_SMALL,
-                    TaperWarning.NOSE_UNREACHABLE, TaperWarning.NOSE_GT_SLOPE, TaperWarning.CONCAVE_R_LE_NOSE,
+                    TaperWarning.ARC_NO_TANGENT, TaperWarning.NOSE_UNREACHABLE, TaperWarning.NOSE_GT_SLOPE, TaperWarning.CONCAVE_R_LE_NOSE,
                 )
             ) {
                 assertEquals(taperWarningText(w, straight), taperWarningText(w, base), w.name)

@@ -984,6 +984,11 @@ class Verify1110ArcSimTest {
                     }
                 } else if (variant == 0 && (rr == null || !(rr >= 4.993) || rr > 1e4)) {
                     bad += "풀리면 안 되는 R 이 풀림 ${desc(f)}"
+                } else if (variant in 4..5) {
+                    // 빈 좌표 하나는 호가 앞뒤 요소에 접하는 자리로(2026-11-14 사용자 피드백) — 풀렸으면 R 이 풀린 두 점의 가장 작은 R 과 같다
+                    val p = res.solution!!.points.map { it.vertex }
+                    val m = TaperCalc.arcMinR(p[0].xDia, p[0].z, p[1].xDia, p[1].z)
+                    if (m == null || rr == null || abs(m - rr) > 1e-6 * rr) bad += "빈 좌표가 접하는 자리가 아님(variant $variant) 최소 R $m ${desc(f)}"
                 } else if (variant in 1..7) {
                     bad += "풀리면 안 되는 점이 풀림(variant $variant) ${desc(f)}"
                 }

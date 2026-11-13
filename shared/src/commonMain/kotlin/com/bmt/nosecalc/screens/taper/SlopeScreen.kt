@@ -177,8 +177,8 @@ internal fun SlopeScreen(s: TaperState) {
                 // 가공 방향 뒤집기: T1 = 먼저 깎는 점. 바꾸면 칸 값이 같은 실제 점에 남게 맞바뀐다(TaperState.toggleFlip)
                 FlipSwitch("T1 ⇄ T$n 바꾸기", travelText(kind, type, s.reverse, flip), flip, s::toggleFlip)
                 Spacer(Modifier.height(Space.fieldGap))
-                // 단일 테이퍼는 다섯 값 가운데 하나를 비워 계산한다(키패드 '비우기 · 자동 계산') — T1–T2 를 원호로 내면 네 좌표를 모두 넣는다
-                val blankable = !kind.double && !arcOn
+                // 단일 테이퍼는 다섯 값 가운데 하나를 비워 계산한다(키패드 '비우기 · 자동 계산') — T1–T2 를 원호로 내면 네 좌표 가운데 하나(접하는 자리로)
+                val blankable = !kind.double
                 Column(verticalArrangement = Arrangement.spacedBy(Space.fieldGap)) {
                     for (i in 0 until n) {
                         val p = sol?.points?.get(i)?.vertex
@@ -269,13 +269,14 @@ internal fun SlopeScreen(s: TaperState) {
                 }
                 ExpandableHint(
                     if (kind.double) "세 점의 X · Z 를 모두 넣습니다. 각도는 결과로 나옵니다."
-                    else if (arcOn) "T1 · T2 의 X · Z 와 원호의 R 을 넣습니다 (원호는 네 좌표를 모두 넣음)."
+                    else if (arcOn) "원호의 R 과 T1 · T2 의 X · Z 를 넣습니다 (빈 좌표 하나는 원호가 앞뒤 요소에 접하는 자리로 계산)."
                     else "빈칸 하나는 나머지 넷으로 자동 계산합니다 (보통 각도를 비움).",
                     (
                         if (kind.double) ""
                         else if (arcOn) {
                             "T1 과 T2 를 직선 대신 반지름 R 의 원호로 잇습니다. 볼록은 소재가 불룩(직선보다 덜 깎음), 오목은 움푹(더 깎음)입니다 — G02/G03 은 앱이 정합니다. " +
-                                "R 은 '최소 R' 이상이어야 합니다(그 값이면 호가 앞뒤 요소에 접합니다). 꼭짓점을 둥글리는 R 은 점 줄의 모서리 R 칸이고, 이 원호와 함께 쓸 수 있습니다. "
+                                "R 은 '최소 R' 이상이어야 합니다(그 값이면 호가 앞뒤 요소에 접합니다). 꼭짓점을 둥글리는 R 은 점 줄의 모서리 R 칸이고, 이 원호와 함께 쓸 수 있습니다. " +
+                                "X1·Z1·X2·Z2 가운데 하나를 비우면(키패드의 '비우기 · 자동 계산') 원호가 앞뒤 요소(수평 · 단면)에 접하는 자리로 계산합니다 — 도면에 접점 좌표가 없을 때. "
                         } else "X1·Z1·X2·Z2·각도 가운데 하나를 비우면(키패드의 '비우기 · 자동 계산') 나머지 넷으로 계산합니다. 보통 각도를 비워 둡니다. "
                         ) +
                         "모서리 R 은 비우면 0(날카로운 꼭짓점). 시작점·끝점은 앞뒤 요소의 바깥 끝 좌표(단면이면 X, 수평이면 Z)로, 넣었을 때만 그 요소를 깎습니다 — " +

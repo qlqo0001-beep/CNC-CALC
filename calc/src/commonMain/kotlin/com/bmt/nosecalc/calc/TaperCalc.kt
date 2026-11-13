@@ -13,11 +13,11 @@ import kotlin.math.tan
 
 /**
  * 테이퍼 경고. 화면이 한국어 문구를 고른다.
- * 위 아홉 개는 계산을 멈춘다 — [TaperResult.solution] 이 null 이고 경고는 그 하나뿐(틀린 숫자를 내지 않으려고).
+ * 위 열 개는 계산을 멈춘다 — [TaperResult.solution] 이 null 이고 경고는 그 하나뿐(틀린 숫자를 내지 않으려고).
  * 아래 여덟은 숫자와 함께 나온다.
  */
 enum class TaperWarning {
-    /** 값이 모자람. 한 경사는 X1·Z1·X2·Z2·각도 가운데 넷, 겹테이퍼는 세 점의 X·Z 모두 */
+    /** 값이 모자람. 한 경사는 X1·Z1·X2·Z2·각도 가운데 넷(원호는 네 좌표 가운데 셋과 R), 겹테이퍼는 세 점의 X·Z 모두 */
     MISSING_INPUT,
 
     /** 다섯 값을 다 넣었는데 각도가 점과 0.001° 넘게 다르다 */
@@ -46,9 +46,15 @@ enum class TaperWarning {
 
     /**
      * T1–T2 사이 원호([TaperInput.arc])의 R 이 작다: R 이 두 점 사이 거리의 절반보다 작거나, 호가 T1 · T2 너머로 부푼다
-     * (끝 접선이 형상 사분면 밖 — [TaperCalc.arcMinR] 보다 작음)
+     * (끝 접선이 형상 사분면 밖 — [TaperCalc.arcMinR] 보다 작음). 빈 좌표를 접점으로 풀 때는 넣은 두 점의 반경 차(빈 칸이 X 면 Z 거리)가 R 보다 크다
      */
     ARC_R_TOO_SMALL,
+
+    /**
+     * 원호의 빈 좌표를 풀 수 없다: 그 볼록 · 오목 호는 이 TYPE 의 앞뒤 요소(수평 · 단면) 어느 쪽에도 접하지 않는다
+     * (형상 1 의 오목 · 형상 4 의 볼록 — 외경 · 내경 같다). 네 좌표를 모두 넣어야 한다
+     */
+    ARC_NO_TANGENT,
 
     /**
      * 노즈R 에 비해 경사(또는 앞뒤 요소)가 짧아 공구가 그 요소의 어느 점에도 닿지 못한다 — 도면 형상이 안 나온다.
@@ -161,7 +167,8 @@ data class TaperInput(
     val approach: Boolean = true,
     /**
      * T1–T2 사이를 직선(테이퍼 · 면취) 대신 원호로(피드백 2026-11-10). 꼭짓점을 둥글리는 모서리 R([cornerR1] · [cornerR2])과 다르다 — 그 선 자체가 호이고,
-     * 모서리 R 은 그 호와 앞뒤 요소가 만나는 T1 · T2 에 그대로 걸린다. 네 좌표를 모두 넣는다([angleDeg] 는 읽지 않는다).
+     * 모서리 R 은 그 호와 앞뒤 요소가 만나는 T1 · T2 에 그대로 걸린다. [angleDeg] 는 읽지 않는다. 네 좌표 가운데 하나를 비우면
+     * 호가 앞뒤 요소에 접하는 자리로 채운다(사용자 피드백 2026-11-14 — 도면이 접점 좌표를 적지 않는 꼴).
      * false 면 [arcR] · [arcConvex] 는 읽지 않는다(전과 꼭 같은 결과)
      */
     val arc: Boolean = false,
@@ -353,6 +360,39 @@ object TaperCalc {
     }
 
     /**
+     * 원호([TaperInput.arc])의 빈 좌표 하나(그림 순서 — 뒤집기를 푼 뒤)를 호가 앞뒤 요소에 접하는 자리로 채운다. 도면이 R 과 지름만 적고
+     * 접점 Z 는 적지 않는 꼴(구멍 Ø7.5 → Ø6.3 의 R3.75 볼 자리 등 — 사용자 피드백 2026-11-14). 그 자리면 R 이 [arcMinR] 과 같다.
+     * 접하는 끝: 볼록은 소재 쪽 점(외경은 아래 · 내경은 위)에서 단면, 반대 점에서 수평에 접하고 오목은 그 반대 — 그 끝의 앞뒤 요소(TYPE 1 · 2 는 T1,
+     * 2 · 4 는 T2 가 단면, 나머지 수평)가 그 방향인 끝만 된다. 두 끝 다 되면 빈 좌표의 점에서 접한다(도면이 안 적은 쪽이 접점).
+     * 수평에 접하면 Δz² + (R − Δr)² = R², 단면에 접하면 Δr² + (R − Δz)² = R² (Δz · Δr = 두 점의 Z 거리 · 반경 차) — 호가 1/4 원을 넘지 않는다
+     */
+    private fun tangentFill(i: TaperInput, up: Double): TaperInput {
+        val r = i.arcR!!
+        val deepIsT1 = (up > 0) != i.inner
+        fun vertAt(t1: Boolean) = if (t1) i.type <= 2 else i.type == 2 || i.type == 4
+        // 그 끝의 요소에 접한 호가 볼록인가: 소재 쪽 점에서 단면 · 반대 점에서 수평
+        val ends = listOf(true, false).filter { (vertAt(it) == (it == deepIsT1)) == i.arcConvex }
+        if (ends.isEmpty()) stop(TaperWarning.ARC_NO_TANGENT)
+        val emptyAt1 = i.x1 == null || i.z1 == null
+        val vertical = vertAt(if (emptyAt1 in ends) emptyAt1 else ends.single())
+        // 접선을 따라 간 거리(접선에서 a 만큼 떨어질 때) · 접선에서 떨어진 거리(접선을 따라 b 만큼 갈 때)
+        fun along(a: Double) = if (a - r > EPS) stop(TaperWarning.ARC_R_TOO_SMALL) else sqrt(max(0.0, a * (2 * r - a)))
+        fun across(b: Double) = if (b - r > EPS) stop(TaperWarning.ARC_R_TOO_SMALL) else r - sqrt(max(0.0, r * r - b * b))
+        return when {
+            i.z1 == null || i.z2 == null -> {
+                val dr = rise(i.x1!!, i.x2!!, up)
+                val dz = if (vertical) across(dr) else along(dr)
+                if (i.z1 == null) i.copy(z1 = i.z2!! + dz) else i.copy(z2 = i.z1 - dz)
+            }
+            else -> {
+                val dz = leftward(i.z1, i.z2)
+                val dr = if (vertical) along(dz) else across(dz)
+                if (i.x1 == null) i.copy(x1 = i.x2!! - up * 2 * dr) else i.copy(x2 = i.x1 + up * 2 * dr)
+            }
+        }
+    }
+
+    /**
      * 가공 순서 a → b 를 잇는 반지름 R 의 작은 호. 볼록(소재가 불룩) = 중심이 소재 쪽(공구 반대쪽), 오목 = 공구 쪽.
      * 방향은 [NoseComp] 의 규칙 그대로: 왼쪽 공구(G41) + 시계 = 볼록
      */
@@ -370,9 +410,9 @@ object TaperCalc {
         }
         require(i.type in 1..5) { "TYPE 은 1~5: ${i.type}" }
         checkCommon(i.noseR, i.tip, i.zClear, listOf(i.cornerR1, i.cornerR2), i.start, i.end)
-        // T1–T2 를 호로 내면 네 좌표와 R 을 모두 넣는다 — 각도 칸은 읽지 않는다(도면이 호의 현 각도를 주지 않는다)
+        // T1–T2 를 호로 내면 각도 칸 대신 R 을 넣는다(도면이 호의 현 각도를 주지 않는다) — 빈 좌표 하나는 호가 앞뒤 요소에 접하는 자리로([tangentFill])
         val given = if (i.arc) listOf(i.x1, i.z1, i.x2, i.z2) else listOf(i.x1, i.z1, i.x2, i.z2, i.angleDeg)
-        if (given.count { it == null } > (if (i.arc) 0 else 1)) stop(TaperWarning.MISSING_INPUT)
+        if (given.count { it == null } > 1) stop(TaperWarning.MISSING_INPUT)
         if (i.arc && i.arcR == null) stop(TaperWarning.MISSING_INPUT)
         if (given.any { it != null && !it.isFinite() }) stop(TaperWarning.BAD_INPUT)
         if (i.arc && (!(i.arcR!! > 0 && i.arcR.isFinite()) || tooBig(i.arcR))) stop(TaperWarning.BAD_INPUT)
@@ -381,11 +421,12 @@ object TaperCalc {
         // T1 에서 왼쪽 T2 로 갈 때 X 가 커지면 +1: 외경 TYPE 1~4, 내경 TYPE 5
         val up = if (i.inner == (i.type == 5)) 1.0 else -1.0
         val t = ang?.let { tan(it * PI / 180) }
-        // 빈 값은 많아야 하나라 차례로 채우면 된다
-        val x1 = i.x1 ?: (i.x2!! - up * 2 * leftward(i.z1!!, i.z2!!) * t!!)
-        val x2 = i.x2 ?: (x1 + up * 2 * leftward(i.z1!!, i.z2!!) * t!!)
-        val z1 = i.z1 ?: (i.z2!! + rise(x1, x2, up) / t!!)
-        val z2 = i.z2 ?: (z1 - rise(x1, x2, up) / t!!)
+        // 빈 값은 많아야 하나라 차례로 채우면 된다(원호는 접하는 자리로 먼저 채운다)
+        val f = if (i.arc && given.any { it == null }) tangentFill(i, up) else i
+        val x1 = f.x1 ?: (f.x2!! - up * 2 * leftward(f.z1!!, f.z2!!) * t!!)
+        val x2 = f.x2 ?: (x1 + up * 2 * leftward(f.z1!!, f.z2!!) * t!!)
+        val z1 = f.z1 ?: (f.z2!! + rise(x1, x2, up) / t!!)
+        val z2 = f.z2 ?: (z1 - rise(x1, x2, up) / t!!)
         // 아주 작은 각도로 푼 점도 한도를 넘을 수 있다
         if (x1 <= 0 || x2 <= 0 || tooBig(x1, z1, x2, z2)) stop(TaperWarning.BAD_INPUT)
         val p1 = Pt.ofDia(z1, x1)

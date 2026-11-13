@@ -258,7 +258,7 @@ internal data class SlopeForm(
     val flip: Boolean = false,
     /** [angle] 을 잰 축(화면 스위치 AppState.angleRef). 기본이 없다 — 부르는 쪽이 늘 밝힌다(calc 에는 [zAngle]) */
     val angleRef: AngleRef,
-    /** T1–T2 사이를 직선 대신 원호로(홑테이퍼만 — calc 의 TaperInput.arc). 그때 [angle] 은 읽지 않고 네 좌표와 [arcR] 을 모두 넣는다 */
+    /** T1–T2 사이를 직선 대신 원호로(홑테이퍼만 — calc 의 TaperInput.arc). 그때 [angle] 은 읽지 않고 [arcR] 과 네 좌표 가운데 셋 이상(빈 하나는 접하는 자리로)을 넣는다 */
     val arc: Boolean = false,
     /** 그 호의 R(빈칸 = null) */
     val arcR: Double? = null,
@@ -471,10 +471,10 @@ internal fun taperWarningText(w: TaperWarning, f: SlopeForm): String = if (f.arc
 
 /**
  * T1–T2 를 원호로 냈을 때([SlopeForm.arc]) 글이 달라지는 경고(나머지는 null — 직선 글 그대로). 직선의 '경사' · '각도' 말을 원호 · R 로 바꾸고,
- * R 이 작아 멈춘 것(ARC_R_TOO_SMALL)은 이 두 점의 가장 작은 R 을 적는다
+ * R 이 작아 멈춘 것(ARC_R_TOO_SMALL)은 이 두 점의 가장 작은 R 을(빈 좌표를 접하는 자리로 풀다 멈췄으면 넣은 쪽 차를) 적는다
  */
 private fun arcWarningText(w: TaperWarning, f: SlopeForm): String? = when (w) {
-    TaperWarning.MISSING_INPUT -> "값을 넣으면 바로 계산합니다 — X1 · Z1 · X2 · Z2 와 R (원호는 네 좌표를 모두 넣습니다)."
+    TaperWarning.MISSING_INPUT -> "값을 넣으면 바로 계산합니다 — R 과 X1 · Z1 · X2 · Z2 가운데 셋 (빈 좌표 하나는 원호가 앞뒤 요소에 접하는 자리로 계산합니다)."
     TaperWarning.BAD_ANGLE -> "두 점이 같은 자리이거나 수평 · 수직으로 놓였습니다. T1 · T2 는 그림처럼 X · Z 가 모두 달라야 합니다."
     TaperWarning.BAD_INPUT ->
         "입력이 잘못됐습니다. 지름과 T1–T2 원호의 R 은 0 보다 크고, 노즈R·모서리 R·Z 여유는 0 이상이어야 합니다(노즈R 이 0 이면 Z 여유를 넣으세요 — 진입 거리가 없습니다). " +
@@ -488,10 +488,23 @@ private fun arcWarningText(w: TaperWarning, f: SlopeForm): String? = when (w) {
         val x2 = f.x[1]
         val z2 = f.z[1]
         val len = if (x1 != null && z1 != null && x2 != null && z2 != null) Pt((z2 - z1), (x2 - x1) / 2).length else null
+        // 빈 좌표를 접하는 자리로 풀다 멈춘 것: 넣은 쪽 차(빈 칸이 Z 면 반경 차, X 면 Z 거리)가 R 보다 크다 — 1/4 원보다 큰 호가 된다
+        val gap = when {
+            x1 != null && x2 != null && (z1 == null) != (z2 == null) -> "두 점의 반경 차 ${Fmt.fixed3(abs(x2 - x1) / 2)}"
+            z1 != null && z2 != null && (x1 == null) != (x2 == null) -> "두 점의 Z 거리 ${Fmt.fixed3(abs(z2 - z1))}"
+            else -> null
+        }
         "R 이 너무 작습니다. " +
-            (if (min != null && len != null) "이 두 점 사이 원호는 R ${Fmt.fixed3(min)} 이상이어야 합니다(두 점 사이 거리 ${Fmt.fixed3(len)}). " else "") +
+            when {
+                gap != null -> "빈 좌표를 원호가 앞뒤 요소에 접하는 자리로 풀려면 R 이 $gap 이상이어야 합니다. "
+                min != null && len != null -> "이 두 점 사이 원호는 R ${Fmt.fixed3(min)} 이상이어야 합니다(두 점 사이 거리 ${Fmt.fixed3(len)}). "
+                else -> ""
+            } +
             "그보다 작으면 호가 T1 · T2 너머로 부풀어 앞뒤 요소를 넘습니다. 꼭짓점을 둥글리는 R 은 점 줄의 '모서리 R' 칸에 넣으세요."
     }
+    TaperWarning.ARC_NO_TANGENT ->
+        "빈 좌표를 계산할 수 없습니다. 이 형상의 ${if (f.arcConcave) "오목" else "볼록"} 원호는 앞뒤 요소(수평 · 단면) 어느 쪽에도 접하지 않아 접점이 정해지지 않습니다. " +
+            "네 좌표를 모두 넣거나 볼록 · 오목을 확인하세요."
     TaperWarning.NOSE_UNREACHABLE ->
         "노즈R 에 비해 T1–T2 원호(또는 앞뒤 요소)가 짧거나 오목 원호의 R 이 작아 공구가 닿지 못합니다. 도면 형상이 안 나옵니다 — 노즈R 을 줄이거나 원호의 R 을 키우세요."
     TaperWarning.NOSE_GT_SLOPE -> "노즈R 이 T1–T2 사이 거리보다 큽니다. 숫자는 맞지만 오목 모서리 쪽에 노즈R 이 남아 원호가 거의 안 남을 수 있습니다. 도면을 확인하세요."
@@ -508,6 +521,7 @@ private fun straightWarningText(w: TaperWarning, f: SlopeForm): String = when (w
     TaperWarning.BAD_ANGLE -> "각도는 0° 보다 크고 90° 보다 작아야 합니다. 두 점이 수평·수직으로 놓이면 경사가 아닙니다."
     // T1–T2 원호에서만 난다(글은 arcWarningText)
     TaperWarning.ARC_R_TOO_SMALL -> "T1–T2 원호의 R 이 너무 작습니다. 호가 T1 · T2 너머로 부풉니다."
+    TaperWarning.ARC_NO_TANGENT -> "T1–T2 원호가 앞뒤 요소에 접하지 않아 빈 좌표를 계산할 수 없습니다. 네 좌표를 모두 넣으세요."
     TaperWarning.SHAPE_MISMATCH -> when {
         !f.zBackward -> "값이 고른 형상 그림과 맞지 않습니다. 점의 좌우 순서(그림의 T1·T2 자리)와 X 가 커지는 쪽을 확인하세요."
         f.flip && f.reverse -> "Z 부호 · 순서를 확인하세요. T1 ⇄ T${f.x.size} 를 바꿔 T1 이 척 반대쪽이라 Z 가 작아집니다 (예: Z1 −25 → Z${f.x.size} −30)."
