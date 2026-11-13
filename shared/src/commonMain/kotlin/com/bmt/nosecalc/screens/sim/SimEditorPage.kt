@@ -55,6 +55,7 @@ import com.bmt.nosecalc.LocalAppState
 import com.bmt.nosecalc.OnBack
 import com.bmt.nosecalc.calc.sim.IssueCode
 import com.bmt.nosecalc.calc.sim.IssueLevel
+import com.bmt.nosecalc.calc.sim.ParsedProgram
 import com.bmt.nosecalc.calc.sim.SimIssue
 import com.bmt.nosecalc.calc.sim.SimRun
 import com.bmt.nosecalc.ui.AppIcons
@@ -110,6 +111,7 @@ internal fun SimulatorPage(sim: SimState, onTools: () -> Unit, onTrajectory: (Si
     val run = sim.run
     // 빈 글의 'M30 없이 끝남' 같은 안내와 쓰는 줄의 문제는 띄우지 않는다
     val issues = shownIssues(ed, run)
+    val stop = run.stop?.takeIf { !hidden(ed, run, it) }
     FeatureScaffold(Feature.SIMULATOR, SimHelp, helpStart = if (sim.trajOpen) SIM_HELP_TRAJ else 0) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val keyH = if (maxHeight < 700.dp) 46.dp else 58.dp
@@ -128,7 +130,7 @@ internal fun SimulatorPage(sim: SimState, onTools: () -> Unit, onTrajectory: (Si
                         FindBar(sim, onClose = { sim.findOpen = false; refocus() })
                     }
                     GEditor(
-                        ed, issues.filter { it.line > 0 }.groupBy { it.line }, run.stop?.line, focus,
+                        ed, issues.filter { it.line > 0 }.groupBy { it.line }, stop?.line, focus,
                         // 궤적 창이 덮고 있으면 PC 키를 편집기에 넣지 않는다(창이 받지 않은 글자 키가 숨은 글에 들어가지 않게)
                         onKey = { e -> !sim.trajOpen && pcKey(e, sim, clip) },
                         modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -182,15 +184,43 @@ internal fun SimulatorPage(sim: SimState, onTools: () -> Unit, onTrajectory: (Si
             onExamples = { sim.sheet = SimSheet.PROGRAMS },
             onDismiss = { sim.sheet = null },
         )
-        SimSheet.ISSUES -> IssueSheet(issues, run.stop?.takeIf { !ed.hides(it.line - 1) }, onPick = { sim.goTo(it); refocus() }) { sim.sheet = null }
+        SimSheet.ISSUES -> IssueSheet(issues, stop, onPick = { sim.goTo(it); refocus() }) { sim.sheet = null }
         null -> {}
     }
     SimAskModal(sim)
 }
 
-/** 편집기에 보일 문제(설계 20): 빈 검사 글이면 없음, 쓰는 줄 · 막 끝낸 줄 것은 뺀다. 화면과 시험이 같이 쓴다 */
+/** 편집기에 보일 문제(설계 20): 빈 검사 글이면 없음, 가린 것([hidden])은 뺀다. 화면과 시험이 같이 쓴다 */
 internal fun shownIssues(ed: EditorState, run: SimRun): List<SimIssue> =
-    if (ed.checkedText.isBlank()) emptyList() else run.issues.filterNot { ed.hides(it.line - 1) }
+    if (ed.checkedText.isBlank()) emptyList() else run.issues.filterNot { hidden(ed, run, it) }
+
+/** 지금 가린 문제: 쓰는 줄 · 막 끝낸 줄의 것, 그 줄이 글의 마지막 줄이면 글이 덜 끝나서 생긴 문제([endOfText])도(설계 21.6) */
+internal fun hidden(ed: EditorState, run: SimRun, i: SimIssue): Boolean = ed.hides(i.line - 1) || ed.atTextEnd && endOfText(run.program, i)
+
+/** 실행이 글 끝에 닿아서 붙는 문제(설계 21.6): 끝(M30 · M02 · M99) 없음 · 부프로그램 M99 없음 · 끄지 않은 보정 · 다음 이동 없는 모서리 */
+internal val TextEndCodes = setOf(IssueCode.NO_END, IssueCode.SUB_NO_M99, IssueCode.COMP_NOT_CANCELLED, IssueCode.CORNER_NO_NEXT)
+
+/** 프로그램을 끝내는 M — 이 블록에 붙은 [TextEndCodes] 는 글 끝이 아니라 이 끝에서 생겼다 */
+private val EndM = setOf(2.0, 30.0, 99.0)
+
+/**
+ * 검사 글이 덜 끝나서 생긴 문제인가(설계 21.6). 같은 코드라도 이미 끝낸 다른 줄 때문에 생긴 것은 아니다:
+ * [TextEndCodes] 는 줄 없는 것이거나 마지막 O 번호의 낱말 있는 마지막 블록(M02 · M30 · M99 블록이 아님)에 붙은 것,
+ * 아직 안 쓴 P · Q 의 N 블록(CYCLE_PQ_NOT_FOUND — 같은 O 번호 안에서만 찾는다)은 그 G7x 가 마지막 O 번호에 있을 때,
+ * 아직 안 쓴 M98 의 부프로그램(SUB_SKIPPED — 부프로그램은 글 끝에 쓴다)은 언제나.
+ */
+internal fun endOfText(prog: ParsedProgram, i: SimIssue): Boolean {
+    val unit = prog.units.lastOrNull() ?: return false
+    return when (i.code) {
+        in TextEndCodes -> {
+            val end = unit.blocks.lastOrNull { it.words.isNotEmpty() }
+            i.line == 0 || i.line >= (end?.line ?: unit.firstLine) && end?.words.orEmpty().none { it.key == "M" && it.value in EndM }
+        }
+        IssueCode.CYCLE_PQ_NOT_FOUND -> i.line >= unit.firstLine
+        IssueCode.SUB_SKIPPED -> true
+        else -> false
+    }
+}
 
 /**
  * 프로그램 줄(48dp — 우리가 정함): O 번호 칩 · 첫 주석과 상태(저장됨 · 예제 · 고침) · [저장] · [목록] · [⋯].

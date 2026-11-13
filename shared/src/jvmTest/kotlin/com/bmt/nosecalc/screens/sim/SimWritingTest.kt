@@ -3,9 +3,11 @@ package com.bmt.nosecalc.screens.sim
 import com.bmt.nosecalc.KeyValueStore
 import com.bmt.nosecalc.calc.sim.IssueCode
 import com.bmt.nosecalc.calc.sim.SimIssue
+import com.bmt.nosecalc.calc.sim.ToolOffset
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -31,7 +33,7 @@ class SimWritingTest {
     private fun SimState.codes(line: Int): List<IssueCode> = shown().filter { it.line == line }.map { it.code }
 
     /** 글을 불러와 한 번 돈 상태(커서는 글 끝) */
-    private fun sim(text: String = "", cursor: Int = text.length) = SimState(store()).apply {
+    private fun sim(text: String = "", cursor: Int = text.length, tools: Map<Int, ToolOffset>? = null) = SimState(store(), tools).apply {
         editor.replaceAll(text, cursor)
         rerun()
     }
@@ -65,8 +67,10 @@ class SimWritingTest {
         val s = sim("G00 X44 Z2.\n")
         val before = s.shown()
         assertTrue(IssueCode.NO_POINT_COORD in s.codes(1), "$before")
+        assertTrue(IssueCode.NO_END in s.codes(1), "$before")
         s.editor.insert("X")
-        assertEquals(before, s.shown())
+        // 글 끝 줄을 쓰는 중이라 글 끝 안내(NO_END)만 빠진다(설계 21.6)
+        assertEquals(before.filter { it.code != IssueCode.NO_END }, s.shown())
         assertEquals(emptyList(), s.codes(2))
     }
 
@@ -238,10 +242,10 @@ class SimWritingTest {
         assertEquals(emptyList(), skip.codes(2))
     }
 
-    /** 줄 없는 문제(line 0)는 쓰는 중에도 보이고, 검사 글이 빈 글이면 아무것도 보이지 않는다 */
+    /** 줄 없는 문제(line 0)는 쓰는 중에도 보이고(가운데 줄 — 글 끝 줄이면 글 끝 문제는 가린다, 설계 21.6), 검사 글이 빈 글이면 아무것도 보이지 않는다 */
     @Test
     fun lineLessIssuesAndBlankText() {
-        val s = sim("G0X1.\n")
+        val s = sim("G0X1.\n\nM30", cursor = 6)
         s.editor.insert("X")
         s.run = s.run.copy(issues = s.run.issues + SimIssue(IssueCode.NO_END, 0))
         assertTrue(s.shown().any { it.line == 0 })
@@ -352,5 +356,102 @@ class SimWritingTest {
         s.editor.vertical(1)
         s.rerun()
         assertEquals(listOf(IssueCode.NO_NUMBER), s.codes(2))
+    }
+
+    /**
+     * 사용자 답(2026-11-13) "그 줄을 다 입력할 때까지 에러 표기하지 않음"(설계 21.6): 글 끝 줄을 쓰는 동안은 글이 덜 끝나서 붙는 문제도 띄우지 않는다.
+     * 끝낼 글을 한 글자씩 치는 동안 · ⏎ 직후(새 결과 전) · 새 결과 뒤 모두 없다. 끝내도 남는 글을 치고 ⏎ 하면 새 결과 뒤 보인다
+     */
+    @Test
+    fun endOfTextIssuesWaitForTheLastLine() {
+        for (c in END_CASES) {
+            fun SimState.has() = c.code in shown().map { it.code }
+            val s = sim(c.text, tools = c.tools)
+            assertTrue(s.has(), "치기 전에는 보인다(${c.code}): ${s.shown()}")
+            for (ch in c.done) {
+                s.press(key(if (ch == ' ') "SP" else ch.toString()))
+                assertFalse(s.has(), "'${c.done}' 를 쓰는 중(${c.code}): ${s.shown()}")
+                s.rerun()
+                assertFalse(s.has(), "'${c.done}' 를 쓰는 중 0.3초 뒤(${c.code}): ${s.shown()}")
+            }
+            s.press(key("⏎"))
+            assertNull(s.editor.writingLine)
+            assertFalse(s.has(), "⏎ 직후 — 옛 결과의 ${c.code} 가 되살아났다: ${s.shown()}")
+            s.rerun()
+            assertTrue(s.run.issues.none { it.code == c.code }, "'${c.done}' 로 끝났다: ${s.run.issues}")
+
+            val w = sim(c.text, tools = c.tools)
+            for (ch in c.wrong) w.press(key(if (ch == ' ') "SP" else ch.toString()))
+            assertFalse(w.has(), "'${c.wrong}' 를 쓰는 중(${c.code}): ${w.shown()}")
+            w.press(key("⏎"))
+            assertFalse(w.has(), "⏎ 직후(새 결과 전 — ${c.code}): ${w.shown()}")
+            w.rerun()
+            assertTrue(w.has(), "'${c.wrong}' 로는 끝나지 않는다(${c.code}): ${w.shown()}")
+        }
+    }
+
+    /** 가운데 줄을 고칠 때는 글 끝 문제가 그 줄 때문이 아니라 그대로 보인다 */
+    @Test
+    fun endOfTextIssuesStayWhileEditingAMiddleLine() {
+        for (c in END_CASES) {
+            val s = sim(c.text, tools = c.tools)
+            s.editor.moveTo(s.editor.lineEnd(2))
+            s.editor.backspace()
+            assertEquals(2, s.editor.writingLine)
+            assertTrue(c.code in s.shown().map { it.code }, "${c.code}: ${s.shown()}")
+            s.editor.insert("3")
+            assertTrue(c.code in s.shown().map { it.code }, "${c.code}: ${s.shown()}")
+        }
+    }
+
+    /**
+     * 같은 코드라도 글 끝에서 생긴 것이 아니면 글 끝 줄을 쓰는 동안에도 보인다(설계 21.6 — 쓰는 줄로는 고칠 수 없다):
+     * 주 프로그램에 M30 이 없어 끝 부프로그램의 M99 줄에 붙은 NO_END(M99 뒤에 쓰는 중) · 뒤에 다른 O 번호가 있는 주 프로그램의 G70 Q 번호 틀림
+     */
+    @Test
+    fun endOfTextCodesFromFinishedPlacesStay() {
+        val cases = listOf(
+            Triple(IssueCode.NO_END, 9, HEAD + "G00 X40. Z2.\nM98 P2\nO0002\nG01 Z-10. F0.2\nM99\n"),
+            Triple(IssueCode.CYCLE_PQ_NOT_FOUND, 11, HEAD + "G00 X42. Z2.\nG71 U1. R0.5\nG71 P10 Q20 U0.2 W0.1 F0.2\nN10 G00 X30.\nG01 Z-10.\nN20 X42.\nG70 P10 Q30\nM30\nO0002\nG01 X50.\n"),
+        )
+        for ((code, line, text) in cases) {
+            val s = sim(text)
+            assertTrue(code in s.codes(line), "$code: ${s.run.issues}")
+            s.press(key("G"))
+            assertEquals(text.count { it == '\n' }, s.editor.writingLine, "$code: 글 끝 줄을 쓰는 중")
+            assertTrue(code in s.codes(line), "$code 가 끝 줄에 G 하나로 숨었다: ${s.shown()}")
+        }
+    }
+
+    /** 글 끝 뒤에 빈 줄 · 빈칸만 있으면 쓰는 줄을 마지막 줄로 본다. 뒤에 글(주석 하나라도)이 있으면 마지막 줄이 아니다 */
+    @Test
+    fun onlyBlankLinesAfterIsTheLastLine() {
+        val c = END_CASES[0]
+        val blank = sim(c.text + "\n  \n\n", cursor = c.text.length)
+        assertTrue(IssueCode.NO_END in blank.shown().map { it.code }, "${blank.shown()}")
+        blank.press(key("M"))
+        assertEquals(6, blank.editor.writingLine)
+        assertFalse(IssueCode.NO_END in blank.shown().map { it.code }, "${blank.shown()}")
+        val note = sim(c.text + "\n(END)", cursor = c.text.length)
+        note.press(key("M"))
+        assertEquals(6, note.editor.writingLine)
+        assertTrue(IssueCode.NO_END in note.shown().map { it.code }, "${note.shown()}")
+    }
+
+    /** 글이 덜 끝나서 붙는 문제 한 가지: 앞 글(끝은 빈 줄 — 커서가 거기), 끝내는 글, 끝내도 남는 글, 그 문제 */
+    class EndCase(val text: String, val done: String, val wrong: String, val code: IssueCode, val tools: Map<Int, ToolOffset>? = null)
+
+    companion object {
+        private const val HEAD = "O0001\nT0101\nG97 S1000 M03\nG99\n"
+
+        /** 글 끝 문제마다 하나(설계 21.6 — 화면 시험도 쓴다). 글은 새로 쓴 것 */
+        val END_CASES = listOf(
+            EndCase(HEAD + "G00 X40. Z2.\nG01 Z-10. F0.2\n", "M30", "M3", IssueCode.NO_END),
+            EndCase(HEAD + "G42\nG00 X40. Z20.\nZ2.\nG01 Z-10. F0.2\nX46. F.3\n", "G40", "X48.", IssueCode.COMP_NOT_CANCELLED, mapOf(1 to ToolOffset(0.8, 3))),
+            EndCase(HEAD + "G00 X36. Z2.\nG01 Z0. F0.2\nX40.,C1.\n", "Z-10.", "M30", IssueCode.CORNER_NO_NEXT),
+            EndCase(HEAD + "G00 X42. Z2.\nG71 U1. R0.5\nG71 P10 Q20 U0.2 W0.1 F0.2\nN10 G00 X30.\nG01 Z-10.\n", "N20 X42.", "N2 X42.", IssueCode.CYCLE_PQ_NOT_FOUND),
+            EndCase(HEAD + "G00 X40. Z2.\nM98 P2\nM30\nO0002\nG01 Z-10. F0.2\n", "M99", "M9", IssueCode.SUB_NO_M99),
+            EndCase(HEAD + "G00 X40. Z2.\nM98 P3\nM30\n", "O0003", "O0004", IssueCode.SUB_SKIPPED),
+        )
     }
 }
