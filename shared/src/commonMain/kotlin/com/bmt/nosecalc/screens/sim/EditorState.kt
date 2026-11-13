@@ -65,6 +65,10 @@ internal class EditorState(text: String = "", cursor: Int = 0) {
     /** 그 줄(0부터)의 문제를 지금 보이지 않나 */
     fun hides(line: Int): Boolean = line == writingLine || line in settling
 
+    /** 쓰는 줄이나 막 끝낸 줄이 글의 마지막 줄인가(뒤는 빈 줄 · 빈칸뿐) — 그동안은 글이 덜 끝나서 붙는 문제도 가린다(설계 21.6) */
+    val atTextEnd: Boolean
+        get() = (settling + listOfNotNull(writingLine)).any { l -> (lineEnd(l) until text.length).all { text[it].isWhitespace() } }
+
     /** 줄을 끝냄: 검사 글을 now 로. 고친 것이 있으면 번호를 올리고 쓰던 줄은 새 결과가 올 때까지 가린다 */
     private fun settle(now: String) {
         val l = writingLine

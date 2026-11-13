@@ -170,12 +170,13 @@ class Verify1110EditorModelTest {
     /** "X" 만 침: 어느 줄이든(한 줄짜리 · 첫 줄 · 가운데 빈 줄 · 줄바꿈 없는 끝 줄) 쓰는 동안 그 줄 문제가 없고, ⏎ · 위 · 아래 · 다른 줄 누르기로 끝내면 보인다 */
     @Test
     fun xAloneOnAnyLineThenLeave() {
-        data class Case(val text: String, val cursor: Int, val line: Int)
+        // last = 글 끝 줄 — [2026-11-13 사용자 답, 설계 21.6] 그 줄을 쓰는 동안은 앞 줄에 붙은 글 끝 안내(NO_END)도 숨는다
+        data class Case(val text: String, val cursor: Int, val line: Int, val last: Boolean = false)
         val cases = listOf(
-            Case("", 0, 1),
+            Case("", 0, 1, last = true),
             Case("\nG0X40.Z2.\nM30", 0, 1),
             Case("G0X40.Z2.\n\nM30", 10, 2),
-            Case("G0X40.Z2.\n", 10, 2),
+            Case("G0X40.Z2.\n", 10, 2, last = true),
         )
         val leaves: List<Pair<String, (Screen) -> Unit>> = listOf(
             "⏎" to { s -> s.key("⏎") },
@@ -191,7 +192,7 @@ class Verify1110EditorModelTest {
             val run = s.sim.run
             s.key("X")
             assertEquals(c.line - 1, s.ed.writingLine, "$c")
-            assertEquals(before.filterNot { it.line == c.line }, s.shown(), "쓰는 동안 다른 줄의 문제가 바뀌었다 — $c")
+            assertEquals(before.filterNot { it.line == c.line || c.last && it.code == IssueCode.NO_END }, s.shown(), "쓰는 동안 다른 줄의 문제가 바뀌었다 — $c")
             assertFalse(s.quiesce(), "쓰는 동안 다시 돌았다 — $c")
             assertTrue(run === s.sim.run)
             assertEquals(emptyList(), s.codes(c.line), "$c")
