@@ -295,7 +295,9 @@ internal fun shownWarnings(r: RoundResult, arc3: Arc3Input? = null, machine: Rou
 }
 
 /** 기계 보정 프로그램만 내는 경고 */
-private val MACHINE_ONLY = setOf(RoundWarning.SHORT_END_PAST, RoundWarning.SHORT_END_SKIPPED, RoundWarning.ENTRY_NOT_FOUND, RoundWarning.EXIT_NOT_FOUND)
+private val MACHINE_ONLY = setOf(
+    RoundWarning.SHORT_END_PAST, RoundWarning.SHORT_END_SKIPPED, RoundWarning.ENTRY_NOT_FOUND, RoundWarning.EXIT_NOT_FOUND, RoundWarning.THROUGH_END_BLOCKED,
+)
 
 /** 경고가 가리키는 치수 칸(빨간 테두리). 값 부족은 안내라 칸을 붉히지 않는다 */
 internal fun roundWarningFields(w: RoundWarning, type: Int): Set<String> = when (w) {
@@ -306,9 +308,12 @@ internal fun roundWarningFields(w: RoundWarning, type: Int): Set<String> = when 
 
 /**
  * 경고 글. 계산을 멈춘 것은 빨강, 숫자와 함께 나온 것은 노랑, 값 부족은 파란 안내. type = [MANUAL] 이면 3점호.
- * empty = 아직 안 넣은(빈칸 · 0) 치수 칸 key — 값 부족 안내에 넣을 칸 이름을 든다. inner = 내경(구멍) 형상, flip = 가공 방향을 바꾼 상태
+ * empty = 아직 안 넣은(빈칸 · 0) 치수 칸 key — 값 부족 안내에 넣을 칸 이름을 든다. inner = 내경(구멍) 형상, flip = 가공 방향을 바꾼 상태,
+ * through = 관통 구멍(내경 5 · 6)
  */
-internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = emptySet(), inner: Boolean = false, flip: Boolean = false): String {
+internal fun roundWarningText(
+    w: RoundWarning, type: Int, empty: Set<String> = emptySet(), inner: Boolean = false, flip: Boolean = false, through: Boolean = false,
+): String {
     val names = dims(type).associate { it.key to it.label }
     val blanks = blankable(type).joinToString(" · ") { names.getValue(it) }
     return when (w) {
@@ -346,9 +351,10 @@ internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = e
                 "가공 방향을 되돌려 보고, 되돌려도 같은 경고면 노즈R 을 줄이세요."
             else if (type == MANUAL) "오목 원호의 R 이 노즈R 보다 작아 공구가 들어가지 못하거나, 축 가까이에서 노즈 중심이 축을 넘어 부품 반대쪽을 팝니다. 노즈R 을 줄이세요."
             // 가공 방향을 바꾸면 척 · 구멍 바닥 쪽 끝 직선에서 시작한다 — 노즈가 그 시작 좌표를 넘지 않고 닿으려면 그 직선이 노즈R 쯤보다 길어야 한다(calc '뒤집은 시작').
-            // 기본 방향도 못 닿는 꼴(좁은 구멍 · 짧은 요소)이면 방향을 되돌려도 같다 — 그때는 노즈R 을 줄이라고 한다(검증 2026-11-11)
-            else if (flip) "노즈R 에 비해 요소가 너무 짧거나 좁아 공구가 닿지 못합니다. 가공 방향을 바꾸면 척 · 구멍 바닥 쪽 끝 직선에서 시작하는데, " +
-                "노즈가 그 시작 좌표를 넘지 않고 닿으려면 그 직선이 노즈R 보다 길어야 합니다 — 그 직선(끝 직선 · 관통 구멍)을 늘리거나 가공 방향을 되돌려 보세요. " +
+            // 기본 방향도 못 닿는 꼴(좁은 구멍 · 짧은 요소)이면 방향을 되돌려도 같다 — 그때는 노즈R 을 줄이라고 한다(검증 2026-11-11).
+            // 관통 구멍은 시작 좌표 너머에서 들어와 시작 쪽 길이를 따지지 않는다 — 기본 방향과 같은 글(검증 2026-11-14)
+            else if (flip && !through) "노즈R 에 비해 요소가 너무 짧거나 좁아 공구가 닿지 못합니다. 가공 방향을 바꾸면 척 · 구멍 바닥 쪽 끝 직선에서 시작하는데, " +
+                "노즈가 그 시작 좌표를 넘지 않고 닿으려면 그 직선이 노즈R 보다 길어야 합니다 — 그 직선(끝 직선)을 늘리거나 가공 방향을 되돌려 보세요. " +
                 "되돌려도 같은 경고면 형상에 비해 노즈R 이 큰 것이니 노즈R 을 줄이세요."
             else "노즈R 에 비해 요소가 너무 짧거나 좁아 공구가 닿지 못합니다. 도면 형상이 안 나옵니다 — 노즈R 을 줄이세요."
         RoundWarning.CONCAVE_R_LE_NOSE ->
@@ -377,6 +383,10 @@ internal fun roundWarningText(w: RoundWarning, type: Int, empty: Set<String> = e
         RoundWarning.SHORT_END_SKIPPED ->
             "끝 직선(척 · 구멍 바닥 쪽으로 깎아 끝나는 직선)이 노즈R 보다 짧아, 기계 보정(G41/G42) 프로그램은 그 직선(과 앞 모서리 R)을 깎지 않고 앞 요소 끝에서 벽을 따라 뺍니다. " +
                 "노즈가 벽 너머로 가지 않는 대신 그 자리에 살이 남으니, 따로 다듬거나 노즈R 을 줄이세요."
+        // 관통 구멍 끝을 너머로 지나 빼지 못해 막힌 끝으로 뺀 꼴(calc 라운드 throughFrame — 검증 2026-11-14)
+        RoundWarning.THROUGH_END_BLOCKED ->
+            "관통 구멍이 노즈R 에 비해 아주 좁아 기계 보정(G41/G42) 프로그램은 끝 좌표 너머로 지나 뺄 자리(G40 자리)를 찾지 못해, " +
+                "막힌 끝처럼 끝 좌표에서 공구 쪽으로 뺍니다. 그래서 구멍 끝의 노즈R 구간에 구석이 조금(노즈R 의 0.41 배까지) 남으니, 직접 보정 프로그램을 쓰거나 노즈R 을 줄이세요."
     }
 }
 

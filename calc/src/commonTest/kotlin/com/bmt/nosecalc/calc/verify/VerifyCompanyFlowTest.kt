@@ -629,7 +629,9 @@ class VerifyCompanyFlowTest {
 
     // ================================================================ 라운드 · 3점호 · 보링바(다른 생성기)
 
-    private fun roundCase(group: String, tag: String, machine: RoundResult, direct: RoundResult, inner: Boolean, r: Double, extra: String?, std: Boolean = true): Case? {
+    private fun roundCase(
+        group: String, tag: String, machine: RoundResult, direct: RoundResult, inner: Boolean, r: Double, extra: String?, std: Boolean = true, through: Boolean = false,
+    ): Case? {
         val s = machine.solution ?: return null
         val ds = direct.solution ?: return null
         val d = s.drawing.segs
@@ -637,6 +639,9 @@ class VerifyCompanyFlowTest {
         val uB = dirEnd(last)
         val end = when {
             last.end.x <= 1e-6 -> End.AXIS
+            // 관통 구멍의 끝 너머는 같은 지름의 구멍 — 막힌 끝이 아니라 끝 좌표 너머로 지나간다(사용자 답 2026-11-13). 너머로 뺄 자리가 없으면 계산기가 전 규칙
+            // (막힌 끝)으로 짠다 — 어느 쪽인지는 NC 로 가른다(CompanyFrameVerifyTest.kt 의 `passesThroughEnd` — 검증 2026-11-14)
+            through && passesThroughEnd(s.nc, last.end.z) && last is Line && abs(uB.z) >= abs(uB.x) && uB.z < 0 -> End.FREE
             last is Line && abs(uB.z) >= abs(uB.x) && uB.z < 0 -> End.BLOCKED
             last is Line && abs(uB.x) > abs(uB.z) && ((uB.x > 0) == inner) -> End.BLOCKED
             else -> End.FREE
@@ -730,7 +735,7 @@ class VerifyCompanyFlowTest {
         val out = mutableListOf<Case>()
         repeat(count) {
             val inp = roundInput(rnd, rnd.nextBoolean())
-            roundCase("라운드", inp.toString(), RoundCalc.machine(inp), RoundCalc.calc(inp), inp.inner, inp.noseR, null, inp.tip == null || inp.tip == NoseComp.standardTip(inp.inner, false))?.let { out += it }
+            roundCase("라운드", inp.toString(), RoundCalc.machine(inp), RoundCalc.calc(inp), inp.inner, inp.noseR, null, inp.tip == null || inp.tip == NoseComp.standardTip(inp.inner, false), inp.through)?.let { out += it }
         }
         return out
     }

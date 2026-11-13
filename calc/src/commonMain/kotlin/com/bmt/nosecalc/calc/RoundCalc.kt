@@ -67,6 +67,12 @@ enum class RoundWarning {
      * 뺀 요소는 깎이지 않는다(벽 앞에 살이 남음)
      */
     SHORT_END_SKIPPED,
+
+    /**
+     * 기계 보정 프로그램: 관통 구멍([RoundInput.through])의 끝을 끝 좌표 너머로 지나 빼는 길을 못 찾아(노즈에 비해 아주 좁은 구멍) 전처럼 막힌 끝으로 뺐다 —
+     * 노즈가 끝 점의 법선에서 멈춰 그 끝의 노즈R 구간에 구석((√2 − 1)·r 까지)이 남는다(끝 직선이 노즈R 쯤보다 짧으면 SHORT_END_SKIPPED 와 함께 — 그 직선이 남는다)
+     */
+    THROUGH_END_BLOCKED,
 }
 
 /** TYPE 2 의 L2 를 어디서 재나. A = 왼쪽 이음점 ~ 오른쪽 끝(= L1 + B), B = 두 이음점 사이 */
@@ -107,13 +113,16 @@ data class RoundInput(
     val legLen: Double = 5.0,
     /** 내경(보링, 팁 2 · G41). TYPE 2~6 만 */
     val inner: Boolean = false,
-    /** 내경 5 · 6 만: 바닥 면 없이 D1 구멍이 뚫림 */
+    /**
+     * 내경 5 · 6 만: 바닥 면 없이 D1 구멍이 뚫림. 그 끝 좌표 너머는 같은 지름의 구멍으로 보고 노즈가 넘어가도 된다(사용자 답 2026-11-13) — 기계 보정의 끝은
+     * 끝 좌표 너머로 지나가 빼고, 가공 방향을 바꾸면([flip]) 시작 좌표 너머에서 들어와 구멍 벽을 끝까지 깎는다
+     */
     val through: Boolean = false,
     /**
      * 가공 방향 뒤집기(사용자 요청 2026-11-10 — 라운드에도 반대 보정 쪽 프로그램). 같은 형상 · 같은 치수를 같은 바이트(팁 그대로)로 **반대 끝부터** 깎는다:
      * 외경은 척 쪽 끝 직선에서 앞(Z+)으로 — G41, 내경은 구멍 바닥에서 입구로 — G42. 테이퍼의 [TaperInput.flip] 과 같은 뜻.
      * 보정점은 공구 쪽 · 팁 벡터로만 정해져 안 뒤집은 것과 같은 점(순서만 반대)이다 — 다만 척 · 구멍 바닥 쪽 끝 직선에서 시작할 때는 노즈가 그 시작 좌표를
-     * 넘지 않게 닿기만 한다([RoundCalc] 의 '뒤집은 시작')
+     * 넘지 않게 닿기만 한다([RoundCalc] 의 '뒤집은 시작'). 관통 구멍([through])에서 시작하면 그 너머가 구멍이라 시작 좌표 너머에서 들어온다
      */
     val flip: Boolean = false,
 )
@@ -256,7 +265,10 @@ object RoundCalc {
         val drawing = Contour(if (i.flip) reversed(base) else base)
         // Z 여유 0 이어도 진입점은 노즈R 만큼 띄운다(테이퍼와 같다)
         val tip = i.tip ?: NoseComp.standardTip(i.inner, false)
-        finish(drawing, if (machineR == null) i.noseR else 0.0, Side.of(i.inner, i.flip), tip, Pt(max(i.zClear, i.noseR), 0.0), s.filled, i.inner, machineR, i.flip, typed = true)
+        finish(
+            drawing, if (machineR == null) i.noseR else 0.0, Side.of(i.inner, i.flip), tip, Pt(max(i.zClear, i.noseR), 0.0), s.filled, i.inner, machineR, i.flip, typed = true,
+            through = i.through,
+        )
     }
 
     /** 윤곽을 거꾸로(가공 방향 뒤집기): 요소 순서 · 양 끝을 바꾸고 원호는 도는 방향도 */
@@ -552,9 +564,12 @@ object RoundCalc {
      * 방향과 상관없는 제 규칙 그대로).
      *
      * 뒤집은 시작(TYPE) — 기본 방향의 끝 규칙을 시간을 거꾸로 돌린 것이다([machineFrame]):
-     * - 척 · 구멍 바닥 쪽 끝 직선(외경 끝 직선 · 내경 공 뒤 구멍 · 관통 구멍)에서 Z+ 로 시작 = 막힌 시작. 넣은 시작 좌표 너머는 척 · 구멍 속이라 공구 쪽에서
+     * - 척 · 구멍 바닥 쪽 끝 직선(외경 끝 직선 · 내경 공 뒤 구멍)에서 Z+ 로 시작 = 막힌 시작. 넣은 시작 좌표 너머는 척 · 구멍 속이라 공구 쪽에서
      *   직각으로 들어가고, 노즈는 시작 좌표의 법선에 닿기만 한다(넘지 않는다 — calc-design '넣은 시작·끝점 너머로 넘지 않기'). 직접 보정의 첫 보정점도 그 자리
      *   (팁 3 이면 인선이 시작 좌표). 그 직선의 노즈 길이 [CompFrame.MIN_MOVE] 보다 짧으면 벽 앞에서 닿을 길이 없다 — NOSE_UNREACHABLE 로 멈춘다.
+     * - 관통 구멍([through] — 내경 5 · 6 의 D1 구멍)에서 시작: 시작 좌표 너머는 같은 지름의 구멍이 이어진다고 본다(벽이 아니다 — 사용자 답 2026-11-13
+     *   "관통이면 넘어가도 됌"). 첫 보정점은 기본 방향의 끝 보정점 그대로(노즈가 시작 좌표에 접함 — 구석이 남지 않는다). 급송은 시작 좌표 너머 c ·
+     *   공구 쪽 c(구멍이 좁으면 축까지) 자리에서 멈추고(급송 노즈가 도면 · 구멍 연장선에서 c), 비스듬한 이송 한 줄로 첫 보정점에 닿는다.
      * - 축에서 시작하는 면(내경 막힌 바닥 · 술통 뒷면) · 원호(내경 돔 · 공 바닥): 직접 보정은 첫 보정점(노즈 중심이 축)으로 공구 쪽에서 c.
      * 직접 보정은 진입 G00 앞에 접근 점을 둔다(테이퍼 뒤집기와 같다): 부품 앞 끝면 바깥(Z + c)에서 X 를 맞추고 Z 로만 들어간다 — 그 X 로 오는 노즈가 도면에서
      * c 안으로 지나면 도면 바깥 X(+ c)에서 Z 를 맞춘 뒤 X 로.
@@ -567,7 +582,7 @@ object RoundCalc {
      */
     private fun finish(
         drawing: Contour, r: Double, side: Side, tip: Int, entryShift: Pt, filled: RoundInput?, inner: Boolean, machineR: Double? = null,
-        flip: Boolean = false, typed: Boolean = false, squareStart: Boolean = false,
+        flip: Boolean = false, typed: Boolean = false, squareStart: Boolean = false, through: Boolean = false,
     ): RoundResult {
         val center = try {
             NoseComp.centerPath(drawing, r, side)
@@ -588,7 +603,10 @@ object RoundCalc {
         val first = drawing.segs.first()
         val t0 = CompFrame.startDir(first)
         val nS = CompFrame.normal(t0, side)
-        val wallStart = flipStart && first is Line && abs(t0.z) > abs(t0.x) && t0.z > 0
+        // 관통 구멍 쪽 끝 직선에서 시작하면 그 너머는 구멍(벽이 아님 — 사용자 답 2026-11-13): 첫 보정점은 기본 방향 끝 그대로, 시작 좌표 너머에서 들어온다
+        val horizontalUp = first is Line && abs(t0.z) > abs(t0.x) && t0.z > 0
+        val holeStart = flipStart && through && horizontalUp
+        val wallStart = flipStart && !through && horizontalUp
         if (wallStart && machineR == null) {
             // 노즈가 시작 좌표의 법선과 첫 직선에 함께 닿는 자리에서 시작한다(시작 좌표 너머 — 척 · 구멍 속 — 로 넘지 않음)
             val c0 = first.start + nS * r + t0 * r
@@ -618,7 +636,7 @@ object RoundCalc {
         var approach = emptyList<Pt>()
         var leadIn = emptyList<Pt>()
         if (machineR == null) {
-            if (wallStart || squareStart) {
+            if (wallStart || squareStart || holeStart) {
                 val c = entryShift.length
                 val tv = NoseComp.tipVector(tip, r)
                 val nose0 = centerPath.segs.first().start
@@ -627,21 +645,26 @@ object RoundCalc {
                 val plain = FrameMaterial(drawing.segs + drawing.segs.map(FrameMaterial::mirror))
                 // 급송이 떨어져야 할 소재: 도면 + 시작 좌표의 벽(3점호는 끝점의 법선). 진입점 → 첫 보정점 이송은 막힌 시작이면 벽에 닿기만, 3점호는 도면에 닿기만
                 val walled = FrameMaterial(plain.segs, listOf(first.start to t0 * -1.0))
+                // 관통 구멍: 벽 대신 시작 좌표 너머로 이어지는 같은 지름의 구멍 벽(시작 직선을 거꾸로 늘인 반직선)
+                val holed = FrameMaterial(plain.segs + FrameMaterial.ray(first.start, t0 * -1.0).let { listOf(it, FrameMaterial.mirror(it)) })
                 fun at(e: Pt, gap: Double, rapid: FrameMaterial): Pair<Pt, List<Pt>>? {
                     if (inner && e.x < -EPS) return null
-                    if ((if (wallStart) walled else plain).dist(Line(e, nose0)) < r - 1e-7 || rapid.dist(e) < r + gap - 1e-7) return null
+                    if ((if (wallStart) walled else if (holeStart) holed else plain).dist(Line(e, nose0)) < r - 1e-7 || rapid.dist(e) < r + gap - 1e-7) return null
                     val pts = flipApproach(drawing, e + tv, e, r, c, inner) + (e + tv)
                     return if (pts.zipWithNext().all { (a, b) -> rapid.dist(Line(a - tv, b - tv)) >= r + gap - 1e-7 }) (e + tv) to pts else null
                 }
                 // 벽(끝점의 법선)에서 앞으로 g(c → c/2 → c/4) 떨어진 자리 — 3점호의 첫 보정점은 노즈 중심이 법선 위라 r 더
                 val ahead = if (wallStart) 0.0 else r
-                var pick = listOf(c, c / 2, c / 4).firstNotNullOfOrNull { g -> at(nose0 + up + t0 * (ahead + g), min(g, up.length), walled) }
+                // 관통 구멍은 시작 좌표 너머(구멍 연장선 쪽)로 g 떨어진 자리 — 거기서 비스듬한 이송으로 노즈가 시작 좌표에 접하는 첫 보정점에
+                var pick = listOf(c, c / 2, c / 4).firstNotNullOfOrNull { g ->
+                    if (holeStart) at(nose0 + up - t0 * g, min(g, up.length), holed) else at(nose0 + up + t0 * (ahead + g), min(g, up.length), walled)
+                }
                 if (pick == null && squareStart) {
                     pick = listOf(1.0, 0.5, 0.25).firstNotNullOfOrNull { k -> at(nose0 + up * k, up.length * k, plain) } ?: stop(RoundWarning.NOSE_UNREACHABLE)
                 }
                 if (pick == null) {
-                    // 전 규칙: 벽에 붙어 공구 쪽에서 내려온다
-                    val e = prog[0] + up
+                    // 전 규칙: 벽에 붙어 공구 쪽에서 내려온다(관통 구멍은 시작 좌표 너머 c 자리 위에서)
+                    val e = (if (holeStart) prog[0] - t0 * c else prog[0]) + up
                     pick = e to (flipApproach(drawing, e, e - tv, r, c, inner) + e)
                 }
                 entry = pick.first
@@ -666,7 +689,7 @@ object RoundCalc {
                 }
             }
         } else {
-            val (lines, app, lead) = machineFrame(drawing, side, machineR, entryShift.length, inner, warnings, flipStart, squareStart)
+            val (lines, app, lead) = throughFrame(drawing, side, machineR, entryShift.length, inner, warnings, flipStart, squareStart, through)
             nc = lines
             approach = app
             leadIn = lead
@@ -734,8 +757,11 @@ object RoundCalc {
      * 셋째 값 = 그 뒤 형상의 첫 점 앞에 이송으로 거치는 명령점([RoundSolution.leadIn]).
      * 진입점은 첫 점에서 첫 요소의 처음 접선을 거꾸로 c(= |entryShift| = max(Z 여유, r)) — 축에서 시작하는 끝 면 · 돔은 축 너머(X −2c), 내경은 입구 구멍을 따라
      * Z 로 c, 3점호는 시작 접선을 따라. 첫 깎는 줄이 첫 요소와 한 직선이라 노즈는 첫 점의 법선(노즈 접점 = 첫 점)에서 시작한다.
-     * 끝(라운드는 끝에도 빼는 줄 — 사용자 결정 2026-10-29 ①): 척 · 구멍 바닥 쪽으로 깎아 끝난 직선(외경 끝 직선 · 플랜지 윗면 · 내경 공 뒤 구멍 · 관통 구멍)은
-     * 막힌 끝 — 공구 쪽으로 직각(노즈가 끝 점의 법선에 닿아 멈춤), 축(X0)에서 끝나는 끝 면 · 바닥 면은 그 면을 축 너머 r(X −2r)까지 쓰고 공구 쪽으로 직각
+     * 끝(라운드는 끝에도 빼는 줄 — 사용자 결정 2026-10-29 ①): 척 · 구멍 바닥 쪽으로 깎아 끝난 직선(외경 끝 직선 · 플랜지 윗면 · 내경 공 뒤 구멍)은
+     * 막힌 끝 — 공구 쪽으로 직각(노즈가 끝 점의 법선에 닿아 멈춤). 관통 구멍([through])은 그 너머가 같은 지름의 구멍이라(사용자 답 2026-11-13) 막힌 끝이 아니다 —
+     * 끝 좌표 너머로 곧게 c 지나가(노즈가 끝 점에 접해 구멍 벽을 끝까지 깎음) 공구 쪽으로 뺀다(구멍 연장선은 반직선 소재로 둔다). [pastEnd] 면 끝 직선을 끝 좌표
+     * 너머 c 까지 깎은 뒤 막힌 끝처럼 공구 쪽 → 입구 쪽(+Z)으로 뺀다([throughFrame] 의 둘째 안 — 좁은 구멍에서 G40 자리를 넓은 데서 찾는다).
+     * 축(X0)에서 끝나는 끝 면 · 바닥 면은 그 면을 축 너머 r(X −2r)까지 쓰고 공구 쪽으로 직각
      * (제어기의 안쪽 모서리 교점이 노즈 중심을 축에), 축에서 끝나는 원호(내경 돔 · 공 바닥)는 끝 접선으로 축 너머 r + [AXIS_PAST] 뒤 공구 쪽으로(원호 뒤에 바로
      * G40 을 두지 않는다 — G02/G03 모드의 취소는 FANUC 알람 PS0034), 그 밖(3점호)은 끝 접선으로 곧게.
      * 짧은 막힌 끝을 뺐거나(SHORT_END_SKIPPED) 빼지 못하거나(SHORT_END_PAST), 진입 · 빼는 길을 못 찾으면(ENTRY_NOT_FOUND · EXIT_NOT_FOUND) [warnings] 에 더한다.
@@ -744,6 +770,9 @@ object RoundCalc {
      * 입구 끝면에서 끝남 — 너머가 공기라 곧게 c, 끝 반직선을 소재로 넣지 않는다). 시작은 위 끝 규칙을 거꾸로:
      * - 막힌 시작(척 · 구멍 바닥 쪽 끝 직선에서 Z+ 로): 진입점 = 시작 좌표에서 공구 쪽으로 c(내경은 축까지만), 첫 깎는 줄이 벽을 따라 시작 좌표로 — 안쪽 꺾임이라
      *   노즈가 시작 좌표의 법선과 첫 직선에 함께 닿아 넘지 않는다. 시작 좌표 너머는 소재(벽)로 본다.
+     * - 관통 구멍에서 시작([through]): 시작 좌표 너머는 같은 지름의 구멍(반직선 소재 — 벽 아님). 급송은 시작 좌표 너머 r + g · 공구 쪽 2r + g 자리까지(노즈가
+     *   구멍 연장선 · 도면에서 g) → 이송으로 벽 쪽(`G1 X… F.1` — 노즈가 시작 좌표 너머 g 에서 구멍 연장선에 닿음) → 구멍 벽을 따라 시작 좌표로(`Z…`) → 형상.
+     *   노즈가 시작 좌표를 지나며 구멍 벽을 끝까지 깎는다(구석 0).
      * - 축에서 시작하는 면(내경 막힌 바닥 · 술통 뒷면): 그 면을 축 너머 r(X −2r)부터 쓰고 거기로 공구 쪽에서 직각으로(교점이 노즈 중심을 축에).
      * - 축에서 시작하는 원호(내경 돔 · 공 바닥): 시작 접선 위 축 너머 r + 조금([AXIS_PAST] 까지)으로 공구 쪽에서 들어가 접선 한 줄로 원호 시작점에 —
      *   G1 뒤 바로 원호로 꺾지 않아 노즈가 축에서 원호를 탄다
@@ -759,9 +788,29 @@ object RoundCalc {
      * 법선 앞 r + g)까지 급송, 이송으로 P3 너머 r + [CompFrame.MIN_MOVE] 자리 위까지 → 접선 연장선으로 내려와 → 접선 한 줄로 P3 에 — 노즈가 P3 의 법선에서
      * 원호를 탄다(원호를 끝까지 깎는다). 앞이 원호에 막히면(오목 R) 그 자리 위로 곧장 급송해 내려온다. 전에는 P3 너머 접선 연장선 위로 급송이 틈 0 으로 내려앉았다
      */
+    /**
+     * [machineFrame] — 바꾸지 않은 방향의 관통 구멍([through])은 끝 좌표 너머로 지나가 빼는데, 그 빼는 길을 못 찾으면(EXIT_NOT_FOUND — 구멍 지름이 노즈R 의
+     * 5 배쯤 아래면 너머 구멍 속에 G40 자리((1 + √2)·r)가 없다) 끝 좌표 너머로 c 지나간 뒤 막힌 끝처럼 공구 쪽 → 입구 쪽(+Z)으로 비켜 넓은 데서 G40 자리를
+     * 찾는다(노즈는 끝 좌표를 지나 구멍 벽을 끝까지 깎는다). 그것도 못 찾으면 전 규칙(막힌 끝)으로 짜고 THROUGH_END_BLOCKED 로 알린다(구석이 남는다 —
+     * 검증 2026-11-14: 전에는 경고 없이 되돌아가 화면이 '너머로 지나가 끝까지 깎음' 이라고 했다). 너머 구멍은 비킬 자리가 없어 막힌 끝이 G40 옮김이 덜 판다
+     * (구멍 Ø4.321 · 노즈 1.73: 너머로 빼면 G40 옮김이 맞은편 벽을 1.30 파고 막힌 끝은 0.26, 둘 다 EXIT_NOT_FOUND 경고)
+     */
+    private fun throughFrame(
+        drawing: Contour, side: Side, r: Double, c: Double, inner: Boolean, warnings: MutableList<RoundWarning>, flipStart: Boolean, squareStart: Boolean,
+        through: Boolean,
+    ): Triple<NcLines, List<Pt>, List<Pt>> {
+        if (!through || flipStart) return machineFrame(drawing, side, r, c, inner, warnings, flipStart, squareStart, through)
+        for (pastEnd in listOf(false, true)) {
+            val tried = mutableListOf<RoundWarning>()
+            val res = machineFrame(drawing, side, r, c, inner, tried, flipStart, squareStart, through = true, pastEnd = pastEnd)
+            if (RoundWarning.EXIT_NOT_FOUND !in tried) return res.also { warnings += tried }
+        }
+        return machineFrame(drawing, side, r, c, inner, warnings, flipStart, squareStart, through = false).also { warnings += RoundWarning.THROUGH_END_BLOCKED }
+    }
+
     private fun machineFrame(
         drawing: Contour, side: Side, r: Double, c: Double, inner: Boolean, warnings: MutableList<RoundWarning>, flipStart: Boolean = false,
-        squareStart: Boolean = false,
+        squareStart: Boolean = false, through: Boolean = false, pastEnd: Boolean = false,
     ): Triple<NcLines, List<Pt>, List<Pt>> {
         val segs = drawing.segs
         val first = segs.first()
@@ -769,9 +818,11 @@ object RoundCalc {
         val s0 = first.start
         val t0 = CompFrame.startDir(first)
         val nS = CompFrame.normal(t0, side)
-        // 뒤집은 시작의 종류: 막힌 시작 / 축에서 시작하는 면 / 축에서 시작하는 원호(시작 접선으로 축 너머 r + past 에서)
-        val wallStart = flipStart && first is Line && abs(t0.z) > abs(t0.x) && t0.z > 0
-        val faceStart = flipStart && !wallStart && first is Line && s0.x <= EPS
+        // 뒤집은 시작의 종류: 막힌 시작 / 관통 구멍에서 시작 / 축에서 시작하는 면 / 축에서 시작하는 원호(시작 접선으로 축 너머 r + past 에서)
+        val horizontalUp = first is Line && abs(t0.z) > abs(t0.x) && t0.z > 0
+        val wallStart = flipStart && !through && horizontalUp
+        val holeStart = flipStart && through && horizontalUp
+        val faceStart = flipStart && !wallStart && !holeStart && first is Line && s0.x <= EPS
         val arcStart = flipStart && first is Arc && s0.x <= EPS
         val past0 = if (first is Arc && (side == Side.G41) != first.cw) sqrt(1e-4 * max(0.0, first.radius - r)).coerceIn(AXIS_PAST / 5, AXIS_PAST) else AXIS_PAST
         val p = last.end
@@ -786,7 +837,8 @@ object RoundCalc {
         // 그 요소에 닿을 길이 없어 그 요소를 빼고 앞 요소 끝에서 벽을 따라 공구 쪽으로 뺀다(전에는 접선으로 곧게 빼 벽 속으로 갔다 — 검증 2026-11-04)
         val noses = runCatching { NoseComp.centerPath(drawing, r, side).path.segs }.getOrNull()
         val shortEnd = noses?.last()?.start?.let { ((p + nE * r - uE * r - it) dot uE) < CompFrame.MIN_MOVE } ?: false
-        val wallEnd = last is Line && abs(uE.z) > abs(uE.x) && uE.z < 0
+        // 관통 구멍의 끝은 막힌 끝이 아니다 — 아래 '그 밖' 처럼 끝 좌표 너머로 곧게 c(그 너머 구멍 벽은 끝 반직선 소재)
+        val wallEnd = !through && last is Line && abs(uE.z) > abs(uE.x) && uE.z < 0
         val blocked = wallEnd && !shortEnd
         // 빼려면 앞 요소의 노즈 길 위에 직각 빼기 교점이 MIN_MOVE 이상 남아야 한다(`CompFrame.keepBeforeShortEnd` — 모서리 R · 주 원호는 노즈 원과의 정확한 교점,
         // 교점이 모서리 R 앞이면 그 R 도 빼고 그 앞 요소에서). 못 맞추면 전처럼 곧게 빼고 SHORT_END_PAST 로 알린다(노즈가 끝 좌표 너머로 감)
@@ -819,6 +871,12 @@ object RoundCalc {
                 away = nE
                 minFirst = past / 2
                 stretch = false
+            }
+            // 관통 구멍 끝([throughFrame] 의 둘째 안): 끝 직선을 끝 좌표 너머 c 까지 깎고(노즈가 끝 좌표를 지남) 막힌 끝처럼 공구 쪽(축까지) → 입구 쪽(+Z)
+            through && pastEnd && last is Line -> {
+                endPt = p + uE * c
+                x1 = CompFrame.untilAxis(endPt, nE, c, inner)
+                away = uE * -1.0
             }
             else -> {
                 x1 = p + uE * c
@@ -879,6 +937,13 @@ object RoundCalc {
             val reach = over + 2 * r + max(g, CompFrame.MIN_MOVE)
             return when {
                 wallStart -> start(s0 + nS * reach + t0 * (r + max(g, CompFrame.MIN_MOVE)), listOf(s0 + nS * reach, s0), clear)
+                // 시작 좌표 너머 r + g 의 구멍 벽 선 위로 공구 쪽에서 내려와(노즈가 너머 g 에서 구멍 연장선에 닿음) 벽을 따라 시작 좌표로.
+                // 공구 쪽 g 는 노즈 중심이 축까지만(넘으면 맞은편 벽 — 직접 보정과 같다), 가는 길의 여유도 그 자리(구멍 반지름 − r)까지(검증 2026-11-14)
+                holeStart -> {
+                    val nose0 = s0 + nS * r
+                    val room = (CompFrame.untilAxis(nose0, nS, max(g, CompFrame.MIN_MOVE), inner) - nose0).length
+                    (s0 - t0 * (r + max(g, CompFrame.MIN_MOVE))).let { start(it + nS * (2 * r + room), listOf(it, s0), min(clear, room)) }
+                }
                 squareStart -> {
                     val col = s0 - t0 * (r + CompFrame.MIN_MOVE)
                     if (ahead) start(s0 + nS * reach + t0 * (r + max(g, CompFrame.MIN_MOVE)), listOf(col + nS * reach, col, s0), clear)
@@ -900,7 +965,7 @@ object RoundCalc {
             return if (edge.isFinite()) max(0.0, (edge - s0.x) * outward) else 0.0
         }
         val begin = when {
-            wallStart || faceStart || arcStart ->
+            wallStart || holeStart || faceStart || arcStart ->
                 gaps.asSequence().map { flipped(it.first, it.second) }.firstOrNull { it.ok }
                     ?: (if (wallStart) gaps.asSequence().map { flipped(it.first, it.second, over = overTop(it.first)) }.firstOrNull { it.ok } else null)
                     ?: loose.asSequence().map { flipped(it.first, it.second) }.firstOrNull { it.ok }
@@ -908,6 +973,7 @@ object RoundCalc {
                     ?: when {
                         // 전 규칙(급송 여유 없이) — 전처럼 `CompFrame.entry` 가 찾았다는 것만 본다
                         wallStart -> start(CompFrame.untilAxis(s0, nS, c, inner), listOf(s0), 0.0, turns = false)
+                        holeStart -> (s0 - t0 * (r + CompFrame.MIN_MOVE)).let { start(CompFrame.untilAxis(it, nS, 2 * r + CompFrame.MIN_MOVE, inner), listOf(it, s0), 0.0, turns = false) }
                         faceStart -> (s0 - t0 * r).let { start(it + nS * c, listOf(it), 0.0, turns = false) }
                         else -> (s0 - t0 * (r + past0)).let { start(it + nS * c, listOf(it, s0), 0.0, turns = false, leads = false) }
                     }

@@ -275,6 +275,54 @@ internal object V1113 {
         return dNew <= 2e-3 || dNew <= max(dOld, 0.0) + 2e-3
     }
 
+    /**
+     * 라운드 관통 구멍(내경 5 · 6 through) 글이 사용자 답 2026-11-13("관통이면 넘어가도 됌" — 뒤집은 시작은 시작 좌표 너머에서 들어오고 기본 방향 기계 보정의
+     * 끝은 끝 좌표 너머로 지나감)으로 달라진 것인가: 새 글을 시뮬레이터로 돌려 어느 이동의 노즈도 소재(도면 + 축 거울 + 관통 구멍 연장선 + 부품 앞면)를
+     * 파지 않거나(0.002) 옛 글보다 더 파지 않는다(좁은 구멍 — 옛 글도 판 것). 새 글이 멈추면 옛 글도 같은 까닭으로 멈춰야 한다(형상 알람 — 오목 R ≤ r ·
+     * 형상 안의 바깥 90° 넘는 꺾임은 방향 · 관통과 상관없이 멈춘다). 구멍 벽을 끝까지 깎는지 · 급송 틈은 `RoundThroughTest` 가 고정한다
+     */
+    fun roundThroughOk(s: RoundSolution?, old: List<String>?, machine: Boolean, r: Double): Boolean {
+        val (dNew, dOld) = throughDepths(s, old, machine, r) ?: return false
+        return dNew <= 2e-3 || dNew <= max(dOld, 0.0) + 2e-3
+    }
+
+    /**
+     * 관통 글의 경고가 바뀌어도 되는 것만 바뀌었나(검증 2026-11-14 — 전에는 관통 글이면 경고를 견주지 않았다): 없어진 것은 관통 끝 · 시작 탓인 것만
+     * (짧은 관통 시작의 NOSE_UNREACHABLE · 막힌 끝의 SHORT_END_* · 빼는 · 진입 길 못 찾음), 새로 난 것은 THROUGH_END_BLOCKED(너머로 못 빼 막힌 끝 — 옛 글과 같은 끝)와,
+     * 옛 글이 없을 때(풀리게 된 것) 풀이에 붙는 경고(AGAINST_TOOL · CONCAVE_R_LE_NOSE)뿐
+     */
+    fun roundThroughWarningsOk(newW: List<String>, oldW: List<String>, oldSolved: Boolean): Boolean {
+        val added = newW.filter { it !in oldW && it != "THROUGH_END_BLOCKED" }
+        val removed = oldW.filter { it !in newW }
+        val mayAdd = if (oldSolved) emptySet() else setOf("AGAINST_TOOL", "CONCAVE_R_LE_NOSE")
+        val mayGo = setOf("NOSE_UNREACHABLE", "SHORT_END_SKIPPED", "SHORT_END_PAST", "EXIT_NOT_FOUND", "ENTRY_NOT_FOUND")
+        return added.all { it in mayAdd } && removed.all { it in mayGo }
+    }
+
+    /**
+     * [roundThroughOk] 의 잰 값: (새 글 파고듦, 옛 글 파고듦) — 소재는 도면 + 축 거울 + 관통 구멍 연장선 + 부품 앞면. 새 글이 멈추면 옛 글도 같은 까닭으로 멈출 때만
+     * (0, 0)(형상 알람), 아니면 null. 옛 글이 없으면(짧은 관통 구멍 쪽 시작을 막힌 시작으로 봐 NOSE_UNREACHABLE — 이제는 벽이 없어 풀린다) 오목 R ≤ r 형상 알람
+     * (COMP_ARC_SMALL — 직접 보정이 CONCAVE_R_LE_NOSE 로 알리는 꼴, 방향 · 관통과 상관없음 — 도면에 오목 R ≤ r 이 있을 때만)만 멈춤으로 받는다. 옛 글이 없거나 멈추면 옛 값은 +∞
+     */
+    private fun throughDepths(s: RoundSolution?, old: List<String>?, machine: Boolean, r: Double): Pair<Double, Double>? {
+        val new = s?.nc ?: return null
+        val segs = s.drawing.segs
+        val hole = (if (s.flip) segs.first() else segs.last()) as? Line ?: return null
+        val end = if (hole.start.z < hole.end.z) hole.start else hole.end
+        val ext = Line(end, end + Pt(-300.0, 0.0))
+        val mat = segs + segs.map(V1112::mirror) + listOf(ext, V1112.mirror(ext)) + frontFace(ends(segs), true)
+        fun text(nc: List<String>) = if (machine) nc else V1112.direct(nc)
+        val nNew = text(new)
+        val runNew = V1112.sim(nNew, r, s.tip)
+        val nOld = old?.let(::text)
+        val runOld = nOld?.let { V1112.sim(it, r, s.tip) }
+        // 오목 R ≤ r(계산기 finish 의 CONCAVE_R_LE_NOSE 기준 — G41 이면 반시계, G42 면 시계 원호)
+        val concaveLeNose = segs.any { it is Arc && (s.side == Side.G41) != it.cw && it.radius - r <= 1e-9 }
+        runNew.stop?.let { stop -> return if (runOld?.stop?.code == stop.code || (old == null && stop.code == IssueCode.COMP_ARC_SMALL && concaveLeNose)) 0.0 to 0.0 else null }
+        val dOld = if (nOld == null || runOld == null || runOld.stop != null) Double.POSITIVE_INFINITY else depth(runOld, nOld, r, mat).first
+        return depth(runNew, nNew, r, mat).first to dOld
+    }
+
     fun shapeAlarm(w: List<TaperWarning>) = TaperWarning.CONCAVE_R_LE_NOSE in w || TaperWarning.NOSE_GT_SLOPE in w
 
     fun shortEnd(w: List<TaperWarning>) = TaperWarning.SHORT_END_SKIPPED in w || TaperWarning.SHORT_END_PAST in w
@@ -670,23 +718,33 @@ class Verify1113FlipSmallHoleTest {
  * 견줌으로 뒤집은 기계 보정 · 기본 방향 직접 보정도 같이 잰다
  */
 class Verify1113RoundFlipEntryTest {
-    private class D(val draw: Pair<Double, String>, val face: Pair<Double, String>, val wall: Pair<Double, String>) {
+    private class D(val draw: Pair<Double, String>, val face: Pair<Double, String>, val wall: Pair<Double, String>, val hole: Boolean = false) {
         val worst get() = listOf(draw, face, wall).maxBy { it.first }
         val where get() = when (worst) {
             face -> "앞면"
-            wall -> "막힌 시작 벽"
+            wall -> if (hole) "관통 구멍 연장선" else "막힌 시작 벽"
             else -> "도면"
         }
     }
 
-    private fun measure(segs: List<Seg>, inner: Boolean, flip: Boolean, nc: List<String>, run: SimRun, r: Double): D? {
+    /**
+     * [through] = 관통 구멍: 뒤집은 시작 좌표 너머는 같은 지름의 구멍이라(사용자 답 2026-11-13 — 시작 좌표 너머에서 들어온다) 막힌 시작 벽 대신 그 구멍 벽
+     * (시작 직선을 거꾸로 늘인 선과 축 거울)을 잰다
+     */
+    private fun measure(segs: List<Seg>, inner: Boolean, flip: Boolean, nc: List<String>, run: SimRun, r: Double, through: Boolean = false): D? {
         val t0 = CompFrame.startDir(segs.first())
-        val wallStart = flip && segs.first() is Line && abs(t0.z) > abs(t0.x) && t0.z > 0
+        val upStart = flip && segs.first() is Line && abs(t0.z) > abs(t0.x) && t0.z > 0
         val none = Double.NEGATIVE_INFINITY to ""
         val draw = V1113.entryDepth(run, nc, r, segs + segs.map(V1112::mirror)) ?: return null
         val face = V1113.entryDepth(run, nc, r, V1113.frontFace(V1113.ends(segs), inner)) ?: none
-        val wall = if (wallStart) V1113.entryDepth(run, nc, r, V1112.walls(segs, inner, true, false)) ?: none else none
-        return D(draw, face, wall)
+        val hole = upStart && through
+        val ext = Line(segs.first().start, segs.first().start - t0 * 1000.0)
+        val wall = when {
+            hole -> V1113.entryDepth(run, nc, r, listOf(ext, V1112.mirror(ext))) ?: none
+            upStart -> V1113.entryDepth(run, nc, r, V1112.walls(segs, inner, true, false)) ?: none
+            else -> none
+        }
+        return D(draw, face, wall, hole)
     }
 
     @Test
@@ -737,10 +795,10 @@ class Verify1113RoundFlipEntryTest {
                     bump("${modes[mode]} 멈춤")
                     continue
                 }
-                val d = measure(segs, inner, inp.flip, nc, run, r) ?: continue
+                val d = measure(segs, inner, inp.flip, nc, run, r, inp.through) ?: continue
                 bump("${modes[mode]} 돌림")
                 val t0 = CompFrame.startDir(segs.first())
-                val branch = if (!inp.flip) "기본" else if (segs.first() is Line && abs(t0.z) > abs(t0.x) && t0.z > 0) "막힌 시작" else if (segs.first().start.x <= 1e-6) "축에서 시작" else "그 밖"
+                val branch = if (!inp.flip) "기본" else if (segs.first() is Line && abs(t0.z) > abs(t0.x) && t0.z > 0) (if (inp.through) "관통에서 시작" else "막힌 시작") else if (segs.first().start.x <= 1e-6) "축에서 시작" else "그 밖"
                 val w = d.worst
                 if (w.first > 2e-3) {
                     bump("${modes[mode]} 파고듦 팁 ${tip ?: "표준"}")
@@ -1056,10 +1114,18 @@ class Verify1113RegressionTest {
         var n = 0
         // 최종 확인 뒤 고침(F5 2026-11-13): 뒤집은 직접 보정은 첫 G1 앞 급송만 달라질 수 있다(첫 G1 부터 같고 급송이 더 파지 않음 — V1113.roundEntryOnly)
         var approachFixed = 0
-        fun same(flip: Boolean, m: Boolean, sol: RoundSolution?, o: List<String>?, w: Boolean, r: Double, inner: Boolean): Boolean {
+        // 사용자 답 2026-11-13: 관통 구멍은 끝 · 시작 좌표 너머로 간다 — 뒤집은 글(직접 · 기계)과 기본 방향 기계 보정 글이 바뀐다(V1113.roundThroughOk)
+        var throughChanged = 0
+        fun same(
+            flip: Boolean, m: Boolean, sol: RoundSolution?, o: List<String>?, w: Boolean, r: Double, inner: Boolean, through: Boolean = false, throughW: Boolean = false,
+        ): Boolean {
             if (sol?.nc == o && w) return true
             if (flip && !m && w && V1113.roundEntryOnly(sol, o, r, inner)) {
                 approachFixed++
+                return true
+            }
+            if (through && (flip || m) && throughW && V1113.roundThroughOk(sol, o, m, r)) {
+                throughChanged++
                 return true
             }
             return false
@@ -1073,7 +1139,8 @@ class Verify1113RegressionTest {
                 val res = if (m) RoundCalc.machine(inp) else RoundCalc.calc(inp)
                 val (o, w) = V1112.oldRound(inp, m)
                 n++
-                if (!same(inp.flip, m, res.solution, o, res.warnings.map { it.name } == w, inp.noseR, inp.inner)) diffs += "$inp ${if (m) "기계" else "직접"}\n 옛 $o $w\n 새 ${res.solution?.nc} ${res.warnings}"
+                val throughW = V1113.roundThroughWarningsOk(res.warnings.map { it.name }, w, o != null)
+                if (!same(inp.flip, m, res.solution, o, res.warnings.map { it.name } == w, inp.noseR, inp.inner, inp.through, throughW)) diffs += "$inp ${if (m) "기계" else "직접"}\n 옛 $o $w\n 새 ${res.solution?.nc} ${res.warnings}"
             }
         }
         var n3 = 0
@@ -1099,7 +1166,7 @@ class Verify1113RegressionTest {
                 if (!same(flip, m, res.solution, o, res.warnings.map { it.name } == w, nose, inner)) diffs += "$a ${if (m) "기계" else "직접"}\n 옛 $o $w\n 새 ${res.solution?.nc} ${res.warnings}"
             }
         }
-        V1113.log(name, "라운드 회귀: TYPE 글 $n · 3점호 글 $n3 · 뒤집은 직접 보정 접근만 바뀜(고침 F5) $approachFixed · 다름 ${diffs.size}")
+        V1113.log(name, "라운드 회귀: TYPE 글 $n · 3점호 글 $n3 · 뒤집은 직접 보정 접근만 바뀜(고침 F5) $approachFixed · 관통 구멍 너머로(사용자 답 11-13) $throughChanged · 다름 ${diffs.size}")
         diffs.take(10).forEach { V1113.log(name, it) }
         assertEquals(0, diffs.size, diffs.take(4).joinToString("\n\n"))
     }

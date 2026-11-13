@@ -419,7 +419,9 @@ class CompanyFrameVerifyTest {
 
     // ================================================================ 라운드
 
-    private fun roundFrame(tag: String, machine: com.bmt.nosecalc.calc.RoundResult, direct: com.bmt.nosecalc.calc.RoundResult, inner: Boolean, r: Double): Frame? {
+    private fun roundFrame(
+        tag: String, machine: com.bmt.nosecalc.calc.RoundResult, direct: com.bmt.nosecalc.calc.RoundResult, inner: Boolean, r: Double, through: Boolean = false,
+    ): Frame? {
         val s = machine.solution ?: return null
         val dsol = direct.solution ?: return null
         val d = s.drawing.segs
@@ -432,6 +434,9 @@ class CompanyFrameVerifyTest {
         val nB = if (s.side == com.bmt.nosecalc.calc.Side.G41) Pt(-uB.x, uB.z) else Pt(uB.x, -uB.z)
         val shortEnd = (((last.end + nB * r - uB * r) - dsol.center.segs.last().start) dot uB) < 0.05
         val end = when {
+            // 관통 구멍의 끝 너머는 같은 지름의 구멍 — 막힌 끝이 아니라 끝 좌표 너머로 지나간다(사용자 답 2026-11-13). 너머로 뺄 자리가 없으면(노즈에 비해 아주
+            // 좁은 구멍) 계산기가 전 규칙(막힌 끝)으로 짠다 — 어느 쪽인지는 계산기의 경고가 아니라 NC 로 가른다(검증 2026-11-14)
+            through && passesThroughEnd(s.nc, last.end.z) && last is Line && abs(uB.z) > abs(uB.x) && uB.z < 0 -> End.FREE
             last is Line && abs(uB.z) > abs(uB.x) && uB.z < 0 && !shortEnd -> End.BLOCKED
             last is Line && abs(uB.z) > abs(uB.x) && uB.z < 0 && !reaches(s.nc, last.end) -> End.SHORT_BLOCKED
             last is Line && abs(uB.z) > abs(uB.x) && uB.z < 0 -> End.OTHER
@@ -451,14 +456,14 @@ class CompanyFrameVerifyTest {
             val inner = rnd.nextBoolean()
             val type = if (inner) 2 + rnd.nextInt(5) else 1 + rnd.nextInt(6)
             val inp = g.randomRound(type, rnd, inner).input
-            roundFrame(inp.toString(), RoundCalc.machine(inp), RoundCalc.calc(inp), inner, inp.noseR)?.let { out += it }
+            roundFrame(inp.toString(), RoundCalc.machine(inp), RoundCalc.calc(inp), inner, inp.noseR, inp.through)?.let { out += it }
         }
         return out
     }
 
     /**
      * 뒤집은 라운드(가공 방향 뒤집기 — 2026-11-10 피드백 2)와 같은 입력의 기본 방향. 척 · 구멍 바닥 쪽 끝 직선에서 Z+ 로 시작하면 막힌 시작 —
-     * 노즈가 시작 좌표의 법선(벽)을 넘지 않는지 본다
+     * 노즈가 시작 좌표의 법선(벽)을 넘지 않는지 본다(관통 구멍은 벽이 아니다 — 2026-11-13)
      */
     private fun flippedRoundCases(seed: Int, count: Int): List<Pair<Frame, Frame>> {
         val rnd = Random(seed)
@@ -469,11 +474,12 @@ class CompanyFrameVerifyTest {
             val type = if (inner) 2 + rnd.nextInt(5) else 1 + rnd.nextInt(6)
             val base = g.randomRound(type, rnd, inner).input
             val inp = base.copy(flip = true)
-            val f = roundFrame(inp.toString(), RoundCalc.machine(inp), RoundCalc.calc(inp), inner, inp.noseR) ?: return@repeat
-            val b = roundFrame(base.toString(), RoundCalc.machine(base), RoundCalc.calc(base), inner, base.noseR) ?: return@repeat
+            val f = roundFrame(inp.toString(), RoundCalc.machine(inp), RoundCalc.calc(inp), inner, inp.noseR, inp.through) ?: return@repeat
+            val b = roundFrame(base.toString(), RoundCalc.machine(base), RoundCalc.calc(base), inner, base.noseR, base.through) ?: return@repeat
             val first = f.drawing.first()
             val u = (first.end - first.start).let { it * (1 / it.length) }
-            val wall = if (first is Line && abs(u.z) > abs(u.x) && u.z > 0) first.start to u * -1.0 else null
+            // 관통 구멍에서 시작하면 그 너머는 구멍이라 막힌 시작이 아니다(사용자 답 2026-11-13 — 시작 좌표 너머에서 들어온다)
+            val wall = if (first is Line && abs(u.z) > abs(u.x) && u.z > 0 && !inp.through) first.start to u * -1.0 else null
             out += Frame(f.tag, f.nc, f.r, f.drawing, f.inner, f.end, f.endP, f.endU, wall, f.shapeAlarm) to b
         }
         return out
@@ -591,3 +597,10 @@ class CompanyFrameVerifyTest {
         assertEquals(0, t.fails.size, t.report() + "\n" + t.fails.take(5).joinToString("\n\n"))
     }
 }
+
+/**
+ * 기계 보정 글이 관통 구멍 끝 좌표 너머로 가나 — G40 앞 줄들의 가장 작은 Z 가 끝 좌표 [endZ] 보다 작다(관통 구멍 끝은 Z− 로 누운 직선). 라운드 검증 셋이
+ * 함께 쓴다(전에는 계산기가 EXIT_NOT_FOUND 를 냈나로 갈라, 계산기가 경고 없이 막힌 끝으로 되돌아가면 막힌 끝 글을 FREE 로 보고도 지나갔다 — 검증 2026-11-14)
+ */
+internal fun passesThroughEnd(nc: List<String>, endZ: Double): Boolean =
+    nc.takeWhile { it != "G40" }.flatMap(::ncWords).filter { it.startsWith("Z") }.mapNotNull { it.drop(1).toDoubleOrNull() }.minOrNull()?.let { it < endZ - 5e-4 } ?: false

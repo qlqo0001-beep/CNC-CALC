@@ -144,7 +144,7 @@ internal fun RoundTypeScreen(s: RoundState, type: Int) {
     Page(dock, chain.sheetOpen) { anchor ->
         // 바꾸면 바이트는 그대로이고 가는 Z 쪽만 반대(한 줄에 들게 짧게 — 길면 '노즈 R0.4' 가 글자 사이에서 꺾였다)
         RoundSummary(type, "${if (inner) "내경" else "외경"} · ${if (flip) "반대 끝부터 가공 (Z+)" else "정방향 가공 (Z−)"} · ${toolText(s, tip)}", inner) { s.open = false }
-        if (sol == null) Banners(warnings, type, solved = false, empty, anchor, inner, flip) { s.setDim(type, it, "") }
+        if (sol == null) Banners(warnings, type, solved = false, empty, anchor, inner, flip, through) { s.setDim(type, it, "") }
 
         // 치수 · 공구 카드와 보링바 카드의 칸이 한 키패드 묶음
         FieldChainHost(chain) {
@@ -447,7 +447,10 @@ private fun warnLevel(w: RoundWarning, type: Int, solved: Boolean): WarnLevel = 
     else -> WarnLevel.Warn
 }
 
-/** 경고 띠([warnLevel] 색). 값 부족은 넣을 칸 이름을 들고, 모순으로 멈췄으면 비울 수 있는 칸마다 '… 비우기' 단추. inner = 내경 형상, flip = 가공 방향을 바꾼 상태 */
+/**
+ * 경고 띠([warnLevel] 색). 값 부족은 넣을 칸 이름을 들고, 모순으로 멈췄으면 비울 수 있는 칸마다 '… 비우기' 단추. inner = 내경 형상, flip = 가공 방향을 바꾼 상태,
+ * through = 관통 구멍
+ */
 @Composable
 private fun Banners(
     warnings: List<RoundWarning>,
@@ -457,6 +460,7 @@ private fun Banners(
     modifier: Modifier = Modifier,
     inner: Boolean = false,
     flip: Boolean = false,
+    through: Boolean = false,
     onBlank: (String) -> Unit = {},
 ) {
     if (warnings.isEmpty()) return
@@ -465,7 +469,7 @@ private fun Banners(
         warnings.forEach { w ->
             val level = warnLevel(w, type, solved)
             WarningBanner(
-                roundWarningText(w, type, empty, inner, flip),
+                roundWarningText(w, type, empty, inner, flip, through),
                 level = level,
                 collapsedText = if (w == RoundWarning.AGAINST_TOOL && level == WarnLevel.Info) {
                     if (flip) "바이트와 반대 (면 · 방향) — 눌러서 자세히" else "바이트 반대쪽 면 있음 (${if (inner) "입구" else "척"} 쪽 면) — 눌러서 자세히"
@@ -538,7 +542,7 @@ private fun Results(
     if (sol == null) return
     CompModeSwitch(sol.side)
     if (type == MANUAL) ArcCard(sol)
-    Banners(warnings, type, solved = true, inner = inner, flip = sol.flip)
+    Banners(warnings, type, solved = true, inner = inner, flip = sol.flip, through = sol.filled?.through == true)
     val bar = holder?.bar
     val plan = holder?.plan
     when {
@@ -586,10 +590,12 @@ private fun Results(
         else -> " 마지막 줄은 끝 직선의 끝(끝 직선 길이)까지입니다."
     }
     val r = Fmt.nc(noseR).removeSuffix(".")
+    // 관통 구멍 끝을 너머로 빼지 못해 막힌 끝으로 뺀 기계 보정 글(구석이 남음) — 아랫글이 '너머로 지나가 끝까지 깎음' 이라고 하지 않게
+    val throughBlocked = RoundWarning.THROUGH_END_BLOCKED in warnings
     when {
-        holder != null -> HolderNc(sol, drawn, comp, noseR, r, legNote, rows, stop, full, focus) { full = it }
+        holder != null -> HolderNc(sol, drawn, comp, noseR, r, legNote, rows, stop, full, focus, throughBlocked) { full = it }
         comp -> NcCard(directNc(sol.nc, noseR, sol.tip), directNote(sol, legNote), programName = DIRECT_NAME, facts = directFacts())
-        drawn != null -> NcCard(drawn.nc, machineNote(sol, r, legNote), programName = MACHINE_NAME, facts = machineFacts(sol, r))
+        drawn != null -> NcCard(drawn.nc, machineNote(sol, r, legNote, throughBlocked), programName = MACHINE_NAME, facts = machineFacts(sol, r))
     }
 }
 
@@ -606,6 +612,8 @@ private fun directNote(sol: RoundSolution, legNote: String) =
         if (sol.flip && sol.approach.isNotEmpty()) {
             " 가공 방향을 바꿔 척 쪽 · 구멍 안에서 시작하므로, 앞 끝면 바깥에서 X 를 맞추고 Z 로 들어가는 접근 줄(G0)을 앞에 넣었습니다 — 급송은 깎을 면에서 Z 여유만큼 떨어져 지납니다." +
                 when {
+                    holeStart(sol) -> " 관통 구멍 쪽 끝에서 시작하면 급송은 시작 좌표 너머(구멍 연장선 쪽) · 공구 쪽으로 Z 여유만큼 떨어진 자리에서 멈추고 " +
+                        "비스듬한 이송 한 줄로 닿습니다.$HOLE_NOTE"
                     wallStart(sol) -> " 척 · 구멍 바닥 쪽 끝 직선에서 시작하면 급송은 그 시작 좌표 앞 Z 여유에서 멈추고 비스듬한 이송 한 줄로 닿습니다. " +
                         "노즈가 시작 좌표를 넘지 않게 닿는 자리가 첫 보정점입니다.$CORNER_NOTE"
                     sol.filled == null -> " 급송은 끝점(P3) 앞 · 공구 쪽으로 Z 여유만큼 떨어진 자리에서 멈추고 비스듬한 이송 한 줄로 첫 보정점에 닿습니다."
@@ -615,17 +623,26 @@ private fun directNote(sol: RoundSolution, legNote: String) =
             ""
         }
 
-/** 가공 방향을 바꿔 척 · 구멍 바닥 쪽 끝 직선(Z+ 로 가는 누운 직선)에서 시작하는 풀이인가 — calc 의 '막힌 시작' */
-private fun wallStart(sol: RoundSolution): Boolean {
+/** 가공 방향을 바꿔 척 · 구멍 바닥 쪽 끝 직선(Z+ 로 가는 누운 직선)에서 시작하는 풀이인가 — calc 의 '막힌 시작'(관통 구멍은 아님) */
+private fun wallStart(sol: RoundSolution): Boolean = upStart(sol) && sol.filled?.through != true
+
+/** 가공 방향을 바꿔 관통 구멍 쪽 끝에서 시작하는 풀이인가 — 너머가 구멍이라 시작 좌표 너머에서 들어온다(calc '뒤집은 시작' · 사용자 답 2026-11-13) */
+private fun holeStart(sol: RoundSolution): Boolean = upStart(sol) && sol.filled?.through == true
+
+private fun upStart(sol: RoundSolution): Boolean {
     val first = sol.drawing.segs.first()
     return sol.flip && sol.filled != null && first is Line && first.end.z > first.start.z && abs(first.end.x - first.start.x) < 1e-9
 }
 
+/** 관통 구멍에서 시작: 시작 좌표 너머는 같은 지름의 구멍으로 보고 노즈가 넘어가 시작 좌표까지 다 깎는다 */
+private const val HOLE_NOTE = " 관통 구멍이라 시작 좌표 너머에서 들어와 끝까지 깎습니다 — 노즈가 시작 좌표를 지나므로 그 끝에 구석이 남지 않습니다."
+
 /** 막힌 시작의 구석: 노즈가 시작 좌표를 넘지 않아 그 끝의 노즈R 구간에 노즈 둥근 부분만큼(가장 크게 (√2 − 1)·r) 남는다 — 검증 2026-11-11 */
 private const val CORNER_NOTE =
-    " 그래서 시작 좌표 쪽 끝의 노즈R 구간은 구석이 조금(노즈R 의 0.41 배까지) 남습니다 — 그 끝까지 치수대로 깎으려면 끝 직선(관통 구멍)을 노즈R 넘게 길게 넣으세요."
+    " 그래서 시작 좌표 쪽 끝의 노즈R 구간은 구석이 조금(노즈R 의 0.41 배까지) 남습니다 — 그 끝까지 치수대로 깎으려면 끝 직선을 노즈R 넘게 길게 넣으세요."
 
-private fun machineNote(sol: RoundSolution, r: String, legNote: String) =
+/** throughBlocked = 관통 구멍 끝을 너머로 지나 빼지 못해 막힌 끝으로 뺀 글(calc THROUGH_END_BLOCKED) */
+private fun machineNote(sol: RoundSolution, r: String, legNote: String, throughBlocked: Boolean) =
     "도면(접점) 좌표에 ${sol.side} 를 걸어 기계가 노즈R 을 보정합니다(공구 보정 화면에 R$r · T${sol.tip}). 회사 꼴입니다 — ${sol.side} 혼자 줄 → G0 로 Z20. 에서 X 를 맞추고 " +
         "진입점까지 Z 로 → 첫 점 G1 F.1 → 형상 → 보정 켠 채 공기로 빼는 줄 F.3 → G40 혼자 줄 → G0Z200. 입니다. 보정 줄이 움직임 없는 혼자 줄이라 " +
         "깎는 줄의 노즈는 기계의 보정 시작 · 취소 형식(No.5003#1 SUV)과 팁 번호에 상관없습니다. 끝은 척 · 바닥 쪽 직선이면 공구 쪽으로 직각(노즈가 끝 점에서 멈춤), " +
@@ -633,11 +650,17 @@ private fun machineNote(sol: RoundSolution, r: String, legNote: String) =
         "G40 줄은 둘레 (1 + √2) × 노즈R 안에 도면이 없는 자리에 둡니다(형식 C 기계는 그 줄에서 공구가 움직입니다).$legNote" +
         // 가공 방향을 바꾼 프로그램의 진입(calc '뒤집은 시작의 급송 여유'): 급송은 깎을 면 · 시작 좌표에서 Z 여유만큼 떨어진 자리에서 멈추고 이송으로 닿는다
         when {
+            holeStart(sol) -> " 가공 방향을 바꿔 관통 구멍 쪽 끝에서 시작하므로, 급송은 시작 좌표 너머(구멍 연장선 쪽) · 공구 쪽으로 Z 여유만큼 떨어진 자리에서 멈추고 " +
+                "G1 두 줄(구멍 벽 쪽으로 X → 벽을 따라 시작 좌표로 Z)로 닿습니다.$HOLE_NOTE"
             wallStart(sol) -> " 가공 방향을 바꿔 척 · 구멍 바닥 쪽 끝 직선에서 시작하므로, 급송은 깎을 면과 시작 좌표에서 Z 여유만큼 떨어진 자리에서 멈추고 " +
                 "G1 두 줄(시작 좌표 쪽으로 Z → 벽을 따라 X)로 닿습니다.$CORNER_NOTE"
             sol.flip && sol.filled != null -> " 가공 방향을 바꿔 축에서 시작하므로, 급송은 첫 깎는 면에서 Z 여유 넘게 떨어진 자리에서 멈추고 이송으로 닿습니다."
             sol.flip && sol.approach.isNotEmpty() -> " 가공 방향을 바꾼 3점호라 급송은 끝점(P3) 너머로 가지 않습니다 — P3 앞 · 공구 쪽 Z 여유 자리에서 멈춘 뒤 " +
                 "G1 로 P3 바로 뒤 자리 위 → 접선 연장선 → 접선 한 줄로 P3 에 들어갑니다(노즈가 P3 에서 원호를 탑니다)."
+            // 관통 구멍의 끝(바꾸지 않은 방향): 막힌 끝이 아니라 끝 좌표 너머로 지나간다(calc machineFrame · 사용자 답 2026-11-13)
+            sol.filled?.through == true && throughBlocked -> " 관통 구멍이지만 노즈R 에 비해 아주 좁아 끝 좌표 너머에 G40 자리가 없어, 막힌 끝처럼 끝 좌표에서 공구 쪽으로 뺍니다 " +
+                "— 구멍 끝의 노즈R 구간에 구석이 조금(노즈R 의 0.41 배까지) 남습니다."
+            sol.filled?.through == true -> " 관통 구멍은 끝 좌표 너머가 구멍이라 그 너머로 지나가 구멍 벽을 끝까지 깎은 뒤 공구 쪽으로 뺍니다."
             else -> ""
         }
 
@@ -665,6 +688,7 @@ private fun HolderNc(
     stop: StopView?,
     full: Boolean,
     focus: HitRow?,
+    throughBlocked: Boolean,
     onFull: (Boolean) -> Unit,
 ) {
     val whole = if (comp) directNc(sol.nc, noseR, sol.tip) else drawn?.nc ?: return
@@ -709,7 +733,7 @@ private fun HolderNc(
     }
     // 전체: 간섭 줄 빨강, 목록에서 누른 줄은 초점색. 닿거나 안전 여유가 모자라면 확인용 표시(빨간 칩 · 노랑 테 복사 단추)
     val careful = rows.isNotEmpty() || (stop != null && stop.kind != StopKind.CLEAR)
-    val note = if (comp) directNote(sol, legNote) else machineNote(sol, r, legNote)
+    val note = if (comp) directNote(sol, legNote) else machineNote(sol, r, legNote, throughBlocked)
     HolderNcCard(
         whole,
         if (careful) "전체 프로그램(확인용)입니다 — 이대로 끝까지 깎으면 보링바가 소재에 닿거나 안전 여유를 지키지 못합니다. $note" else note,

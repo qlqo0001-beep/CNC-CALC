@@ -23,8 +23,8 @@ NC 도면 좌표
   Z-5.
   G3X30.Z-10.R25.
   G1Z-16.
-  X28.F.3
-  Z-15.014
+  Z-17.F.3
+  X28.029
   G40
   G0Z200.
 보링바 BoringBar(dia=16.0, f=11.0, shape=C, edge=9.0, kappaDeg=95.0, overhang=null, dMin=20.0) · 안전 여유 0.5

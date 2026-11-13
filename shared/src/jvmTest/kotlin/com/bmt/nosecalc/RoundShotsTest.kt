@@ -110,6 +110,8 @@ class RoundShotsTest {
         shot("round-b3-flip-direct", 3320, comp = CompMode.DIRECT) { roundExample(3, open = true).apply { setFlipped(3, true) } }
         shot("round-inner-b3-flip", 4300) { roundInnerDomeA().apply { setFlipped(3, true) } }
         shot("round-manual-flip", 2900) { roundExample(MANUAL, open = true).apply { manualFlip = true } }
+        // 관통 구멍(2026-11-13 사용자 답): 시작 좌표 너머에서 구멍 벽을 따라 들어오는 기계 보정 NC(카드 아랫글은 '자세히' 로 펼친다)
+        shot("round-inner-b5-through-flip", 4500) { roundInnerStep().apply { setFlipped(5, true) } }
         Shots.both("round-b3-flip-narrow", 1500, setup = { it.open(Feature.ROUND) }, widthDp = 360, fontScale = 1.3f) {
             AppHost(it) { RoundScreen(roundInnerExample(3).apply { setFlipped(3, true) }) }
         }

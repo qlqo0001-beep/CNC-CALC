@@ -671,13 +671,15 @@ class VerifyShortNeighborTest {
         return out
     }
 
-    private fun roundCase(group: String, tag: String, m: RoundResult, d: RoundResult, inner: Boolean, r: Double, extra: String? = null): Case? {
+    private fun roundCase(group: String, tag: String, m: RoundResult, d: RoundResult, inner: Boolean, r: Double, extra: String? = null, through: Boolean = false): Case? {
         val s = m.solution ?: return null
         val ds = d.solution ?: return null
         val dr = s.drawing.segs
         val last = dr.last()
         var endWall: Pair<Pt, Pt>? = null
-        if (last is Line) {
+        // 관통 구멍의 끝 너머는 같은 지름의 구멍 — 막힌 끝이 아니다(사용자 답 2026-11-13). 너머로 뺄 자리가 없으면 계산기가 전 규칙(막힌 끝)으로 짠다 —
+        // 어느 쪽인지는 NC 로 가른다(CompanyFrameVerifyTest.kt 의 `passesThroughEnd` — 검증 2026-11-14)
+        if (last is Line && !(through && passesThroughEnd(s.nc, last.end.z))) {
             val u = unitOf(last.end - last.start)
             val blocked = if (abs(u.x) > abs(u.z)) (if (inner) u.x > 0 else u.x < 0 && last.end.x > 1e-6) else u.z < 0
             if (blocked) endWall = last.end to u
@@ -726,7 +728,7 @@ class VerifyShortNeighborTest {
                     )
                 }
             }
-            roundCase("라운드", inp.toString(), RoundCalc.machine(inp), RoundCalc.calc(inp), inner, r)?.let { out += it }
+            roundCase("라운드", inp.toString(), RoundCalc.machine(inp), RoundCalc.calc(inp), inner, r, through = inp.through)?.let { out += it }
         }
         return out
     }

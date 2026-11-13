@@ -132,8 +132,11 @@ class Verify1110RoundFlipTest {
         is Arc -> sweep(s) * (s.start - s.center).length
     }
 
-    /** 소재: 기본 방향 도면(외경 = 앞 끝 → 척 쪽, 내경 = 입구 → 바닥)으로 만든다 */
-    private inner class Solid(val segs: List<Seg>, val inner: Boolean) {
+    /**
+     * 소재: 기본 방향 도면(외경 = 앞 끝 → 척 쪽, 내경 = 입구 → 바닥)으로 만든다. [through] = 관통 구멍 — 끝 직선 너머는 같은 지름의 구멍이 이어지고 벽이 아니다
+     * (사용자 답 2026-11-13 "관통이면 넘어가도 됌" — 노즈가 그 끝 좌표 너머로 가도 된다)
+     */
+    private inner class Solid(val segs: List<Seg>, val inner: Boolean, val through: Boolean = false) {
         val zFront = segs.maxOf { max(it.start.z, it.end.z) }
         val zBack = segs.minOf { min(it.start.z, it.end.z) }
         private val last = segs.last()
@@ -142,7 +145,7 @@ class Verify1110RoundFlipTest {
         val legEnd = last is Line && abs(last.end.x - last.start.x) < 1e-9 && last.end.z < last.start.z - 1e-9 && last.end.x > 1e-9
         val backX = last.end.x
         val frontX = segs.first().start.x
-        val wallZ: Double? = if (legEnd) zBack else null
+        val wallZ: Double? = if (legEnd && !through) zBack else null
         val boundary: List<Seg>
 
         init {
@@ -368,7 +371,7 @@ class Verify1110RoundFlipTest {
     /** 급송 틈 표: Z 여유 · 노즈R 마다 가장 작은 틈 */
     private fun gapTable(t: Tally, kind: String, i: RoundInput, clear: Double?, what: String) {
         if (clear == null) return
-        val start = if (i.inner) (if (i.through || i.type == 2) "막힌 시작" else "축에서 시작") else (if (i.type == 1) "축에서 시작" else "막힌 시작")
+        val start = if (i.inner) (if (i.through) "관통에서 시작" else if (i.type == 2) "막힌 시작" else "축에서 시작") else (if (i.type == 1) "축에서 시작" else "막힌 시작")
         t.minOf("틈표 [$kind] Z여유 ${i.zClear} 노즈 ${i.noseR} ${if (kind.startsWith("뒤집기")) start else ""}", clear) { what }
     }
 
@@ -447,7 +450,7 @@ class Verify1110RoundFlipTest {
         }
         t.count("사례")
         val r = base.noseR
-        val solid = Solid(bs.drawing.segs, base.inner)
+        val solid = Solid(bs.drawing.segs, base.inner, base.through)
         val fs = fd.solution
         if (fs == null) {
             val w = fd.warnings.firstOrNull()
@@ -499,11 +502,11 @@ class Verify1110RoundFlipTest {
             val outside = if (base.inner) q.z - r >= solid.zFront - tol else (q.z - r >= solid.zFront - tol || abs(q.x) - r >= solid.segs.maxOf { max(it.start.x, it.end.x) } - tol)
             if (!outside) t.hit("F_직접_첫_G0_끝이_부품_안쪽") { "$what ${m0.text} 노즈 중심 X${2 * q.x} Z${q.z}\n${fs.nc.joinToString("\n")}" }
         }
-        // 덜 깎임: 기본 방향 직접 보정과 견줌(막힌 시작 구석은 r(√2−1) 까지 설계대로)
+        // 덜 깎임: 기본 방향 직접 보정과 견줌(막힌 시작 구석은 r(√2−1) 까지 설계대로 — 관통 구멍은 너머에서 들어와 구석이 없다)
         val bErr = mutableListOf<String>()
         val bFeed = parse(bs.nc, bErr).filter { !it.rapid }.map { shift(it.seg, tv(bs.tip) * r * -1.0) }
         val s0 = fs.drawing.segs.first().start
-        val wallStart = solid.legEnd
+        val wallStart = solid.legEnd && !base.through
         val bl = lacks(bs.drawing.segs, bFeed, r)
         val fl = lacks(bs.drawing.segs, dFeed, r)
         for (k in fl.indices) {
@@ -807,8 +810,10 @@ class Verify1110RoundFlipTest {
                 "G42 / G0X-.82Z20. / Z-13.2 / G1Z-15.F.1 / X0. / G2X19.565Z-10.281R12.5 / X20.Z-9.659R1. / G1Z0. / Z1.F.3 / G40 / G0Z200."),
             ex("C 외경 5", c, "G0X32.Z1. / Z-16.342 / G1X30.Z-17.342 / Z-13.048 / G2X29.506Z-12.254R1.4 / X10.821Z-5.233R18.4 / G3X10.Z-4.664R.6 / G1Z0. / X-.8",
                 "G41 / G0X33.6Z20. / Z-15.942 / G1Z-17.342F.1 / X30. / Z-12.648 / G2X29.647Z-12.081R1. / X11.368Z-5.213R18. / G3X10.Z-4.264R1. / G1Z0. / X-.8 / Z1.F.3 / G40 / G0Z200."),
-            ex("D 내경 5 관통", d, "G0X28.Z1. / Z-15. / G1X30.Z-16. / Z-10.199 / G2X40.Z-5.266R24.6 / G1Z-.4",
-                "G42 / G0X26.4Z20. / Z-14.6 / G1Z-16.F.1 / X30. / Z-10. / G2X40.Z-5.R25. / G1Z0. / Z1.F.3 / G40 / G0Z200."),
+            // 관통은 시작 좌표 너머에서 들어온다(사용자 답 2026-11-13 — 손 계산을 새 규칙으로: 직접은 노즈 중심 X27.2 Z-17(첫 보정점 노즈 Z-16 에서 너머 c ·
+            // 축 쪽 c) → 첫 보정점 인선 X30. Z-16.4, 기계는 급송 Z = 시작 Z − (r + c) · X = D − 2(2r + c) 뒤 `G1 X(D) F.1` · `Z(시작)`)
+            ex("D 내경 5 관통", d, "G0X28.Z1. / Z-17.4 / G1X30.Z-16.4 / Z-10.199 / G2X40.Z-5.266R24.6 / G1Z-.4",
+                "G42 / G0X26.4Z20. / Z-17.4 / G1X30.F.1 / Z-16. / Z-10. / G2X40.Z-5.R25. / G1Z0. / Z1.F.3 / G40 / G0Z200."),
             ex("D2 내경 5 막힘", d2, "G0X.8Z1. / Z-15. / G1Z-16. / X30. / Z-10.199 / G2X40.Z-5.266R24.6 / G1Z-.4",
                 "G42 / G0X-.8Z20. / Z-14.2 / G1Z-16.F.1 / X30. / Z-10. / G2X40.Z-5.R25. / G1Z0. / Z1.F.3 / G40 / G0Z200."),
             ex("F 외경 2", f, "G0X22.Z1. / Z-26.321 / X12. / G1X10.Z-27.321 / Z-23.28 / G3X10.545Z-22.777R.6 / G2X20.Z-14.06R10.4 / X10.545Z-5.344R10.4 / G3X10.Z-4.841R.6 / G1Z0. / X-.8",
@@ -832,7 +837,7 @@ class Verify1110RoundFlipTest {
             if (direct != ex.direct) wrong += "${ex.name} 직접 보정이 손 계산과 다름"
             if (machine != ex.machine && ex.base != null && machine != null) {
                 // 어느 쪽이 맞나: 두 글을 같은 소재에서 돌려 급송 틈을 견준다
-                val solid = Solid(RoundCalc.calc(ex.base).solution!!.drawing.segs, ex.base.inner)
+                val solid = Solid(RoundCalc.calc(ex.base).solution!!.drawing.segs, ex.base.inner, ex.base.through)
                 fun gap(nc: List<String>): String {
                     val (nose, stop) = simNose(nc, ex.base.noseR, NoseComp.standardTip(ex.base.inner, false), CompStartup.C)
                     if (nose == null) return "알람 $stop"
@@ -872,7 +877,7 @@ class Verify1110RoundFlipTest {
         )
         val out = StringBuilder()
         for ((name, base) in cases) {
-            val solid = Solid(RoundCalc.calc(base).solution!!.drawing.segs, base.inner)
+            val solid = Solid(RoundCalc.calc(base).solution!!.drawing.segs, base.inner, base.through)
             for (flip in listOf(true, false)) {
                 val i = base.copy(flip = flip)
                 val m = RoundCalc.machine(i)
