@@ -422,11 +422,17 @@ class GeometricVerifyTest {
         // 직접 보정 NC 는 진입 · 형상 · 후퇴. 시작·끝은 인선을 그 좌표에 둬서 노즈 접점이 바깥 끝에서 r 까지 안쪽일 수 있다.
         // 시작점을 비우면 시작 요소는 깎지 않는다(진입점에서 첫 꺾임점′ 으로). 끝점을 비우면 끝 요소도 깎지 않는다(마지막 꺾임점′ 에서 후퇴)
         val skip = (if (sol.fromStart) emptySet() else setOf(0)) + (if (sol.toEnd) emptySet() else setOf(drawing.lastIndex))
+        // 알려진 한계(최종 확인 뒤 고침 2026-11-13): 뒤집은 내경에서 접근 줄이 지나야 하는 목(축에 닿지 않는 요소의 가장 안쪽)이 노즈R 보다 좁으면 앞에서 들어오는
+        // 직접 보정 급송은 어떻게 해도 목에 닿는다 — 접근 X 는 노즈 중심이 축까지(전에는 축 너머로 가 이 모형에 없는 맞은편 벽을 팠다). 앱은 ENTRY_NOT_FOUND 로 알린다.
+        // 그 글은 접근 · 진입 급송만 노즈 굴리기에서 뺀다
+        val neck = inner && sol.approach.isNotEmpty() && TaperWarning.ENTRY_NOT_FOUND in res.warnings &&
+            drawing.filter { it.a.x > 1e-6 && it.b.x > 1e-6 }.flatMap { e -> (0..20).map { e.at(it / 20.0) } }.minOfOrNull { it.x }.let { it != null && it < r }
+        if (neck) rep.note("목이 노즈R 보다 좁은 뒤집은 내경(직접 보정 접근 급송 안 봄)")
         checkPath(
             rep, id, drawing, reg, leftMat, sol.program.segs.map(::el), sol.center.segs.map(::el), sol.tip, r,
-            sol.ncG40.legacy, ncSkip = skip, looseApproach = false, legTrim = r, exitMove = true, lead = sol.approach.size,
+            sol.ncG40.legacy, ncSkip = skip, looseApproach = false, legTrim = r, exitMove = true, lead = sol.approach.size, skipLead = neck,
         ) { it in small && warned }
-        checkEnds(rep, id, sol, drawing, sign, r, inner)
+        checkEnds(rep, id, sol, drawing, sign, r, inner, noseBased = !reverse)
         // 단면을 중심(X0)까지 깎아 끝나면 G41/G42 는 그 단면을 중심 너머 r(X −2r)까지 쓰고 공구 쪽으로 뺀다 — 외경(설계 문서 "가공 방향 뒤집기" ②)도
         // 내경 바닥 단면도(회사 꼴 — calc-design '진입점과 NC')
         val lu = drawing.last().tangent(0.0)
@@ -445,15 +451,22 @@ class GeometricVerifyTest {
      * 하나만 다르다: 외경 단면을 중심(X0)까지 깎아 끝나면 너머는 이미 깎은 같은 면이라, 인선을 X0 에 두었을 때 노즈 중심이 반경 > 0 에 서면
      * (인선이 노즈보다 앞서 가는 팁) 노즈 중심이 중심선에 닿을 때까지 더 간다 — 안 그러면 중심에 살이 남는다(설계 문서 "가공 방향 뒤집기" ②).
      */
-    private fun checkEnds(rep: Report, id: String, sol: TaperSolution, drawing: List<El>, sign: Double, r: Double, inner: Boolean) {
+    private fun checkEnds(rep: Report, id: String, sol: TaperSolution, drawing: List<El>, sign: Double, r: Double, inner: Boolean, noseBased: Boolean) {
         val tv = tipVec(sol.tip, r)
         fun foot(e: El, p: V): V {
             val u = e.tangent(0.0)
             val off = e.leftNormal(0.0) * (sign * r) + tv
             return p + off - u * (off dot u)
         }
-        val s0 = foot(drawing.first(), drawing.first().a)
-        val e0 = foot(drawing.last(), drawing.last().b)
+        // 막힌 시작 · 끝(척 · 구멍 바닥 쪽 수평 — 계산기 −Z 가 척 쪽, 재료 쪽 단면 — 보스, 외경 X0 은 빼고)은 인선이 아니라 노즈가 그 좌표의 법선에 닿는 자리
+        // (최종 확인 뒤 고침 2026-11-13 — 팁 벡터가 그 쪽으로 덜 나온 팁은 시작 · 끝점′ 을 u·max(0, r ± 팁 벡터·u) 안쪽으로). 표준 팁 정방향은 전과 같다.
+        // 화면 정방향(뒤집기 포함)만 — 계산기 역방향은 전 규칙(인선을 그 좌표에)
+        val u0 = drawing.first().tangent(0.0)
+        val blockedStart = noseBased && if (abs(u0.z) > abs(u0.x)) u0.z > 0 else (u0.x > 0) != inner && !(!inner && drawing.first().a.x <= 1e-9)
+        val uE = drawing.last().tangent(0.0)
+        val blockedEnd = noseBased && if (abs(uE.z) > abs(uE.x)) uE.z < 0 else (uE.x < 0) != inner && !(!inner && drawing.last().b.x <= 1e-9)
+        val s0 = foot(drawing.first(), drawing.first().a) + u0 * (if (blockedStart) max(0.0, r + (tv dot u0)) else 0.0)
+        val e0 = foot(drawing.last(), drawing.last().b) + uE * (if (blockedEnd) min(0.0, (tv dot uE) - r) else 0.0)
         // 접근 줄(뒤집어 척 쪽에서 시작할 때 진입 G00 앞의 G00)은 빼고 진입 G00 부터
         val pts = ncPoints(sol.ncG40.legacy).drop(sol.approach.size)
         // 시작 요소가 수평이면 진입점·시작점′·다음 점이 한 직선이라 시작점′ 을 따로 쓰지 않는다 — 그때는 진입선 위에 있으면 된다
@@ -1052,7 +1065,7 @@ class GeometricVerifyTest {
         rep: Report, id: String, drawing: List<El>, reg: Region, leftMat: Boolean,
         program: List<El>, center: List<El>?, tip: Int, r: Double,
         nc: List<String>?, ncSkip: Set<Int>, looseApproach: Boolean,
-        legTrim: Double = 0.0, exitMove: Boolean = false, lead: Int = 0,
+        legTrim: Double = 0.0, exitMove: Boolean = false, lead: Int = 0, skipLead: Boolean = false,
         mayBeUncut: (Int) -> Boolean,
     ) {
         val tv = tipVec(tip, r)
@@ -1120,7 +1133,7 @@ class GeometricVerifyTest {
                 rep.bad(id, "NC오차", "NC $what 가 계산 경로에서 ${fmt(dev)} mm 벗어남  NC=$nc")
             }
         }
-        val body = if (looseApproach) ncEls.drop(1) else ncEls
+        val body = if (skipLead) ncEls.drop(lead + 1) else if (looseApproach) ncEls.drop(1) else ncEls
         val (ncl, nat) = clearance(body, tv, r, reg)
         if (ncl < -NC_TOL) rep.bad(id, "NC파고듦", "NC 글대로 가면 노즈 원이 재료로 ${fmt(-ncl)} mm 들어감, 노즈 중심 $nat  NC=$nc")
         if (looseApproach && ncEls.isNotEmpty()) {
@@ -1129,7 +1142,7 @@ class GeometricVerifyTest {
             val g = (0..n).minOf { k -> drawing.minOf { it.dist(ap.at(k.toDouble() / n) - tv) } } - r
             if (g < -NC_TOL) rep.bad(id, "NC파고듦", "진입 이동에서 노즈 원이 도면 원호로 ${fmt(-g)} mm 들어감  NC=$nc")
         }
-        val ncCenters = ncEls.map { it.shift(tv * -1.0) }
+        val ncCenters = (if (skipLead) ncEls.drop(lead + 1) else ncEls).map { it.shift(tv * -1.0) }
         for ((i, e) in drawing.withIndex()) {
             if (i in ncSkip || mayBeUncut(i)) continue
             val cv = cover(e, ncCenters, r, reg, sign, trimmed(i, e))

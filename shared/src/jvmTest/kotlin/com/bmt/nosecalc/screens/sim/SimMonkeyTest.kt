@@ -979,6 +979,8 @@ class SimMonkeyTest {
         part.report()
         val real = part.failures.groupBy { it.sig }
         assertTrue(real.isEmpty(), "$name: 예외 ${real.size}종류 — build/monkey/$name.txt\n" + real.keys.joinToString("\n"))
+        // 메모리 한도에 첫머리부터 걸려 거의 못 누르면 껍데기 통과다([recheck] 와 같다 — 최종 확인 2026-11-13: 앞 클래스와 한 JVM 에서 돌아 여섯 부분이 누르기 0 으로 초록)
+        assertTrue(part.steps >= MIN_STEPS, "$name: 누르기 ${part.steps}번뿐(메모리 최대 ${part.peakMb}MB) — 껍데기 통과")
     }
 
     /** 씨앗(처음 값 SEED) · 다시 확인 켬(겨눈 손짓을 모든 층에서 · 처음 층은 촘촘히, 두 손가락 핀치) — [recheck] 만 바꾼다 */

@@ -341,7 +341,10 @@ internal object V1112 {
     }
 }
 
-/** 회귀: 옛 계산기(b305c71)와 글을 견준다. 바뀌어도 되는 것 = 뒤집은(화면 정방향) G41/G42 의 진입 줄 · 내경 바닥 X0 끝의 직접 보정 */
+/**
+ * 회귀: 옛 계산기(b305c71)와 글을 견준다. 바뀌어도 되는 것 = 뒤집은(화면 정방향) G41/G42 의 진입 줄 · 내경 바닥 X0 끝의 직접 보정, 그리고 최종 확인 뒤 고침
+ * (2026-11-13)의 직접 보정 — 노즈 기준 막힌 시작 · 끝 · 진입 · 뒤집은 접근, 내경 축 쪽 노즈 중심 멈춤(시뮬레이터로 옛 글보다 나쁘지 않은 것만 — `V1113.vsOld`)
+ */
 class Verify1112TaperRegressionTest {
     private fun need() = assumeTrue(V1112.oldJar.isFile, "옛 jar 가 없어 건너뜀: ${V1112.oldJar}")
 
@@ -356,7 +359,10 @@ class Verify1112TaperRegressionTest {
         assertEquals(listOf("G41", "G0X53.6Z20.", "Z-18.6", "G1Z-20.F.1", "X50."), n.take(5), "$n")
     }
 
-    /** 뒤집지 않은 것 · 화면 역방향(거울, 뒤집기 포함) · 계산기 역방향(뒤집기 포함): G41/G42 는 글자 하나 다르지 않고, 직접 보정은 내경 바닥 X0 끝만 */
+    /**
+     * 뒤집지 않은 것 · 화면 역방향(거울, 뒤집기 포함) · 계산기 역방향(뒤집기 포함): G41/G42 는 글자 하나 다르지 않고, 직접 보정은 내경 바닥 X0 끝과
+     * 최종 확인 뒤 고침(2026-11-13 — 시뮬레이터로 옛 글보다 나쁘지 않은 것, 그 탓의 ENTRY_PAST_AXIS · 새 BAD_LEG 포함)만
+     */
     @Test
     fun unchangedOutsideFlip() {
         need()
@@ -365,26 +371,26 @@ class Verify1112TaperRegressionTest {
         var n = 0
         var solved = 0
         var axis = 0
+        var fixed = 0
         for ((flip, reverse, approach) in listOf(Triple(false, false, true), Triple(false, false, false), Triple(true, false, false), Triple(false, true, true), Triple(true, true, true))) {
             for (c in V1112.grid(flip, reverse, approach)) {
                 n++
                 val res = c.calc()
                 val o = V1112.oldTaper(c)
                 val s = res.solution
-                if ((s == null) != (o.nc4x == null)) {
-                    diffs += "풀림 다름 ${c.tag}: 새 ${res.warnings} 옛 ${o.warnings}"
-                    continue
-                }
-                if (s == null) continue
-                solved++
-                val ax = V1112.axisEnd(s, c.inner)
+                if (s != null) solved++
+                val ax = s != null && V1112.axisEnd(s, c.inner)
                 if (ax) axis++
-                if (s.ncG41G42 != o.nc4x) diffs += "G41/G42 ${c.tag}\n 옛 ${o.nc4x}\n 새 ${s.ncG41G42}"
-                if (s.ncG40 != o.nc40) (if (ax) axisDiffs else diffs) += "G40 ${c.tag}\n 옛 ${o.nc40}\n 새 ${s.ncG40}"
-                if (res.warnings.map { it.name } != o.warnings) diffs += "경고 ${c.tag}: 옛 ${o.warnings} 새 ${res.warnings}"
+                if (ax && s.ncG40 != o.nc40) axisDiffs += "G40 ${c.tag}\n 옛 ${o.nc40}\n 새 ${s.ncG40}"
+                val (bad, fx) = V1113.vsOld(c, res, o) { V1112.axisEnd(it, c.inner) }
+                if (fx) fixed++
+                bad.forEach { diffs += "$it · ${c.tag}" }
             }
         }
-        V1112.log("unchangedOutsideFlip", "회귀(뒤집기 밖): 사례 $n · 풀림 $solved · 내경 바닥 X0 끝 $axis · 그 직접 보정 바뀜 ${axisDiffs.size} · 다른 것 ${diffs.size}")
+        V1112.log(
+            "unchangedOutsideFlip",
+            "회귀(뒤집기 밖): 사례 $n · 풀림 $solved · 내경 바닥 X0 끝 $axis · 그 직접 보정 바뀜 ${axisDiffs.size} · 고침(2026-11-13)으로 G40 바뀜 $fixed · 다른 것 ${diffs.size}",
+        )
         axisDiffs.take(3).forEach { V1112.log("unchangedOutsideFlip", it) }
         diffs.take(20).forEach { V1112.log("unchangedOutsideFlip", it) }
         assertEquals(0, diffs.size, diffs.take(5).joinToString("\n\n"))
@@ -417,14 +423,19 @@ class Verify1112TaperRegressionTest {
                 bad[key] = ((bad[key]?.first ?: 0) + 1) to (bad[key]?.second ?: "${c.tag}\n   옛 ${o.nc4x}\n   새 ${s?.ncG41G42}$ex")
             }
             if ((s == null) != (o.nc4x == null)) {
-                fail("풀림 다름", "")
+                // 최종 확인 뒤 고침(2026-11-13): 노즈 기준 막힌 시작 · 끝에서 노즈가 짧은 요소에 못 닿아 새로 BAD_LEG(옛 글이 막힌 벽을 판 것만)
+                if (V1113.newBadLegOk(c, res, o)) bump("새 BAD_LEG(옛 글은 막힌 벽을 팜)") else fail("풀림 다름", "")
                 continue
             }
             if (s == null) continue
             n++
             val ax = V1112.axisEnd(s, c.inner)
             if (ax) axis++
-            if (s.ncG40 != o.nc40 && !ax) fail("G40 바뀜", "\n   옛 G40 ${o.nc40}\n   새 G40 ${s.ncG40}")
+            // 직접 보정은 최종 확인 뒤 고침(2026-11-13)으로 바뀔 수 있다 — 시뮬레이터로 옛 글보다 나쁘지 않은 것만
+            if (s.ncG40 != o.nc40 && !ax) {
+                val worse = V1113.g40Worse(s, c.inner, c.r, o.nc40!!)
+                if (worse != null) fail("G40 나빠짐 $worse", "\n   옛 G40 ${o.nc40}\n   새 G40 ${s.ncG40}") else bump("G40 바뀜(고침 2026-11-13 — 나빠지지 않음)")
+            }
             val wOld = o.warnings.toSet() - "ENTRY_NOT_FOUND"
             val wNew = res.warnings.map { it.name }.toSet() - "ENTRY_NOT_FOUND"
             if (wOld != wNew) notes.getOrPut("경고 바뀜 | $shape | 옛 ${o.warnings} 새 ${res.warnings}") { mutableListOf() }.add("${c.tag} / 옛 ${o.nc4x} / 새 ${s.ncG41G42}")
@@ -530,7 +541,10 @@ class Verify1112TaperRegressionTest {
         }
     }
 
-    /** 라운드(공용 CompFrame 을 같이 씀): 무작위 외경 · 내경 · 뒤집기 · 직접 · 기계 보정 글이 옛것과 글자 하나 다르지 않다 */
+    /**
+     * 라운드(공용 CompFrame 을 같이 씀): 무작위 외경 · 내경 · 뒤집기 · 직접 · 기계 보정 글이 옛것과 글자 하나 다르지 않다 — 뒤집은 직접 보정의 접근 급송만
+     * 최종 확인 뒤 고침(F5 2026-11-13 — 노즈 기준 접근 줄)으로 달라질 수 있다(첫 G1 부터 같고 급송이 더 파지 않음 — `V1113.roundEntryOnly`)
+     */
     @Test
     fun roundUnchanged() {
         need()
@@ -546,7 +560,9 @@ class Verify1112TaperRegressionTest {
                 val res = if (m) RoundCalc.machine(inp) else RoundCalc.calc(inp)
                 val (o, w) = V1112.oldRound(inp, m)
                 n++
-                if (res.solution?.nc != o || res.warnings.map { it.name } != w) diffs += "$inp ${if (m) "기계" else "직접"}\n 옛 $o $w\n 새 ${res.solution?.nc} ${res.warnings}"
+                val wSame = res.warnings.map { it.name } == w
+                if (inp.flip && !m && wSame && res.solution?.nc != o && V1113.roundEntryOnly(res.solution, o, inp.noseR, inp.inner)) continue
+                if (res.solution?.nc != o || !wSame) diffs += "$inp ${if (m) "기계" else "직접"}\n 옛 $o $w\n 새 ${res.solution?.nc} ${res.warnings}"
             }
         }
         V1112.log("roundUnchanged", "라운드 회귀: 글 $n · 다름 ${diffs.size}")

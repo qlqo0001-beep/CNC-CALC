@@ -55,7 +55,7 @@ import kotlin.time.TimeSource
  * 1. 남김: 깎는 도면(시작 · 끝 요소는 넣었을 때만) 위 점마다 노즈가 남긴 살 max(0, 노즈 경로까지 거리 − r) — G4x − G40 (끝 꼭짓점 · 첫 점 · 어디든)
  * 2. 파고듦: 노즈가 도면(깎지 않는 요소 포함) + 양 끝 접선 연장선에 r 보다 가까이 간 깊이 — 블록 종류별
  * 3. 넣은 좌표 너머가 막힌 쪽(척 · 구멍 바닥 · 보스 — calc-design '넣은 시작·끝점 너머로 넘지 않기')으로 G00 점 · 노즈가 넘는가
- * 4. 끝 노즈 자리: (G4x 끝 노즈 − G40 끝 노즈)·u 가 문서 식인가(회사 꼴 — 막힌 끝 팁 벡터·u − r, 외경 단면 X0 끝 min(0, 팁 벡터·u), 그 밖 팁 벡터·u)
+ * 4. 끝 노즈 자리: (G4x 끝 노즈 − G40 끝 노즈)·u 가 문서 식인가(회사 꼴 — 막힌 끝 0(화면 정방향 — 2026-11-13 부터 직접 보정도 노즈가 끝좌표 법선, 역방향 · 거울은 팁 벡터·u − r), 외경 단면 X0 끝 min(0, 팁 벡터·u), 그 밖 팁 벡터·u)
  * 5. 소재 깎기(StockSim, 노즈 원 공구)의 마지막 단면이 두 글에서 같은가 · 급송 깎음
  * 6. 형식 A ↔ B 차이, 따로 짠 모형 ↔ GSim 차이, 시뮬레이터 멈춤
  * 소재 깎기는 봉(내경은 관) 소재라 황삭 안 된 덩어리를 두 글의 다른 진입 · 후퇴 길이 다르게 지나는 차이도 나온다 — 그래서 단면 비교는 깎는 도면에서
@@ -830,7 +830,10 @@ class VerifyG4xSimTest {
                     // 짧은 막힌 끝 요소를 계산기가 뺐으면(마지막 형상 줄 끝이 끝좌표가 아님 — 앞 요소가 직선일 때, calc-design '진입점과 NC' 2026-11-04) 노즈는 그 요소에
                     // 닿지 않고 앞 요소 끝 둘레에서 멈춘다 — 문서 식 대신 노즈가 벽(끝좌표의 법선)에서 r 이상 앞인지 본다
                     val skipped = shortEnd && g.endWall && (parse(nc4).last { it.idx < iExit }.p - g.l).length > 1e-3
-                    val want = if (g.endWall && !shortEnd) tvu - r else if (outerAxis) (if (c.inner) 0.0 else min(0.0, tvu)) else tvu
+                    // 화면 정방향(뒤집기 포함)의 직접 보정 막힌 끝은 최종 확인 뒤 고침(2026-11-13)부터 인선이 아니라 노즈가 끝좌표의 법선에 닿는 자리(끝점′ += u·(팁 벡터·u − r)) — 그만큼 식에서 뺀다
+                    // (막힌 끝은 두 노즈가 같은 자리 0, 짧은 막힌 끝을 곧게 빼는 글은 r)
+                    val d40 = if (g.endWall && !c.reverse && !c.mirror) tvu - r else 0.0
+                    val want = (if (g.endWall && !shortEnd) tvu - r else if (outerAxis) (if (c.inner) 0.0 else min(0.0, tvu)) else tvu) - d40
                     val onLine = abs(((end4 - g.l) dot g.nB) - r) <= tol
                     val ahead = (end4 - g.l) dot g.uB
                     val ok = if (skipped) ahead <= -r + tol else abs(got - want) <= tol && onLine

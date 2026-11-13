@@ -702,7 +702,9 @@ object RoundCalc {
      */
     private fun flipApproach(drawing: Contour, entry: Pt, nose: Pt, r: Double, c: Double, inner: Boolean): List<Pt> {
         val zFront = drawing.segs.maxOf { max(it.start.z, it.end.z) }
-        if (entry.z >= zFront - EPS) return emptyList()
+        // 앞 끝면 앞인지는 노즈(척 쪽 끝)로 가른다 — 인선 점으로 가르면 팁 벡터의 Z 가 0 · +r 인 팁(0 · 8 · 1 · 4 · 5 …)은 노즈가 끝면 뒤 r ~ 2r 인데
+        // 접근 줄 없이 두 축 G0 로 와 끝면 · 구멍 입구를 팠다(최종 확인 F5 2026-11-13: 팁 4 에서 0.3976). 표준 팁(2 · 3)은 인선이 노즈의 척 쪽 끝이라 전과 같다
+        if (nose.z - r >= zFront - EPS) return emptyList()
         val edge = FrameMaterial(drawing.segs).extremeX(nose.z - r, zFront, max = !inner)
         val clear = if (inner) nose.x + r <= edge - c + 1e-7 else nose.x - r >= edge + c - 1e-7
         // 앞 끝면 바깥: 노즈의 척 쪽 끝이 끝면에서 c(표준 팁 2 · 3 은 인선 Z = 끝면 + c — 인선이 노즈의 척 쪽 끝이다)

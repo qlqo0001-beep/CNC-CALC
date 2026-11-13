@@ -60,9 +60,12 @@ class TaperCalcTest {
         // 노즈 바깥 끝(외경은 아래, 내경은 위) = 인선 − 팁 벡터 ∓ r
         val lim = if (inner) xs.min() + tv.x - r else xs.max() + tv.x + r
         val clear = if (inner) e.x <= lim + 1e-6 else e.x >= lim - 1e-6
-        if (clear) return listOf(Pt(zFront + c, e.x))
-        val xa = if (inner) lim - c else lim + c
-        return listOf(Pt(zFront + c, xa), Pt(e.z, xa))
+        // 노즈의 척 쪽 끝이 앞 끝면 + c(최종 확인 뒤 고침 2026-11-13 — 표준 팁은 인선 Z = 앞 끝면 + c), 내경 바깥 X 는 노즈 중심이 축까지
+        val zA = zFront + c + tv.z + r
+        if (clear) return listOf(Pt(zA, e.x))
+        val xa = if (inner) max(lim - c, tv.x) else lim + c
+        if (inner && xa >= e.x - 1e-6) return listOf(Pt(zA, e.x))
+        return listOf(Pt(zA, xa), Pt(e.z, xa))
     }
 
     private fun ncTrace(nc: List<String>): List<Pair<String, String>> {
@@ -276,10 +279,17 @@ class TaperCalcTest {
         // 내경은 바깥 X+)으로 깎아 끝나면(그림의 앞 단면을 거꾸로) 너머도 같은 단면이라 공구 쪽으로(이 격자의 끝 X 는 중심이 아니다).
         // 비웠으면 마지막 보정점에서 공구 쪽으로 c.
         val g40End: List<Pt>
+        val tv0 = NoseComp.tipVector(tip, r)
+        // 노즈 기준 막힌 시작 · 끝 · 연장선 진입은 화면 정방향(뒤집기 포함 — 계산기 역방향 아님)만(최종 확인 뒤 고침 2026-11-13)
+        val noseBased = leftFirst == flip
         if (s.toEnd) {
             val inward = !lastH && (en.x < tl.x) != inner
             val leave = if (lastH || inward) nB else (en - tl).unit()
-            val e0 = legFoot(en, tl, inner, tip, r)
+            // 막힌 끝(척 · 구멍 바닥 쪽으로 깎아 끝난 수평 · 재료 쪽으로 깎아 끝난 단면 — 이 격자의 끝 X 는 중심이 아니다)은 인선이 아니라 노즈가 끝좌표의 법선에
+            // 닿는 데서 멈춘다(최종 확인 뒤 고침 2026-11-13): 끝점′ += u·min(0, 팁 벡터·u − r) — 표준 팁 정방향은 0, 역방향 + 뒤집기의 표준 팁은 −2r
+            val uE = (en - tl).unit()
+            val wall = noseBased && if (lastH) uE.z < 0 else inward
+            val e0 = legFoot(en, tl, inner, tip, r) + uE * (if (wall) min(0.0, (tv0 dot uE) - r) else 0.0)
             assertPt(e0 + leave * c, s.exit, msg = "$tag 후퇴점")
             g40End = listOf(e0, s.exit)
         } else {
@@ -287,18 +297,19 @@ class TaperCalcTest {
             g40End = listOf(s.exit)
         }
         val u0 = (order[1] - st).unit()
-        val tv0 = NoseComp.tipVector(tip, r)
         // 진입: 시작점을 넣었으면 그 요소의 연장선(수평)·공구 쪽(단면)에서 시작점으로. 비웠으면 시작 요소는 깎지 않고
         // 첫 꺾임이 볼록이면 경사선을(손으로 정한 표 slopeEntry), 아니면 수평인 시작 요소는 그 보정선을 늘인 곳에서,
         // 단면은 공구 쪽(Z)에서 첫 보정점으로
         val nF = toolNormal(st, order[1], inner)
         val g40: List<Pt>
         if (s.fromStart) {
-            // 뒤집어 수평 시작 요소를 팁의 Z 와 반대로 깎으면 시작 좌표 너머(척·구멍 바닥)로 넘지 않고 공구 쪽에서 직각으로 — 단면 시작과 같은 꼴
-            val along = firstH && !(flip && u0.z * tv0.z <= 0)
-            val approach = if (along) (st - order[1]).unit() else nF
-            val s0 = legFoot(st, order[1], inner, tip, r)
-            assertPt(s0 + approach * c, s.entry, msg = "$tag 진입점")
+            // (정방향의) 막힌 시작(척 · 구멍 바닥 쪽에서 앞으로 깎기 시작하는 수평 · 바깥으로 깎기 시작하는 단면)과 뒤집어 수평 시작 요소를 팁의 Z 와 반대로 깎으면 시작 좌표
+            // 너머로 넘지 않고 공구 쪽에서 직각으로 — 단면 시작과 같은 꼴. 막힌 시작의 시작점′ 은 노즈가 시작 좌표의 법선에 닿는 자리(+ u·max(0, r + 팁 벡터·u)),
+            // 연장선 진입은 노즈가 시작 좌표 면에서 c 앞(c + max(0, r − 팁 벡터·u)) — 최종 확인 뒤 고침 2026-11-13(표준 팁 정방향은 전과 같다)
+            val blocked = if (firstH) u0.z > 0 else (u0.x > 0) != inner && !(!inner && st.x <= 1e-9)
+            val along = firstH && !(noseBased && blocked) && !(flip && u0.z * tv0.z <= 0)
+            val s0 = legFoot(st, order[1], inner, tip, r) + u0 * (if (noseBased && blocked) max(0.0, r + (tv0 dot u0)) else 0.0)
+            assertPt(if (along) s0 - u0 * (c + if (noseBased) max(0.0, r - (tv0 dot u0)) else 0.0) else s0 + nF * c, s.entry, msg = "$tag 진입점")
             g40 = listOf(s.entry) + (if (along) emptyList() else listOf(s0)) + corners
         } else {
             val back = order[1] - order[2]
@@ -315,7 +326,8 @@ class TaperCalcTest {
         // 접근 줄: 뒤집어 척 쪽(그림 왼쪽)에서 시작하면 진입 G00 이 앞 끝면(T 점 · 넣은 앞 요소 끝 가운데 가장 오른쪽)보다 왼쪽이라
         // 앞 끝면 + c 에서 X 를 맞추고 Z 로 들어간다. 왼쪽부터 깎을 때 앞 요소는 끝 요소(order 의 마지막)다
         val zFront = (order.subList(1, order.size - 1) + listOfNotNull(order.last().takeIf { s.toEnd })).maxOf { it.z }
-        fun app(e: Pt) = if (flip && leftFirst && e.z < zFront - 1e-9) approachOf(e, order, zFront, inner, tip, r, c) else emptyList()
+        // 척 쪽인지는 노즈의 척 쪽 끝으로(최종 확인 뒤 고침 2026-11-13 — 표준 팁은 인선과 같다)
+        fun app(e: Pt) = if (flip && leftFirst && e.z - tv0.z - r < zFront - 1e-9) approachOf(e, order, zFront, inner, tip, r, c) else emptyList()
         val app40 = app(s.entry)
         assertEquals(app40.size, s.approach.size, "$tag 접근 줄 ${s.ncG40.legacy}")
         assertEquals((app40 + g40 + g40End).map(::printed), ncTrace(s.ncG40.legacy), "$tag G40 ${s.ncG40.legacy}")

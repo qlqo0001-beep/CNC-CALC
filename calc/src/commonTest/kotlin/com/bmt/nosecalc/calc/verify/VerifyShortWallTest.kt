@@ -2,6 +2,7 @@ package com.bmt.nosecalc.calc.verify
 
 import com.bmt.nosecalc.calc.Arc
 import com.bmt.nosecalc.calc.Arc3Input
+import com.bmt.nosecalc.calc.CompFrame
 import com.bmt.nosecalc.calc.DoubleTaperInput
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.Line
@@ -118,21 +119,25 @@ class VerifyShortWallTest {
 
     @Test
     fun taperShortBlockedStartEntersOnCornerR() {
-        // 외경 TYPE 3 뒤집기(큰 외경 쪽 — 척 쪽에서 +Z 로): 큰 외경 X40 의 T1 Z−10, 45° 테이퍼로 T2 X30 Z−5, T1 모서리 R2, 시작 Z−11.2(막힌 시작 — 너머가 척 쪽),
-        // 0.8R · 역바이트 팁 4, Z 여유 1
+        // 외경 TYPE 3 뒤집기(큰 외경 쪽 — 척 쪽에서 +Z 로): 큰 외경 X40 의 T1 Z−10, 45° 테이퍼로 T2 X30 Z−5, T1 모서리 R2, 시작 Z−11.648(막힌 시작 — 너머가 척 쪽),
+        // 0.8R · 역바이트 팁 4, Z 여유 1. 처음 재현(시작 Z−11.2 — 시작 요소 0.372 < r)은 최종 확인 뒤 고침(2026-11-13)부터 BAD_LEG 다 — 직접 보정의 막힌 시작을
+        // 노즈 기준으로 잡아(팁 4 의 노즈가 시작 벽 너머 2r 로 깎던 것) 노즈가 r 보다 짧은 막힌 요소에 벽 앞에서 닿을 길이 없다(표준 팁은 전부터 그랬다).
+        // 그래서 시작 요소를 r + 0.02(0.82)로: 직접 보정은 노즈가 0.02 를 깎고, G41/G42 는 그 요소의 노즈 길(0.02)이 MIN_MOVE 보다 짧아 빼고 들어간다
         val r = 0.8
-        val res = TaperCalc.calc(TaperInput(inner = false, type = 3, noseR = r, tip = 4, x1 = 40.0, z1 = -10.0, x2 = 30.0, z2 = -5.0, zClear = 1.0, cornerR1 = 2.0, start = -11.2, flip = true))
+        val st = -11.648
+        assertEquals(listOf(TaperWarning.BAD_LEG), TaperCalc.calc(TaperInput(inner = false, type = 3, noseR = r, tip = 4, x1 = 40.0, z1 = -10.0, x2 = 30.0, z2 = -5.0, zClear = 1.0, cornerR1 = 2.0, start = -11.2, flip = true)).warnings)
+        val res = TaperCalc.calc(TaperInput(inner = false, type = 3, noseR = r, tip = 4, x1 = 40.0, z1 = -10.0, x2 = 30.0, z2 = -5.0, zClear = 1.0, cornerR1 = 2.0, start = st, flip = true))
         val nc = res.solution!!.ncG41G42
         // 모서리 R(볼록, 45° 꺾임): 접점까지 2·tan 22.5° = 0.828427 → R 처음 Z−10.828427(X40), 중심 (−10.828427, 18), 끝 = 중심 + 2·(√½, √½) = (−9.414214, 19.414214)
         val zs = -10 - 2 * tan(PI / 8)
-        // 시작 요소 Z−11.2 ~ −10.828 = 0.372 < r: 노즈가 시작 벽(노즈 중심 Z ≥ −11.2 + 0.8 = −10.4)에서 R 처음 법선(Z−10.828)으로 가면 −Z 로 되돌아간다
-        assertTrue(zs < -11.2 + r)
+        // 시작 요소 Z−11.648 ~ −10.828 = 0.82: 노즈가 시작 벽(노즈 중심 Z ≥ −11.648 + 0.8 = −10.848)에서 R 처음 법선(Z−10.828)까지 0.02 — MIN_MOVE 보다 짧다
+        assertTrue(zs - (st + r) in 0.0..CompFrame.MIN_MOVE)
         val iCut = nc.indexOfFirst { it.endsWith("F.1") }
         // 시작 요소를 빼고 R 처음(X40. Z−10.828)에 공구 쪽(+X)에서 직각으로 — 뒤집은 진입(2026-11-12 통합 고침): 급송은 R 처음에서 공구 쪽 2r + c = 2.6
         // (X45.2) · 앞으로 r + c = 1.8(Z−9.028)에서 멈추고 `G1Z-10.828F.1`(벽 쪽으로) → `X40.`(벽을 따라 내려옴). 급송 노즈 밑(반경 22.6 − 2r = 21.0)이 R 꼭대기(20)에서 c,
         // 급송 끝 노즈의 척 쪽 끝(Z−9.028 − r = −9.828)이 시작 벽 Z−11.2 에서 1.372
         assertEquals(listOf("G0X45.2Z20.", "Z-9.028", "G1Z-10.828F.1", "X40.", "G2X38.828Z-9.414R2."), nc.subList(iCut - 2, iCut + 3), nc.joinToString(" / "))
-        assertFalse(nc.any { it.contains("Z-11.2") }, nc.joinToString(" / "))
+        assertFalse(nc.any { it.contains("Z-11.648") }, nc.joinToString(" / "))
         assertTrue(TaperWarning.SHORT_END_PAST !in res.warnings && TaperWarning.ENTRY_NOT_FOUND !in res.warnings, "${res.warnings}")
         // 뺀 시작 요소(Z−11.2 ~ −10.828)는 깎이지 않는다 — 화면에 알린다(2026-11-05)
         assertTrue(TaperWarning.SHORT_END_SKIPPED in res.warnings, "${res.warnings}")
@@ -149,9 +154,9 @@ class VerifyShortWallTest {
             val g1 = run.steps.filterIsInstance<MoveStep>().last { it.line == line(iCut + 1) }.nose
             assertEquals(want.z, g1.end.z, 2e-3, "형식 $form 팁 $tip 첫 깎는 줄 끝 노즈")
             assertEquals(want.x, g1.end.x, 2e-3, "형식 $form 팁 $tip 첫 깎는 줄 끝 노즈")
-            // 노즈 중심이 시작 벽 Z−11.2 에서 r 안(Z < −10.4)으로 가지 않는다
+            // 노즈 중심이 시작 벽 Z−11.648 에서 r 안(Z < −10.848)으로 가지 않는다
             val worst = noses(run).minOf { it.z }
-            assertTrue(worst >= -11.2 + r - 1e-3, "형식 $form 팁 $tip: 노즈 Z $worst\n${nc.joinToString(" / ")}")
+            assertTrue(worst >= st + r - 1e-3, "형식 $form 팁 $tip: 노즈 Z $worst\n${nc.joinToString(" / ")}")
         }
     }
 
@@ -160,8 +165,11 @@ class VerifyShortWallTest {
         // 외경 TYPE 5 뒤집기: T1 X40 Z−10 → 가파른 경사(ΔZ 0.2 · Δ반경 4) → T2 X48 Z−9.8, 시작 Z−11.2(막힌 시작, 요소 1.2), 0.8R · 팁 4, Z 여유 1
         val r = 0.8
         val res = TaperCalc.calc(TaperInput(inner = false, type = 5, noseR = r, tip = 4, x1 = 40.0, z1 = -10.0, x2 = 48.0, z2 = -9.8, zClear = 1.0, start = -11.2, flip = true))
-        val s = res.solution!!
-        assertTrue(TaperWarning.SHORT_END_PAST in res.warnings, "${res.warnings}\n${s.ncG41G42.joinToString(" / ")}")
+        // 최종 확인 뒤 고침(2026-11-13): 노즈(Ø1.6)가 시작 벽과 경사 사이 틈(1.2)에 들어가 경사를 깎을 길이 없는 꼴은 직접 보정도 깎을 수 없다 — 직접 보정의 막힌
+        // 시작을 노즈 기준으로 잡아(팁 4 의 노즈가 시작 벽 너머 2r 로 깎던 것) 팁과 상관없이 BAD_LEG 로 멈춘다(표준 팁 3 은 전부터 그랬다). 전에는 팁 4 만 풀려
+        // G41/G42 가 곧게 들어가며 SHORT_END_PAST 로 알렸다(아래 손 계산은 그 틈이 정말 좁은지 — 그대로 둔다)
+        assertEquals(listOf(TaperWarning.BAD_LEG), res.warnings)
+        assertEquals(listOf(TaperWarning.BAD_LEG), TaperCalc.calc(TaperInput(inner = false, type = 5, noseR = r, x1 = 40.0, z1 = -10.0, x2 = 48.0, z2 = -9.8, zClear = 1.0, start = -11.2, flip = true)).warnings)
         // 손 계산: 경사 u = (0.2, 4)/4.004997, G41 노즈는 그 왼쪽(−Z 쪽) r. T1 은 오목 꺾임 — 노즈 = 시작 요소 보정선 X20.8 과 경사 보정선의 교점,
         // Z = −10 − r·tan(α/2), tan(α/2) = (1 − cos α)/sin α = (1 − 0.049938)/0.998752 = 0.951249 → Z−10.760999.
         // T2 는 볼록(바깥 90° 이하) — 끝 요소 보정선 X24.8 과의 늘인 교점 Z = −10 − 0.998752·0.8 + 0.049938·t, t = (24.8 − 20 − 0.049938·0.8)/0.998752 → Z−10.560999.
@@ -174,14 +182,8 @@ class VerifyShortWallTest {
         assertEquals(-10.760999, zLow, 1e-5)
         assertEquals(-10.560999, zHigh, 1e-5)
         // 시작 벽을 넘지 않으려면 노즈 중심 Z ≥ −11.2 + 0.8 = −10.4 — 경사를 깎는 노즈(Z−10.761 ~ −10.561)는 모두 그 너머(0.161 ~ 0.361):
-        // 노즈(Ø1.6)가 시작 벽과 경사 사이 틈(Z−11.2 ~ −10, 1.2)에 들어가 경사를 깎을 길이 없다. 시작 요소를 빼고 들어가려 해도 진입 줄 보정선 Z = −10 + r = −9.2 가
-        // 경사 노즈 길과 만나지 않는다 — 그래서 곧게 들어가고 경고한다(조용히 넘지 않는다)
+        // 노즈(Ø1.6)가 시작 벽과 경사 사이 틈(Z−11.2 ~ −10, 1.2)에 들어가 경사를 깎을 길이 없다
         assertTrue(zHigh < -11.2 + r && zHigh < -10 + r)
-        val nc = s.ncG41G42
-        val run = sim(nc, r, 4, CompStartup.C)
-        assertNull(run.stop, "${run.stop}\n${nc.joinToString(" / ")}")
-        // 경고가 헛것이 아니다: 노즈가 정말 시작 벽 한계를 넘는다
-        assertTrue(noses(run).minOf { it.z } < -11.2 + r - 0.1, nc.joinToString(" / "))
     }
 
     // ================================================================ 진입 길 못 찾음(ENTRY_NOT_FOUND)

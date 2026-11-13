@@ -141,23 +141,28 @@ class VerifyFixHandTest {
 
     @Test
     fun shortBlockedEndStaysOffTheWall() {
-        // 뒤집기 외경 형상 1: X241.291 Z-10.995 → X138.145 Z-2.532, 끝 단면 X137.253(반경 0.446 — 0.8R 보다 짧음), 시작 Z-12.051, Z 여유 0.607, 팁 2
-        val r = 0.8
-        val s = TaperCalc.calc(
-            TaperInput(inner = false, type = 1, noseR = r, tip = 2, x1 = 241.291, z1 = -10.995, x2 = 138.145, z2 = -2.532, zClear = 0.607, start = -12.051, end = 137.253, flip = true),
-        ).solution!!
+        // 뒤집기 외경 형상 1: X241.291 Z-10.995 → X138.145 Z-2.532, 시작 Z-12.051, Z 여유 0.607, 팁 2. 처음 재현(노즈 0.8 · 끝 단면 X137.253 — 반경 0.446)은
+        // 최종 확인 뒤 고침(2026-11-13)부터 BAD_LEG — 직접 보정의 막힌 끝을 노즈 기준으로 잡아(팁 2 의 노즈가 보스 속 2r 가던 것) 노즈R 보다 짧은 막힌 끝 요소에는
+        // 노즈가 벽 앞에서 닿을 길이 없다(표준 팁과 같은 기준). 이 볼록 꺾임(9.3°)에서 G41/G42 가 그 요소를 빼는 띠(노즈 길 < MIN_MOVE)가 BAD_LEG 밖에 남으려면
+        // r·tan(꺾임/2) < MIN_MOVE 라 노즈 0.4 · 끝 단면 반경 0.41(X137.325)로 본다 — 직접 보정은 노즈가 0.01 을 깎고 G41/G42 는 그 요소를 빼고(SHORT_END_SKIPPED) 뺀다
+        val first = TaperInput(inner = false, type = 1, noseR = 0.8, tip = 2, x1 = 241.291, z1 = -10.995, x2 = 138.145, z2 = -2.532, zClear = 0.607, start = -12.051, end = 137.253, flip = true)
+        assertEquals(listOf(TaperWarning.BAD_LEG), TaperCalc.calc(first).warnings)
+        val r = 0.4
+        val res = TaperCalc.calc(first.copy(noseR = r, end = 137.325))
+        assertTrue(TaperWarning.SHORT_END_SKIPPED in res.warnings, "${res.warnings}")
+        val s = res.solution!!
         val nc = s.ncG41G42
-        // 끝 단면 줄(X137.253)을 쓰지 않고 앞 요소(경사) 끝에서 끝 단면의 공구 쪽(+Z)으로 뺀다
-        assertFalse(nc.any { it.startsWith("X137.253") }, nc.joinToString(" / "))
+        // 끝 단면 줄(X137.325)을 쓰지 않고 앞 요소(경사) 끝에서 끝 단면의 공구 쪽(+Z)으로 뺀다
+        assertFalse(nc.any { it.startsWith("X137.325") }, nc.joinToString(" / "))
         val iExit = nc.indexOfFirst { it.endsWith("F.3") }
         assertEquals("X138.145Z-2.532", nc[iExit - 1])
         assertTrue(nc[iExit].startsWith("Z"), "첫 빼는 줄은 Z 로만(끝 단면의 공구 쪽 법선): ${nc[iExit]}")
-        // 빼는 점은 경사 끝(반경 69.0725)보다 벽(보스 옆면 X137.253 — 반경 68.6265) 쪽으로 가지 않는다 — 빼는 줄의 공구 쪽은 +X(G41 · +Z 진행의 왼쪽)라
-        // 노즈 중심은 그 점 + r 이상, 벽에서 0.446 + 0.8 ≥ r
-        val wall = 137.253 / 2
+        // 빼는 점은 경사 끝(반경 69.0725)보다 벽(보스 옆면 X137.325 — 반경 68.6625) 쪽으로 가지 않는다 — 빼는 줄의 공구 쪽은 +X(G41 · +Z 진행의 왼쪽)라
+        // 노즈 중심은 그 점 + r 이상, 벽에서 0.41 + 0.4 ≥ r
+        val wall = 137.325 / 2
         for (q in exitPoints(nc)) assertTrue(q.x >= 138.145 / 2 - 1e-3 && q.x + r >= wall + r, "빼는 점 $q 가 벽 쪽으로 간다 — ${nc.joinToString(" / ")}")
-        // 첫 빼는 줄: 경사 → +Z 안쪽 꺾임(경사 방향 (0.162, −0.987), +Z 와 80.7°) 노즈는 경사 보정선과 빼는 줄 보정선(반경 69.0725 + 0.8)의 교점,
-        // 그 줄 → +X(G40 자리로 비킴) 꺾임 노즈는 명령점 − r(Z) — 그 줄의 노즈 이동이 0.05 가 되게 c = 0.8 에 0.73 더(Z ≈ −1.003)
+        // 첫 빼는 줄: 경사 → +Z 안쪽 꺾임(경사 방향 (0.162, −0.987), +Z 와 80.7°) 노즈는 경사 보정선과 빼는 줄 보정선(반경 69.0725 + r)의 교점,
+        // 그 줄 → +X(G40 자리로 비킴) 꺾임 노즈는 명령점 − r(Z) — 그 줄의 노즈 이동이 0.05 가 되게 c 에 더 늘인다
         val z1 = nc[iExit].removePrefix("Z").removeSuffix("F.3").toDouble()
         val slope = Pt(-2.532 - -10.995, (138.145 - 241.291) / 2).let { Pt(it.z / sqrt(it.z * it.z + it.x * it.x), it.x / sqrt(it.z * it.z + it.x * it.x)) }
         val nS = Pt(-slope.x, slope.z) // G41 왼쪽

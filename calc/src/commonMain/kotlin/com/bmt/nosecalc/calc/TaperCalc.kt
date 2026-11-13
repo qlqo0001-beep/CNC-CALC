@@ -523,6 +523,18 @@ object TaperCalc {
         // 화면 역방향(그림을 Z 로 거울해 푼다 — approach = false)은 계산기 +Z 가 실제 척 쪽이다([TaperInput.approach]). 넣은 좌표 너머가 막혔는지 ·
         // G41/G42 의 진입 · 물러남 쪽(부품 앞)을 볼 때 쓴다
         val mirror = !approach
+        // 직접 보정의 막힌 시작 · 끝 · 연장선 진입을 노즈 기준으로 잡는 것은 화면 정방향(뒤집기 포함 — 계산기 역방향 · 거울 아님)만(최종 확인 뒤 고침 2026-11-13).
+        // 역방향(역바이트로 척 쪽에서 Z+ 로)의 척 쪽 시작 · 끝은 직접 보정이 너머를 비었다고 보고(연장선 진입) G41/G42 는 막혔다고 본다 — 어느 쪽이 맞는지는
+        // 따로 정할 일이라 전 규칙 그대로 둔다(뒤집기 대칭 · 화면 역방향 = 계산기 역방향의 거울도 그래서 그대로)
+        val noseBased = !reverse && !mirror
+        // 내경에서 축 쪽으로 빼거나 들어가면 노즈 중심이 축에서 멈춘다(`CompFrame.untilAxis` — 넘으면 맞은편 벽, 최종 확인 T2 2026-11-13). 노즈 중심이 이미 축(너머)이면
+        // (노즈보다 좁은 바닥 · 구멍) 단면을 이어 빼던 끝은 공구 쪽([alt])으로, 그 밖은 전처럼
+        fun toolMove(at: Pt, dir: Pt, alt: Pt? = null): Pt {
+            val nose = at - tv
+            if (!inner || dir.x >= -1e-12) return at + dir * c
+            if (nose.x <= 1e-9) return at + (alt ?: dir) * c
+            return CompFrame.untilAxis(nose, dir, c, true) + tv
+        }
         val exit: Pt
         var endD = last.end // G41/G42 프로그램의 마지막 형상 점(도면 좌표)
         val x1D: Pt // G41/G42 첫 빼는 줄 끝(도면 좌표)
@@ -534,8 +546,6 @@ object TaperCalc {
         var shortPast = false // 짧은 막힌 끝 · 시작 요소를 뺄 수 없어 곧게 빼거나 들어감(SHORT_END_PAST)
         if (cutLast) {
             var e0 = foot(last.end, segs.last().start, uB)
-            // 인선이 끝좌표에 왔을 때 노즈가 끝 요소에 한 번도 닿지 않으면(요소가 노즈R 쯤보다 짧다) 그 요소는 깎이지 않는다
-            if (((e0 - segs.last().start) dot uB) < -EPS || ((e0 - tv - last.start) dot uB) < -EPS) stop(TaperWarning.BAD_LEG)
             val face = !isHorizontal(uB)
             val inward = face && (uB.x < 0) != inner
             // 내경 바닥 단면을 중심(X0)까지(너머가 빈 끝이지만 축 너머는 같은 면): G41/G42 도 외경처럼 단면을 X −2r 까지 쓰고 공구 쪽으로(노즈 중심이 축에)
@@ -550,6 +560,12 @@ object TaperCalc {
             // 넣은 끝좌표 너머가 막힌 쪽인가 — 척 · 구멍 바닥 쪽으로 깎아 끝난 수평 끝(거울이면 계산기 +Z 쪽), 재료 쪽으로 깎아 끝난 단면 끝(보스 — 외경 X0 은 빼고).
             // calc-design '넣은 시작·끝점 너머로 넘지 않기'
             val wall = if (face) inward && !toAxis else if (mirror) uB.z > 0 else uB.z < 0
+            // 화면 정방향([noseBased])의 막힌 끝은 직접 보정도 인선이 아니라 노즈가 끝좌표의 법선에 닿는 데서 멈춘다(노즈의 끝 쪽 끝 = 끝좌표). 표준 팁(외경 3 ·
+            // 내경 2)은 인선이 노즈의 그 끝이라 전과 같고, 팁 0 · 8 은 r, 4 · 5 는 2r 일찍 멈춘다 — 전에는 인선을 끝좌표에 둬 노즈가 벽 · 척 · 보스 속으로 r ~ 2r
+            // 갔다(최종 확인 T1 2026-11-13: 외경 형상 3 끝 Z−4.5 · 노즈 1.2 · 팁 0 에서 Z−5.7 까지)
+            if (wall && noseBased) e0 += uB * min(0.0, (tv dot uB) - r)
+            // 끝에 왔을 때 노즈가 끝 요소에 한 번도 닿지 않으면(요소가 노즈R 쯤보다 짧다) 그 요소는 깎이지 않는다
+            if (((e0 - segs.last().start) dot uB) < -EPS || ((e0 - tv - last.start) dot uB) < -EPS) stop(TaperWarning.BAD_LEG)
             // 끝 요소가 짧아(노즈R 쯤) 직각 빼는 줄과의 교점이 그 요소의 보정 시작보다 앞이면 끝 블록이 거꾸로 가 간섭 알람이다(FF 5.4.6).
             // 막힌 끝이면 그 요소는 노즈가 벽 앞에서 닿을 길이 없다 — G41/G42 는 그 요소를 빼고 앞 요소 끝에서 벽을 따라 공구 쪽으로 뺀다(노즈가 끝좌표
             // 너머 벽 · 보스로 가지 않음 — 전에는 빈 끝처럼 곧게 빼 벽 속으로 c 와 G40 옮김만큼 갔다, 검증 2026-11-04). 직접 보정은 그대로
@@ -570,7 +586,8 @@ object TaperCalc {
             if (toAxis || axisIn) endD = last.end + uB * r
             toAxisEnd = toAxis
             segs[segs.lastIndex] = Line(segs.last().start, e0)
-            exit = e0 + leave * c
+            // 내경에서 축 쪽으로 빼면(수평 끝의 공구 쪽 · 중심 쪽으로 깎아 끝난 단면을 이어) 노즈 중심이 축에서 멈춘다(최종 확인 T2 2026-11-13 — 아래 비운 끝과 같은 꼴)
+            exit = toolMove(e0, leave, if (leave == nB) null else nB)
             when {
                 toAxis || axisIn -> {
                     x1D = endD + nB * c
@@ -599,7 +616,9 @@ object TaperCalc {
                 }
             }
         } else {
-            exit = segs.last().start + nB * c
+            // 내경 수평 끝 요소의 공구 쪽은 축 쪽 — 노즈 중심이 축에서 멈춘다(최종 확인 T2 2026-11-13: 입구 Ø10 → Ø6 · Z 여유 5 · 노즈 0.8 의 `G0X-4.` 가
+            // 노즈 중심 반경 −2.8 로 Ø6 맞은편 벽을 0.58 팠다)
+            exit = toolMove(segs.last().start, nB)
             x1D = if (convexAt(path.size - 2, cr.lastIndex)) {
                 // 끝 깎는 요소가 T1–T2 호면 그 끝 접선으로 곧게
                 val ahead = (raw[path.size - 3] as? Arc)?.let(CompFrame::endDir) ?: (path[path.size - 2] - path[path.size - 3])
@@ -627,18 +646,28 @@ object TaperCalc {
         val fromSeg: Int // 직접 보정에서 진입 뒤 따라갈 첫 요소
         var s0: Pt? = null
         val nF = toolNormal(uF, side)
-        // 넣은 시작점: 수평 시작 요소의 연장선을 따라 들어가나(뒤집어 팁의 Z 와 반대로 깎는 것은 빼고 — 그때와 단면은 공구 쪽에서 직각으로)
-        val along = isHorizontal(uF) && !(flip && uF.z * tv1.z <= 0)
-        var blockedStart = false
+        // 넣은 시작 좌표 너머가 막혔나 — 뒤집어 척 쪽 · 구멍 바닥 쪽에서 시작하는 수평(거울이면 계산기 −Z 로 가는 것), 바깥으로 깎기 시작하는 단면(보스 — 외경 X0 은 빼고)
+        val blockedAt = cutFirst &&
+            (if (isHorizontal(uF)) (if (mirror) uF.z < 0 else uF.z > 0) else (uF.x > 0) != inner && !(!inner && first.start.x <= EPS))
+        // 넣은 시작점: 수평 시작 요소의 연장선을 따라 들어가나(뒤집어 팁의 Z 와 반대로 깎는 것은 빼고 — 그때와 단면은 공구 쪽에서 직각으로).
+        // 화면 정방향([noseBased])의 막힌 시작(G41/G42 가 직각으로 들어가는 것과 같은 판정)도 직각으로 — 전에는 팁의 Z 로만 갈라 뒤집기의 팁 1 · 4 · 5 가
+        // 연장선(시작 좌표 너머 척 · 구멍 바닥 속)에서 들어와 노즈가 그 좌표를 2r 넘어 깎기 시작했다(최종 확인 T1 2026-11-13)
+        val along = isHorizontal(uF) && !(noseBased && blockedAt) && !(flip && uF.z * tv1.z <= 0)
+        var blockedStart = blockedAt
         var dropFirst: Int? = null // G41/G42 가 짧은 막힌 시작 요소(와 그 뒤 모서리 R)를 빼고 들어갈 요소 번호 — null 이면 빼지 않음
         if (cutFirst) {
-            val p = foot(first.start, segs.first().start, uF)
+            var p = foot(first.start, segs.first().start, uF)
+            // 화면 정방향의 막힌 시작은 직접 보정도 노즈가 시작 좌표의 법선에 닿는 자리에서 시작한다(끝과 같다 — 표준 팁은 전과 같고, 수평이면 팁 0 · 8 은 r,
+            // 1 · 4 · 5 는 2r 안쪽에서). 전에는 인선을 시작 좌표에 둬 노즈가 벽 · 보스 속으로 r ~ 2r 들어갔다
+            if (blockedAt && noseBased) p += uF * max(0.0, r + (tv dot uF))
             if (((segs.first().end - p) dot uF) < -EPS || ((first.end - (p - tv)) dot uF) < -EPS) stop(TaperWarning.BAD_LEG)
             segs[0] = Line(p, segs[0].end)
-            val inDir = if (along) uF * -1.0 else nF
             s0 = p
-            entry = p + inDir * c
-            blockedStart = if (isHorizontal(uF)) (if (mirror) uF.z < 0 else uF.z > 0) else (uF.x > 0) != inner && !(!inner && first.start.x <= EPS)
+            // 연장선으로 들어가면 노즈(인선 아님)가 시작 좌표 면에서 c 앞 — 표준 팁은 인선이 노즈의 그 끝이라 전과 같고, 팁 0 · 8 은 r, 1 · 4 · 5 는 2r 더 물린다
+            // (전에는 노즈 중심이 부품 앞면 위에 서 급송이 앞면을 팠다 — 최종 확인 T1 2026-11-13: 내경 형상 4 시작 Z3 · 팁 5).
+            // 공구 쪽에서 직각으로 들어가면 내경은 노즈 중심이 축에서 멈춘다(넘으면 맞은편 벽 — 최종 확인 T2 2026-11-13: 뒤집은 바닥 Ø6 · 시작 Z−11 · Z 여유 5 ·
+            // 노즈 0.8 의 `G0X-4.Z5.` `Z-11.` 이 노즈 중심 반경 −2.8 로 내려가 맞은편 벽을 0.6 팠다)
+            entry = if (along) p - uF * (c + if (noseBased) max(0.0, r - (tv dot uF)) else 0.0) else toolMove(p, nF)
             // 시작 요소가 짧아(노즈R 쯤) 직각 진입의 교점이 그 요소의 보정 끝보다 뒤면 간섭 알람 — 막힌 시작이면 그 요소는 노즈가 벽 앞에서 닿을 길이 없어
             // G41/G42 는 그 요소를 빼고 다음 요소 처음으로 공구 쪽에서 직각으로 들어간다(전에는 한 직선으로 시작 좌표 너머 벽 속에서 들어왔다, 검증 2026-11-04)
             val shortStart = blockedStart && drawing.segs.size > 1 && ((segs[0].end - tv - (first.start + nF * r + uF * r)) dot uF) < CompFrame.MIN_MOVE
@@ -695,10 +724,17 @@ object TaperCalc {
         // 도면(진입점에서 노즈 왼쪽 끝부터 오른쪽)보다 바깥이어야 한다 — 아니면(역테이퍼 꼴 · 겹테이퍼 산 너머) 그 바깥 X(+ c)로 Z 를 맞춘 뒤
         // X 로 진입점에 간다. 안 뒤집은 것 · 계산기 역방향은 지금 그대로. 그림의 꺾은선(모서리 R 전)이 모서리 R 윤곽을 바깥에서 감싼다.
         // (G41/G42 는 CompFrame 이 Z20. 에서 같은 일을 한다 — 진입 Z 줄이 도면에 닿으면 바깥 X 에서 Z 를 맞추고 X 로)
-        val zFront = (if (start != null) drawn else drawn.drop(1)).maxOf { it.z }
+        // 깎는 요소가 그보다 앞으로 나오면(비운 앞 요소 쪽 T 점 모서리 R 의 접점) 그 앞까지 — 부품이 거기까지는 있다(최종 확인 T2 2026-11-13: 내경 형상 5 뒤집기 ·
+        // 모서리 R 0.5 · 노즈 0.2 에서 접근 `G0X29.6Z.2` 의 노즈가 Z0.402 까지 나온 모서리 R 앞을 0.198 지났다)
+        val zFront = max(
+            (if (start != null) drawn else drawn.drop(1)).maxOf { it.z },
+            drawing.segs.subList(fromSeg, toSeg).maxOfOrNull { max(it.start.z, it.end.z) } ?: Double.NEGATIVE_INFINITY,
+        )
         fun approachTo(e: Pt): List<Pt> {
-            if (!approach || !flip || reverse || e.z >= zFront - EPS) return emptyList()
+            // 노즈의 척 쪽 끝으로 가른다(인선으로 가르면 팁 벡터의 Z 가 0 · +r 인 팁은 노즈가 끝면 뒤 r ~ 2r 인데 접근 줄 없이 두 축 G0 로 왔다 — 라운드 F5 와 같다,
+            // 최종 확인 2026-11-13). 표준 팁(2 · 3)은 인선이 그 끝이라 전과 같다
             val from = e.z - tv.z - r
+            if (!approach || !flip || reverse || from >= zFront - EPS) return emptyList()
             val xs = raw.flatMap { s ->
                 val a = s.start
                 val b = s.end
@@ -712,9 +748,14 @@ object TaperCalc {
             }
             // 노즈가 도면 바깥에 있으려면 인선 X 가 이 값 바깥(외경 위 · 내경 아래)
             val lim = if (inner) xs.min() + tv.x - r else xs.max() + tv.x + r
-            if (if (inner) e.x <= lim + EPS else e.x >= lim - EPS) return listOf(Pt(zFront + c, e.x))
-            val xa = if (inner) lim - c else lim + c
-            return listOf(Pt(zFront + c, xa), Pt(e.z, xa))
+            // 앞 끝면 바깥: 노즈의 척 쪽 끝이 끝면에서 c(라운드 flipApproach 와 같다 — 표준 팁은 인선 Z = 끝면 + c 로 전과 같다)
+            val zA = zFront + c + tv.z + r
+            if (if (inner) e.x <= lim + EPS else e.x >= lim - EPS) return listOf(Pt(zA, e.x))
+            // 내경은 노즈 중심이 축을 넘지 않게(넘으면 맞은편 벽 — 최종 확인 T2 2026-11-13: 바닥 Ø6 · Z 여유 5 · 노즈 0.8 에서 `G0X-4.` 가 맞은편 벽을 0.6 팠다).
+            // 진입점이 이미 그보다 축 쪽이면 곧장(라운드 flipApproach 와 같다)
+            val xa = if (inner) max(lim - c, tv.x) else lim + c
+            if (inner && xa >= e.x - EPS) return listOf(Pt(zA, e.x))
+            return listOf(Pt(zA, xa), Pt(e.z, xa))
         }
         val approachG40 = approachTo(entry)
 
@@ -749,7 +790,10 @@ object TaperCalc {
             var ok = app.found
             if (ok && turns) {
                 ok = (ds + u).zipWithNext().none { (a, b) -> CompFrame.acuteOuter(a, b, side) } &&
-                    ns.zipWithNext().withIndex().all { (k, n) -> ((n.second - n.first) dot ds[k]) > 0 }
+                    ns.zipWithNext().withIndex().all { (k, n) -> ((n.second - n.first) dot ds[k]) > 0 } &&
+                    // 회사 흐름: Z20. 줄 뒤 급송은 한 축씩 — `CompFrame.entry` 의 셋째 길(공구 쪽 P3 에서 첫 깎는 줄에 직각)은 첫 깎는 줄이 비스듬하면 두 축 G0 이다
+                    // (최종 확인 F2 2026-11-13: 뒤집은 내경 작은 구멍 `X-.835` `X-1.013Z-7.685`). 그런 후보는 받지 않고 다음 후보로
+                    app.points.zipWithNext().all { (a, b) -> abs(a.z - b.z) < 1e-9 || abs(a.x - b.x) < 1e-9 }
             }
             if (ok && turns && cmds.size > 1) {
                 val dirs = cmds.zipWithNext { a, b -> (b - a).unit() }

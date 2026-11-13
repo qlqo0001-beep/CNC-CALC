@@ -509,7 +509,12 @@ class VerifyG4xHandTest {
             total++
             val s = cs.new.solution
             val h = cs.head.solution
-            if ((s == null) != (h == null)) t.add("풀림 여부가 HEAD 와 다름", 0.0, "${cs.tag} ${cs.head.warnings} → ${cs.new.warnings}")
+            if ((s == null) != (h == null)) {
+                // 최종 확인 뒤 고침(2026-11-13): 직접 보정의 막힌 시작 · 끝을 노즈 기준으로 잡아 노즈가 짧은 막힌 요소에 벽 앞에서 닿을 길이 없으면 팁과 상관없이 BAD_LEG —
+                // HEAD 직접 보정 글의 노즈가 그 좌표 너머로 간 것만 받는다
+                if (s == null && cs.new.warnings == listOf(TaperWarning.BAD_LEG) && headPastBlocked(h!!, cs.inner, cs.r)) t.add("(고침 2026-11-13) 새 BAD_LEG — HEAD 직접 보정 노즈가 막힌 좌표 너머", 0.0, cs.tag)
+                else t.add("풀림 여부가 HEAD 와 다름", 0.0, "${cs.tag} ${cs.head.warnings} → ${cs.new.warnings}")
+            }
             if (s == null || h == null) continue
             solved++
             val screen = !cs.calcRev && !cs.tipChosen
@@ -517,15 +522,23 @@ class VerifyG4xHandTest {
             val against = TaperWarning.AGAINST_TOOL in cs.new.warnings
             val r = cs.r
             val tag = "${cs.tag.substringBefore(", approach")} | ${s.ncG41G42.legacy.joinToString(" / ")}"
-            // --- 사용자 결정: 직접 보정 글 · 보정점 · 진입 · 후퇴 · 도면 그대로
-            if (s.ncG40.legacy != h.ncG40.legacy || s.points != h.points || s.entry != h.entry || s.exit != h.exit || s.approach != h.approach ||
-                s.drawing != h.drawing || s.center != h.center || s.program != h.program || s.tip != h.tip || s.side != h.side ||
-                s.fromStart != h.fromStart || s.toEnd != h.toEnd || s.anglesDeg != h.anglesDeg
+            // --- 사용자 결정: 직접 보정 글 · 보정점 · 진입 · 후퇴 · 도면 그대로. 다만 최종 확인 뒤 고침(2026-11-13)은 직접 보정의 막힌 시작 · 끝 · 연장선 진입 ·
+            // 뒤집은 접근을 노즈 기준으로, 내경 축 쪽 진입 · 접근 · 후퇴를 노즈 중심 축까지로 바꿨다 — 보정점(T 점) · 도면 · 팁 · 보정 쪽은 그대로, 직접 보정 글 ·
+            // 진입 · 후퇴 · 접근 · 처음 · 끝 요소의 보정 경로는 달라질 수 있다(따로 세고, 직접 보정 파고듦은 아래에서 센다)
+            if (s.points != h.points || s.drawing != h.drawing || s.tip != h.tip || s.side != h.side || s.fromStart != h.fromStart || s.toEnd != h.toEnd ||
+                s.anglesDeg != h.anglesDeg
             ) t.add("직접 보정 글 · 보정점이 HEAD 와 다름", 0.0, cs.tag)
+            val g40Changed = s.ncG40.legacy != h.ncG40.legacy || s.entry != h.entry || s.exit != h.exit || s.approach != h.approach || s.center != h.center ||
+                s.program != h.program
+            if (g40Changed) t.add("(고침 2026-11-13) 직접 보정 글이 HEAD 와 다름 · ${if (cs.tipChosen) "팁 직접 고름" else if (cs.calcRev) "계산기 역방향" else "표준 팁"}", 0.0, cs.tag)
             // HEAD 뒤에 더한 G41/G42 글만의 경고(2026-11-04 — 짧은 막힌 끝 · 시작을 못 뺌 · 진입 길 못 찾음, 2026-11-05 — 짧은 요소를 뺌 · 빼는 길 못 찾음)는
             // 따로 센다(HEAD 에는 없던 알림이라 견주지 않는다)
             val added = setOf(TaperWarning.SHORT_END_PAST, TaperWarning.ENTRY_NOT_FOUND, TaperWarning.SHORT_END_SKIPPED, TaperWarning.EXIT_NOT_FOUND)
-            if (cs.new.warnings - added != cs.head.warnings) t.add("[$grp] 경고가 HEAD 와 다름 ${cs.head.warnings} → ${cs.new.warnings}", 0.0, tag)
+            // ENTRY_PAST_AXIS 는 직접 보정 점도 보므로 그 글이 고침으로 바뀌면 달라질 수 있다
+            val past = setOf(TaperWarning.ENTRY_PAST_AXIS)
+            if (cs.new.warnings - added != cs.head.warnings && !(g40Changed && cs.new.warnings - added - past == cs.head.warnings - past)) {
+                t.add("[$grp] 경고가 HEAD 와 다름 ${cs.head.warnings} → ${cs.new.warnings}", 0.0, tag)
+            }
             for (w in cs.new.warnings.filter { it in added }) t.add("[$grp] HEAD 뒤에 더한 경고 $w · ${cs.new.warnings}", 0.0, tag)
             // --- 글 모양 분류(회사 꼴: 진입 G0 줄 수 · 빼는 줄 수)
             val g4 = s.ncG41G42.legacy
@@ -642,6 +655,27 @@ class VerifyG4xHandTest {
         // 2026-10-29 판정 고침(13.9): 고치기 전(HEAD)에 멈추지 않던 G41/G42 글이 GSim 에서 멈추지 않음 · 화면 표준 팁 첫 G00 이 앞 끝면 뒤에 새로 생기지 않음
         assertTrue(t.n.keys.none { "HEAD 는 안 멈춤" in it }, "새로 멈춘 G41/G42 글")
         assertTrue(t.n.keys.none { it.startsWith("[화면 표준 팁] 첫 G00 이 부품 앞 끝면 뒤") && "새로 생김" in it }, "화면 표준 팁 새 앞 끝면 뒤 G00")
+    }
+
+    /**
+     * 최종 확인 뒤 고침(2026-11-13): HEAD 직접 보정 글의 이송 노즈가 넣은 막힌 시작 · 끝 좌표 너머로 갔나 — 막힘은 계산기 판정(척 쪽 수평 · 재료 쪽 단면, 외경 X0 빼고).
+     * 그랬으면 이제 BAD_LEG 로 멈춰도 된다(노즈가 짧은 막힌 요소에 벽 앞에서 닿을 길이 없다)
+     */
+    private fun headPastBlocked(h: TaperSolution, inner: Boolean, r: Double): Boolean {
+        val segs = h.drawing.segs
+        val planes = mutableListOf<Pair<Pt, Pt>>()
+        fun add(p: Pt, b: Pt) {
+            val blocked = if (abs(b.z) > abs(b.x)) b.z < 0 else (b.x < 0) != inner && !(!inner && p.x <= 1e-9)
+            if (blocked) planes += p to b
+        }
+        if (h.fromStart) add(segs.first().start, (segs.first().start - segs.first().end).unit())
+        if (h.toEnd) add(segs.last().end, (segs.last().end - segs.last().start).unit())
+        if (planes.isEmpty()) return false
+        val run = sim(h.ncG40.legacy, r, h.tip)
+        if (run.stop != null) return false
+        val over = moves(run).filter { it.kind == com.bmt.nosecalc.calc.sim.MoveKind.FEED }.flatMap { pts(it.nose) }
+            .maxOfOrNull { q -> planes.maxOf { (p, b) -> ((q - p) dot b) + r } } ?: return false
+        return over > 2e-3
     }
 
     // ================================================================ 3. 라운드 기계 보정 글
