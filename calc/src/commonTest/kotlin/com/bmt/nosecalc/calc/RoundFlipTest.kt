@@ -98,9 +98,15 @@ class RoundFlipTest {
 
     @Test
     fun innerType5FlippedThroughAndBlind() {
-        // 관통: D1 구멍의 척 쪽 끝(Z-16)에서 — 막힌 시작(공구 쪽 = 축 쪽에서 직각으로)
-        assertEquals(listOf("G0X28.Z1.", "Z-15.", "G1X30.Z-16.", "Z-10.199", "G2X40.Z-5.266R24.6", "G1Z-.4"), direct(d).nc)
-        assertEquals(listOf("G42", "G0X26.4Z20.", "Z-14.6", "G1Z-16.F.1", "X30.", "Z-10.", "G2X40.Z-5.R25.", "G1Z0.", "Z1.F.3", "G40", "G0Z200."), machine(d).nc)
+        // 관통: D1 구멍의 끝(Z-16) 너머는 같은 지름의 구멍(사용자 답 2026-11-13 — 벽이 아님). 직접 보정은 첫 보정점이 기본 방향의 끝 보정점(인선 Z-16.4 —
+        // 노즈가 Z-16 에 접함)이고, 급송은 그 노즈에서 너머 c · 축 쪽 c(노즈 중심 X27.2 Z-17 → 인선 X28. Z-17.4)에서 멈춰 비스듬한 이송 한 줄로 닿는다
+        assertEquals(listOf("G0X28.Z1.", "Z-17.4", "G1X30.Z-16.4", "Z-10.199", "G2X40.Z-5.266R24.6", "G1Z-.4"), direct(d).nc)
+        // 기계 보정: 급송은 시작 좌표 너머 r + c(Z-17.4) · 축 쪽 2r + c(X26.4)까지 → 이송으로 구멍 벽 선(X30.) — 노즈가 너머 c(Z-17)에서 구멍 연장선에 닿음 →
+        // 벽을 따라 시작 좌표(Z-16.)로 → 형상
+        assertEquals(listOf("G42", "G0X26.4Z20.", "Z-17.4", "G1X30.F.1", "Z-16.", "Z-10.", "G2X40.Z-5.R25.", "G1Z0.", "Z1.F.3", "G40", "G0Z200."), machine(d).nc)
+        // 기본 방향(입구 → 관통 끝)의 기계 보정 끝도 막힌 끝이 아니다 — 끝 좌표 너머로 c(Z-17.) 지나간 뒤 G40 자리(둘레 (1 + √2)r + 0.02 = 0.986 에 소재
+        // 없음)까지 축 쪽으로(X30 − 2 × 0.986 = X28.029)
+        assertEquals(listOf("G1Z-16.", "Z-17.F.3", "X28.029", "G40", "G0Z200."), machine(d.copy(flip = false)).nc.takeLast(5))
         // 막힘: 바닥 면의 축에서 — 면을 축 너머 r(X-.8)부터 쓰고 그 자리로 Z 이송
         val blind = d.copy(through = false)
         assertEquals(listOf("G0X.8Z1.", "Z-15.", "G1Z-16.", "X30.", "Z-10.199", "G2X40.Z-5.266R24.6", "G1Z-.4"), direct(blind).nc)
@@ -163,7 +169,8 @@ class RoundFlipTest {
             val tv = NoseComp.tipVector(fs.tip, inp.noseR)
             val first = fs.drawing.segs.first()
             val t0 = CompFrame.startDir(first)
-            val wall = first is Line && abs(t0.z) > abs(t0.x) && t0.z > 0
+            // 관통 구멍에서 시작하면 그 너머는 구멍이라 막힌 시작이 아니다(사용자 답 2026-11-13 — RoundThroughTest)
+            val wall = first is Line && abs(t0.z) > abs(t0.x) && t0.z > 0 && !inp.through
             if (wall) walls++
             for ((k, n) in fs.nodes.withIndex()) {
                 val m = bs.nodes[bs.nodes.lastIndex - k]
@@ -324,7 +331,8 @@ class RoundFlipTest {
             }
             val first = s.drawing.segs.first()
             val t0 = CompFrame.startDir(first)
-            val wall = first is Line && abs(t0.z) > abs(t0.x) && t0.z > 0
+            // 관통 구멍에서 시작하면 그 너머는 구멍이라 막힌 시작이 아니다(사용자 답 2026-11-13 — RoundThroughTest)
+            val wall = first is Line && abs(t0.z) > abs(t0.x) && t0.z > 0 && !inp.through
             if (wall) {
                 walls++
                 val past = noses.flatMap(::dense).minOf { (it - first.start) dot t0 }
@@ -352,8 +360,8 @@ class RoundFlipTest {
     private val pre = listOf("T0101", "G97S1000M03", "G99")
 
     /**
-     * 글을 시뮬레이터로 돌린 진입 급송(첫 이송 앞 — 보정 혼자 줄 · 공구 교환 자리에서 오는 첫 G0 은 빼고)의 노즈와 소재(도면 + 축 거울 + [wall] = 시작 좌표의 벽 평면)
-     * 사이 가장 작은 틈. [machine] = 기계 보정 글(형식 C 로 돌린 노즈), 아니면 직접 보정 글(노즈 = 인선 − 팁 벡터)
+     * 글을 시뮬레이터로 돌린 진입 급송(첫 이송 앞 — 보정 혼자 줄 · 공구 교환 자리에서 오는 첫 G0 은 빼고)의 노즈와 소재(도면 + 축 거울 + [wall] = 시작 좌표의 벽 평면,
+     * 관통 구멍에서 시작한 글은 시작 좌표 너머로 이어지는 구멍 벽) 사이 가장 작은 틈. [machine] = 기계 보정 글(형식 C 로 돌린 노즈), 아니면 직접 보정 글(노즈 = 인선 − 팁 벡터)
      */
     private fun rapidGap(s: RoundSolution, r: Double, machine: Boolean, wall: Boolean): Double {
         val g1 = s.nc.indexOfFirst { it.startsWith("G1") }
@@ -365,9 +373,11 @@ class RoundFlipTest {
         val moves = run.steps.filterIsInstance<MoveStep>().filter { it.line > skip }
         val rapids = moves.takeWhile { it.kind == MoveKind.RAPID }.map { if (machine) it.nose else shifted(it.tip, tv * -1.0) }
         assertTrue(rapids.isNotEmpty(), s.nc.joinToString("\n"))
-        val mat = s.drawing.segs + s.drawing.segs.map(::mirror)
         val first = s.drawing.segs.first()
         val t0 = CompFrame.startDir(first)
+        // 관통 구멍에서 시작한 글은 시작 좌표 너머로 이어지는 구멍 벽도 소재로 잰다
+        val hole = if (s.flip && s.filled?.through == true) listOf<Seg>(Line(first.start, first.start - t0 * 300.0)) else emptyList()
+        val mat = (s.drawing.segs + hole).let { it + it.map(::mirror) }
         return rapids.flatMap(::dense).minOf { p -> min(mat.minOf { distTo(it, p) }, if (wall) (p - first.start) dot t0 else Double.MAX_VALUE) } - r
     }
 
@@ -375,8 +385,8 @@ class RoundFlipTest {
     private val v1 = listOf(
         RoundInput(type = 3, mainR = 25.0, cornerR1 = 0.0, d1 = 30.0, noseR = 0.8, zClear = 1.0, legLen = 5.0, flip = true) to true,
         a to true,
-        d.copy(noseR = 0.8) to true,
-        d to true,
+        d.copy(noseR = 0.8) to false,
+        d to false,
         RoundInput(type = 5, mainR = 20.0, cornerR1 = 0.0, cornerR2 = 0.0, d1 = 16.0, d2 = 30.0, l1 = 8.0, noseR = 0.8, zClear = 1.0, legLen = 5.0, inner = true, flip = true) to false,
         d.copy(through = false) to false,
         b to false,
@@ -476,7 +486,8 @@ class RoundFlipTest {
             val c = max(inp.zClear, inp.noseR)
             val first = m.drawing.segs.first()
             val t0 = CompFrame.startDir(first)
-            val wall = first is Line && abs(t0.z) > abs(t0.x) && t0.z > 0
+            // 관통 구멍에서 시작하면 그 너머는 구멍이라 막힌 시작이 아니다(사용자 답 2026-11-13 — RoundThroughTest)
+            val wall = first is Line && abs(t0.z) > abs(t0.x) && t0.z > 0 && !inp.through
             for ((tab, s) in listOf("기계" to m, "직접" to d)) {
                 val run = runCatching { rapidGap(s, inp.noseR, machine = tab == "기계", wall = wall) }.getOrNull()
                 if (run == null) {

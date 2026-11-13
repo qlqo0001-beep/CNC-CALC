@@ -543,7 +543,9 @@ class Verify1112TaperRegressionTest {
 
     /**
      * 라운드(공용 CompFrame 을 같이 씀): 무작위 외경 · 내경 · 뒤집기 · 직접 · 기계 보정 글이 옛것과 글자 하나 다르지 않다 — 뒤집은 직접 보정의 접근 급송만
-     * 최종 확인 뒤 고침(F5 2026-11-13 — 노즈 기준 접근 줄)으로 달라질 수 있다(첫 G1 부터 같고 급송이 더 파지 않음 — `V1113.roundEntryOnly`)
+     * 최종 확인 뒤 고침(F5 2026-11-13 — 노즈 기준 접근 줄)으로 달라질 수 있다(첫 G1 부터 같고 급송이 더 파지 않음 — `V1113.roundEntryOnly`).
+     * 관통 구멍(내경 5 · 6 through)의 뒤집은 글 · 기본 방향 기계 보정 글은 사용자 답 2026-11-13(관통 구멍 끝 · 시작 좌표 너머로)으로 바뀐다 — 시뮬레이터로 옛 글보다
+     * 더 파지 않는 것만(`V1113.roundThroughOk`)
      */
     @Test
     fun roundUnchanged() {
@@ -552,6 +554,7 @@ class Verify1112TaperRegressionTest {
         val g = GeometricVerifyTest()
         val diffs = mutableListOf<String>()
         var n = 0
+        var through = 0
         repeat(1500) {
             val inner = rnd.nextBoolean()
             val type = if (inner) 2 + rnd.nextInt(5) else 1 + rnd.nextInt(6)
@@ -562,10 +565,16 @@ class Verify1112TaperRegressionTest {
                 n++
                 val wSame = res.warnings.map { it.name } == w
                 if (inp.flip && !m && wSame && res.solution?.nc != o && V1113.roundEntryOnly(res.solution, o, inp.noseR, inp.inner)) continue
+                if (inp.through && (inp.flip || m) && (res.solution?.nc != o || !wSame) && V1113.roundThroughWarningsOk(res.warnings.map { it.name }, w, o != null) &&
+                    V1113.roundThroughOk(res.solution, o, m, inp.noseR)
+                ) {
+                    through++
+                    continue
+                }
                 if (res.solution?.nc != o || !wSame) diffs += "$inp ${if (m) "기계" else "직접"}\n 옛 $o $w\n 새 ${res.solution?.nc} ${res.warnings}"
             }
         }
-        V1112.log("roundUnchanged", "라운드 회귀: 글 $n · 다름 ${diffs.size}")
+        V1112.log("roundUnchanged", "라운드 회귀: 글 $n · 관통 구멍 너머로(사용자 답 11-13) $through · 다름 ${diffs.size}")
         assertEquals(0, diffs.size, diffs.take(4).joinToString("\n\n"))
     }
 }

@@ -727,7 +727,10 @@ internal class StopJob(
         val p0 = ex.start + exitNormal(u) * r
         val near = b.end + normal(b, b.end) * r
         return when (b) {
-            is Line -> Intersect.lineLine(b.start + normal(b, b.start) * r, b.end - b.start, p0, u)
+            // 끝 블록과 한 직선으로 이어지는 빼는 줄(관통 구멍 끝 — 끝 좌표 너머로 곧게, 2026-11-13)은 보정선 교점이 없다 — 노즈는 끝 점의 법선 자리
+            // (`CompFrame.junction` 과 같다. 전에는 null 이라 원래 끝 검사를 말없이 건너뛰었다)
+            is Line -> if (abs((b.end - b.start).unit() cross u) < 1e-9 && ((b.end - b.start) dot u) > 0) near
+            else Intersect.lineLine(b.start + normal(b, b.start) * r, b.end - b.start, p0, u)
             is Arc -> Intersect.lineCircle(p0, u, b.center, (near - b.center).length).minByOrNull { (it - near).length }
         }
     }
