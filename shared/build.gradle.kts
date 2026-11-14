@@ -15,6 +15,8 @@ kotlin {
         testRuns.named("test") {
             executionTask.configure {
                 useJUnitPlatform()
+                // 화면 그리기(skiko)의 네이티브 메모리가 한 JVM 에 쌓여 전체 시험 1시간쯤에 17 GB 로 꺼졌다(2026-11-14, 같은 PC 에 테섭이 함께 돎) — 클래스 20개마다 새 JVM
+                forkEvery = 20
                 // 헤드리스 스크린샷(ScreenShots) 저장 곳
                 val shots = rootDir.resolve("build/shots")
                 systemProperty("shotsDir", shots.absolutePath)

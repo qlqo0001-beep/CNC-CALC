@@ -465,7 +465,11 @@ class GeometricVerifyTest {
         val blockedStart = noseBased && if (abs(u0.z) > abs(u0.x)) u0.z > 0 else (u0.x > 0) != inner && !(!inner && drawing.first().a.x <= 1e-9)
         val uE = drawing.last().tangent(0.0)
         val blockedEnd = noseBased && if (abs(uE.z) > abs(uE.x)) uE.z < 0 else (uE.x < 0) != inner && !(!inner && drawing.last().b.x <= 1e-9)
-        val s0 = foot(drawing.first(), drawing.first().a) + u0 * (if (blockedStart) max(0.0, r + (tv dot u0)) else 0.0)
+        val s1 = foot(drawing.first(), drawing.first().a) + u0 * (if (blockedStart) max(0.0, r + (tv dot u0)) else 0.0)
+        // 내경 바닥 단면을 중심(X0)부터 깎으면 노즈 중심을 축에 세워 시작한다 — 넣은 X 가 0 이 아니어도 인선을 거기 두면 노즈 중심이 축 너머인 값(팁 1 · 2 · 6 의
+        // X < 2r)도(재확인 RC-2 · 재확인2 B2-V2-1 2026-11-14 — 끝 쪽과 같은 규칙, 화면 · 계산기 방향 모두)
+        val fromAxis = inner && drawing.first() is Ln && abs(u0.z) < 1e-9 && u0.x > 0 && (drawing.first().a.x <= 1e-9 || (s1 - tv).x < 0)
+        val s0 = if (fromAxis) s1 + u0 * ((tv - s1) dot u0) else s1
         val e0 = foot(drawing.last(), drawing.last().b) + uE * (if (blockedEnd) min(0.0, (tv dot uE) - r) else 0.0)
         // 접근 줄(뒤집어 척 쪽에서 시작할 때 진입 G00 앞의 G00)은 빼고 진입 G00 부터
         val pts = ncPoints(sol.ncG40.legacy).drop(sol.approach.size)
@@ -478,8 +482,9 @@ class GeometricVerifyTest {
         if (sol.toEnd) {
             val lu = drawing.last().tangent(0.0)
             // 단면을 중심(X0)까지 — 내경 바닥도(2026-11-12 통합 고침: 직접 보정이 축 너머로 이어 가지 않고 Z 로 빠지므로 노즈 중심을 축까지). 외경은 팁 벡터가 축 쪽을
-            // 보는 팁만 더 가고, 내경은 어느 팁이든 노즈 중심이 축에 선다 — 표준 팁 2 · 1 은 인선이 X +2r 에서 멈춘다(검증 F1 2026-11-13)
-            val toAxis = drawing.last() is Ln && abs(lu.z) < 1e-9 && lu.x < 0 && drawing.last().b.x <= 1e-9
+            // 보는 팁만 더 가고, 내경은 어느 팁이든 노즈 중심이 축에 선다 — 표준 팁 2 · 1 은 인선이 X +2r 에서 멈춘다(검증 F1 2026-11-13).
+            // 내경은 넣은 끝 X 가 0 이 아니어도 인선을 거기 두면 노즈 중심이 축 너머인 값(팁 1 · 2 · 6 의 X < 2r)도 같다(재확인2 B2-V2-1 2026-11-14)
+            val toAxis = drawing.last() is Ln && abs(lu.z) < 1e-9 && lu.x < 0 && (drawing.last().b.x <= 1e-9 || inner && (e0 - tv).x < 0)
             val want = if (toAxis) e0 + lu * (if (inner) (e0 - tv).x else max(0.0, (e0 - tv).x)) else e0
             if ((end - want).len > NC_TOL) rep.bad(id, "끝점", "NC 끝 점 $end, 인선을 끝점에 둔 점은 $e0 (중심까지 깎으면 노즈 중심이 중심선에 닿는 $want)  NC=${sol.ncG40.legacy}")
         } else {
