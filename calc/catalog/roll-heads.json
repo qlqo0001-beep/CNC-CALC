@@ -14,7 +14,8 @@
     "speeds": "재질별 권장 전조 속도 범위(m/min). materialNo = 원문 재료 번호. vRecMpm 은 모든 표에 없다(범위만)",
     "speedBasisDia": "회전수 식 n ≈ 1000·v/(π·d) 의 d 가 무엇인지 — blank = 전조 전 지름",
     "feed": "CNC 기계 이송과 피치의 비 — ratioRec = 설명서 값(피치보다 5 % 작게)",
-    "tips": "증상 · 원인 · 대책. group = RPM_UP · RPM_DOWN · RATIO_UP · RATIO_DOWN · BLANK_BIG · BLANK_SMALL · SETUP(order 차례) · OTHER"
+    "tips": "증상 · 원인 · 대책. group = RPM_UP · RPM_DOWN · RATIO_UP · RATIO_DOWN · BLANK_BIG · BLANK_SMALL · SETUP(order 차례) · OTHER",
+    "rollLengths": "(머리, 산수, 크기)마다 최대 전조 길이(mm, 나사끝 포함) — 카탈로그 선택표. 없는 짝은 머리 칸 maxRollLengthMm(F233400 73) 또는 무제한"
   },
   "sources": [
     {
@@ -1324,6 +1325,92 @@
       ]
     }
   ],
+  "rollLengths": [
+    {
+      "head": "F23",
+      "tpi": 20,
+      "sizes": [
+        "11/16",
+        "3/4",
+        "13/16",
+        "7/8"
+      ],
+      "maxMm": 19,
+      "noteKo": "선택표 칸 '19'. 롤 표의 ¹⁾ 롤(UN 5/8…11/16¹⁾ · UNEF 11/16¹⁾…7/8¹⁾ – 20)과 같음",
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 42 (PDF 44쪽) 선택표",
+          "quote": "19 = max. Rolllänge (19 mm)"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 94 (PDF 96쪽)",
+          "quote": "Für Kurzgewinde bis 19 mm Länge einschließlich Auslauf."
+        }
+      ]
+    },
+    {
+      "head": "F233400",
+      "tpi": 20,
+      "sizes": [
+        "5/8",
+        "11/16",
+        "3/4",
+        "13/16",
+        "7/8",
+        "15/16",
+        "1"
+      ],
+      "maxMm": 73,
+      "noteKo": "선택표 칸 '73'. 롤 표의 ¹⁾ 롤(UN 5/8¹⁾ … UNEF 1¹⁾ – 20)과 같음",
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 42 (PDF 44쪽) 선택표",
+          "quote": "73 = max. Rolllänge (73 mm)"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 43 (PDF 45쪽) 선택표",
+          "quote": "1 – 20 UNEF 73"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 98 (PDF 100쪽)",
+          "quote": "Für Kurzgewinde bis 73 mm Länge einschließlich Auslauf."
+        }
+      ]
+    },
+    {
+      "head": "F34",
+      "tpi": 20,
+      "sizes": [
+        "7/8",
+        "15/16",
+        "1"
+      ],
+      "maxMm": 24,
+      "noteKo": "선택표 칸 '24'. 롤 표는 ¹⁾ 를 15/16 · 1 에만 달고 7/8 은 ¹⁾ 없는 UNEF 13/16…7/8 – 20 롤에도 들어 있어 두 표가 어긋남 — 앱은 선택표(짧은 쪽)를 따른다",
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 42 (PDF 44쪽) 선택표",
+          "quote": "7/8 – 20 UNEF 19 73 24"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 43 (PDF 45쪽) 선택표",
+          "quote": "1 – 20 UNEF 73 24"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 106 (PDF 108쪽)",
+          "quote": "Für Kurzgewinde bis 24 mm Länge einschließlich Auslauf."
+        }
+      ]
+    }
+  ],
   "tips": [
     {
       "group": "RPM_UP",
@@ -2302,6 +2389,11 @@
       "path": "coverage.BLANK_SMALL",
       "was": "③ 접선 고장표 2줄",
       "reason": "대조 X3: tips 에 든 접선 줄은 1개(카탈로그 인쇄 368)"
+    },
+    {
+      "path": "rollLengths",
+      "was": "(없음 — 머리 칸 maxRollLengthMm 만)",
+      "reason": "계산부 검토(2026-11-14): F23 · F34 의 롤별 19 · 24 mm 한도가 notesKo · notFound 글에만 있어 계산이 보지 못함 — R1 이 읽고 X1 이 확대 대조한 선택표 값을 칸으로 옮김"
     }
   ],
   "checkerAdded": [
