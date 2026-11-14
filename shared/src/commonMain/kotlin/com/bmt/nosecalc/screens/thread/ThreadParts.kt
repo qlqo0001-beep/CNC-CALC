@@ -70,8 +70,8 @@ internal fun AppColors.threadAuto(): Color {
 }
 
 /**
- * 맨 위 카드: 외경 가공 (OD) · 내경 가공 (ID), 곧은 나사 숫나사(M · UN 외경)면 그 아래 가공 방식 '바이트 (G92 · G76) · 다이스 헤드'
- * (사용자 결정 2026-11-05 — 내경 · 관용 테이퍼로 가면 바이트로 돌아가고 이 줄이 숨는다)
+ * 맨 위 카드: 외경 가공 (OD) · 내경 가공 (ID), 곧은 나사 숫나사(M · UN 외경)면 그 아래 가공 방식 세 칸 [바이트 | 전조 다이스 | 절삭 다이스]
+ * (사용자 결정 2026-11-05 · 결정 D9 — 내경 · 관용 테이퍼로 가면 바이트로 돌아가고 이 줄이 숨는다). 칸 차례는 [METHOD_ORDER](enum 차례와 다름)
  */
 @Composable
 internal fun ThreadTopCard(s: ThreadState) {
@@ -79,18 +79,37 @@ internal fun ThreadTopCard(s: ThreadState) {
         Segmented(listOf("외경 가공 (OD)", "내경 가공 (ID)"), if (s.inner) 1 else 0, { s.switchInner(it == 1) }, Modifier.fillMaxWidth(), height = 54.dp)
         if (s.dieAllowed) {
             Spacer(Modifier.height(8.dp))
-            // 좁은 폰 · 큰 글꼴(글꼴 배율로 나눈 폭 300dp 미만)은 '바이트 (G92 · …' 로 잘리지 않게 '바이트' 만
+            // 세 칸이라 한 칸이 폭의 1/3 — 칸 글 자리([methodRoom])가 긴 이름에 모자라면(보통 폰 · 큰 글꼴) '바이트 (G92 · …' 로 잘리지 않게 '바이트' 만,
+            // 글 크기도 칸 글 자리로 정한다([methodFontSize]). Segmented 의 자동 줄임은 '…' 와 같이 쓰면 줄지 않고 잘린다(360dp · 130% 샷에서 '전조 다…')
             BoxWithConstraints {
-                val narrow = maxWidth / LocalDensity.current.fontScale < 300.dp
+                val room = methodRoom(maxWidth.value, LocalDensity.current.fontScale)
                 Segmented(
-                    listOf(if (narrow) "바이트" else "바이트 (G92 · G76)", "다이스 헤드"), if (s.isDie) 1 else 0,
-                    { s.pickMethod(if (it == 1) ThreadMethod.DIE else ThreadMethod.BITE) },
-                    Modifier.fillMaxWidth(), height = 48.dp, fontSize = 15,
+                    METHOD_ORDER.map { methodText(it, methodNarrow(room)) }, METHOD_ORDER.indexOf(s.method).coerceAtLeast(0),
+                    { s.pickMethod(METHOD_ORDER[it]) },
+                    Modifier.fillMaxWidth(), height = 48.dp, fontSize = methodFontSize(room),
                 )
             }
         }
     }
 }
+
+/**
+ * 가공 방식 세 칸의 한 칸 글 자리(글꼴 배율로 나눈 dp — sp 와 같은 잣대): (칸 줄 폭 − 테 · 안 여백 10) / 3 − 글 옆 여백 12.
+ * 화면 폭 W dp 이면 칸 줄 폭 = W − 양옆 Space.gutter 24 − 맨 위 카드 안 여백 16
+ */
+internal fun methodRoom(widthDp: Float, fontScale: Float): Float = ((widthDp - 10f) / 3f - 12f) / fontScale
+
+/**
+ * 긴 첫 칸 이름 '바이트 (G92 · G76)' 에 드는 글 자리 — 앱 글꼴(noto_sans_kr) 굵게 15sp 로 잰 폭 128.7dp + 약 4 % 여유.
+ * 옛 문턱(글꼴 배율로 나눈 폭 420dp)은 그 바로 위(420 ~ 432dp — 360dp 폰 · 글꼴 0.85배도 든다)에서 자리가 125dp 뿐이라 '바이트 (G92 · …' 로 잘렸다(검토 a4)
+ */
+internal const val METHOD_LONG_ROOM = 134f
+
+/** 첫 칸을 '바이트' 만 쓰나 — 칸 글 자리가 긴 이름에 모자라면 */
+internal fun methodNarrow(room: Float): Boolean = room < METHOD_LONG_ROOM
+
+/** 가공 방식 글 크기(sp): '전조 다이스' 는 글 크기의 약 4.8배 폭이라 칸 글 자리를 5 로 나눈다(11 ~ 15sp — 360dp · 130% 는 14sp) */
+internal fun methodFontSize(room: Float): Int = (room / 5f).toInt().coerceIn(11, 15)
 
 /**
  * 인서트 칸(고급 설정): 지금 내외 · 종류 · 산수에 맞는 카탈로그 인서트(`ThreadInserts.match`)를 고른다. 맞는 줄이 없으면 읽기만('맞는 줄 없음').

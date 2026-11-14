@@ -3,6 +3,7 @@ package com.bmt.nosecalc
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
+import com.bmt.nosecalc.calc.CompanyRolls
 import com.bmt.nosecalc.calc.Cutting
 import com.bmt.nosecalc.calc.DieHeadCalc
 import com.bmt.nosecalc.calc.DieHeadCatalog
@@ -18,6 +19,11 @@ import com.bmt.nosecalc.calc.PolarWarning
 import com.bmt.nosecalc.calc.PipeKind
 import com.bmt.nosecalc.calc.PipeTable
 import com.bmt.nosecalc.calc.PipeThreadCalc
+import com.bmt.nosecalc.calc.RollHeadCalc
+import com.bmt.nosecalc.calc.RollHeadCatalog
+import com.bmt.nosecalc.calc.RollSteel
+import com.bmt.nosecalc.calc.RollStock
+import com.bmt.nosecalc.calc.RollWarning
 import com.bmt.nosecalc.calc.ThreadClass
 import com.bmt.nosecalc.calc.ThreadDir
 import com.bmt.nosecalc.calc.ThreadKind
@@ -50,6 +56,9 @@ import com.bmt.nosecalc.screens.previewLine
 import com.bmt.nosecalc.screens.resultCells
 import com.bmt.nosecalc.screens.thread.DieField
 import com.bmt.nosecalc.screens.thread.DieStore
+import com.bmt.nosecalc.screens.thread.Pick
+import com.bmt.nosecalc.screens.thread.RollField
+import com.bmt.nosecalc.screens.thread.RollStore
 import com.bmt.nosecalc.screens.thread.ThreadFamily
 import com.bmt.nosecalc.screens.thread.ThreadField
 import com.bmt.nosecalc.screens.thread.ThreadMethod
@@ -69,6 +78,21 @@ import com.bmt.nosecalc.screens.thread.ncText
 import com.bmt.nosecalc.screens.thread.pipeOutline
 import com.bmt.nosecalc.screens.thread.pipeResultCells
 import com.bmt.nosecalc.screens.thread.pipeSectionGeom
+import com.bmt.nosecalc.screens.thread.rollBlankCells
+import com.bmt.nosecalc.screens.thread.rollConditionHint
+import com.bmt.nosecalc.screens.thread.rollDirectionText
+import com.bmt.nosecalc.screens.thread.rollFeedFact
+import com.bmt.nosecalc.screens.thread.rollFieldHint
+import com.bmt.nosecalc.screens.thread.rollFlagged
+import com.bmt.nosecalc.screens.thread.rollHeadChoices
+import com.bmt.nosecalc.screens.thread.rollHeadRow
+import com.bmt.nosecalc.screens.thread.rollHeadText
+import com.bmt.nosecalc.screens.thread.rollMissing
+import com.bmt.nosecalc.screens.thread.rollNcExplain
+import com.bmt.nosecalc.screens.thread.rollPlaceholder
+import com.bmt.nosecalc.screens.thread.rollReferenceText
+import com.bmt.nosecalc.screens.thread.rollResultCells
+import com.bmt.nosecalc.screens.thread.rollWarningText
 import com.bmt.nosecalc.screens.thread.sectionGeom
 import com.bmt.nosecalc.screens.thread.threadWarningText
 import java.io.File
@@ -78,7 +102,7 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * 3단계 화면(나사 G76 — 관용 테이퍼 · 다이스 헤드 포함 · 턴밀 극좌표 · 재료·절삭조건)이 잘못된 입력에서 죽지 않는가 — [InputRobustnessTest] 와 같은 방식.
+ * 3단계 화면(나사 G76 — 관용 테이퍼 · 다이스 헤드 · 전조 다이스 포함 · 턴밀 극좌표 · 재료·절삭조건)이 잘못된 입력에서 죽지 않는가 — [InputRobustnessTest] 와 같은 방식.
  * 키패드로 칠 수 있는 글(빈칸 · 0 · 음수 · 12자리 · 아주 작은 수 · '.' · '-')을 칸마다 흔들고, 고르는 칸(사이즈 · 급수 · 도형 · 메이커 · 행 …)도 섞는다.
  * 1) 화면이 쓰는 글 함수(경고 · 결과 칸 · 미리보기 · 낱말)가 예외 없이 나오고 찍는 숫자가 유한한지(극좌표는 PolarStateTest.fuzzNoCrash 가 같은 일을 한다),
  * 2) 그런 상태의 화면을 실제로 그려 본다(키패드 · 다크 · 직접 보정 · 시뮬레이션 모달 · 탭 셋 섞어서).
@@ -251,6 +275,73 @@ class Stage3RobustnessTest {
         assertTrue(dieSolved > 2_500, "결과가 나온 사례가 너무 적다: $dieSolved")
     }
 
+    /**
+     * 무작위 전조 다이스 화면 상태(미터 · UN 숫나사 — 셋에 하나는 회사 롤 규격 일곱)와 전조 조건 저장소 글 — 칸마다 셋에 하나를 흔든다.
+     * 머리는 그 규격의 선택지 가운데(가끔 아무 EVOline 머리 — 지름 범위 밖일 수도), 소재는 셋에 둘이 비움(스테인리스로 봄)
+     */
+    private fun randomRoll(): Pair<ThreadState, Map<String, String>> {
+        val kind = if (rnd.nextBoolean()) ThreadKind.METRIC else ThreadKind.UN
+        val specs = ThreadTable.of(kind)
+        val spec = when (rnd.nextInt(10)) {
+            0 -> null
+            1, 2, 3 -> CompanyRolls.specs[rnd.nextInt(CompanyRolls.specs.size)]
+            else -> specs[rnd.nextInt(specs.size)]
+        }
+        val choices = spec?.let(::rollHeadChoices).orEmpty()
+        val base = mapOf("zStart" to "", "zEnd" to "-16.37", "rpm" to "", "zRef" to "")
+        val s = ThreadState(
+            family = if ((spec?.kind ?: kind) == ThreadKind.METRIC) ThreadFamily.METRIC else ThreadFamily.UN,
+            spec = spec,
+            material = if (rnd.nextInt(3) != 0) null else IsoGroup.entries[rnd.nextInt(6)],
+            values = base.mapValues { (_, v) -> if (rnd.nextInt(3) == 0) nudge(v) else v },
+            unGroup = UnGroup.entries[rnd.nextInt(UnGroup.entries.size)],
+            method = ThreadMethod.ROLL,
+            rollHead = if (choices.isEmpty() || rnd.nextBoolean()) null else choices[rnd.nextInt(choices.size)],
+            rollStock = RollStock.entries[rnd.nextInt(RollStock.entries.size)],
+            rollSteel = RollSteel.entries[rnd.nextInt(RollSteel.entries.size)],
+        )
+        if (rnd.nextInt(12) == 0) s.rollHead = RollHeadCatalog.evoHeads[rnd.nextInt(RollHeadCatalog.evoHeads.size)].key
+        val store = RollField.entries.associate { f -> RollStore.key(f) to (if (rnd.nextInt(3) == 0) nudge("") else "") }
+        return s to store
+    }
+
+    /** 전조 다이스: 같은 흔들기로 계산기 · 화면 글 함수(경고 · 짚는 칸 · 자리표시 · 지름 칸 · 머리 칸 · 결과 칸 · 요령 방향 · NC 설명)가 예외 없이 유한한 숫자를 낸다 */
+    @Test
+    fun rollThread() {
+        var rollSolved = 0
+        repeat(10_000) {
+            val (s, store) = randomRoll()
+            val r = RollStore(KeyValueStore(File.createTempFile("bmt-roll", ".properties").apply { delete() }).apply { store.forEach { (k, v) -> put(k, v) } })
+            check("전조 ${s.spec} ${s.material} 머리 ${s.rollHead} ${s.fields.map { s.value(it) }} $store") {
+                val res = RollHeadCalc.calc(s.rollInput(r))
+                val sol = res.solution
+                rollMissing(s)
+                rollFlagged(s, r, res.warnings)
+                s.fields.forEach { s.placeholder(it); rollFieldHint(it) }
+                RollField.entries.forEach { rollPlaceholder(s, it); rollConditionHint(it) }
+                res.warnings.forEach { rollWarningText(it, s, r, sol) }
+                rollWarningText(RollWarning.MISSING_INPUT, s, r)
+                rollWarningText(RollWarning.BAD_INPUT, s, r)
+                rollBlankCells(s)
+                rollHeadText(s)
+                rollReferenceText(s)
+                s.spec?.let { sp -> s.rollHeadChoices.forEach { rollHeadRow(sp, it) } }
+                s.rollDefaults.blank?.let { show(it.used, it.rec, it.recMin, it.recMax) }
+                if (sol != null) {
+                    rollSolved++
+                    rollResultCells(s, r, sol)
+                    rollDirectionText(sol)
+                    rollFeedFact(sol)
+                    rollNcExplain(s.rollInput(r).retractZ, sol.openingMovement)
+                    show(sol.vUsed, sol.feed, sol.ratio, sol.feedPerMin, sol.timeSec, sol.zStart, sol.crest.min, sol.crest.max)
+                    listOfNotNull(sol.rollEndZ, sol.rolledLength).forEach { show(it) }
+                }
+            }
+        }
+        println("전조 흔들기: 결과가 나온 사례 $rollSolved / 10000")
+        assertTrue(rollSolved > 2_000, "결과가 나온 사례가 너무 적다: $rollSolved")
+    }
+
     // ── 재료·절삭조건 ──
 
     private fun randomCutting(): CuttingState {
@@ -390,6 +481,16 @@ class Stage3RobustnessTest {
                 draw(dark, false) { CuttingScreen(c, cEdit) }
             }
         }
+        // 전조 다이스(위 120 회의 차례를 바꾸지 않게 뒤에 따로): 키패드 · 머리 · 사이즈 · 가공 소재 시트를 섞어서
+        repeat(40) { i ->
+            val (roll, rollStore) = randomRoll()
+            val dark = rnd.nextBoolean()
+            val sheet = if (rnd.nextInt(4) == 0) listOf(Pick.ROLL_HEAD, Pick.SIZE, Pick.MATERIAL)[rnd.nextInt(3)] else null
+            val edit = if (sheet == null && rnd.nextInt(3) == 0) roll.fields[rnd.nextInt(roll.fields.size)] else null
+            check("전조 화면 $i ${roll.spec} ${roll.material} 머리 ${roll.rollHead} ${roll.fields.map { roll.value(it) }} $rollStore 키패드 $edit 시트 $sheet") {
+                draw(dark, false, rollStore) { ThreadScreen(roll, edit, sheet) }
+            }
+        }
     }
 
     /** 칸마다 극단 값 하나씩(다른 칸은 그럴듯한 값) — 큰 수 · 아주 작은 수 · 음수 · 0 */
@@ -423,6 +524,18 @@ class Stage3RobustnessTest {
             for (f in DieField.entries) {
                 val die = ThreadState(spec = ThreadTable.pitches(ThreadKind.UN, "1/2").first(), values = mapOf("zStart" to "5", "zEnd" to "-25"), method = ThreadMethod.DIE)
                 check("다이스 조건 $f = $v") { draw(false, false, dieBase + (DieStore.key(f, null) to v)) { ThreadScreen(die) } }
+            }
+            // 전조 다이스: 화면 칸 넷(3/4-20 회사 롤 규격) · 전조 조건 칸 셋(M12×1.5 — 회사 표 밖)
+            for (f in listOf(ThreadField.Z_START, ThreadField.RPM, ThreadField.Z_END, ThreadField.Z_REF)) {
+                val roll = ThreadState(
+                    family = ThreadFamily.UN, spec = CompanyRolls.specs.single { it.size == "3/4" }, unGroup = UnGroup.UN20,
+                    values = mapOf("zEnd" to "-16.37", f.key to v), method = ThreadMethod.ROLL,
+                )
+                check("전조 $f = $v") { draw(false, false) { ThreadScreen(roll) } }
+            }
+            for (f in RollField.entries) {
+                val roll = ThreadState(spec = ThreadTable.pitches(ThreadKind.METRIC, "M12").first { it.pitch == 1.5 }, values = mapOf("zEnd" to "-16.37"), method = ThreadMethod.ROLL)
+                check("전조 조건 $f = $v") { draw(false, false, mapOf(RollStore.key(f) to v)) { ThreadScreen(roll) } }
             }
             for (f in PolarField.entries) {
                 val p = PolarState(values = mapOf("od" to "80", "w" to "70", "rc" to "3", "tool" to "10", "depth" to "-5", "feed" to "100", f.key to v))

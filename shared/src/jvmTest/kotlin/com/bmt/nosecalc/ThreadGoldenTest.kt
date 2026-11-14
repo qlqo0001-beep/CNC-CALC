@@ -4,10 +4,16 @@ import com.bmt.nosecalc.calc.DieHeadCalc
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.G76Calc
 import com.bmt.nosecalc.calc.PipeThreadCalc
+import com.bmt.nosecalc.calc.RollHeadCalc
 import com.bmt.nosecalc.calc.ThreadKind
 import com.bmt.nosecalc.calc.ThreadTable
 import com.bmt.nosecalc.screens.resultCells
 import com.bmt.nosecalc.screens.thread.DieStore
+import com.bmt.nosecalc.screens.thread.METHOD_ORDER
+import com.bmt.nosecalc.screens.thread.ROLL_TIP_GROUPS
+import com.bmt.nosecalc.screens.thread.RollField
+import com.bmt.nosecalc.screens.thread.RollStore
+import com.bmt.nosecalc.screens.thread.ThreadField
 import com.bmt.nosecalc.screens.thread.ThreadState
 import com.bmt.nosecalc.screens.thread.chaserRows
 import com.bmt.nosecalc.screens.thread.chaserSources
@@ -25,9 +31,25 @@ import com.bmt.nosecalc.screens.thread.gaugeRows
 import com.bmt.nosecalc.screens.thread.gaugeSource
 import com.bmt.nosecalc.screens.thread.kindText
 import com.bmt.nosecalc.screens.thread.leadText
+import com.bmt.nosecalc.screens.thread.methodText
 import com.bmt.nosecalc.screens.thread.ncText
 import com.bmt.nosecalc.screens.thread.pipeResultCells
 import com.bmt.nosecalc.screens.thread.pitchRow
+import com.bmt.nosecalc.screens.thread.rollBad
+import com.bmt.nosecalc.screens.thread.rollBlankCells
+import com.bmt.nosecalc.screens.thread.rollDirectionText
+import com.bmt.nosecalc.screens.thread.rollFeedFact
+import com.bmt.nosecalc.screens.thread.rollHeadRow
+import com.bmt.nosecalc.screens.thread.rollHeadText
+import com.bmt.nosecalc.screens.thread.rollNcExplain
+import com.bmt.nosecalc.screens.thread.rollPlaceholder
+import com.bmt.nosecalc.screens.thread.rollReferenceText
+import com.bmt.nosecalc.screens.thread.rollResultCells
+import com.bmt.nosecalc.screens.thread.rollTipGroupTitle
+import com.bmt.nosecalc.screens.thread.rollTipsText
+import com.bmt.nosecalc.screens.thread.rollWarningText
+import com.bmt.nosecalc.screens.thread.threadRoll
+import com.bmt.nosecalc.screens.thread.threadRollEmpty
 import com.bmt.nosecalc.screens.thread.specTitle
 import com.bmt.nosecalc.screens.thread.thread20Un
 import com.bmt.nosecalc.screens.thread.threadNptExt
@@ -109,6 +131,80 @@ class ThreadGoldenTest {
     fun die() {
         die("thread-die", threadDie(), threadDieStore())
         die("thread-die-empty", threadDieEmpty(), emptyMap())
+    }
+
+    /**
+     * 전조 다이스(2026-11-14): 입력(전조 조건 저장소 포함) · 가공 방식 세 칸 · 자리표시 · 머리 · 롤 칸과 시트 줄 · 경고 글 · 범위 밖 칸 ·
+     * 전조 전 지름 칸 · S · v · F · 시간 · 실제 끝 · 전조 길이 · NC · NC 사실 · 결과 칸 · 요령 방향 · 참고 줄 · 요령 카드 글.
+     * 위 16개(곧은 나사 · 관용 테이퍼 · 다이스 헤드)와 따로라 그 글은 그대로다
+     */
+    @Test
+    fun roll() {
+        // 3/4-20 은 고친 상태(회전수 620 · 비율 1.04 · 멈춤 0 — 스크린샷 thread-roll-warn)의 노랑 · 요령 방향 · NC 도 뒤에 붙인다
+        val warn = mapOf(RollStore.key(RollField.RATIO) to "1.04", RollStore.key(RollField.DWELL) to "0")
+        roll("thread-roll", threadRoll(), emptyMap()) { rollText(threadRoll().apply { set(ThreadField.RPM, "620") }, warn, "고침 ") }
+        roll("thread-roll-empty", threadRollEmpty(), emptyMap())
+    }
+
+    private fun rollStore(store: Map<String, String>) =
+        RollStore(KeyValueStore(File.createTempFile("bmt-roll", ".properties").apply { delete() }).apply { store.forEach { (k, v) -> put(k, v) } })
+
+    /** 고친 상태의 경고 글 · NC · 회전수 · 이송 칸 · 요령 방향(앞에 [tag]) */
+    private fun rollText(s: ThreadState, store: Map<String, String>, tag: String): String {
+        val r = rollStore(store)
+        val i = s.rollInput(r)
+        val res = RollHeadCalc.calc(i)
+        val sol = res.solution
+        return buildString {
+            line("${tag}입력 회전수 ${i.rpm} · 비율 ${i.ratio} · 멈춤 ${i.dwell}")
+            line("${tag}경고 ${res.warnings}")
+            res.warnings.forEach { line("  ${rollWarningText(it, s, r, sol)}") }
+            if (sol == null) return@buildString
+            sol.program.forEach { line("${tag}NC $it") }
+            line("${tag}NC 사실 ${rollFeedFact(sol)}")
+            rollResultCells(s, r, sol).take(5).forEach { (a, b, c) -> line("${tag}칸 $a = $b ($c)") }
+            line("${tag}방향 ${sol.rpmDirection} · ${sol.ratioDirection}")
+            rollDirectionText(sol).forEach { line("  $it") }
+        }
+    }
+
+    private fun roll(name: String, s: ThreadState, store: Map<String, String>, extra: () -> String = { "" }) {
+        val r = rollStore(store)
+        val i = s.rollInput(r)
+        val res = RollHeadCalc.calc(i)
+        val sol = res.solution
+        val text = buildString {
+            line("${if (s.inner) "내경" else "외경"} · ${kindText(s.family)} · ${s.spec?.let(::specTitle) ?: "사이즈 없음"} · ${s.method} · 소재 ${s.material} · 묶음 ${s.unGroup.label}")
+            line("가공 방식 ${METHOD_ORDER.joinToString(" | ") { methodText(it) }} (고름 ${METHOD_ORDER.indexOf(s.method)}) · 좁은 폰 ${METHOD_ORDER.joinToString(" | ") { methodText(it, narrow = true) }}")
+            line("입력 강종 ${i.steel} · 머리 ${i.head} · 소재 종류 ${i.stock} · 회전수 ${i.rpm} · Z ${i.zStart} → ${i.zEnd} · 끝면 ${i.zFace} · 비율 ${i.ratio} · 멈춤 ${i.dwell} · 물러남 ${i.retractZ}")
+            line("자리표시 ${s.fields.joinToString(" · ") { "${it.key} '${s.placeholder(it)}'" }} · ${RollField.entries.joinToString(" · ") { "${it.key} '${rollPlaceholder(s, it)}'" }}")
+            line("머리 · 롤 ${rollHeadText(s)}")
+            s.spec?.let { sp -> s.rollHeadChoices.forEach { k -> rollHeadRow(sp, k).let { (a, b) -> line("머리 시트 $a · $b") } } }
+            line("경고 ${res.warnings}")
+            res.warnings.forEach { line("  ${rollWarningText(it, s, r, sol)}") }
+            if (s.bad().isNotEmpty() || rollBad(s, r).isNotEmpty()) line("범위 밖 ${s.bad()} ${rollBad(s, r)}")
+            s.rollDefaults.blank?.let { b -> line("전조 전 지름 X${f(b.used)} (${b.usedBasis}) · 추천 ${f(b.recMin)} ~ ${f(b.recMax)} · 회사 ${b.company?.let(::f)}") }
+            rollBlankCells(s).forEach { (a, b, c) -> line("지름 칸 $a = $b ($c)") }
+            line(rollReferenceText(s))
+            // 요령 카드 글(규격과 상관없이 같다 — 사이즈를 고른 골든에만)
+            if (s.spec != null) ROLL_TIP_GROUPS.forEach { g -> rollTipsText(g).forEach { line("요령 ${rollTipGroupTitle(g)}: $it") } }
+            if (sol == null) return@buildString
+            line(
+                "S ${sol.rpm} (${sol.rpmBasis}, 기준 ${sol.baseRpm}, 범위 ${sol.rpmRange}) · v ${f(sol.vUsed)} · F ${f(sol.feed)} · 비율 ${f(sol.ratio)} (${sol.ratioBasis}) · " +
+                    "분당 ${f(sol.feedPerMin)} · 시간 ${f(sol.timeSec)}",
+            )
+            line(
+                "머리 ${sol.head.key} · 회사 롤 ${sol.companyHead?.roll} · a ${sol.openingMovement} · 실제 끝 ${sol.rollEndZ?.let(::f)} · 전조 길이 ${sol.rolledLength?.let(::f)} · " +
+                    "최대 ${sol.maxRollLength} · 바깥지름 ${f(sol.crest.min)} ~ ${f(sol.crest.max)}",
+            )
+            sol.program.forEach { line("NC $it") }
+            line("NC 사실 전조 구간만 — T · M03 없음 · G99 회전당 이송 상태로 · ${rollFeedFact(sol)}")
+            line("NC 설명 ${rollNcExplain(i.retractZ, sol.openingMovement)}")
+            rollResultCells(s, r, sol).forEach { (a, b, c) -> line("칸 $a = $b ($c)") }
+            line("방향 ${sol.rpmDirection} · ${sol.ratioDirection}")
+            rollDirectionText(sol).forEach { line("  $it") }
+        } + extra()
+        golden(name, text)
     }
 
     private fun die(name: String, s: ThreadState, store: Map<String, String>) {

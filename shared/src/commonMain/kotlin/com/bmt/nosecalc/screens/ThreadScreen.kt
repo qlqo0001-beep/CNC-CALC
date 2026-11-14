@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmt.nosecalc.Feature
 import com.bmt.nosecalc.LocalAppState
+import com.bmt.nosecalc.calc.CompanyRolls
 import com.bmt.nosecalc.calc.Cutting
 import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.G76Calc
@@ -41,6 +42,9 @@ import com.bmt.nosecalc.calc.G76Result
 import com.bmt.nosecalc.calc.G76Solution
 import com.bmt.nosecalc.calc.G76Warning
 import com.bmt.nosecalc.calc.PipeKind
+import com.bmt.nosecalc.calc.RollHeadCalc
+import com.bmt.nosecalc.calc.RollHeadCatalog
+import com.bmt.nosecalc.calc.RollTipGroup
 import com.bmt.nosecalc.calc.ThreadDir
 import com.bmt.nosecalc.calc.ThreadKind
 import com.bmt.nosecalc.calc.ThreadTable
@@ -67,7 +71,11 @@ import com.bmt.nosecalc.screens.thread.PassTable
 import com.bmt.nosecalc.screens.thread.Pick
 import com.bmt.nosecalc.screens.thread.PipeSizeSheet
 import com.bmt.nosecalc.screens.thread.PipeThreadBody
+import com.bmt.nosecalc.screens.thread.ROLL_TIP_GROUPS
 import com.bmt.nosecalc.screens.thread.ResultCell
+import com.bmt.nosecalc.screens.thread.RollHeadSheet
+import com.bmt.nosecalc.screens.thread.RollStore
+import com.bmt.nosecalc.screens.thread.RollThreadBody
 import com.bmt.nosecalc.screens.thread.ThreadFamily
 import com.bmt.nosecalc.screens.thread.ThreadField
 import com.bmt.nosecalc.screens.thread.ThreadLabel
@@ -90,6 +98,9 @@ import com.bmt.nosecalc.screens.thread.pitchLabel
 import com.bmt.nosecalc.screens.thread.pitchRow
 import com.bmt.nosecalc.screens.thread.pitchText
 import com.bmt.nosecalc.screens.thread.plain
+import com.bmt.nosecalc.screens.thread.rollHeadRange
+import com.bmt.nosecalc.screens.thread.rollTipGroupTitle
+import com.bmt.nosecalc.screens.thread.rollTipsFull
 import com.bmt.nosecalc.screens.thread.sectionGeom
 import com.bmt.nosecalc.screens.thread.specTitle
 import com.bmt.nosecalc.screens.thread.standardText
@@ -127,8 +138,9 @@ fun ThreadScreen() = ThreadScreen(ThreadState())
  * 나사 단면 → NC(탭 G92 다회 · G76 두 줄, 처음은 G92 — G92 면 다듬질 블록 카드가 아래에). 값이 바뀌면 바로 다시 푼다(계산 버튼 없음). 숫자칸은 한 묶음(키패드 하나 · PC Tab 순서)이고, G76 줄의 테두리 칸을 눌러도
  * 그 칸의 키패드가 열린다(고급 설정 칸이면 접이를 편다). 결과가 화면 밖이면 아래 결과 띠에 시작점 · 끝점(G76 X Z).
  * G76 은 공구 노즈R 보정(G41/G42)을 쓰지 않아 보정 방식 스위치가 없다.
- * 나사 종류가 관용 테이퍼(PT · NPT)면 같은 틀에 다른 카드들(`thread/PipeCards.kt` — G92 테이퍼만)이, 곧은 나사 숫나사에서 가공 방식을 다이스 헤드로 고르면
- * `thread/DieCards.kt` 의 카드들이 선다(다이스 조건 회사 값은 [DieStore] — 앱 저장소).
+ * 나사 종류가 관용 테이퍼(PT · NPT)면 같은 틀에 다른 카드들(`thread/PipeCards.kt` — G92 테이퍼만)이, 곧은 나사 숫나사에서 가공 방식을 절삭 다이스(다이스 헤드)로 고르면
+ * `thread/DieCards.kt` 의 카드들이(다이스 조건 회사 값은 [DieStore] — 앱 저장소), 전조 다이스로 고르면 `thread/RollCards.kt` 의 카드들이 선다
+ * (전조 조건 회사 값은 [RollStore] — 앱 저장소).
  * initial = 시험이 정한 처음 상태, editing = 처음부터 키패드를 열어 둘 칸, sheet = 처음부터 열어 둘 고르기 시트(스크린샷 시험용)
  */
 @Composable
@@ -139,6 +151,8 @@ internal fun ThreadScreen(initial: ThreadState, editing: ThreadField? = null, sh
     val app = LocalAppState.current
     // 다이스 조건(회사 값): 화면을 열 때 앱 저장소에서 읽고, 고치면 바로 쓴다
     val die = remember(app.store) { DieStore(app.store) }
+    // 전조 조건(회사 값): 다이스 조건과 같이 화면을 열 때 읽고, 고치면 바로 쓴다
+    val roll = remember(app.store) { RollStore(app.store) }
     val c = AppTheme.colors
     FeatureScaffold(Feature.THREAD, ThreadHelp) {
         if (s.isPipe) {
@@ -147,6 +161,10 @@ internal fun ThreadScreen(initial: ThreadState, editing: ThreadField? = null, sh
         }
         if (s.isDie) {
             DieThreadBody(s, die, chain) { pick = it }
+            return@FeatureScaffold
+        }
+        if (s.isRoll) {
+            RollThreadBody(s, roll, chain) { pick = it }
             return@FeatureScaffold
         }
         val input = s.input()
@@ -557,7 +575,8 @@ private fun ThreadSheet(pick: Pick, s: ThreadState, onDismiss: () -> Unit) {
             ThreadFamily.UN -> ChoiceSheet(
                 "사이즈",
                 kindText(s.family),
-                "계열을 고르고 크기를 고르면 그 계열의 산수가 들어갑니다 — 같은 크기의 다른 산수는 산수 칸에서. 20UN 과 겹치는 줄은 '3/4-20 UNEF (20UN)' 처럼 본래 계열 이름입니다.",
+                (if (s.isRoll) "전조: 맨 위 '회사 롤 규격' 을 누르면 그 크기의 20산 줄이 바로 들어갑니다. " else "") +
+                    "계열을 고르고 크기를 고르면 그 계열의 산수가 들어갑니다 — 같은 크기의 다른 산수는 산수 칸에서. 20UN 과 겹치는 줄은 '3/4-20 UNEF (20UN)' 처럼 본래 계열 이름입니다.",
                 onDismiss,
             ) { UnSizePicker(s, onDismiss) }
             ThreadFamily.PT -> PipeSizeSheet(s, PipeKind.PT, onDismiss)
@@ -580,6 +599,8 @@ private fun ThreadSheet(pick: Pick, s: ThreadState, onDismiss: () -> Unit) {
             "ISO 피삭재 군",
             if (s.isDie) {
                 "다이스 헤드: 다이스 조건의 절삭 속도 Vc(회사 값)를 소재마다 따로 저장하는 열쇠입니다 — 소재를 바꾸면 그 소재의 Vc 가 들어옵니다."
+            } else if (s.isRoll) {
+                "전조: 회사 회전수는 스테인리스(M) 기준입니다. 다른 소재를 고르면 Fette 추천이 없어 회전수를 넣어야 합니다. 고르지 않으면 스테인리스로 봅니다."
             } else {
                 "기록용 — 출처를 확인한 나사 절삭 속도 자료가 없어 회전수를 정하지 않습니다. 회전수는 인서트 카탈로그의 나사 절삭 조건으로 넣으세요."
             },
@@ -650,15 +671,26 @@ private fun ThreadSheet(pick: Pick, s: ThreadState, onDismiss: () -> Unit) {
             }
         }
         Pick.DIE_SPEED -> DieSpeedSheet(s, onDismiss)
+        Pick.ROLL_HEAD -> RollHeadSheet(s, onDismiss)
     }
 }
 
 /**
  * UN 사이즈 시트 안: 위 계열 묶음 고르기(UNC · UNF · UNEF · 20UN), 아래 그 묶음의 크기 격자. 20UN 은 자주 쓰는 다섯(사용자 결정 2026-11-05)을
- * 따로 위에 두고 나머지를 지름 순으로. 고른 칩은 지금 규격이 그 묶음 줄일 때만
+ * 따로 위에 두고 나머지를 지름 순으로. 고른 칩은 지금 규격이 그 묶음 줄일 때만.
+ * 전조 다이스면 맨 위에 '회사 롤 규격' 일곱([CompanyRolls.specs] — 누르면 그 20산 줄, 묶음도 20UN — 결정 D15). 바이트 · 절삭 다이스의 시트는 그대로
  */
 @Composable
 private fun UnSizePicker(s: ThreadState, onDismiss: () -> Unit) {
+    if (s.isRoll) {
+        val rolls = CompanyRolls.specs
+        ThreadLabel("회사 롤 규격 (20산)")
+        ChoiceGrid(rolls.map { it.size }, rolls.indexOf(s.spec).takeIf { it >= 0 }) {
+            s.pickCompanyRoll(rolls[it])
+            onDismiss()
+        }
+        Spacer(Modifier.height(10.dp))
+    }
     val g = s.unGroup
     val chosen = s.spec?.takeIf { it in ThreadTable.group(g) }?.size
     Segmented(UnGroup.entries.map { it.label }, g.ordinal, { s.unGroup = UnGroup.entries[it] }, Modifier.fillMaxWidth(), height = 48.dp, fontSize = 15)
@@ -681,8 +713,11 @@ private fun UnSizePicker(s: ThreadState, onDismiss: () -> Unit) {
     }
 }
 
-/** 헤더 도움말 버튼의 사용법: 나사 고르기 · 값 넣기 · 고급 설정 · G92 · G76 프로그램과 분석 · 관용 테이퍼 나사 · 다이스 헤드 · 경고 */
-internal val ThreadHelp = listOf(
+/**
+ * 헤더 도움말 버튼의 사용법: 나사 고르기 · 값 넣기 · 고급 설정 · G92 · G76 프로그램과 분석 · 관용 테이퍼 나사 · 전조 다이스 · 다이스 헤드 · 경고.
+ * 전조 다이스 묶음의 머리 · 롤 표 · 요령은 회사 롤 표 · Fette 카탈로그 자료에서 만든다(처음 열 때 — 카탈로그를 읽으므로 lazy)
+ */
+internal val ThreadHelp: List<HelpSection> by lazy { listOf(
     HelpSection(
         "나사 고르기",
         listOf(
@@ -690,12 +725,12 @@ internal val ThreadHelp = listOf(
                 "피치(UN 은 산수 TPI)를 고르면 규격 기본 치수와 공차로 목표 지름을 정합니다. 미터는 사이즈를 고르면 보통 나사가 먼저 들어가고 가는 나사는 피치 칸에서 바꿉니다. " +
                 "UN 은 사이즈 시트 위에서 계열(UNC · UNF · UNEF · 20UN)을 고른 뒤 크기를 고릅니다 — 20UN 은 자주 쓰는 1/4 · 3/8 · 1/2 · 3/4 · 1 이 위에 있고, " +
                 "UNC · UNF · UNEF 와 겹치는 줄은 '3/4-20 UNEF (20UN)' 처럼 본래 계열 이름입니다.",
-            "관용 테이퍼(PT · NPT)는 G92 테이퍼로만 깎습니다 — 아래 '관용 테이퍼 나사 (PT · NPT)'. 미터 · UN 숫나사는 맨 위 가공 방식에서 " +
-                "'다이스 헤드' 를 고를 수 있습니다 — 아래 '다이스 헤드'.",
+            "관용 테이퍼(PT · NPT)는 G92 테이퍼로만 깎습니다 — 아래 '관용 테이퍼 나사 (PT · NPT)'. 미터 · UN 숫나사는 맨 위 가공 방식 " +
+                "[바이트 | 전조 다이스 | 절삭 다이스] 에서 '전조 다이스' · '절삭 다이스' 를 고를 수 있습니다 — 아래 '전조 다이스' · '다이스 헤드'.",
             "공차 급수는 미터 숫나사 4h(정밀) · 6g(보통, 기본) · 6h · 8g(거침), 암나사 6H(기본) · 6G, UN 은 1A · 2A(기본) · 3A, 1B · 2B(기본) · 3B 입니다. " +
                 "미터는 ISO 965 표 값(표가 없는 칸은 식 — 그때는 파란 안내), UN 은 ASME B1.1 의 식입니다.",
             "가공 소재는 바이트에서는 기록용입니다. 출처를 확인한 나사 절삭 속도 자료가 없어 회전수를 정해 주지 않습니다 — 인서트 카탈로그의 나사 절삭 조건으로 회전수를 넣으세요. " +
-                "다이스 헤드에서는 회사 Vc 를 소재마다 저장하는 열쇠입니다.",
+                "절삭 다이스에서는 회사 Vc 를 소재마다 저장하는 열쇠이고, 전조 다이스에서는 회전수의 근거입니다(회사 S · Fette 추천은 스테인리스만 — 비우면 스테인리스).",
         ),
     ),
     HelpSection(
@@ -761,10 +796,12 @@ internal val ThreadHelp = listOf(
                 "암나사의 시작 X 여유는 날 끝 기준이라, 날이 안쪽으로 빠지는 만큼 바 뒤가 맞은편 벽으로 다가갑니다(인서트를 고르면 바 뒤 틈과 견줌).",
         ),
     ),
+    rollHelp(),
     HelpSection(
         "다이스 헤드",
         listOf(
-            "미터 · UN 숫나사는 맨 위 가공 방식에서 '다이스 헤드'(고정형 자동 열림 — 공작물이 돌고 머리는 서 있음)를 고를 수 있습니다. 내경이나 PT · NPT 로 바꾸면 바이트로 돌아갑니다.",
+            "미터 · UN 숫나사는 맨 위 가공 방식에서 '절삭 다이스'(절삭(체이서) 다이스 — 고정형 자동 열림 다이스 헤드, 공작물이 돌고 머리는 서 있음)를 고를 수 있습니다. " +
+                "내경이나 PT · NPT 로 바꾸면 바이트로 돌아갑니다.",
             "프로그램은 깎는 구간만입니다: G97 S… · G0X0.Z20. · Z(시작) · G1Z(끝)F… · G4U(끝 멈춤) · G0Z(물러남). F 는 회전당 이송(G99)이고, 공구 호출 · M03 은 기계에 맞게 앞에 넣습니다.",
             "다이스 조건(절삭 속도 Vc · 이송 비율 · 끝 멈춤 · 물러남 Z · 플로트 · 체이서 목 산수)은 회사 값입니다 — 고치면 바로 저장되고 다음에 열어도 그대로입니다. " +
                 "Vc 는 가공 소재마다 따로 저장되고 처음은 빈칸입니다. 회전수 칸에 넣으면 Vc 대신 그 회전수를 씁니다.",
@@ -793,4 +830,51 @@ internal val ThreadHelp = listOf(
                 "내경 인서트를 고르면 구멍이 홀더 최소 구멍보다 작거나 시작 X 여유가 바 뒤 틈보다 클 때 노란 안내가 뜹니다.",
         ),
     ),
-)
+) }
+
+/**
+ * 도움말 '전조 다이스' 묶음: 고르기 · 머리 · 롤 표(회사 짝 · 카탈로그 지름 범위 · 열림 행정) · 전조 전 지름 읽는 법(NC 에 안 들어감 — 앞 공정 정삭 X) ·
+ * 회전수 · 이송 사슬 · STS304 / STS316 · 결과와 경고 · 요령 전문(출처마다)
+ */
+private fun rollHelp(): HelpSection {
+    val pairs = CompanyRolls.ALL.joinToString(", ") { r ->
+        "${r.size}: " + r.heads.mapIndexed { i, h -> "${h.model} · ${h.roll}${if (i == 0 && r.heads.size > 1) "(처음)" else ""}" }.joinToString(" / ")
+    }
+    val heads = RollHeadCatalog.evoHeads
+    val ranges = heads.joinToString(" · ") { "${it.key} ${rollHeadRange(it)}" }
+    val opening = heads.groupBy { it.openingMovementMm }.entries.filter { it.key != null }
+        .joinToString(", ") { (a, hs) -> "${hs.joinToString(" · ") { it.key }} ${plain(a!!)} mm" }
+    val s316 = RollHeadCatalog.speed("1.4401")
+    val s304 = RollHeadCatalog.speed("1.4301")
+    fun span(lo: Double?, hi: Double?) = "${lo?.let(::plain) ?: "?"}–${hi?.let(::plain) ?: "?"}"
+    val tips = (ROLL_TIP_GROUPS + RollTipGroup.OTHER).map { g ->
+        "${rollTipGroupTitle(g)} — " + rollTipsFull(g).joinToString(" / ")
+    }
+    return HelpSection(
+        "전조 다이스",
+        listOf(
+            "미터 · UN 숫나사는 맨 위 가공 방식에서 '전조 다이스'(LMT Fette 축방향 전조 머리 EVOline — 머리는 터렛에 서 있고 공작물이 돎)를 고를 수 있습니다. " +
+                "사이즈를 아직 안 골랐으면 UN · 20UN 묶음으로 바뀌고(회사 롤은 모두 UN 20산), UN 사이즈 시트 맨 위의 '회사 롤 규격' 을 누르면 그 20산 줄이 바로 들어갑니다. " +
+                "꼭 넣을 값은 사이즈 · 가공 목표점 둘입니다 — Z축 시작점 빈칸은 ${plain(RollHeadCalc.Z_START_DEFAULT)}, 끝면 Z 빈칸은 0. 내경이나 PT · NPT 로 바꾸면 바이트로 돌아갑니다.",
+            "머리 · 롤: 회사 롤 짝이 먼저입니다 — $pairs. 그다음 지름 범위(카탈로그)에 드는 다른 EVOline 머리 — $ranges. " +
+                "고를 것이 하나뿐이면 칸은 읽기만 합니다. 회사 롤이 없는 머리는 맞는 롤을 따로 확인하세요. 열림 행정 a(설명서 Tab. 8): $opening.",
+            "'전조 전 지름 (앞 공정 정삭 X)' 카드의 큰 값은 이 프로그램(NC)에 들어가지 않습니다 — 앞 공정(바깥 정삭)의 X 에 쓰는 값입니다. " +
+                "회사 값(회사 프로그램 원문에서 확인한 값만 — 소재 종류 자동단조 · 자동핵사마다) → Fette 추천 차례로 쓰고, 회전수도 이 지름으로 계산합니다. " +
+                "Fette 추천 = 기본 급수(UN 2A · 미터 6g) 유효지름 범위 − ${plain(RollHeadCalc.BLANK_OFFSET)} mm(설명서 dV ≈ d2 − 0.03), 한 값은 그 가운데입니다. " +
+                "전조 전 지름을 바꾸면 바깥지름은 그 3~5배로 바뀌고(설명서), 정한 지름은 ±0.015 mm 안으로 지킵니다(카탈로그). 셋째 칸은 전조 뒤 바깥지름의 규격 범위입니다.",
+            "회전수: 넣은 값 → 회사 S(가공 소재가 스테인리스 M 이거나 비었고 회사 표 규격일 때, 소재 종류마다) → Fette 추천(고른 강종의 재질 표 속도 아래 끝, " +
+                "n = 1000 × v / (π × 전조 전 지름)). 다른 소재는 Fette 표 줄을 가를 수 없어 회전수를 넣어야 합니다. " +
+                "이송 비율(전조 조건 — 회사 값, 고치면 저장): 넣은 값 → 20산이면 회사 F${plain(CompanyRolls.FEED_20TPI)}(비율 ${plain(CompanyRolls.FEED_20TPI)}/1.27 ≈ 0.961) → " +
+                "Fette ${plain(RollHeadCalc.FETTE_RATIO)}(피치보다 5 % 작게). 끝 멈춤 빈칸 ${plain(RollHeadCalc.DWELL_DEFAULT)} 초 · 물러남 Z 빈칸 ${plain(RollHeadCalc.RETRACT_Z_DEFAULT)}. " +
+                "자리표시가 쓰일 값을 숫자로 보입니다('추천 …' · '회사 S…').",
+            "STS316 · STS304: Fette 재질 표(F1–F3 설명서 Tab. 6)가 1.4401(STS316 에 해당) ${span(s316?.vMinMpm, s316?.vMaxMpm)}, " +
+                "1.4301(STS304 에 해당) ${span(s304?.vMinMpm, s304?.vMaxMpm)} m/min 으로 갈라 적습니다(316 · 304 대응은 조사자 주 — 원문에 AISI 표기 없음). " +
+                "가공 소재가 스테인리스이거나 비었을 때만 그 아래에서 고릅니다(처음 STS316).",
+            "결과: 실제 전조 끝 = 끝 Z − 열림 행정 a(이송을 멈추면 머리가 a 만큼 더 나가며 열림), 전조 길이 = (끝면 Z − 끝 Z) + a. " +
+                "회전수 · 비율을 처음 값과 다르게 넣으면 그 방향의 요령이 결과 위에 파랗게 뜹니다(출처 있는 글이 없으면 안 뜸). " +
+                "빨강 = 범위 밖 값 · 맞는 머리 없음(고른 머리의 지름 범위 밖) · Z 순서(절삭 다이스와 같음), " +
+                "노랑 = 이송 비율 > 1 · 넣은 회전수가 Fette 범위 밖 · 회사 짝이 카탈로그 지름 범위 밖 · 산수(피치)가 롤 목록 밖 · 전조 길이가 선택표 최대보다 김 · 끝 멈춤 0. " +
+                "열린 머리는 다음 공작물 전에 닫습니다.",
+        ) + tips.mapIndexed { i, t -> if (i == 0) "요령(LMT Fette 설명서 · 카탈로그 — 글마다 출처, 출처 없는 글은 넣지 않음). $t" else t },
+    )
+}

@@ -1,9 +1,12 @@
 package com.bmt.nosecalc
 
+import com.bmt.nosecalc.calc.IsoGroup
 import com.bmt.nosecalc.screens.ThreadScreen
 import com.bmt.nosecalc.screens.ThreadHelp
 import com.bmt.nosecalc.ui.FeatureScaffold
 import com.bmt.nosecalc.screens.thread.Pick
+import com.bmt.nosecalc.screens.thread.RollField
+import com.bmt.nosecalc.screens.thread.RollStore
 import com.bmt.nosecalc.screens.thread.ThreadField
 import com.bmt.nosecalc.screens.thread.ThreadNc
 import com.bmt.nosecalc.screens.thread.ThreadState
@@ -18,6 +21,8 @@ import com.bmt.nosecalc.screens.thread.threadNptInt
 import com.bmt.nosecalc.screens.thread.threadPtExt
 import com.bmt.nosecalc.screens.thread.threadOriginal
 import com.bmt.nosecalc.screens.thread.threadReverse
+import com.bmt.nosecalc.screens.thread.threadRoll
+import com.bmt.nosecalc.screens.thread.threadRollEmpty
 import com.bmt.nosecalc.screens.thread.threadWarn
 import com.bmt.nosecalc.screens.thread.threadZOrder
 import kotlin.test.Test
@@ -123,16 +128,42 @@ class ThreadShotsTest {
         shot("thread-insert-w360-fs130", 3600, widthDp = 360, fontScale = 1.3f) { threadOriginal().apply { advOpen = true; pickInsert(insertChoices.last()) } }
     }
 
-    /** 도움말: 묶음 일곱 + 끝의 '장갑을 끼고 쓸 때' */
+    /**
+     * 전조 다이스(2026-11-14): 화면 전체(3/4-20 · 결과를 위로) · 아래 NC 와 조건 · 요령 · 처음(파랑 안내 · 가공 방식 세 칸) · 머리 · 롤 시트 ·
+     * 사이즈 시트(맨 위 회사 롤 규격) · 노랑과 요령 방향(회전수 620 · 비율 1.04 · 멈춤 0) · 다른 소재(회전수 넣으세요), 각각 보통 폭과 좁은 폰(360dp) · 큰 글꼴(1.3배).
+     * 메뉴 카드 · 헤더 부제('G92 · G76 · PT/NPT · 전조 · 다이스')도 두 폭으로. 가공 방식 긴 이름이 나오는 가장 좁은 폭 언저리(490dp)도
+     */
+    @Test
+    fun roll() {
+        val warn = mapOf(RollStore.key(RollField.RATIO) to "1.04", RollStore.key(RollField.DWELL) to "0")
+        for ((w, fs, tail) in listOf(Triple(Shots.WIDTH_DP, 1f, ""), Triple(360, 1.3f, "-w360-fs130"))) {
+            val big = fs > 1f
+            shot("thread-roll$tail", if (big) 3900 else 3100, widthDp = w, fontScale = fs) { threadRoll() }
+            shot("thread-roll-nc$tail", if (big) 2400 else 1900, widthDp = w, fontScale = fs, scrollToEnd = true) { threadRoll() }
+            shot("thread-roll-empty$tail", if (big) 2000 else 1700, widthDp = w, fontScale = fs) { threadRollEmpty() }
+            shot("thread-roll-head-sheet$tail", Shots.HEIGHT_DP, sheet = Pick.ROLL_HEAD, widthDp = w, fontScale = fs) { threadRoll() }
+            shot("thread-roll-size-sheet$tail", Shots.HEIGHT_DP, sheet = Pick.SIZE, widthDp = w, fontScale = fs) { threadRoll() }
+            shot("thread-roll-warn$tail", if (big) 4300 else 3500, widthDp = w, fontScale = fs, store = warn) { threadRoll().apply { set(ThreadField.RPM, "620") } }
+            shot("thread-roll-other$tail", if (big) 2400 else 2000, widthDp = w, fontScale = fs) { threadRoll().apply { material = IsoGroup.P } }
+            // 메뉴(일곱 카드가 폰 한 화면에 든다): 나사에서 연 것(나사 카드 '지금 화면') · 라운드에서 연 것(나사 카드 꺾쇠)
+            Shots.both("thread-menu$tail", widthDp = w, fontScale = fs, setup = { it.open(Feature.THREAD); it.menuOpen = true }) { App(it) }
+            Shots.both("thread-menu-round$tail", widthDp = w, fontScale = fs, setup = { it.open(Feature.ROUND); it.menuOpen = true }) { App(it) }
+        }
+        // 가공 방식 넓은 갈래의 아래 끝(칸 글 자리 134 — 밀도 2.625 의 px 반올림으로 488dp 는 133.9 라 '바이트', 490dp · 100% 는 134.5):
+        // 첫 칸 '바이트 (G92 · G76)' 가 '…' 없이(검토 a4 — 잼은 ThreadLabelFitTest)
+        shot("thread-roll-w490", 420, widthDp = 490) { threadRoll() }
+    }
+
+    /** 도움말: 묶음 여덟 + 끝의 '장갑을 끼고 쓸 때' */
     @Test
     fun help() {
         assertEquals(
-            listOf("나사 고르기", "값 넣기", "고급 공차 및 인선 설정", "G92 · G76 프로그램과 분석", "관용 테이퍼 나사 (PT · NPT)", "다이스 헤드", "경고"),
+            listOf("나사 고르기", "값 넣기", "고급 공차 및 인선 설정", "G92 · G76 프로그램과 분석", "관용 테이퍼 나사 (PT · NPT)", "전조 다이스", "다이스 헤드", "경고"),
             ThreadHelp.map { it.title },
         )
         Shots.both("thread-help", setup = { it.open(Feature.THREAD); it.helpOpen = true }) { App(it) }
-        // 새 두 묶음(관용 테이퍼 · 다이스 헤드)부터 연 도움말
-        for ((start, tail) in listOf(4 to "pipe", 5 to "die")) {
+        // 새 세 묶음(관용 테이퍼 · 전조 다이스 · 다이스 헤드)부터 연 도움말
+        for ((start, tail) in listOf(4 to "pipe", 5 to "roll", 6 to "die")) {
             Shots.both("thread-help-$tail", setup = { it.open(Feature.THREAD); it.helpOpen = true }) {
                 AppHost(it) { FeatureScaffold(Feature.THREAD, ThreadHelp, helpStart = start) {} }
             }
