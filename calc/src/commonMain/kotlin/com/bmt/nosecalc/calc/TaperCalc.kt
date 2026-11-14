@@ -65,7 +65,8 @@ enum class TaperWarning {
     /**
      * 노즈R 이 경사 길이보다 크고, 그 경사 끝 하나 이상이 오목 모서리(모서리 R < r)다. 공구는 경사에 닿고 숫자도 맞다
      * (못 닿으면 이 경고 대신 NOSE_UNREACHABLE 로 멈춘다). 다만 오목 모서리 쪽에는 R 대신 r 이 남아 경사가 거의 안 남을 수 있으니
-     * 도면을 확인할 것. 양 끝이 볼록이면(C0.3 면취에 0.8R) 다 깎여 경고하지 않는다
+     * 도면을 확인할 것. 양 끝이 볼록이면(C0.3 면취에 0.8R) 다 깎여 경고하지 않는다.
+     * T1–T2 오목 원호(R > r)의 노즈 길이 없어진 것도(호 전체가 오목 꼭짓점 뒤 노즈 그늘 — 그 자리에 r 이 남는다) 이 경고다
      */
     NOSE_GT_SLOPE,
 
@@ -240,6 +241,8 @@ data class SlopeArc(
     val cw: Boolean,
     /** 원호 중심(도면) */
     val center: Pt,
+    /** 빈 좌표를 호가 앞뒤 요소에 접하는 자리로 풀었으면 호가 접한 점(칸 순서 1 = T1 · 2 = T2), 네 좌표를 다 넣었으면 null */
+    val tangentAt: Int? = null,
 )
 
 /** 꼭짓점 T1·T2(·T3) 하나 */
@@ -360,25 +363,31 @@ object TaperCalc {
     }
 
     /**
-     * 원호([TaperInput.arc])의 빈 좌표 하나(그림 순서 — 뒤집기를 푼 뒤)를 호가 앞뒤 요소에 접하는 자리로 채운다. 도면이 R 과 지름만 적고
-     * 접점 Z 는 적지 않는 꼴(구멍 Ø7.5 → Ø6.3 의 R3.75 볼 자리 등 — 사용자 피드백 2026-11-14). 그 자리면 R 이 [arcMinR] 과 같다.
+     * 원호([TaperInput.arc])의 빈 좌표 하나(그림 순서 — 뒤집기를 푼 뒤)를 호가 앞뒤 요소에 접하는 자리로 채운다. 도면이 접하는 점의 반대 끝 좌표 하나를
+     * 적지 않는 꼴(Ø7.5 구멍에 접하는 R3.75 볼 자리의 Ø6.3 쪽 Z 등 — 사용자 피드백 2026-11-14). 그 자리면 R 이 [arcMinR] 과 같다.
      * 접하는 끝: 볼록은 소재 쪽 점(외경은 아래 · 내경은 위)에서 단면, 반대 점에서 수평에 접하고 오목은 그 반대 — 그 끝의 앞뒤 요소(TYPE 1 · 2 는 T1,
-     * 2 · 4 는 T2 가 단면, 나머지 수평)가 그 방향인 끝만 된다. 두 끝 다 되면 빈 좌표의 점에서 접한다(도면이 안 적은 쪽이 접점).
-     * 수평에 접하면 Δz² + (R − Δr)² = R², 단면에 접하면 Δr² + (R − Δz)² = R² (Δz · Δr = 두 점의 Z 거리 · 반경 차) — 호가 1/4 원을 넘지 않는다
+     * 2 · 4 는 T2 가 단면, 나머지 수평)가 그 방향인 끝만 된다. 두 끝 다 되면(TYPE 1 볼록 · 4 오목) 두 좌표를 다 넣은 점에서 접한다(사용자 예처럼 접점을 적고
+     * 반대 끝을 비운 꼴 — 검증 뒤 고침 2026-11-14, 처음에는 빈 좌표의 점).
+     * 수평에 접하면 Δz² + (R − Δr)² = R², 단면에 접하면 Δr² + (R − Δz)² = R² (Δz · Δr = 두 점의 Z 거리 · 반경 차) — 호가 1/4 원을 넘지 않는다.
+     * 채운 입력과 접한 끝(그림 T1 이면 true)을 돌려준다
      */
-    private fun tangentFill(i: TaperInput, up: Double): TaperInput {
+    private fun tangentFill(i: TaperInput, up: Double): Pair<TaperInput, Boolean> {
         val r = i.arcR!!
         val deepIsT1 = (up > 0) != i.inner
         fun vertAt(t1: Boolean) = if (t1) i.type <= 2 else i.type == 2 || i.type == 4
         // 그 끝의 요소에 접한 호가 볼록인가: 소재 쪽 점에서 단면 · 반대 점에서 수평
         val ends = listOf(true, false).filter { (vertAt(it) == (it == deepIsT1)) == i.arcConvex }
         if (ends.isEmpty()) stop(TaperWarning.ARC_NO_TANGENT)
-        val emptyAt1 = i.x1 == null || i.z1 == null
-        val vertical = vertAt(if (emptyAt1 in ends) emptyAt1 else ends.single())
+        val fullAt1 = i.x1 != null && i.z1 != null
+        val at1 = if (ends.size > 1) fullAt1 else ends.single()
+        val vertical = vertAt(at1)
+        // 넣은 차가 R 을 조금 넘으면(CAD 값을 0.001 로 반올림 — 검증 뒤 고침 2026-11-14) R 로 잘라 1/4 원으로 풀고 부푼 깊이는 네 좌표 때처럼 [ARC_OVER_TOL] 로 본다(calc).
+        // 그 깊이 ≈ 넘은 몫² / 2R 이라 그 띠의 두 배 넘게 넘으면 여기서 멈춘다(1/4 원으로 푼 지름이 0 이하라 BAD_INPUT 이 먼저 나지 않게)
+        val band = sqrt(8 * ARC_OVER_TOL * r)
         // 접선을 따라 간 거리(접선에서 a 만큼 떨어질 때) · 접선에서 떨어진 거리(접선을 따라 b 만큼 갈 때)
-        fun along(a: Double) = if (a - r > EPS) stop(TaperWarning.ARC_R_TOO_SMALL) else sqrt(max(0.0, a * (2 * r - a)))
-        fun across(b: Double) = if (b - r > EPS) stop(TaperWarning.ARC_R_TOO_SMALL) else r - sqrt(max(0.0, r * r - b * b))
-        return when {
+        fun along(a: Double) = if (a - r > band) stop(TaperWarning.ARC_R_TOO_SMALL) else min(a, r).let { sqrt(max(0.0, it * (2 * r - it))) }
+        fun across(b: Double) = if (b - r > band) stop(TaperWarning.ARC_R_TOO_SMALL) else min(b, r).let { r - sqrt(max(0.0, r * r - it * it)) }
+        val filled = when {
             i.z1 == null || i.z2 == null -> {
                 val dr = rise(i.x1!!, i.x2!!, up)
                 val dz = if (vertical) across(dr) else along(dr)
@@ -390,6 +399,7 @@ object TaperCalc {
                 if (i.x1 == null) i.copy(x1 = i.x2!! - up * 2 * dr) else i.copy(x2 = i.x1 + up * 2 * dr)
             }
         }
+        return filled to at1
     }
 
     /**
@@ -416,13 +426,15 @@ object TaperCalc {
         if (i.arc && i.arcR == null) stop(TaperWarning.MISSING_INPUT)
         if (given.any { it != null && !it.isFinite() }) stop(TaperWarning.BAD_INPUT)
         if (i.arc && (!(i.arcR!! > 0 && i.arcR.isFinite()) || tooBig(i.arcR))) stop(TaperWarning.BAD_INPUT)
+        // 원호는 넣은 좌표의 범위를 접하는 자리로 풀기 전에 본다 — 범위 밖 오타(X30000)에 'R 이 반경 차 14980 이상' 같은 따를 수 없는 글이 먼저 났다(검증 뒤 고침 2026-11-14)
+        if (i.arc && (listOf(i.x1, i.x2).any { it != null && it <= 0 } || tooBig(i.x1, i.z1, i.x2, i.z2))) stop(TaperWarning.BAD_INPUT)
         val ang = if (i.arc) null else i.angleDeg
         if (ang != null && (ang <= 0 || ang >= 90)) stop(TaperWarning.BAD_ANGLE)
         // T1 에서 왼쪽 T2 로 갈 때 X 가 커지면 +1: 외경 TYPE 1~4, 내경 TYPE 5
         val up = if (i.inner == (i.type == 5)) 1.0 else -1.0
         val t = ang?.let { tan(it * PI / 180) }
         // 빈 값은 많아야 하나라 차례로 채우면 된다(원호는 접하는 자리로 먼저 채운다)
-        val f = if (i.arc && given.any { it == null }) tangentFill(i, up) else i
+        val (f, tanAt1) = if (i.arc && given.any { it == null }) tangentFill(i, up) else i to null
         val x1 = f.x1 ?: (f.x2!! - up * 2 * leftward(f.z1!!, f.z2!!) * t!!)
         val x2 = f.x2 ?: (x1 + up * 2 * leftward(f.z1!!, f.z2!!) * t!!)
         val z1 = f.z1 ?: (f.z2!! + rise(x1, x2, up) / t!!)
@@ -442,7 +454,10 @@ object TaperCalc {
         solve(
             listOf(front, p1, p2, back), listOf(i.cornerR1, i.cornerR2), i.inner, i.reverse, i.flip, i.noseR, i.tip, i.zClear, i.start, i.end, i.approach,
             if (i.arc) i.arcR!! to i.arcConvex else null,
-        )
+        ).let { res ->
+            // 빈 좌표를 접하는 자리로 풀었으면 호가 접한 점(칸 순서 — 뒤집으면 그림 T1 이 칸 T2)
+            if (tanAt1 == null) res else res.copy(solution = res.solution?.let { s -> s.copy(arc = s.arc?.copy(tangentAt = if (tanAt1 != i.flip) 1 else 2)) })
+        }
     }
 
     fun calcDouble(input: DoubleTaperInput): TaperResult = guarded {
@@ -734,7 +749,11 @@ object TaperCalc {
                 // 첫 깎는 요소가 T1–T2 호: 경사 연장선 대신 호의 처음 접선을 거꾸로 늘여 큰 축으로 c(접선이 단면에 가까우면 Z 로 c 는 X 가 발산한다).
                 // 직접 보정은 보정 호(늘인 교점에서 시작)의 접선, G41/G42 는 도면 호의 접선 — 첫 깎는 줄이 호에 접해 이어져 노즈가 T1 의 법선에 선다
                 val tj = CompFrame.startDir(segs[1] as? Arc ?: arc1)
-                entry = segs[0].end - tj * (c / max(abs(tj.z), abs(tj.x)))
+                // 내경에서 그 접선이 축 쪽이면 노즈 중심이 축에서 멈춘다(끝 쪽 [toolMove] 와 같은 꼴) — 늘인 접선이 축을 넘어 G00 이 맞은편 구멍 벽을 팠다
+                // (검증 2026-11-14 F1: 사용자 화면 Ø6.3 → Ø7.5 오목 R3.75 · 노즈 1.2 · Z 여유 5 의 `G0X-2.127Z-5.1` `Z-17.943` — 0.31)
+                val nose0 = segs[0].end - tv
+                val len = c / max(abs(tj.z), abs(tj.x))
+                entry = if (inner && nose0.x > 1e-9) CompFrame.untilAxis(nose0, tj * -1.0, len, true) + tv else segs[0].end - tj * len
                 val t1 = CompFrame.startDir(arc1)
                 e0D = path[1] - t1 * (c / max(abs(t1.z), abs(t1.x)))
             } else if (convexAt(1, 0)) {
@@ -758,6 +777,26 @@ object TaperCalc {
         // G41/G42 가 깎는 요소(짧은 막힌 시작 · 끝 요소는 빼고)
         val fromSegG4 = dropFirst ?: fromSeg
         val toSegG4 = keepLast ?: toSeg
+        // G41/G42 가 T1–T2 호와 깎는 직선 사이 꺾임에서 기댈 보정선 교점을 글에 쓰는 0.001 값(제어기가 R 로 다시 구한 중심)으로 다시 푼다 — 오목 호가 볼록 꺾임에서
+        // 노즈R 이 '못 받는 꼴' 경계(R = 2r / (1 + cos β))에 붙으면 교점이 보정 원 꼭대기의 겹근이라 반올림이 교점을 없애 제어기가 멈춘다(검증 2026-11-14 F2:
+        // 외경 X30 Z−2 → X30.8 오목 R0.6 · 노즈 0.4 의 `G2X30.8Z-2.566R.6` `G1Z-5.566` — 경계 너머 노즈 0.401 처럼 멈춘다)
+        if (arcIdx != null) {
+            fun nc(p: Pt) = Pt.ofDia(Fmt.nc(p.z).toDouble(), Fmt.nc(p.xDia).toDouble())
+            val a = drawing.segs[arcIdx] as Arc
+            val s = nc(a.start)
+            val e = nc(a.end)
+            val half = (e - s).length / 2
+            val rr = Fmt.nc(a.radius).toDouble()
+            val h = sqrt(max(0.0, rr * rr - half * half))
+            val ar = Arc(s, e, (s + e) * 0.5 + (e - s).unit().left() * (if (a.cw) -h else h), a.cw)
+            for (k in listOf(arcIdx - 1, arcIdx + 1)) {
+                val l = drawing.segs.getOrNull(k) as? Line ?: continue
+                if (k !in fromSegG4 until toSegG4) continue
+                val ul = (nc(l.end) - nc(l.start)).unit()
+                val p = if (k < arcIdx) CompFrame.junction(s, ul, CompFrame.startDir(ar), side, r, arcB = ar) else CompFrame.junction(e, CompFrame.endDir(ar), ul, side, r, arcA = ar)
+                if (p == null) stop(TaperWarning.NOSE_UNREACHABLE)
+            }
+        }
 
         // 접근 줄(직접 보정): 뒤집어 그림 왼쪽(척 쪽 · 구멍 안)에서 시작하면 진입 G00 점이 부품 앞 끝면(넣은 앞 요소 끝이나 T 점 가운데 가장 오른쪽)보다
         // 척 쪽이다. G00 은 X · Z 가 따로 움직일 수 있어(dog-leg) 앞 위치에서 바로 오면 입구 단면 · 면취나 부품 앞을 지날 수 있으므로
@@ -933,7 +972,10 @@ object TaperCalc {
         fun leavesR(k: Int) = (dirIn(k) cross dirOut(k)).let { abs(it) > EPS && (it > 0) != (side == Side.G42) } &&
             cr[k - 1] < r
         val slopes = 1 until path.size - 2 // path[k] – path[k+1] 이 경사(앞뒤 요소 빼고)
-        if (slopes.any { r > (path[it + 1] - path[it]).length && (leavesR(it) || leavesR(it + 1)) }) warnings += TaperWarning.NOSE_GT_SLOPE
+        // T1–T2 오목 호(R > r)의 노즈 길이 없어진 것도(호 전체가 날카로운 오목 꼭짓점 뒤 노즈 그늘 — 넣은 반경 차 = 노즈R 인 오목 호가 단면에 접한 꼴, 검증 2026-11-14 F4):
+        // 그 자리에 호 대신 r 이 남는다. R ≤ r 은 CONCAVE_R_LE_NOSE 가 알린다
+        val arcGone = arcIdx != null && segs[arcIdx] !is Arc && (drawing.segs[arcIdx] as Arc).radius - r > EPS
+        if (arcGone || slopes.any { r > (path[it + 1] - path[it]).length && (leavesR(it) || leavesR(it + 1)) }) warnings += TaperWarning.NOSE_GT_SLOPE
         // 공구가 원 안쪽(오목): G41 이면 반시계, G42 면 시계 원호
         if (drawing.segs.any { it is Arc && (side == Side.G41) != it.cw && it.radius - r <= EPS }) warnings += TaperWarning.CONCAVE_R_LE_NOSE
         if (tip in 1..4 && againstTool(drawing, drawing.segs.subList(fromSeg, toSeg), side, tip, arcIdx?.let { drawing.segs[it] })) {

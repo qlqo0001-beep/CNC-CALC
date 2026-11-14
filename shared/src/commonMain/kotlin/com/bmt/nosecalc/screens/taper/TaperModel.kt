@@ -478,7 +478,9 @@ private fun arcWarningText(w: TaperWarning, f: SlopeForm): String? = when (w) {
     TaperWarning.BAD_ANGLE -> "두 점이 같은 자리이거나 수평 · 수직으로 놓였습니다. T1 · T2 는 그림처럼 X · Z 가 모두 달라야 합니다."
     TaperWarning.BAD_INPUT ->
         "입력이 잘못됐습니다. 지름과 T1–T2 원호의 R 은 0 보다 크고, 노즈R·모서리 R·Z 여유는 0 이상이어야 합니다(노즈R 이 0 이면 Z 여유를 넣으세요 — 진입 거리가 없습니다). " +
-            "좌표·치수는 ±${MAX_MM.toInt()} mm 안이어야 합니다."
+            "좌표·치수는 ±${MAX_MM.toInt()} mm 안이어야 합니다." +
+            // 넣은 값이 모두 맞으면 빈 좌표를 접하는 자리로 푼 값이 그 밖이다(칸을 짚지 않는다)
+            (if ((f.x + f.z).count { it == null } == 1) " 빈 좌표를 원호가 접하는 자리로 계산한 지름이 0 이하이거나 한도 밖이면 이 글이 납니다 — 값과 R 을 확인하세요." else "")
     TaperWarning.CORNER_R_TOO_BIG ->
         "모서리 R 이 들어가지 않습니다. 접점이 T1–T2 원호나 앞뒤 요소(시작·끝점까지)를 넘거나, 두 R 의 접점이 원호 위에서 겹칩니다. 모서리 R 을 줄이세요."
     TaperWarning.ARC_R_TOO_SMALL -> {
@@ -507,7 +509,8 @@ private fun arcWarningText(w: TaperWarning, f: SlopeForm): String? = when (w) {
             "네 좌표를 모두 넣거나 볼록 · 오목을 확인하세요."
     TaperWarning.NOSE_UNREACHABLE ->
         "노즈R 에 비해 T1–T2 원호(또는 앞뒤 요소)가 짧거나 오목 원호의 R 이 작아 공구가 닿지 못합니다. 도면 형상이 안 나옵니다 — 노즈R 을 줄이거나 원호의 R 을 키우세요."
-    TaperWarning.NOSE_GT_SLOPE -> "노즈R 이 T1–T2 사이 거리보다 큽니다. 숫자는 맞지만 오목 모서리 쪽에 노즈R 이 남아 원호가 거의 안 남을 수 있습니다. 도면을 확인하세요."
+    // 노즈R 이 두 점 사이보다 크거나, 오목 원호 전체가 오목 꼭짓점 뒤 노즈 그늘이라 원호의 노즈 길이 없어진 것(calc 의 같은 경고)
+    TaperWarning.NOSE_GT_SLOPE -> "노즈R 에 비해 T1–T2 원호가 짧거나 오목 꼭짓점 바로 뒤에 있습니다. 숫자는 맞지만 오목 모서리 쪽에 노즈R 이 남아 원호가 거의(또는 전혀) 안 남을 수 있습니다. 도면을 확인하세요."
     TaperWarning.CONCAVE_R_LE_NOSE ->
         "오목 R(모서리 R · T1–T2 원호)이 노즈R 이하입니다. 같으면 꼭 맞고, 작으면 그 자리에 노즈R 만큼의 R 이 남습니다. G41/G42 프로그램은 기계가 간섭 알람을 낼 수 있습니다."
     else -> null
@@ -568,9 +571,11 @@ private fun straightWarningText(w: TaperWarning, f: SlopeForm): String = when (w
             }
         } else if (f.flip && !f.reverse) {
             "진입점이나 후퇴점이 중심(X0)을 넘습니다. 뒤집어 " + (if (f.kind.inner) "구멍 안" else "척 쪽") + "에서 시작하면 기계 보정(G41/G42) 진입이 급송을 소재에서 " +
-                "떼려고 일부러 중심 너머로 돌아 들어갈 수 있습니다 — 기계가 X− 로 그만큼 갈 수 있는지 확인하세요. 경사 연장선이 중심을 넘는 것이면 Z 여유를 줄이세요."
+                "떼려고 일부러 중심 너머로 돌아 들어갈 수 있습니다 — 기계가 X− 로 그만큼 갈 수 있는지 확인하세요. 경사 연장선이 중심을 넘는 것이면" +
+                // 내경은 중심 너머가 맞은편 구멍 벽이다(검증 뒤 고침 2026-11-14 F1)
+                (if (f.kind.inner) " 노즈가 맞은편 구멍 벽에 닿을 수 있으니" else "") + " Z 여유를 줄이세요."
         } else {
-            "진입점이나 후퇴점이 중심(X0)을 넘습니다. Z 여유를 줄이세요."
+            "진입점이나 후퇴점이 중심(X0)을 넘습니다." + (if (f.kind.inner) " 내경은 노즈가 중심 너머 맞은편 구멍 벽에 닿을 수 있습니다." else "") + " Z 여유를 줄이세요."
         }
     // 짧은 막힌 끝 · 시작 요소를 뺄 수 없는 꼴(calc '진입점과 NC' 끝 · 진입 — 앞뒤 요소에 직각 빼기 · 들어가기 교점이 남지 않음)
     TaperWarning.SHORT_END_PAST ->

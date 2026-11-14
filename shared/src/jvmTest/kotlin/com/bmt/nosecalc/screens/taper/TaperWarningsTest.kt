@@ -41,9 +41,11 @@ class TaperWarningsTest {
         assertEquals(TaperWarning.BAD_INPUT, stop(base.copy(arcR = 0.0)))
         // 좌표 둘이 비면 각도가 있어도 모자람(각도로 채우지 않는다)
         assertEquals(TaperWarning.MISSING_INPUT, stop(base.copy(x = listOf(40.0, null), z = listOf(0.0, null), angle = 45.0, arcR = 10.0)))
-        // 좌표 하나는 호가 앞뒤 요소에 접하는 자리로(사용자 피드백 2026-11-14): 외경 형상 1 볼록 R10 의 X2 → T2 에서 외경에 접함
-        val x2 = TaperSolve.solve(base.copy(x = listOf(40.0, null), arcR = 10.0)).solution!!.points[1].vertex.xDia
-        assertEquals(40 + 2 * (10 - sqrt(75.0)), x2, 1e-9)
+        // 좌표 하나는 호가 앞뒤 요소에 접하는 자리로(사용자 피드백 2026-11-14): 외경 형상 1 볼록 R10 의 X2 → 두 끝 다 되는 형상이라 두 좌표를 다 넣은 T1 에서 단면에 접함
+        // (검증 뒤 고침 2026-11-14 R-VR1 — 처음에는 빈 좌표의 T2 에서 외경에 접해 40 + 2(10 − √75))
+        val arcX2 = TaperSolve.solve(base.copy(x = listOf(40.0, null), arcR = 10.0)).solution!!
+        assertEquals(40 + 2 * sqrt(75.0), arcX2.points[1].vertex.xDia, 1e-9)
+        assertEquals(1, arcX2.arc!!.tangentAt)
         // 사용자 화면: 내경 형상 3 · T1 ⇄ T2 · Z1 빈칸 · 오목 R3.75 → Z1 = −10.1 − √(0.6 × 6.9)
         val seat = form(TaperKind.INNER, 3, listOf(6.3, 7.5), listOf(null, -10.1)).copy(flip = true, arc = true, arcR = 3.75, arcConcave = true)
         assertEquals(-10.1 - sqrt(0.6 * 6.9), TaperSolve.solve(seat).solution!!.points[0].vertex.z, 1e-9)
@@ -230,7 +232,13 @@ class TaperWarningsTest {
         assertTrue(TaperWarning.ENTRY_PAST_AXIS in res.warnings, "${res.warnings} ${res.solution?.ncG41G42}")
         val t = taperWarningText(TaperWarning.ENTRY_PAST_AXIS, small)
         assertTrue(t.startsWith("진입점이나 후퇴점이 중심(X0)을 넘습니다. 뒤집어 구멍 안에서 시작하면") && "기계가 X− 로 그만큼 갈 수 있는지" in t, t)
-        assertEquals("진입점이나 후퇴점이 중심(X0)을 넘습니다. Z 여유를 줄이세요.", taperWarningText(TaperWarning.ENTRY_PAST_AXIS, small.copy(reverse = true)))
+        // 내경은 중심 너머가 맞은편 구멍 벽이라 그 말을 더한다(검증 뒤 고침 2026-11-14 F1), 외경은 전 글
+        assertTrue("노즈가 맞은편 구멍 벽에 닿을 수 있으니 Z 여유를 줄이세요." in t, t)
+        assertEquals(
+            "진입점이나 후퇴점이 중심(X0)을 넘습니다. 내경은 노즈가 중심 너머 맞은편 구멍 벽에 닿을 수 있습니다. Z 여유를 줄이세요.",
+            taperWarningText(TaperWarning.ENTRY_PAST_AXIS, small.copy(reverse = true)),
+        )
+        assertEquals("진입점이나 후퇴점이 중심(X0)을 넘습니다. Z 여유를 줄이세요.", taperWarningText(TaperWarning.ENTRY_PAST_AXIS, small.copy(kind = TaperKind.OUTER, reverse = true)))
     }
 
     @Test

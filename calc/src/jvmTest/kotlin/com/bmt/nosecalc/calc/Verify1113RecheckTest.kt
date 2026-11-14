@@ -183,6 +183,10 @@ internal object V1113 {
      * 바뀐 직접 보정(G40) 글이 옛 글보다 나쁜가: 새 글만 멈춤 · 소재(깎는 요소 + 축 거울 + 막힌 시작 · 끝 벽 — 그림만 요소는 길이가 그림용이라 뺀다, [directMat] 과 같다)를
      * 옛 글보다 더 팜(옛 글이 이미 선을 지나 r 쯤 팠으면 이 잣대로는 더 나빠질 수 없어 보지 않는다) · 깎는 구간 덜 깎임이 늚. 나쁘면 그 까닭, 아니면 null.
      * 고침은 막힌 시작 · 끝과 연장선 진입 · 뒤집은 접근을 노즈 기준으로, 내경에서 축 쪽으로 가는 진입 · 접근 · 후퇴는 노즈 중심이 축에서 멈추게 했다
+     * (2026-11-14 검증 뒤 고침 F1 — T1–T2 호의 처음 접선을 거꾸로 늘인 진입도).
+     * 내경은 글의 첫 줄(공구 교환 자리 home — 구멍 밖 X100 — 에서 진입점 · 접근점으로 오는 G00)을 재지 않는다: 그 줄 끝의 X 급송이 진입 Z 에서 그림의 부품 몸을
+     * 가로질러(실제 공구는 구멍을 따라 들어온다), 진입점이 그림 끝 너머로 멀리 간 글만 피한 것으로 잰다 — F1 의 축에서 자른 진입(노즈 중심이 축 위)이 그렇게
+     * '파고듦 0.0003 → 0.797' 로 나왔다(옛 진입은 계산기 Z1.392 · 노즈 중심 반경 −4.12 — 그림이 끝난 너머의 맞은편 Ø8.403 벽 쪽)
      */
     fun g40Worse(s: TaperSolution, inner: Boolean, r: Double, old: List<String>): String? {
         val segs = s.drawing.segs
@@ -196,8 +200,9 @@ internal object V1113 {
         val b = V1112.sim(nOld, r, s.tip)
         if (a.stop != null) return if (b.stop == null) "새 글만 멈춤 ${a.stop}" else null
         if (b.stop != null) return null
-        val gNew = depth(a, nNew, r, mat).first
-        val gOld = depth(b, nOld, r, mat).first
+        val from = V1112.pre.size + if (inner) 1 else 0
+        val gNew = deepest(moves(a).filter { it.line > from }, nNew, r, mat).first
+        val gOld = deepest(moves(b).filter { it.line > from }, nOld, r, mat).first
         if (gNew > max(gOld, 0.0) + 2e-3 && gOld < r - 0.02) return "파고듦 늘어남 ${f(gOld)} → ${f(gNew)}"
         val uNew = under(a, r, segs, rg.first, rg.last).first
         val uOld = under(b, r, segs, rg.first, rg.last).first

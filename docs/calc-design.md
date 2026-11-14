@@ -513,6 +513,8 @@ G0Z200.                 Z 로만 물러난다
 - 계산을 멈춤(solution = null, 경고 하나): `MISSING_INPUT`, `CONTRADICTION`, `BAD_ANGLE`(0° 이하·90° 이상, 점이 수평·수직),
   `SHAPE_MISMATCH`(T2 가 T1 왼쪽이 아님, 오르내림이 TYPE 과 반대), `BAD_INPUT`(지름 ≤ 0, r·모서리 R < 0, 여유 ≤ 0, 팁 0~9 밖, NaN, 크기 한도 밖),
   `BAD_LEG`(시작·끝점, 위 절), `CORNER_R_TOO_BIG`(모서리 R, 위 절),
+  `ARC_R_TOO_SMALL`(T1–T2 원호의 R 이 가장 작은 R 보다 작음 · 빈 좌표를 접하는 자리로 풀 때 넣은 차가 R 보다 큼 — 아래 '2026-11-10 피드백 — 테이퍼 원호' · '2026-11-14' 절),
+  `ARC_NO_TANGENT`(원호의 빈 좌표를 풀 수 없음 — 그 볼록 · 오목이 접할 앞뒤 요소가 없는 형상, '2026-11-14' 절),
   `NOSE_UNREACHABLE`(경사나 앞뒤 요소의 어느 점에도 노즈 원이 닿지 못함 — NoseComp 의 Unreachable·이을 수 없음.
   한쪽 끝이 볼록이어도 다른 끝 오목 모서리에 접한 원이 요소 밖에서 닿으면 그렇다. 예: 외경 TYPE 5 역방향 경사 0.627 에
   1.2R — 오목 T2(101.7°)에 접한 원이 경사 위 0.976 에서 닿는다. 겹테이퍼 T1 볼록–T2 골(74.3°) 경사 1.221 에 1.2R — 1.58 에서 닿는다).
@@ -1939,9 +1941,10 @@ object DrillCatalog { val makers: List<DrillMaker>; fun maker(key: String): Dril
 
 ### 입력 · 결과 (공개 API 에 더한 것 — 모두 맨 끝 · 기본값, 직선 호출은 그대로)
 ```kotlin
-enum class TaperWarning { …, CORNER_R_TOO_BIG, ARC_R_TOO_SMALL /* 멈춤 */, NOSE_UNREACHABLE, … }
+enum class TaperWarning { …, CORNER_R_TOO_BIG, ARC_R_TOO_SMALL, ARC_NO_TANGENT /* 둘 다 멈춤 — 뒤의 것은 2026-11-14 */, NOSE_UNREACHABLE, … }
 data class TaperInput(…, val arc: Boolean = false, val arcR: Double? = null, val arcConvex: Boolean = true)
-data class SlopeArc(val index: Int, val r: Double, val progR: Double?, val cw: Boolean, val center: Pt)   // index = drawing · program · center 의 요소 번호
+data class SlopeArc(val index: Int, val r: Double, val progR: Double?, val cw: Boolean, val center: Pt,
+                    val tangentAt: Int? = null)   // index = drawing · program · center 의 요소 번호, tangentAt = 빈 좌표를 풀었을 때 접한 점(칸 순서 — 2026-11-14 검증 뒤 고침)
 data class TaperSolution(…, val arc: SlopeArc? = null)
 object TaperCalc { fun arcMinR(x1: Double, z1: Double, x2: Double, z2: Double): Double? }                    // X 는 직경
 ```
@@ -2036,28 +2039,71 @@ object TaperCalc { fun arcMinR(x1: Double, z1: Double, x2: Double, z2: Double): 
 
 ### 2026-11-14 사용자 피드백 — 빈 좌표는 호가 앞뒤 요소에 접하는 자리로
 폰 화면(내경 형상 3 · T1 ⇄ T2 · X1 6.3 · **Z1 빈칸** · X2 7.5 · Z2 −10.1 · 오목 R3.75)에 "z값이 자동으로 안나타나". 직선은 다섯 값 가운데 하나를 비우면 채우는데
-원호는 네 좌표를 모두 넣게 막혀 있었다. 도면은 R 과 지름만 적고 **접점 Z 는 적지 않는 일이 흔하다**(이 예는 Ø7.5 구멍에 접하는 R3.75 볼 자리 — 중심이 축 위).
+원호는 네 좌표를 모두 넣게 막혀 있었다. 도면은 R 과 지름만 적고 **좌표 하나를 적지 않는 일이 흔하다**(이 예는 Ø7.5 구멍에 접하는 R3.75 볼 자리 — 중심이 축 위.
+적지 않은 것은 접점(Ø7.5 쪽 Z−10.1 — 적혀 있다)이 아니라 반대 끝 Ø6.3 쪽의 Z — 아래 '검증 뒤 고침' R-VR2).
 - R 하나로는 빈 좌표가 정해지지 않는다(그 사이 어느 Z 든 호가 들어간다) — **호가 앞뒤 요소(수평 · 단면)에 접한다**는 조건을 더한다. 그 자리면 R = `arcMinR`(위 'R 의 한계'의 경계).
 - 접하는 끝: 볼록은 **소재 쪽 점**(외경은 아래 · 내경은 위 — `(up > 0) != inner` 면 T1)에서 단면, 반대 점에서 수평에 접하고, 오목은 그 반대(소재 쪽에서 수평 · 반대 점에서 단면).
   그 끝의 앞뒤 요소(그림 순서로 T1 은 형상 1 · 2, T2 는 2 · 4 가 단면 · 나머지 수평)가 그 방향인 끝만 고른다. 형상마다:
 
   | 형상 | 볼록 | 오목 |
   |---|---|---|
-  | 1 (T1 단면 · T2 수평) | T1 단면 · T2 수평 둘 다 → **빈 좌표의 점** | 없음 → `ARC_NO_TANGENT` |
+  | 1 (T1 단면 · T2 수평) | T1 단면 · T2 수평 둘 다 → **두 좌표를 다 넣은 점** | 없음 → `ARC_NO_TANGENT` |
   | 2 (둘 다 단면) | T1 | T2 |
   | 3 (둘 다 수평) | T2 | T1 |
-  | 4 (T1 수평 · T2 단면) | 없음 → `ARC_NO_TANGENT` | 둘 다 → 빈 좌표의 점 |
+  | 4 (T1 수평 · T2 단면) | 없음 → `ARC_NO_TANGENT` | 둘 다 → 두 좌표를 다 넣은 점 |
   | 5 (둘 다 수평) | T1 | T2 |
 
-  외경 · 내경이 같다(내경 그림은 외경의 거울이라 소재 쪽 점이 같은 T). 두 끝 다 되면 도면이 안 적은 쪽(빈 좌표의 점)이 접점이다.
+  외경 · 내경이 같다(내경 그림은 외경의 거울이라 소재 쪽 점이 같은 T). 두 끝 다 되면 두 좌표를 다 넣은 점이 접점이다(사용자 예처럼 접점을 적고 반대 끝을 비운 꼴).
+  → 처음에는 '도면이 안 적은 쪽(빈 좌표의 점)이 접점' 이었다 — 검증 뒤 고침(아래 R-VR1)에서 바꿨다.
 - 식(Δz · Δr = 두 점의 Z 거리 · 반경 차): 수평에 접하면 **Δz² + (R − Δr)² = R²**, 단면에 접하면 **Δr² + (R − Δz)² = R²** — 어느 끝에서 접하든 같다.
-  빈 칸이 Z 면 넣은 Δr 로, X 면 넣은 Δz 로 푼다(Δr 을 풀 때는 R 이하 근). 호가 1/4 원을 넘지 않으므로 넣은 차가 R 보다 크면 `ARC_R_TOO_SMALL`(화면 글은 그 차를 적는다).
+  빈 칸이 Z 면 넣은 Δr 로, X 면 넣은 Δz 로 푼다(Δr 을 풀 때는 R 이하 근). 호가 1/4 원을 넘지 않으므로 넣은 차가 R 보다 크면 `ARC_R_TOO_SMALL`(화면 글은 그 차를 적는다
+  — 0.001 반올림만큼 넘는 것은 네 좌표처럼 받는다, 아래 R-VR3).
   사용자 예: 오목 · 형상 3 → 소재 쪽(내경은 위) Ø7.5 = 그림 T1 에서 수평에 접함 → Δz = √(0.6 × (7.5 − 0.6)) = 2.035, Z1 = −12.135.
 - `TaperWarning.ARC_NO_TANGENT`(새 · 멈춤 — `ARC_R_TOO_SMALL` 뒤, 멈춤 경고가 열 개): "빈 좌표를 계산할 수 없습니다 … 네 좌표를 모두 넣거나 볼록 · 오목을 확인하세요".
 - 다른 해석: ① 빈 좌표의 점이 늘 접점(형상 3 의 오목 + Z 의 반대 점 빈칸이 멈춘다 — 사용자 예가 그렇다) ② 앞뒤 요소와 상관없이 가장 작은 R 의 꼴(형상 3 에서 단면에 접하는
   Δz 0.05 같은 답이 나온다) ③ 각도 칸을 남겨 현이나 접선의 각으로(처음 설계가 피한 혼동).
 - `TaperArcTest.blankCoordinateIsTangentPoint`: 사용자 예 숫자 · 1/4 원(R = Δr) · R < Δr 멈춤, 외 · 내경 × 형상 1~5 × 현 3 × R 3 × 볼록/오목 × 뒤집기 × 빈 칸 넷 1440 사례 —
   접할 요소가 없는 288 은 `ARC_NO_TANGENT`, 풀린 것은 넣은 값 그대로 · R = 풀린 두 점의 `arcMinR` · 호 중심이 접한 끝의 법선 위 · 두 끝 다 되면 빈 좌표의 점 · 채운 값을 넣어 다시 풀어도 같은 NC.
+  (검증 뒤 고침으로 '두 좌표를 다 넣은 점' · 풀림 1134 · 빈 X 의 지름 ≤ 0 BAD_INPUT 18 을 정확히 센다)
+
+#### 검증 뒤 고침 (2026-11-14)
+독립 검증(`Verify1114ArcAutoSimTest` · `Verify1114ArcAutoUiTest` · 코드 검토)이 찾은 것. 재현 입력은 `TaperArcTest` 의 같은 이름 시험에 그대로.
+- **F1 사용자 화면의 직접 보정 진입이 맞은편 벽을 팜(critical, 이번 변경 전부터)**: 비운 시작을 T1–T2 호의 처음 접선을 거꾸로 늘여 큰 축으로 c 들어오는데, 내경에서 그 접선이
+  축 쪽이면 진입점이 축을 넘었다 — 사용자 화면 그대로 노즈 1.2 · Z 여유 5 에서 `G0X-2.127Z-5.1` `Z-17.943` 의 노즈 중심이 반경 −2.26 으로 내려가 맞은편 Ø6.3 벽을 0.31 팠다
+  (화면 역방향은 이송 줄이). 고침: 그 접선 진입은 내경이면 노즈 중심이 축에서 멈춘다(`CompFrame.untilAxis` — 끝 쪽 `toolMove` 와 같은 꼴). 직선 경사 연장 진입(`back * c/|ΔZ|`)은
+  '사용자 결정 ① 범위'(`VerifyFixHandTest.steepConvexStartEntersAlongTheMajorAxis`)라 그대로 — 남은 일. `ENTRY_PAST_AXIS` 글은 내경이면 "노즈가 (중심 너머) 맞은편 구멍 벽에 닿을 수
+  있습니다" 를 더한다. 시험 `userScreenDirectEntryStaysOffTheFarWall`(노즈R 4 × Z 여유 3 × 거울 2 × 시작 · 끝 4 — 직접 보정 글을 시뮬레이터로, 노즈가 맞은편 Ø6.3 에서 떨어짐).
+- **F2 '못 받는 꼴' 경계의 반올림(major)**: 오목 T1–T2 호가 볼록 꺾임(β)에서 깎는 직선과 만나고 R = 2r / (1 + cos β) 에 꼭 붙으면 G41/G42 의 보정선 교점이 보정 원 꼭대기의 겹근이라
+  NC 0.001 반올림이 교점을 없앤다(외경 형상 3 · X30 Z−2 → X30.8 · 오목 R0.6 · 노즈 0.4 · 끝 Z−5.566 — `G2X30.8Z-2.566R.6` `G1Z-5.566` 에서 시뮬레이터 COMP_ACUTE_OUTER).
+  자동 채움이 둥근 입력(Δr = 2(R − r))으로 그 경계에 닿게 했다. 고침: T1–T2 호와 깎는 이웃 직선의 꺾임을 글에 쓰는 0.001 값(제어기처럼 끝점 · R 로 다시 구한 중심)으로
+  `CompFrame.junction` 에 다시 넣어 교점이 없으면 경계 너머(노즈 0.401)처럼 `NOSE_UNREACHABLE` 로 멈춘다 — 시뮬레이터 `GComp` 와 같은 교점 함수 · 같은 R 중심 식이라 그 글이 돌지 않는
+  것만 멈춘다. 직접 보정 글은 문제없지만 함께 멈춘다(멈춤 경고는 둘을 가르지 않는다). 시험 `roundedBoundaryJunctionStops`(네 좌표로도 · 노즈 0.399 는 돌고 시뮬레이터 C · A/B 통과).
+- **R-VR1 두 끝 다 되는 형상의 접점(major — 결정)**: 형상 1 볼록 · 4 오목은 빈 좌표의 점에서 접했는데, 사용자 예는 접점의 X · Z 를 다 적고 반대 끝 Z 를 비웠다 — 같은 습관이면
+  다른 호가 조용히 나온다(내경 형상 4 오목 X7.5 Z−10.1 → X6.3 Z 빈칸 R3.75: 구멍에 접하면 Z−12.135, 그때는 바닥 단면에 접해 −10.148). **기본값: 두 좌표를 다 넣은 점에서 접한다**
+  (사용자 예의 습관 — 반대 습관 '앞 끝면 Ø 를 적고 외경 접점 Z 를 비움' 이면 틀리니 순수한 모호함이라 접한 점을 보인다). `SlopeArc.tangentAt`(칸 순서, 빈 좌표를 풀었을 때만)을 더하고
+  결과의 원호 줄에 "· T1 에서 접함" 을 적는다. 새 노랑 경고는 만들지 않았다. 시험 `twoEndShapesTouchAtTheFullyGivenPoint`(위 −12.135 · 외경 형상 1 볼록 Z0 → X50 Z−8 R10 의 X1 42 ·
+  외경 형상 4 오목 X30 Z−3 → Z−6 R5 의 X2 32, 뒤집기).
+- **R-VR2 근거 문장**: 도움말 · KDoc · 위 문단의 "접점 Z 를 적지 않을 때" 를 "접점의 반대 끝 좌표 하나를 적지 않을 때(Ø7.5 구멍에 접하는 R3.75 의 Ø6.3 쪽 Z)" 로.
+- **R-VR3 받는 띠**: 빈 좌표 풀이는 넣은 차가 R 보다 1e-9 만 커도 멈췄는데 네 좌표는 부푼 깊이 `ARC_OVER_TOL`(5e-6 mm)까지 받는다 — 0.001 로 반올림한 CAD 값(X7.501)을 빈 좌표로 못
+  풀었다. 고침: 넣은 차를 R 로 잘라 1/4 원 자리로 채우고 부푼 깊이는 뒤의 `arcOver` 검사가 네 좌표 때처럼 본다(깊이 ≈ 넘은 몫² / 2R). 그 띠의 두 배(√(8 · 5e-6 · R)) 넘게 넘으면 바로
+  `ARC_R_TOO_SMALL`(1/4 원으로 푼 지름이 0 이하라 BAD_INPUT 이 먼저 나지 않게). 시험 `blankFillTakesRoundedQuarterLikeFourCoordinates`(X7.5 + e 의 빈 Z2 ↔ 네 좌표 Z2 −10.7 이 같은
+  경고 · 글 — 반경 차 0.002 넘음까지 받고 0.003 부터 멈춤).
+- **R-VR6 범위 검사 순서**: 원호는 넣은 좌표의 지름 ≤ 0 · ±MAX_MM 밖을 접하는 자리로 풀기 전에 `BAD_INPUT`(X2 30000 오타에 'R 이 반경 차 14980 이상' 이 먼저 났다). 원호 BAD_INPUT 글에
+  빈 좌표가 있으면 "빈 좌표를 원호가 접하는 자리로 계산한 지름이 0 이하이거나 한도 밖이면 …" 한 마디. 시험 `blankFillChecksGivenRangeFirst`.
+- **F4 오목 호가 노즈 그늘에 다 들어감(minor)**: 넣은 반경 차 = 노즈R 인 오목 호가 단면에 접한 꼴(외경 형상 4 · X30 Z−2 → X30.8 · 오목 R1.2 · 노즈 0.4)은 호의 노즈 길이 0 이라
+  (`SlopeArc.progR` = null · 직접 보정 글에 호 줄 없음) 그 자리에 r 이 남는데 경고가 없었다. 고침: T1–T2 오목 호(R > r)의 보정 길이 원호가 아니면 `NOSE_GT_SLOPE`(노랑). 원호 글을
+  "노즈R 에 비해 T1–T2 원호가 짧거나 오목 꼭짓점 바로 뒤에 있습니다 … 원호가 거의(또는 전혀) 안 남을 수 있습니다" 로. 시험 `concaveArcInTheNoseShadowWarns`.
+- **R-VR4 · R-VR5**: 경고 목록 · API 블록에 `ARC_R_TOO_SMALL` · `ARC_NO_TANGENT` · `tangentAt`, ui-design 옛 문장. `blankCoordinateIsTangentPoint` 는 풀림 수를 정확히, 멈춤은 빈 X 의
+  BAD_INPUT 만 받는다. `Verify1110ArcSimTest.badInputs` 의 빈 좌표 변형(4 · 5)은 멈춤 까닭(R 없음 → MISSING_INPUT · R 범위 밖 → BAD_INPUT · 접할 요소 없음 → ARC_NO_TANGENT ·
+  R < 넣은 차 5 → ARC_R_TOO_SMALL)을 보고, 넣은 차가 R 을 조금 넘어 받은 것은 빈 쪽 차가 R 인지 본다.
+- 검증자 시험: `Verify1114ArcAutoSimTest` 의 접할 끝 기대를 '두 좌표를 다 넣은 점' 으로, `edges` 받는 띠를 '0.001 까지 받고 네 좌표와 같은 글 · 0.01 · 0.1 은 ARC_R_TOO_SMALL' 로,
+  호의 노즈 길 0 갈래를 'NOSE_GT_SLOPE 있으면 알림만 · 없으면 실패' 로 고쳤다(결정이 바뀐 것 · 고친 동작에 맞춤).
+  옛 jar 와 견주는 `Verify1113RegressionTest.taperSameAsOldOutsideFlip` 이 F1 의 한 사례(내경 형상 3 · 뒤집기 · 화면 역방향 · 팁 8 · 노즈 0.8 · 오목 R3.518)를 '직접 보정 파고듦
+  0.0003 → 0.797' 로 잡았다 — 새 진입점(노즈 중심이 축 위)으로 오는 첫 G00 이 공구 교환 자리(X100)에서 진입 Z 로 내려오는 X 급송으로 그림의 부품 몸을 가로지른 것이고,
+  옛 진입점은 그림이 끝난 너머(계산기 Z1.392 · 노즈 중심 반경 −4.12 — 맞은편 Ø8.403 벽 쪽)라 그 잣대만 피했다. 내경은 그 첫 줄을 재지 않게 했다(`V1113.g40Worse` — 실제 공구는
+  구멍을 따라 들어온다).
+- **F3 아주 큰 볼록 R(minor) — 미룸**: R 10000 볼록의 직접 보정 글 `R10000.4`(합성 R)가 앱 시뮬레이터의 낱말 한도(MAX_MM)를 넘어 NUMBER_TOO_BIG. 기존 동작(네 좌표도 같음)이고
+  FANUC 지령 한도(±99999.999) 안이라 기계 쪽 문제는 아니다. 고치려면 원호 R 한도를 MAX_MM − 노즈R 로 두거나 시뮬레이터의 R 낱말 한도를 따로 두는 결정이 필요해 남겼다.
 
 ## 2026-11-12 통합 고침 — 테이퍼 진입 급송 · 내경 축 너머 후퇴
 
