@@ -80,6 +80,9 @@ object GText {
     private val KNOWN = COORD + setOf("G", "M", "T", "S", "F", "P", "Q", "L")
     private val ALWAYS_INT = setOf("G", "M", "T", "P", "Q", "L")
 
+    /** R 낱말의 한도(mm) — FANUC 지령 한도(소수 셋째 자리 8자리). 다른 좌표 낱말은 [MAX_MM] */
+    private const val R_MAX = 99_999.999
+
     fun parse(text: String, decimal: DecimalMode = DecimalMode.STANDARD): ParsedProgram {
         val issues = mutableListOf<SimIssue>()
         val units = mutableListOf(UnitB(null, 1))
@@ -254,7 +257,8 @@ object GText {
                     v *= 0.001
                     mine += SimIssue(IssueCode.NO_POINT_COORD, lineNo, t.cols, word, listOf(Fmt.nc(v)))
                 }
-                if (abs(v) > MAX_MM) {
+                // R 낱말(원호 반경 · 사이클 R)만 FANUC 지령 한도 — 앱이 내는 아주 큰 볼록 원호의 직접 보정 글(R 10000 + 노즈R → `R10000.4`)을 받는다(재확인 B-F3 2026-11-14)
+                if (abs(v) > (if (key == "R") R_MAX else MAX_MM)) {
                     mine += SimIssue(IssueCode.NUMBER_TOO_BIG, lineNo, t.cols, word)
                     continue
                 }

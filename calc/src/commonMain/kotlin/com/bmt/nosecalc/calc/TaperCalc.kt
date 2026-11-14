@@ -66,7 +66,7 @@ enum class TaperWarning {
      * 노즈R 이 경사 길이보다 크고, 그 경사 끝 하나 이상이 오목 모서리(모서리 R < r)다. 공구는 경사에 닿고 숫자도 맞다
      * (못 닿으면 이 경고 대신 NOSE_UNREACHABLE 로 멈춘다). 다만 오목 모서리 쪽에는 R 대신 r 이 남아 경사가 거의 안 남을 수 있으니
      * 도면을 확인할 것. 양 끝이 볼록이면(C0.3 면취에 0.8R) 다 깎여 경고하지 않는다.
-     * T1–T2 오목 원호(R > r)의 노즈 길이 없어진 것도(호 전체가 오목 꼭짓점 뒤 노즈 그늘 — 그 자리에 r 이 남는다) 이 경고다
+     * T1–T2 오목 원호(R > r)의 노즈 길이 없어진 것도(호 전체가 오목 꼭짓점 뒤 노즈 그늘 — 그 자리에 r 이 남는다. 0.001 아래로 남아 직접 보정 글에서 빠진 것도) 이 경고다
      */
     NOSE_GT_SLOPE,
 
@@ -86,7 +86,9 @@ enum class TaperWarning {
     /**
      * 진입점이나 후퇴점이 중심(X0)을 넘는다(가는 핀 끝·좁은 구멍의 가파른 경사를 그 연장으로 드나들 때) — Z 여유를 줄일 것.
      * 외경 끝 단면 · 내경 바닥 단면을 중심(X0)까지 깎으면 노즈 중심이 중심선에 닿게 인선(G41/G42 는 도면 점)이 일부러 중심 너머(X −2r)까지 가서도 난다
-     * (그 뒤 Z 로 빠진다 — 내경 직접 보정도 2026-11-12 부터 축 너머로 더 가지 않고 Z 로. 화면 글이 둘을 나눈다)
+     * (그 뒤 Z 로 빠진다 — 내경 직접 보정도 2026-11-12 부터 축 너머로 더 가지 않고 Z 로). 뒤집어 내경 바닥 단면을 중심(X0)부터 깎는 시작도 그렇다
+     * (G41/G42 는 단면을 축 너머에서부터 쓰고 들어오고, 직접 보정은 팁 3 · 4 · 8 이면 인선 X −2r — 재확인 RC-2 2026-11-14). 내경 바닥의 시작 · 끝 X 가 0 이 아니어도
+     * 노즈 중심이 축 너머로 가는 값(팁 1 · 2 · 6 의 X < 2r)은 X0 과 같이 다룬다. 화면 글이 셋(끝 단면 · 바닥 시작 · 그 밖)을 나눈다
      */
     ENTRY_PAST_AXIS,
 
@@ -235,7 +237,7 @@ data class SlopeArc(
     val index: Int,
     /** 도면 R */
     val r: Double,
-    /** 보정 R(합성 R) = 볼록 R + r, 오목 R − r */
+    /** 보정 R(합성 R) = 볼록 R + r, 오목 R − r. 호의 노즈 길이 없어지거나 0.001 아래라 직접 보정 글에서 빠지면 null([TaperWarning.NOSE_GT_SLOPE]) */
     val progR: Double?,
     /** 가공 순서로 갈 때의 방향. true = G02 */
     val cw: Boolean,
@@ -620,8 +622,6 @@ object TaperCalc {
             // 내경 2)은 인선이 노즈의 그 끝이라 전과 같고, 팁 0 · 8 은 r, 4 · 5 는 2r 일찍 멈춘다 — 전에는 인선을 끝좌표에 둬 노즈가 벽 · 척 · 보스 속으로 r ~ 2r
             // 갔다(최종 확인 T1 2026-11-13: 외경 형상 3 끝 Z−4.5 · 노즈 1.2 · 팁 0 에서 Z−5.7 까지)
             if (wall && noseBased) e0 += uB * min(0.0, (tv dot uB) - r)
-            // 끝에 왔을 때 노즈가 끝 요소에 한 번도 닿지 않으면(요소가 노즈R 쯤보다 짧다) 그 요소는 깎이지 않는다
-            if (((e0 - segs.last().start) dot uB) < -EPS || ((e0 - tv - last.start) dot uB) < -EPS) stop(TaperWarning.BAD_LEG)
             // 끝 요소가 짧아(노즈R 쯤) 직각 빼는 줄과의 교점이 그 요소의 보정 시작보다 앞이면 끝 블록이 거꾸로 가 간섭 알람이다(FF 5.4.6).
             // 막힌 끝이면 그 요소는 노즈가 벽 앞에서 닿을 길이 없다 — G41/G42 는 그 요소를 빼고 앞 요소 끝에서 벽을 따라 공구 쪽으로 뺀다(노즈가 끝좌표
             // 너머 벽 · 보스로 가지 않음 — 전에는 빈 끝처럼 곧게 빼 벽 속으로 c 와 G40 옮김만큼 갔다, 검증 2026-11-04). 직접 보정은 그대로
@@ -636,10 +636,16 @@ object TaperCalc {
             }
             // 노즈 중심이 축에 닿게: 이제 축 너머로 이어 가지 않으니 직접 보정도 여기서 중심을 다 깎는다. 외경은 팁 벡터가 축 쪽을 보는 팁만 더 보낸다(너머는 같은 면).
             // 내경 바닥은 어느 팁이든 노즈 중심을 축에 세운다 — 표준 팁(2 · 1)은 인선이 X0 이면 중심이 축 너머 r 이라 좁은 바닥에서 그 이송이 맞은편 경사를 팠다
-            // (검증 F1 2026-11-13: Ø6 → Ø2 · 노즈 0.8 에서 0.357). 그래서 표준 팁은 인선 X +2r 에서 멈추고, 비표준 팁(3 · 4 · 8)은 X −2r 까지 간다
+            // (검증 F1 2026-11-13: Ø6 → Ø2 · 노즈 0.8 에서 0.357). 그래서 인선 X = 2·(팁 벡터 X) — 팁 1 · 2 · 6 은 X +2r 에서 멈추고, 3 · 4 · 8 은 X −2r 까지, 5 · 7 · 0 · 9 는 X0.
+            // 넣은 끝 X 가 0 이 아니어도 인선을 거기 두면 노즈 중심이 축 너머인 값(팁 1 · 2 · 6 의 X < 2r — 화면에 칠 수 있는 X0.001 등)은 직접 보정을 같이 노즈 중심
+            // 축에서 멈춘다(재확인2 B2-V2-1 2026-11-14: 바닥 Ø4 · 노즈 1.6 · 끝 X0.001 의 `G1X.001` 이 맞은편을 0.63 팠다). G41/G42 는 그 끝을 전처럼 단면을 이어 써
+            // 교점의 노즈 중심이 축 둘레다(X0 과 같은 꼴)
             if (toAxis) e0 += uB * max(0.0, tv dot uB)
-            if (axisIn) e0 += uB * (tv dot uB)
+            if (axisIn || (face && inner && uB.x < 0 && e0.x - tv.x < 0)) e0 += uB * ((tv - e0) dot uB)
             if (toAxis || axisIn) endD = last.end + uB * r
+            // 끝에 왔을 때 노즈가 끝 요소에 한 번도 닿지 않으면(요소가 노즈R 쯤보다 짧다) 그 요소는 깎이지 않는다. 노즈 중심을 축에 세운 끝점′ 으로 본다 — 옮기기 전
+            // (인선 X0)으로 보면 팁 벡터 X 가 축 쪽인 팁(내경 3 · 4 · 8, 외경 표준 3 · 8)은 마지막 꺾임의 노즈 중심 X 가 r 보다 작으면 넣을 수 있는데 멈췄다(재확인2 B2-V2-2)
+            if (((e0 - segs.last().start) dot uB) < -EPS || ((e0 - tv - last.start) dot uB) < -EPS) stop(TaperWarning.BAD_LEG)
             toAxisEnd = toAxis
             segs[segs.lastIndex] = Line(segs.last().start, e0)
             // 내경에서 축 쪽으로 빼면(수평 끝의 공구 쪽 · 중심 쪽으로 깎아 끝난 단면을 이어) 노즈 중심이 축에서 멈춘다(최종 확인 T2 2026-11-13 — 아래 비운 끝과 같은 꼴)
@@ -716,6 +722,12 @@ object TaperCalc {
             // 화면 정방향의 막힌 시작은 직접 보정도 노즈가 시작 좌표의 법선에 닿는 자리에서 시작한다(끝과 같다 — 표준 팁은 전과 같고, 수평이면 팁 0 · 8 은 r,
             // 1 · 4 · 5 는 2r 안쪽에서). 전에는 인선을 시작 좌표에 둬 노즈가 벽 · 보스 속으로 r ~ 2r 들어갔다
             if (blockedAt && noseBased) p += uF * max(0.0, r + (tv dot uF))
+            // 내경 바닥 단면을 중심(X0)부터 깎으면 어느 팁이든 노즈 중심을 축에 세워 시작한다(끝 쪽 [axisIn] 과 같다). 표준 팁(2 · 1)은 인선이 X0 이면 노즈 중심이
+            // 축 너머 r 이라 구멍 반지름 < 2r 에서 진입 이송이 맞은편 벽을 팠다(재확인 RC-2 2026-11-14: 바닥 Ø4 → Ø5.2 · 노즈 1.6 · Z 여유 5 의 `G0X0.Z1.` `G1Z-4.` — 0.63).
+            // 그래서 인선 X = 2·(팁 벡터 X) — 팁 1 · 2 · 6 은 X +2r, 3 · 4 · 8 은 X −2r, 5 · 7 · 0 · 9 는 X0 에서 시작한다. 노즈가 바닥에 못 들어가면 아래 BAD_LEG
+            // (또는 보정 경로의 NOSE_UNREACHABLE). 넣은 시작 X 가 0 이 아니어도 인선을 거기 두면 노즈 중심이 축 너머인 값(팁 1 · 2 · 6 의 X < 2r — 화면에 칠 수 있는
+            // X0.001 등)은 같이 노즈 중심을 축에(재확인2 B2-V2-1: 같은 구멍 시작 X0.001 의 `G0X.001Z1.` `G1Z-4.` 가 옛 글처럼 0.63 팠다)
+            if (!isHorizontal(uF) && inner && uF.x > 0 && (first.start.x <= EPS || p.x - tv.x < 0)) p += uF * ((tv - p) dot uF)
             if (((segs.first().end - p) dot uF) < -EPS || ((first.end - (p - tv)) dot uF) < -EPS) stop(TaperWarning.BAD_LEG)
             segs[0] = Line(p, segs[0].end)
             s0 = p
@@ -973,8 +985,12 @@ object TaperCalc {
             cr[k - 1] < r
         val slopes = 1 until path.size - 2 // path[k] – path[k+1] 이 경사(앞뒤 요소 빼고)
         // T1–T2 오목 호(R > r)의 노즈 길이 없어진 것도(호 전체가 날카로운 오목 꼭짓점 뒤 노즈 그늘 — 넣은 반경 차 = 노즈R 인 오목 호가 단면에 접한 꼴, 검증 2026-11-14 F4):
-        // 그 자리에 호 대신 r 이 남는다. R ≤ r 은 CONCAVE_R_LE_NOSE 가 알린다
-        val arcGone = arcIdx != null && segs[arcIdx] !is Arc && (drawing.segs[arcIdx] as Arc).radius - r > EPS
+        // 그 자리에 호 대신 r 이 남는다. R ≤ r 은 CONCAVE_R_LE_NOSE 가 알린다. 노즈 길이 0.001 아래로 남아 직접 보정 글에서 빠지는 호(끝점이 앞 점과 같은 0.001 글 —
+        // [NcLines] 가 버리는 조건 그대로)도 그렇다 — 그때는 보정 R 도 보이지 않는다(재확인 RC-1 2026-11-14: 그 꼴을 0.001 로 적은 Z2 −2.069 는 글이 정확한 꼴과
+        // 글자까지 같은데 경고가 없고 결과가 보정 R 0.8 이었다)
+        val arcGone = arcIdx != null && (drawing.segs[arcIdx] as Arc).radius - r > EPS && (segs[arcIdx] as? Arc).let {
+            it == null || (Fmt.word(it.end.xDia) == Fmt.word(segs[arcIdx - 1].end.xDia) && Fmt.word(it.end.z) == Fmt.word(segs[arcIdx - 1].end.z))
+        }
         if (arcGone || slopes.any { r > (path[it + 1] - path[it]).length && (leavesR(it) || leavesR(it + 1)) }) warnings += TaperWarning.NOSE_GT_SLOPE
         // 공구가 원 안쪽(오목): G41 이면 반시계, G42 면 시계 원호
         if (drawing.segs.any { it is Arc && (side == Side.G41) != it.cw && it.radius - r <= EPS }) warnings += TaperWarning.CONCAVE_R_LE_NOSE
@@ -1043,7 +1059,7 @@ object TaperCalc {
                 drawing = drawing,
                 center = Contour(segs.map { it.shifted(tv * -1.0) }),
                 program = program,
-                arc = arcIdx?.let { k -> (drawing.segs[k] as Arc).let { SlopeArc(k, it.radius, (segs[k] as? Arc)?.radius, it.cw, it.center) } },
+                arc = arcIdx?.let { k -> (drawing.segs[k] as Arc).let { SlopeArc(k, it.radius, if (arcGone) null else (segs[k] as? Arc)?.radius, it.cw, it.center) } },
             ),
             warnings,
         )

@@ -375,7 +375,7 @@ class TaperArcTest {
 
     /**
      * 빈 좌표 하나는 호가 앞뒤 요소에 접하는 자리로(사용자 피드백 2026-11-14 "z값이 자동으로 안나타나" — 원호에서 Z 칸을 비워도 자동 값이 없었다).
-     * 볼록은 소재 쪽 점에서 단면 · 반대 점에서 수평에, 오목은 그 반대로 — 그 방향의 앞뒤 요소가 있는 끝에서 접하고, 두 끝 다 되면 빈 좌표의 점에서.
+     * 볼록은 소재 쪽 점에서 단면 · 반대 점에서 수평에, 오목은 그 반대로 — 그 방향의 앞뒤 요소가 있는 끝에서 접하고, 두 끝 다 되면 두 좌표를 다 넣은 점에서.
      * 접한 끝은 호의 중심이 그 점의 법선 위(수평이면 같은 Z, 단면이면 같은 X)에 있고 R 이 풀린 두 점의 가장 작은 R 과 같다. 채운 값을 넣어 다시 풀어도 같다
      */
     @Test
@@ -565,6 +565,49 @@ class TaperArcTest {
         val small = TaperCalc.calc(inp.copy(noseR = 0.3))
         assertNotNull(ok(small).arc!!.progR)
         assertTrue(TaperWarning.NOSE_GT_SLOPE !in small.warnings, "${small.warnings}")
+    }
+
+    /**
+     * 재확인 RC-1(2026-11-14): 위 꼴을 0.001 로 적은 네 좌표(Z2 −2.069)는 호의 노즈 길이 0.001 아래로 남아 직접 보정 글에서 호 줄이 빠지는데(글이 정확한 꼴과
+     * 글자까지 같다) 경고가 없고 결과는 보정 R 0.8 이었다. 글에서 빠지는 호(끝점이 앞 점과 0.001 로 같은 글)도 그늘로 본다 — 정확한 값 둘레 ±0.002 를
+     * 0.0001 씩: 직접 보정 글에 호 줄이 없음 = NOSE_GT_SLOPE = 보정 R 없음
+     */
+    @Test
+    fun roundedShadowArcWarnsLikeExact() {
+        val exact = -2.0 - (1.2 - sqrt(1.28))
+        val inp = TaperInput(false, 4, noseR = 0.4, x1 = 30.0, z1 = -2.0, x2 = 30.8, z2 = -2.069, end = 36.8, zClear = 5.0, arc = true, arcR = 1.2, arcConvex = false)
+        val res = TaperCalc.calc(inp)
+        val s = ok(res)
+        assertEquals(ok(TaperCalc.calc(inp.copy(z2 = exact))).ncG40, s.ncG40)
+        assertNull(s.arc!!.progR)
+        assertTrue(TaperWarning.NOSE_GT_SLOPE in res.warnings, "${res.warnings}")
+        var gone = 0
+        var kept = 0
+        val fails = mutableListOf<String>()
+        for (k in -20..20) {
+            val z2 = exact + k * 1e-4
+            val r = TaperCalc.calc(inp.copy(z2 = z2))
+            val t = r.solution ?: continue
+            val arcLine = t.ncG40.any { l -> ncWords(l).any { it == "G2" || it == "G3" } }
+            val warned = TaperWarning.NOSE_GT_SLOPE in r.warnings
+            if (arcLine) kept++ else gone++
+            if (arcLine == warned || arcLine != (t.arc!!.progR != null)) fails += "Z2 $z2: 호 줄 $arcLine · 경고 $warned · 보정 R ${t.arc!!.progR}\n${t.ncG40.joinToString(" ")}"
+        }
+        assertTrue(gone > 1 && kept > 1, "빠짐 $gone · 남음 $kept")
+        assertEquals(emptyList(), fails, fails.joinToString("\n\n"))
+    }
+
+    /**
+     * 재확인 B-F3(2026-11-14): R 한도(MAX_MM)의 볼록 원호는 직접 보정 글의 합성 R 이 R10000.4 라 앱 시뮬레이터가 NUMBER_TOO_BIG 로 멈췄다(FANUC 지령 한도 안).
+     * 시뮬레이터의 R 낱말 한도를 FANUC 의 ±99999.999 로 따로 두어 두 글 모두 돈다
+     */
+    @Test
+    fun maxConvexArcRunsInSimulator() {
+        val s = ok(TaperCalc.calc(TaperInput(false, 3, noseR = 0.4, x1 = 30.0, z1 = -2.0, x2 = 31.0, z2 = -6.0, end = -10.0, arc = true, arcR = MAX_MM, arcConvex = true)))
+        assertTrue(s.ncG40.any { l -> ncWords(l).any { it == "R10000.4" } }, "${s.ncG40}")
+        val run = GSim.run(SimInput((pre.dropLast(1) + "G99F.1" + s.ncG40 + "M30").joinToString("\n"), MachineSetup(), mapOf(1 to ToolOffset(0.4, s.tip))))
+        assertNull(run.stop, "직접 보정 멈춤 ${run.stop}\n${s.ncG40.joinToString("\n")}")
+        simCut(s, 0.4, s.tip, CompStartup.C, "R 10000 볼록")
     }
 
     // ------------------------------------------------------------ G41/G42 글을 시뮬레이터로

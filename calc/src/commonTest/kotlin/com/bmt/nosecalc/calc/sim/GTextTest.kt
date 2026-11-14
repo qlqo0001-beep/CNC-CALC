@@ -154,6 +154,21 @@ class GTextTest {
         only(parse("G00 X1.", "G01 Z-1. F0.1", "G01 Y5."), IssueCode.UNKNOWN_ADDRESS, 3)
     }
 
+    /**
+     * R 낱말(원호 반경 · 사이클 R)만 FANUC 지령 한도 ±99999.999 — 앱의 아주 큰 볼록 원호(R 10000 + 노즈R)의 직접 보정 글 `G3X31.R10000.4` 를 받는다
+     * (재확인 B-F3 2026-11-14). 좌표 · I · K · `,R` 은 그대로 MAX_MM
+     */
+    @Test
+    fun arcRadiusWordUsesFanucLimit() {
+        assertEquals(emptyList(), codes(parse("G03 X31. R10000.4")))
+        assertEquals(emptyList(), codes(parse("G02 X31. R-99999.999")))
+        only(parse("G02 X31. R100000."), IssueCode.NUMBER_TOO_BIG)
+        only(parse("G02 X10000.001 R5."), IssueCode.NUMBER_TOO_BIG)
+        only(parse("G02 X31. I10000.001"), IssueCode.NUMBER_TOO_BIG)
+        only(parse("G02 X31. K-10000.001"), IssueCode.NUMBER_TOO_BIG)
+        only(parse("G01 X31. ,R10000.001"), IssueCode.NUMBER_TOO_BIG)
+    }
+
     @Test
     fun gCodes() {
         only(parse("G20"), IssueCode.INCH)

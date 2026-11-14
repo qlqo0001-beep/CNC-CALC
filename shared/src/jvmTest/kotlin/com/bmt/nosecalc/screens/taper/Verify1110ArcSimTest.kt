@@ -2,6 +2,7 @@ package com.bmt.nosecalc.screens.taper
 
 import com.bmt.nosecalc.AngleRef
 import com.bmt.nosecalc.calc.Arc
+import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.Line
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.Seg
@@ -388,8 +389,16 @@ class Verify1110ArcSimTest {
         val e = expect(f)
         run {
             drawingError(f, s, e)?.let { msg ->
-                t.fail("DRAW_" + msg.substringBefore(' ')) { "${desc(f)}\n$msg\n${s.drawing.segs.joinToString("\n")}" }
-                return
+                // 호의 노즈 길이 없어지거나 0.001 아래라 직접 보정 글에서 호 줄이 빠지면 계산기는 보정 R 을 null 로 두고 NOSE_GT_SLOPE 로 알린다(검증 뒤 고침 F4 ·
+                // 재확인 RC-1 2026-11-14 — 아래 D_NOARC 의 '짧은 오목 호' 꼴). 그 글에 호 줄이 남으면 실패, 아니면 세고 시뮬은 돌린다
+                val progWord = "R" + Fmt.word(f.arcR!! + if (f.arcConcave) -f.noseR else f.noseR)
+                val noArcLine = s.ncG40.none { l -> ncWords(l).any { it == progWord } }
+                if (msg.startsWith("PROGR") && s.arc?.progR == null && TaperWarning.NOSE_GT_SLOPE in res.warnings && noArcLine) {
+                    t.note("호의 노즈 길 없음(직접 보정 글에서 빠짐) — NOSE_GT_SLOPE")
+                } else {
+                    t.fail("DRAW_" + msg.substringBefore(' ')) { "${desc(f)}\n$msg\n${s.drawing.segs.joinToString("\n")}" }
+                    return
+                }
             }
         }
         if (f.tip == null) {

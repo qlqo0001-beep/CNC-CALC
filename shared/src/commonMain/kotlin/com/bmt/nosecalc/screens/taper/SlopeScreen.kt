@@ -316,7 +316,7 @@ internal fun SlopeScreen(s: TaperState) {
                             collapsedText = if (flip) "바이트와 반대 (면 · 방향) — 눌러서 자세히" else "바이트 반대쪽 면 있음 (역테이퍼 꼴) — 눌러서 자세히",
                         )
                     } else {
-                        WarningBanner(taperWarningText(it, form), level = WarnLevel.Warn)
+                        WarningBanner(taperWarningText(it, form, result.warnings), level = WarnLevel.Warn)
                     }
                 }
                 if (direct) CompCard(sol, angleRef, pickRef) else MachineCard(sol, form.noseR, angleRef, pickRef)

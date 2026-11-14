@@ -15,7 +15,7 @@ enum class IssueCode(val level: IssueLevel) {
     NO_NUMBER(IssueLevel.STOP),
     /** 숫자 9자리 넘음 */
     NUMBER_TOO_LONG(IssueLevel.STOP),
-    /** 좌표 · 치수가 MAX_MM 넘음 */
+    /** 좌표 · 치수가 MAX_MM 넘음(R 낱말은 GText 의 R_MAX ±99999.999 — FANUC 지령 한도) */
     NUMBER_TOO_BIG(IssueLevel.STOP),
     /** 한 블록에 같은 주소 두 번 */
     DUP_ADDRESS(IssueLevel.STOP),

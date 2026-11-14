@@ -264,11 +264,17 @@ class Verify1114ArcRecheckTest {
         // 내경 T 점 반경이 노즈R 보다 작으면 공구가 구멍에 못 들어간다(넣을 수 없는 꼴 — 계산기는 ENTRY · EXIT_NOT_FOUND 등으로 알린다)
         val tooSmall = inner && s.points.minOf { it.vertex.x } < r + 0.1
         if (!tooSmall) t.keepMax("직접 보정 파고듦(첫 줄 뒤 · 구멍 ≥ 노즈)", d.depth)
+        // 내경 바닥 단면을 중심부터 · 까지(X0, 또는 인선을 거기 두면 노즈 중심이 축 너머인 X — 팁 벡터 X 가 바깥인 표준 · 1 · 2 · 6 의 X < 2r): 노즈 중심을 축에 세우는
+        // 고친 갈래(재확인 RC-2 · 재확인2 B2-V2-1)
+        fun atAxis(x: Double?) = x == 0.0 || (x != null && x < 2 * r && (f.tip ?: 2) in listOf(1, 2, 6))
+        val (fv, bv) = legsVertical(f.kind, f.type, f.flip)
+        val axisStart = inner && fv && atAxis(f.start)
         if (d.depth > tol) {
             val m = d.by!!
             val past = TaperWarning.ENTRY_PAST_AXIS in res.warnings
-            // 고친 진입(F1)은 비운 시작의 갈래뿐 — 시작을 넣은 글의 진입 · 끝 쪽은 이번 diff 가 바꾸지 않았다
-            val soft = if (tooSmall) "(기존 — 구멍 반경 < 노즈R + 0.1)" else if (f.start != null) "(기존 — 시작 넣음, 고친 갈래 밖)" else ""
+            // 고친 진입(F1)은 비운 시작의 갈래뿐 — 시작을 넣은 글의 진입 · 끝 쪽은 이번 diff 가 바꾸지 않았다. 다만 바닥 단면을 중심부터 깎는 시작은 고친 갈래라
+            // 실패로 센다(재확인2 R2-R2V-3 — 전에는 그 꼴도 알림이라 회귀를 못 잡았다)
+            val soft = if (tooSmall) "(기존 — 구멍 반경 < 노즈R + 0.1)" else if (f.start != null && !axisStart) "(기존 — 시작 넣음, 고친 갈래 밖)" else ""
             t.fail("D_GOUGE_${m.kind}_${if (d.far) "맞은편벽" else "도면"}" + (if (f.start == null) "_비운시작" else "") + (if (past) "_축너머경고" else "") + soft) {
                 "${m.line - pre.size}줄 '${nc.getOrNull(m.line - pre.size - 1)}' 노즈 ${xz(m.nose.start)} → ${xz(m.nose.end)} 가 ${xz(d.at!!)} 를 ${d.depth} 팜\n${text()}"
             }
@@ -278,9 +284,13 @@ class Verify1114ArcRecheckTest {
         // 급송(첫 줄 뒤)이 소재에 가장 가까이 간 틈 — 진입을 축에서 자르면 진입점이 깎는 점에 가까워질 수 있다(알림)
         val rap = all.filter { it.line > first && it.kind == MoveKind.RAPID }
         if (rap.isNotEmpty()) t.keepMax("직접 보정 급송 파고듦(− = 가장 좁은 틈)", dig(rap, segs, r, inner).depth)
-        // ENTRY_PAST_AXIS 글(내경 · 바닥 단면 X0 끝 밖): 고침 F1 의 '맞은편 구멍 벽' 말
-        if (TaperWarning.ENTRY_PAST_AXIS in res.warnings && inner && !(legsVertical(f.kind, f.type, f.flip).second && f.end == 0.0)) {
-            if ("맞은편 구멍 벽" !in taperWarningText(TaperWarning.ENTRY_PAST_AXIS, f)) t.fail("TEXT_ENTRY_PAST_AXIS_내경") { text() }
+        // ENTRY_PAST_AXIS 글(내경 · 바닥 단면을 중심까지 깎는 끝 밖): 고침 F1 의 '맞은편 구멍 벽' 말. 바닥 단면을 중심부터 깎는 시작은 바닥 글(재확인 RC-2 고침 —
+        // 직접 보정 노즈 중심이 축에서 시작, X0 이 아니면 그 X 를 밝힌 글 — 재확인2 B2-V2-1)
+        if (TaperWarning.ENTRY_PAST_AXIS in res.warnings && inner && !(bv && atAxis(f.end))) {
+            val pastText = taperWarningText(TaperWarning.ENTRY_PAST_AXIS, f)
+            if (axisStart) {
+                if (!pastText.startsWith(if (f.start == 0.0) "바닥 단면을 중심(X0)부터" else "바닥 단면 시작(X")) t.fail("TEXT_ENTRY_PAST_AXIS_바닥시작") { text() }
+            } else if ("맞은편 구멍 벽" !in pastText) t.fail("TEXT_ENTRY_PAST_AXIS_내경") { text() }
         }
     }
 
@@ -480,34 +490,46 @@ class Verify1114ArcRecheckTest {
     }
 
     /**
-     * 작은 구멍 격자에서 나온 고친 갈래 밖의 꼴(알림만 — '(기존' 갈래): 뒤집어 바닥 단면을 중심(시작 X0)부터 깎으면 직접 보정이 인선을 X0 에 두어
-     * 노즈 중심이 축 너머 r 로 내려가 맞은편 벽을 판다. 원호 · 직선(같은 두 점) 둘 다, 노즈R 0.4~1.6 — 원호만의 일인지 · 이번 diff 탓인지 가린다.
+     * 재확인 RC-2(고침 2026-11-14 — 처음에는 알림만): 뒤집어 바닥 단면을 중심(시작 X0)부터 깎으면 직접 보정이 인선을 X0 에 두어 노즈 중심이 축 너머 r 로
+     * 내려가 맞은편 벽을 팠다(원호 노즈 1.6 에서 0.630 · 직선 노즈 1.2 에서 0.089 · 1.6 에서 0.757). 끝 쪽 X0 처럼 노즈 중심을 축에 세워 시작한다 —
+     * 원호 · 직선(같은 두 점) × 화면 정방향 · 역방향 × 노즈R 0.4~1.6: 멈춤 0 · 첫 줄 뒤 노즈가 도면 · 맞은편 벽을 파지 않음.
      * 내경 형상 2 · 뒤집기 · X1 4 · Z1 −4 · X2 5.2 · Z2 −2 · 오목 R3.634 · 시작 X0 · 끝 빈칸 · Z 여유 5
      */
     @Test
     fun bottomStartAtAxisFarWall() {
         val t = Tally()
         val log = StringBuilder()
-        for (arc in listOf(true, false)) for (noseR in listOf(0.4, 0.8, 1.2, 1.6)) {
+        for (arc in listOf(true, false)) for (reverse in listOf(false, true)) for (noseR in listOf(0.4, 0.8, 1.2, 1.6)) {
             val f = SlopeForm(
-                kind = TaperKind.INNER, type = 2, reverse = false, noseR = noseR, tip = null, x = listOf(4.0, 5.2), z = listOf(-4.0, -2.0),
+                kind = TaperKind.INNER, type = 2, reverse = reverse, noseR = noseR, tip = null, x = listOf(4.0, 5.2),
+                z = if (reverse) listOf(-26.0, -28.0) else listOf(-4.0, -2.0),
                 angle = null, zClear = 5.0, corners = listOf(0.0, 0.0), start = 0.0, end = null, flip = true, angleRef = AngleRef.X,
                 arc = arc, arcR = if (arc) 3.634 else null, arcConcave = true,
             )
+            val tag = "${if (arc) "원호" else "직선"}${if (reverse) " 역방향" else ""} 노즈 $noseR"
             val res = TaperSolve.solve(f)
             val s = res.solution
             if (s == null) {
-                log.appendLine("${if (arc) "원호" else "직선"} 노즈 $noseR 멈춤 ${res.warnings}")
+                log.appendLine("$tag 멈춤 ${res.warnings}")
+                t.fail("STOP") { "$tag ${res.warnings}" }
                 continue
             }
             val run = sim(s.ncG40, noseR, s.tip, feed = true)
             val d = if (run.stop == null) dig(moves(run).filter { it.line > firstLine(s.ncG40) }, s.drawing.segs, noseR, true) else null
-            log.appendLine("${if (arc) "원호" else "직선"} 노즈 $noseR · 경고 ${res.warnings} · 멈춤 ${run.stop?.code} · 가장 깊음 ${d?.depth} ${if (d?.far == true) "맞은편" else "도면"} · ${s.ncG40.joinToString(" ")}")
-            if (d != null && d.depth > tol) t.fail("D_GOUGE_맞은편벽_바닥중심시작(기존 — ${if (arc) "원호" else "직선"})") { "노즈 $noseR ${d.depth}" }
+            log.appendLine("$tag · 경고 ${res.warnings} · 멈춤 ${run.stop?.code} · 가장 깊음 ${d?.depth} ${if (d?.far == true) "맞은편" else "도면"} · ${s.ncG40.joinToString(" ")}")
+            if (run.stop != null) t.fail("D_STOP_${run.stop!!.code}") { tag }
+            if (d != null && d.depth > tol) t.fail("D_GOUGE_${if (d.far) "맞은편벽" else "도면"}_바닥중심시작") { "$tag ${d.depth}\n${s.ncG40.joinToString(" ")}" }
+            // 기계 보정(이번 고침은 직접 보정만 — 확인만): 진입 길을 못 찾았다고 알린 글(ENTRY · EXIT_NOT_FOUND)의 파고듦은 알려진 한계로 따로 센다
+            val mr = sim(s.ncG41G42, noseR, s.tip)
+            val md = if (mr.stop == null) dig(moves(mr).filter { it.line > firstLine(s.ncG41G42) }, s.drawing.segs, noseR, true) else null
+            val honest = TaperWarning.ENTRY_NOT_FOUND in res.warnings || TaperWarning.EXIT_NOT_FOUND in res.warnings
+            log.appendLine("  기계 보정 · 멈춤 ${mr.stop?.code} · 가장 깊음 ${md?.depth} ${if (md?.far == true) "맞은편" else "도면"} · ${s.ncG41G42.joinToString(" ")}")
+            if (mr.stop != null) t.fail("M_STOP_${mr.stop!!.code}" + if (honest) "(기존 — 진입 · 빼는 길 못 찾음 경고 있음)" else "") { tag }
+            if (md != null && md.depth > tol) t.fail("M_GOUGE_${if (md.far) "맞은편벽" else "도면"}" + if (honest) "(기존 — 진입 · 빼는 길 못 찾음 경고 있음)" else "") { "$tag ${md.depth}" }
         }
         outFile("bottom-start.txt").writeText(log.toString())
         println(log)
-        finish(t, "뒤집은 바닥 단면 중심 시작(고친 갈래 밖 · 알림)", "bottom-start-tally.txt")
+        finish(t, "뒤집은 바닥 단면 중심 시작", "bottom-start-tally.txt")
     }
 
     // ================================================================ B-F2

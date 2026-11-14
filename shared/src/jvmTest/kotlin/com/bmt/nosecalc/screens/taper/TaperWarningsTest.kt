@@ -222,6 +222,63 @@ class TaperWarningsTest {
     }
 
     /**
+     * 뒤집은 내경 바닥 단면을 중심(시작 X0)부터(재확인 RC-2 2026-11-14 — 바닥 Ø4 Z−4 → Ø5.2 Z−2 · 노즈 1.6 · Z 여유 5): 직접 보정은 노즈 중심이 축에서 시작하고
+     * (표준 팁은 인선 X3.2 — 전에는 인선 X0 이라 노즈 중심이 축 너머 r 로 맞은편 벽을 팠다) 기계 보정은 중심 너머에서 들어와 ENTRY_PAST_AXIS 가 난다.
+     * 글은 '경사 연장선 · Z 여유' 가 아니라 바닥 단면 시작을 말한다(끝 X0 글과 같은 꼴).
+     * 화면 역방향 + 뒤집기는 기계 보정 진입이 중심 너머에서 내려와 맞은편 구멍 벽에 닿을 수 있어(진입 길 못 찾음 — 재확인2 R2-R2V-1) 그 주의를 남기고, 정방향도
+     * ENTRY_NOT_FOUND 가 같이 나면(작은 구멍 — 재확인2 B2-V2-3) 같다. 시작 X 가 0 이 아니어도 노즈R 안(표준 팁 X < 2r — 재확인2 B2-V2-1)이면 X0 과 같은 진입 · 바닥 글
+     */
+    @Test
+    fun pastAxisTextForInnerBottomFromCenter() {
+        val bottom = form(TaperKind.INNER, 2, listOf(4.0, 5.2), listOf(-4.0, -2.0), r = 1.6, zClear = 5.0).copy(flip = true, start = 0.0)
+        val res = TaperSolve.solve(bottom)
+        assertTrue(TaperWarning.ENTRY_PAST_AXIS in res.warnings && TaperWarning.ENTRY_NOT_FOUND !in res.warnings, "${res.warnings}")
+        assertEquals(listOf("G0X3.2Z1.", "G1Z-4."), res.solution!!.ncG40.take(2))
+        val t = taperWarningText(TaperWarning.ENTRY_PAST_AXIS, bottom, res.warnings)
+        assertTrue(t.startsWith("바닥 단면을 중심(X0)부터 깎습니다.") && "Z 여유를 줄이세요" !in t && "기계가 X− 로 그만큼 갈 수 있는지" in t, t)
+        assertTrue("직접 보정(G40)은 노즈 중심이 중심에 선 자리(표준 팁이면 인선 X3.2)에서 시작해" in t, t)
+        assertTrue("노즈 중심이 중심에 서게 단면을 중심 너머에서부터" in t && "맞은편 구멍 벽" !in t, t)
+        // 화면 역방향 + 뒤집기: 기계 보정 진입이 중심 너머에서 내려온다(진입 길 못 찾음) — 같은 바닥 글에 맞은편 구멍 벽 주의
+        val rev = bottom.copy(reverse = true, z = listOf(-26.0, -28.0))
+        val revRes = TaperSolve.solve(rev)
+        assertTrue(TaperWarning.ENTRY_PAST_AXIS in revRes.warnings && TaperWarning.ENTRY_NOT_FOUND in revRes.warnings, "${revRes.warnings}")
+        val rt = taperWarningText(TaperWarning.ENTRY_PAST_AXIS, rev, revRes.warnings)
+        assertTrue(rt.startsWith("바닥 단면을 중심(X0)부터 깎습니다.") && "맞은편 구멍 벽" in rt && "노즈 중심이 중심에 서게" !in rt, rt)
+        // 경고 목록 없이 불러도(화면 역방향만으로) 같은 주의
+        assertEquals(rt, taperWarningText(TaperWarning.ENTRY_PAST_AXIS, rev))
+        // 정방향이라도 진입 길을 못 찾은 작은 구멍(바닥 Ø2 → Ø3.2 · 오목 R5.451 · 노즈 0.4 · Z 여유 5)은 같은 주의
+        val small = form(TaperKind.INNER, 2, listOf(2.0, 3.2), listOf(-6.0, -4.0), r = 0.4, zClear = 5.0)
+            .copy(flip = true, start = 0.0, arc = true, arcR = 5.451, arcConcave = true)
+        val smallRes = TaperSolve.solve(small)
+        assertTrue(TaperWarning.ENTRY_PAST_AXIS in smallRes.warnings && TaperWarning.ENTRY_NOT_FOUND in smallRes.warnings, "${smallRes.warnings}")
+        assertTrue("맞은편 구멍 벽" in taperWarningText(TaperWarning.ENTRY_PAST_AXIS, small, smallRes.warnings))
+        // 비표준 팁은 표준 팁 인선 말을 빼고 같은 글
+        assertTrue("표준 팁" !in taperWarningText(TaperWarning.ENTRY_PAST_AXIS, bottom.copy(tip = 3)))
+        // 시작 X0.001(표준 팁은 인선을 거기 두면 노즈 중심이 중심 너머): X0 과 같은 진입에 그 X 를 밝힌 바닥 글. 팁 3 은 노즈 중심이 중심 너머로 가지 않아 전 글
+        val near = bottom.copy(start = 0.001)
+        val nearRes = TaperSolve.solve(near)
+        assertEquals(listOf("G0X3.2Z1.", "G1Z-4."), nearRes.solution!!.ncG40.take(2))
+        val nt = taperWarningText(TaperWarning.ENTRY_PAST_AXIS, near, nearRes.warnings)
+        assertTrue(nt.startsWith("바닥 단면 시작(X0.001)이 중심에서 노즈R 안이라 중심(X0)부터") && "Z 여유를 줄이세요" !in nt, nt)
+        assertFalse(taperWarningText(TaperWarning.ENTRY_PAST_AXIS, near.copy(tip = 3)).startsWith("바닥 단면"))
+    }
+
+    /**
+     * 재확인2 B2-V2-1: 정방향 내경 바닥 끝 X0.001(같은 구멍의 직선 · 노즈 1.6 · 표준 팁)은 X0 과 같이 직접 보정이 노즈 중심이 축에 서는 인선 X3.2 에서 멈추고
+     * Z 로 뺀다 — 글도 'Z 여유를 줄이세요' 가 아니라 끝 X0 과 같은 바닥 글에 그 X 를 밝힌다
+     */
+    @Test
+    fun pastAxisTextForInnerBottomNearCenter() {
+        val f = form(TaperKind.INNER, 2, listOf(5.2, 4.0), listOf(-2.0, -4.0), r = 1.6, zClear = 5.0).copy(end = 0.001)
+        val res = TaperSolve.solve(f)
+        assertTrue(TaperWarning.ENTRY_PAST_AXIS in res.warnings, "${res.warnings}")
+        assertEquals(listOf("X3.2", "G0Z1."), res.solution!!.ncG40.takeLast(2))
+        val t = taperWarningText(TaperWarning.ENTRY_PAST_AXIS, f, res.warnings)
+        assertTrue(t.startsWith("바닥 단면 끝(X0.001)이 중심에서 노즈R 안이라 중심(X0)까지") && "Z 여유를 줄이세요" !in t, t)
+        assertTrue("기계 보정(G41/G42)은 단면을 이어 중심 너머까지, 직접 보정(G40)은 노즈 중심이 중심에 서는 데까지(표준 팁이면 인선 X3.2) 간 뒤 Z 로 빠집니다" in t, t)
+    }
+
+    /**
      * 뒤집은 내경 작은 구멍(바닥 Ø6 → 입구 Ø10 · 깊이 8, 노즈 1.2 · Z 여유 0 — 검증 F4 2026-11-13): G41/G42 진입이 급송을 소재에서 c 떼려고 일부러 축 너머(`G0X-3.6Z20.`)로
      * 돌아 들어가 ENTRY_PAST_AXIS 가 난다 — 글은 Z 여유를 줄이라고만 하지 않고 그 진입과 기계 X− 한계를 말한다. 화면 역방향 + 뒤집기(부품 앞에서 들어옴)는 전 글
      */
