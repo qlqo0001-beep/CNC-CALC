@@ -1,0 +1,2621 @@
+{
+  "title": "LMT Fette 축방향 전조 머리(F1–F3 EVOline 외) — 공식 자료와 출처",
+  "researchedAt": "2026-11-14",
+  "rules": [
+    "모든 값에 sourceId 와 쪽(인쇄 쪽 · PDF 쪽)을 단다. 못 찾은 칸은 null 로 두고 notFound 에 까닭을 적는다 — 지어내지 않는다.",
+    "근거는 LMT Fette 공식 PDF(사용 설명서 · 카탈로그 · 브로셔)와 대리점이 올린 같은 회사 롤 카탈로그뿐이다. 다른 회사 자료(secondary)는 없다.",
+    "F RN · F01/K01 설명서와 카탈로그 F-RN 쪽은 F1–F3 EVO 와 다른 계열이다 — 그 값은 글에 계열 이름을 밝힌다.",
+    "조사(R1 머리 · R2 공정 · R3 요령)와 대조(X1~X3 — 조사하지 않은 에이전트가 PDF 쪽을 다시 열어 칸마다 판정)를 거쳤다. 틀린 칸은 corrected 에, 대조가 더 찾은 값은 checkerAdded 에 둔다.",
+    "회사(사용자) 값은 넣지 않는다 — 앱 코드 상수 CompanyRolls 에만 있다."
+  ],
+  "fields": {
+    "heads": "머리 모델 한 줄. 지름 범위 = 카탈로그 머리 쪽 그림표, 피치 · 산수 범위 = 그 머리 롤 쪽 표준 나사 롤 목록의 최소 · 최대(공식 범위 칸이 아님 — 미터 롤 기준, 인치 롤은 더 굵을 수 있음), openingMovementMm = 설명서 Tab. 8 열림 행정 a",
+    "blankDia": "전조 전 지름 dV ≈ d2 − offsetMm(d2 = 유효지름). rows = 카탈로그 부록의 2A 유효지름 표 줄",
+    "speeds": "재질별 권장 전조 속도 범위(m/min). materialNo = 원문 재료 번호. vRecMpm 은 모든 표에 없다(범위만)",
+    "speedBasisDia": "회전수 식 n ≈ 1000·v/(π·d) 의 d 가 무엇인지 — blank = 전조 전 지름",
+    "feed": "CNC 기계 이송과 피치의 비 — ratioRec = 설명서 값(피치보다 5 % 작게)",
+    "tips": "증상 · 원인 · 대책. group = RPM_UP · RPM_DOWN · RATIO_UP · RATIO_DOWN · BLANK_BIG · BLANK_SMALL · SETUP(order 차례) · OTHER"
+  },
+  "sources": [
+    {
+      "id": "FET_OI_F1F3_EVO",
+      "sourceType": "official",
+      "maker": "LMT Fette Werkzeugtechnik GmbH & Co. KG",
+      "title": "Betriebsanleitung Axial-Rollsysteme F1 – F3 EVO / Operating Instruction F1 – F3 Rolling Systems (DE+EN)",
+      "edition": "Printed in Germany, No. F1–F3 (0217 2 DM/W)",
+      "url": "https://www.lmt-tools.com/fileadmin/user_upload/content_lmt-tools/content/segmente/rollsysteme/downloads/LMT_Axial_Bedienungsanl_EVOline_de_screen.pdf",
+      "listedAt": "https://www.lmt-tools.com/en/downloads",
+      "readVia": "R1: 메인 루프가 받은 PDF 사본(evo_f1f3_de.pdf). pdftotext 텍스트로 위치를 찾고 Read(pages)로 쪽 그림을 확인: PDF 65-67, 70-71, 74-75, 80-82, 85-86, 98-99. 텍스트로만 본 쪽: PDF 72, 84, 95, 독일어 대응 15·17·21·31·33-36·48 / R2: 메인 루프가 받아 둔 PDF 사본을 pdftotext 로 찾은 뒤 Read(pages)로 쪽 그림을 보고 확인 / R3: 메인 루프가 받아 둔 PDF 사본. pdftotext 글로 찾은 뒤 Read(pages)로 쪽 그림을 눈으로 확인함",
+      "pages": "R1: PDF 65-67, 70-75, 80-86, 95, 98-99 (인쇄 63-65, 68-73, 78-84, 93, 96-97; 인쇄 = PDF − 2) / R2: 영어: 인쇄 61-63, 69, 75-84 (PDF 63-65, 71, 77-86쪽); 독어: 인쇄 29-30, 33 (PDF 31-32, 35쪽) / R3: 인쇄 43 (PDF 45쪽, 독일어 고장표), 인쇄 61-62 (PDF 63-64쪽), 인쇄 71-76 (PDF 73-78쪽), 인쇄 79-87 (PDF 81-89쪽), 인쇄 93 (PDF 95쪽, 영어 고장표)"
+    },
+    {
+      "id": "FET_CAT_ROLL",
+      "sourceType": "official",
+      "maker": "LMT Fette Werkzeugtechnik GmbH & Co. KG",
+      "title": "LMT Rollsysteme (Katalog, DE/EN)",
+      "edition": "SAP-Nr. 7286623 (01/2025)",
+      "url": "https://assets.ctfassets.net/tzrd35jgpyko/6FBC8FN0TE8q9ZNK9iuQ4x/be1f54847f0874b400cdd048c004b973/7286623_LMT_Rollsysteme_de_screen.pdf",
+      "listedAt": "https://www.lmt-tools.com/en/downloads",
+      "readVia": "R1: PDF 사본(rollsysteme_de_cat.pdf). 텍스트로 찾고 Read(pages)와 pdftoppm 300 dpi 잘라보기로 확인: PDF 14, 24, 43-45, 90, 92, 94, 96, 98, 100, 102, 104, 106, 108, 112, 114-115, 118-119, 239. 텍스트로만 훑은 쪽: 15, 19-22, 30, 33, 60-64, 110, 209, 432 / R2: 메인 루프가 받아 둔 PDF 사본을 pdftotext 로 찾은 뒤 Read(pages)로 쪽 그림을 보고 확인 (인쇄 쪽 = PDF 쪽 − 2) / R3: 메인 루프가 받아 둔 PDF 사본. pdftotext 글로 찾은 뒤 Read(pages)로 쪽 그림을 눈으로 확인함",
+      "pages": "R1: PDF 14, 24, 43-45, 90-108, 112, 114-115, 118-119, 239 (인쇄 = PDF − 2) / R2: 인쇄 15-22, 88, 110, 206, 409-410, 413-414, 418-421 (PDF 17-24, 90, 112, 208, 411-412, 415-416, 420-423쪽) / R3: 인쇄 22 (PDF 24쪽), 인쇄 110-111 (PDF 112-113쪽), 인쇄 207 (PDF 209쪽), 인쇄 237 (PDF 239쪽), 인쇄 242 (PDF 244쪽, 축방향 고장표), 인쇄 368-370 (PDF 370-372쪽, 접선 머리 고장표), 인쇄 413-414 (PDF 415-416쪽)"
+    },
+    {
+      "id": "FET_EVO_BROCHURE",
+      "sourceType": "official",
+      "maker": "LMT Fette Werkzeugtechnik GmbH & Co. KG",
+      "title": "Axial-Rollkopf EVOline (브로셔)",
+      "edition": "Printed in Germany, No. 0294 (0715 1 DM/D)",
+      "url": "https://assets.ctfassets.net/tzrd35jgpyko/3oM0jTInj6RVAsmBTof71J/9c4a007d3d8c7a3804ec5746721e91ed/0294_Axial_Rollkopf_EVOline_screen_01.pdf",
+      "listedAt": "https://www.lmt-tools.com/en/downloads",
+      "readVia": "R1: PDF 사본에서 Read로 PDF 24쪽(인쇄 22) 확인. 나머지는 텍스트 검색으로 카탈로그와 같은 내용인지만 대조 / R3: pdftotext 글 전체에서 고장·원인·조정·속도·이송 낱말만 찾음(쪽 그림은 안 봄). R3 내용이 없어 값을 뽑지 않음",
+      "pages": "R1: PDF 24 (인쇄 22) / R3: 전체 38쪽 글 검색"
+    },
+    {
+      "id": "FET_OI_FRN",
+      "sourceType": "official",
+      "maker": "LMT Fette Werkzeugtechnik GmbH & Co. KG",
+      "title": "Operating Instruction F RN Rolling Systems (EN)",
+      "edition": "Digitale Version vom 27.01.2019",
+      "url": "https://assets.ctfassets.net/tzrd35jgpyko/4rPiHuBXoGlrdFP3SfKhGC/50fc9d7f75bd75f200196fbd1e2adbbd/Op.Instr._Axial__-_FRN__2_.pdf",
+      "listedAt": "https://www.lmt-tools.com/en/downloads",
+      "readVia": "R1: PDF 사본에서 Read로 PDF 44, 53쪽 확인(F RN 계열 보조 자료) / R2: 메인 루프가 받아 둔 PDF 사본을 pdftotext 로 찾은 뒤 Read(pages)로 쪽 그림 확인 (인쇄 쪽 = PDF 쪽 − 3) / R3: 메인 루프가 받아 둔 PDF 사본. pdftotext 글로 찾은 뒤 Read(pages)로 쪽 그림을 눈으로 확인함",
+      "pages": "R1: PDF 44, 53 (인쇄 41, 50) / R2: 인쇄 9, 21, 34, 41-44, 50 (PDF 12, 24, 37, 44-47, 53쪽) / R3: 인쇄 34 (PDF 37쪽), 인쇄 41-42 (PDF 44-45쪽), 인쇄 44 (PDF 47쪽), 인쇄 48-49 (PDF 51-52쪽), 인쇄 69 (PDF 72쪽, Table 13 고장표)"
+    },
+    {
+      "id": "DIST_TECHMAR_ROLLS",
+      "sourceType": "distributor",
+      "maker": "LMT Fette (대리점 techmar.az.pl 게시본)",
+      "title": "Fette Rolling Systems (2016-Rolls-en)",
+      "edition": "2016-Rolls-en30.3+US, 30.03.2005",
+      "url": "https://techmar.az.pl/wp-content/uploads/2023/04/fette23.pdf",
+      "listedAt": null,
+      "readVia": "R1: PDF 사본에서 Read로 PDF 10쪽 확인. 1-12쪽은 텍스트로 훑음 / R3: pdftotext 글 전체에서 고장·원인·조정·속도·이송 낱말만 찾음(쪽 그림은 안 봄). R3 내용이 없어 값을 뽑지 않음",
+      "pages": "R1: 10 / R3: 전체 12쪽 글 검색"
+    },
+    {
+      "id": "FET_OI_F01K01",
+      "sourceType": "official",
+      "maker": "LMT Fette (LMT Tools)",
+      "title": "Operating Instructions Axial Rolling System F01 / K01 EVO (en)",
+      "edition": "Digital version dated February 28, 2025 (txt 끝쪽 표기)",
+      "url": "https://assets.ctfassets.net/tzrd35jgpyko/1CVk75o6Vl7942euepJnpn/54c76d2e7fd83f1e3841f9109b976479/Betr._Axial_-_F01_K01_EVO_-_A4_en.pdf",
+      "listedAt": "https://www.lmt-tools.com/en/downloads",
+      "readVia": "R2: 메인 루프가 받아 둔 PDF 사본을 pdftotext 로 찾은 뒤 Read(pages)로 쪽 그림 확인 (인쇄 쪽 = PDF 쪽 − 3) / R3: 메인 루프가 받아 둔 PDF 사본. pdftotext 글로 찾은 뒤 Read(pages)로 쪽 그림을 눈으로 확인함",
+      "pages": "R2: 인쇄 20, 29-30, 33-36 (PDF 23, 32-33, 36-39쪽) / R3: 인쇄 34 (PDF 37쪽), 인쇄 36 (PDF 39쪽), 인쇄 39-40 (PDF 42-43쪽), 인쇄 50 (PDF 53쪽, Table 8 고장표)"
+    }
+  ],
+  "heads": [
+    {
+      "model": "F2 EVO",
+      "family": "F (EVOline) 축방향 3롤",
+      "design": "3롤 축방향. 머리는 고정, 공작물이 돈다. F형은 고정 전용, K2 EVO는 고정·회전 겸용, F2L/K2L은 왼나사용. 몸통 D=88 mm, 롤 경사 γ=3°",
+      "threadDiaMinMm": 8,
+      "threadDiaMaxMm": 16,
+      "threadDiaInch": "Ø0.315–0.630\" (정면판 표기는 5/16\"–5/8\")",
+      "pitchMinMm": 1,
+      "pitchMaxMm": 2,
+      "tpiMin": 11,
+      "tpiMax": 24,
+      "maxRollLengthMm": null,
+      "maxRpm": null,
+      "maxSpeedNote": "머리별 최대 회전수나 속도 한도는 표기가 없다. 설명서 Tab.6 권장 전조 속도: 1.4401(316) 30–50 m/min, 1.4301(304) 35–55 m/min. n≈1000·v/(dV·π). 카탈로그: 축방향 20–60 m/min, 경우에 따라 90 m/min까지",
+      "rollDiaMm": null,
+      "shank": "EVOline 바꿈 생크 size 2(따로 주문): 곧은 Ø25(R25-size 2 = 7137673)·Ø30·1\"·1¼\"·1½\", VDI-25/30/40, HSK-A63. 이음부 Size 2",
+      "opening": "이송을 STOP하면 저절로 열린다. 열림 행정 a=3 mm(x≈lU−a), 닫힘 각 α=60°",
+      "rollDesignation": "UNF 7/16 … 1/2 – 20: Anlauf 1k 1510744 / 2k 1510753 (롤 한 벌로 7/16-20과 1/2-20)",
+      "notesKo": "주문 번호: F2 EVO 7137660, F2L EVO 7159830, K2 EVO 7159820, K2L EVO 7169599. 선택표에서 회사 나사 가운데 F2에 표시된 것은 7/16-20 UNF와 1/2-20 UNF뿐이다(길이 무제한). 9/16-20부터는 F2 칸이 비어 있다. 피치·TPI 범위는 표준 나사 롤 목록의 최소·최대값이다(널링 RAA/RGE와 둥근나사 Rd 16x1/8은 뺐다). 카탈로그에 '피치 범위' 칸은 따로 없다. 표에 없는 나사도 리드각이 머리 경사각의 ±30% 안이면 전조할 수 있다.",
+      "openingMovementMm": 3,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 88 (PDF 90쪽)",
+          "quote": "F2 EVO 7137660"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 88 (PDF 90쪽) 그림표",
+          "quote": "Ø8-16 Ø0,315 – 0,630 ∞ 3"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 88 (PDF 90쪽)",
+          "quote": "F2 EVO, F2L EVO nur feststehend verwendbar"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 90 (PDF 92쪽)",
+          "quote": "UNF 7/16… 1/2 – 20 1510744 1510753"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 41 (PDF 43쪽) 선택표",
+          "quote": "7/16 – 20 UNF"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 63 (PDF 65쪽) Fig. 3 (독일어 PDF 15쪽)",
+          "quote": "M8-M16 5/16\"-5/8\""
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 84 (PDF 86쪽) Tab. 8 (독일어 PDF 36쪽)",
+          "quote": "Opening movement a [mm]"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽) Tab. 6",
+          "quote": "X5CrNiMo17-12-2 1.4401 30–50"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 237 (PDF 239쪽)",
+          "quote": "DOES NOT VARY MORE THAN ± 30 %"
+        }
+      ]
+    },
+    {
+      "model": "F23 EVO",
+      "family": "F (EVOline) 축방향 3롤",
+      "design": "3롤 축방향. F23은 고정 전용, K23은 겸용, F23L은 왼나사용. 몸통 D=88 mm로 F2와 같고, 롤 경사 γ=1°25'",
+      "threadDiaMinMm": 8,
+      "threadDiaMaxMm": 22,
+      "threadDiaInch": "Ø0.315–0.866\"",
+      "pitchMinMm": 0.5,
+      "pitchMaxMm": 1.5,
+      "tpiMin": 14,
+      "tpiMax": 32,
+      "maxRollLengthMm": null,
+      "maxRpm": null,
+      "maxSpeedNote": "머리별 한도는 표기가 없다. 설명서 Tab.6에 따르면 316 30–50 m/min, 304 35–55 m/min",
+      "rollDiaMm": null,
+      "shank": "EVOline 바꿈 생크 size 2(R25-size 2 7137673 … HSK-A63-size 2 7139626). 이음부 Size 2",
+      "opening": "이송을 STOP하면 저절로 열린다. a=3 mm, α=60°",
+      "rollDesignation": "UN 1/2…9/16–20 (1k 1512421 / 2k 1512430); UN 9/16…5/8–20 (2168849/2168772); UN 5/8…11/16¹⁾–20 (2242913/2242914); UNEF 11/16¹⁾…3/4¹⁾–20 (1512387/1512396); UNEF 3/4¹⁾…13/16¹⁾–20 (2242921/2242922); UNEF 13/16¹⁾…7/8¹⁾–20 (2242923/2242924). ¹⁾ = 나사끝을 포함해 19 mm까지인 짧은 나사용",
+      "notesKo": "주문 번호: F23 EVO 7155144, F23L 7169600, K23 7169601, K23L 7169602. 머리 그림표는 길이 ∞이지만 ¹⁾ 표시 롤은 19 mm까지다. 선택표: 1/2-20 UNF, 9/16-20 UN, 5/8-20 UN은 무제한이고 3/4-20 UNEF와 7/8-20 UNEF는 최대 19 mm. 7/16-20과 1-20은 F23 칸이 비어 있다. 피치·TPI는 롤 목록의 최소·최대값이다(NPT 제외).",
+      "openingMovementMm": 3,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 92 (PDF 94쪽)",
+          "quote": "F23 EVO 7155144"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 92 (PDF 94쪽) 그림표",
+          "quote": "Ø8-22 Ø0,315 – 0,866 ∞"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 94 (PDF 96쪽)",
+          "quote": "UN 1/2 … 9/16 – 20 1512421 1512430"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 94 (PDF 96쪽)",
+          "quote": "Für Kurzgewinde bis 19 mm Länge einschließlich Auslauf."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 42 (PDF 44쪽) 선택표",
+          "quote": "19 = max. Rolllänge (19 mm)"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 41 (PDF 43쪽) 선택표",
+          "quote": "1/2 – 20 UNF"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 84 (PDF 86쪽) Tab. 8",
+          "quote": "23 3"
+        }
+      ]
+    },
+    {
+      "model": "F233400 EVO",
+      "family": "F (EVOline) 축방향 3롤",
+      "design": "3롤 축방향. F233400은 고정 전용, K233400은 겸용, F233400L은 왼나사용. 몸통 D=96 mm, 롤 경사 γ=1°15', 닫힘 각 α=30°. 2015 브로셔에는 'NEW'로 표시",
+      "threadDiaMinMm": 16,
+      "threadDiaMaxMm": 36,
+      "threadDiaInch": "Ø0.630–1.417\"",
+      "pitchMinMm": 1.5,
+      "pitchMaxMm": 2,
+      "tpiMin": 11,
+      "tpiMax": 26,
+      "maxRollLengthMm": 73,
+      "maxRpm": null,
+      "maxSpeedNote": "머리별 한도는 표기가 없다. 설명서 Tab.6에 따르면 316 30–50 m/min, 304 35–55 m/min",
+      "rollDiaMm": null,
+      "shank": "EVOline 바꿈 생크 size 3(R25-size 3 7139628 … HSK-A63-size 3 7139644). 설명서 Tab.9는 이음부를 'Size 3 (F233400)'으로 적어 F3/F34의 'Size 3 (F3)'과 구분한다. 2015 브로셔는 같은 Ident를 'size 2'로 적었다",
+      "opening": "이송을 STOP하면 저절로 열린다. a=3 mm, 닫힘 각 α=30°(다른 크기는 60°)",
+      "rollDesignation": "UN 5/8¹⁾…11/16¹⁾–20 (1k 2243064 / 2k 2243065); UN 11/16¹⁾…3/4¹⁾–20 (2166139/2243068); UNEF 3/4¹⁾…13/16¹⁾–20 (2243070/2243071); UNEF 13/16¹⁾…7/8¹⁾–20 (2169153/2243072); UNEF 7/8¹⁾…15/16¹⁾–20 (2168774/2243075); UNEF 15/16¹⁾…1¹⁾–20 (2242407/2243079); UNEF 1¹⁾…1 1/16¹⁾–20 (2169150/2243083). ¹⁾ = 나사끝 포함 73 mm까지",
+      "notesKo": "주문 번호: F233400 EVO 7156345, F233400L 7169603, K233400 7169604, K233400L 7169605. 선택표에서 5/8-20부터 1-20까지 모두 최대 73 mm다. 7/16-20, 1/2-20, 9/16-20은 지름 범위(Ø16부터) 밖이다. 롤 쪽 각주의 인치 값 2.638\"은 73 mm(=2.874\", 선택표 범례의 값)와 맞지 않아 mm 값을 쓴다. D1max는 카탈로그·브로셔에서 115 mm, 설명서 Fig.10에서 128 mm로 서로 다르다.",
+      "openingMovementMm": 3,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 96 (PDF 98쪽)",
+          "quote": "F233400 EVO 7156345"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 96 (PDF 98쪽) 그림표",
+          "quote": "Ø16-36 Ø0,630 – 1,417 73"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 98 (PDF 100쪽)",
+          "quote": "Für Kurzgewinde bis 73 mm Länge einschließlich Auslauf."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 98 (PDF 100쪽)",
+          "quote": "UNEF 15/16 … 1 –20 2242407 2243079"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 42 (PDF 44쪽) 선택표",
+          "quote": "73 = max. Rolllänge (73 mm) maximum length of rolling (73 mm | 2.874\")"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 43 (PDF 45쪽) 선택표",
+          "quote": "1 – 20 UNEF 73"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 96 (PDF 98쪽) Tab. 9",
+          "quote": "233400 Size 3 (F233400)"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 69 (PDF 71쪽) Fig. 10",
+          "quote": "F233400 96 128 39 98"
+        },
+        {
+          "sourceId": "FET_EVO_BROCHURE",
+          "page": "인쇄 22 (PDF 24쪽)",
+          "quote": "R25-size 2 7139628"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 84 (PDF 86쪽) Tab. 8",
+          "quote": "Opening movement a [mm]"
+        }
+      ]
+    },
+    {
+      "model": "F3 EVO",
+      "family": "F (EVOline) 축방향 3롤",
+      "design": "3롤 축방향. F3은 고정 전용, K3은 겸용, F3L은 왼나사용. 몸통 D=117 mm, 롤 경사 γ=2°40'",
+      "threadDiaMinMm": 12,
+      "threadDiaMaxMm": 22,
+      "threadDiaInch": "Ø0.472–0.866\"",
+      "pitchMinMm": 1.5,
+      "pitchMaxMm": 2.5,
+      "tpiMin": 9,
+      "tpiMax": 20,
+      "maxRollLengthMm": null,
+      "maxRpm": null,
+      "maxSpeedNote": "머리별 한도는 표기가 없다. 설명서 Tab.6에 따르면 316 30–50 m/min, 304 35–55 m/min",
+      "rollDiaMm": null,
+      "shank": "EVOline 바꿈 생크 size 3(R25-size 3 7139628 … HSK-A63-size 3 7139644). 이음부 'Size 3 (F3)'",
+      "opening": "이송을 STOP하면 저절로 열린다. 열림 행정 a=4 mm, α=60°",
+      "rollDesignation": "UNF 7/16 … 1/2 – 20: 1k 1515570 / 2k 1515589",
+      "notesKo": "주문 번호: F3 EVO 7146720, F3L 7169606, K3 7169607, K3L 7169608. 선택표: 7/16-20 UNF와 1/2-20 UNF는 무제한이다. 9/16-20 UN은 'S'(문의 필요, 특수 롤 경사 머리 필요)이고 롤 표에도 9/16-20 롤이 없다. 5/8-20부터는 F3 칸이 비어 있다. 피치·TPI는 롤 목록의 최소·최대값이다(둥근나사 Rd 1/8 제외).",
+      "openingMovementMm": 4,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 100 (PDF 102쪽)",
+          "quote": "F3 EVO 7146720"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 100 (PDF 102쪽) 그림표",
+          "quote": "Ø12-22 Ø0,472 – 0,866 ∞"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 102 (PDF 104쪽)",
+          "quote": "UNF 7/16 … 1/2 – 20 1515570 1515589"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 42 (PDF 44쪽) 선택표",
+          "quote": "S = auf Anfrage, Sonder-Rollkopf-Winkel erforderlich"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 84 (PDF 86쪽) Tab. 8",
+          "quote": "3 4"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 96 (PDF 98쪽) Tab. 9",
+          "quote": "3 Size 3 (F3)"
+        }
+      ]
+    },
+    {
+      "model": "F34 EVO",
+      "family": "F (EVOline) 축방향 3롤",
+      "design": "3롤 축방향. F34는 고정 전용, K34는 겸용, F34L은 왼나사용. 몸통 D=117 mm로 F3와 같고, 롤 경사 γ=1°15'",
+      "threadDiaMinMm": 12,
+      "threadDiaMaxMm": 30,
+      "threadDiaInch": "Ø0.472–1.181\"",
+      "pitchMinMm": 1,
+      "pitchMaxMm": 1.5,
+      "tpiMin": 10,
+      "tpiMax": 28,
+      "maxRollLengthMm": null,
+      "maxRpm": null,
+      "maxSpeedNote": "머리별 한도는 표기가 없다. 설명서 Tab.6에 따르면 316 30–50 m/min, 304 35–55 m/min",
+      "rollDiaMm": null,
+      "shank": "EVOline 바꿈 생크 size 3(R25-size 3 7139628 … HSK-A63-size 3 7139644). 이음부 'Size 3 (F3)'",
+      "opening": "이송을 STOP하면 저절로 열린다. a=4 mm, α=60°",
+      "rollDesignation": "UN 5/8…11/16–20 (1k 2246313 / 2k 2246319); UNEF 3/4…13/16–20 (2243652/2243658); UNEF 13/16…7/8–20 (2166331/2166820); UNEF 7/8…15/16¹⁾–20 (2243653/2243659); UNEF 15/16¹⁾…1¹⁾–20 (2168615/2243660). ¹⁾ = 나사끝 포함 24 mm까지",
+      "notesKo": "주문 번호: F34 EVO 7156344, F34L 7169609, K34 7169610, K34L 7169611. 선택표: 9/16-20 UN과 5/8-20 UN은 무제한이고 7/8-20 UNEF와 1-20 UNEF는 최대 24 mm다. 두 표가 어긋나는 곳이 두 군데 있다. (1) 3/4-20 UNEF는 선택표의 F34 칸이 비어 있지만 롤 표에는 UNEF 3/4…13/16–20 롤이 있다. (2) 9/16-20은 선택표에 ■로 표시돼 있지만 롤 표에는 UN 9/16-20 롤이 없고 BSFS 9/16…5/8–20만 있다. 두 칸 모두 LMT에 확인해야 한다.",
+      "openingMovementMm": 4,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 104 (PDF 106쪽)",
+          "quote": "F34 EVO 7156344"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 104 (PDF 106쪽) 그림표",
+          "quote": "Ø12-30 Ø0,472 – 1,181 ∞"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 106 (PDF 108쪽)",
+          "quote": "UNEF 3/4 … 13/16 –20 2243652 2243658"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 106 (PDF 108쪽)",
+          "quote": "Für Kurzgewinde bis 24 mm Länge einschließlich Auslauf."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 42 (PDF 44쪽) 선택표",
+          "quote": "24 = max. Rolllänge (24 mm)"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 43 (PDF 45쪽) 선택표",
+          "quote": "1 – 20 UNEF 73 24"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 84 (PDF 86쪽) Tab. 8",
+          "quote": "Opening movement a [mm]"
+        }
+      ]
+    },
+    {
+      "model": "F3-1RN X129",
+      "family": "F-RN (플랜지형 CNC용, F1–F3 EVO와 다른 계열)",
+      "design": "3롤 축방향, 플랜지형이다(생크형은 문의). 표준형은 고정 사용, 오른나사용(왼나사는 문의). D=125 mm, 롤 경사 γ=2°40', 머리 약 12 kg",
+      "threadDiaMinMm": 12,
+      "threadDiaMaxMm": 22,
+      "threadDiaInch": "Ø0.472–0.866\"",
+      "pitchMinMm": 1.5,
+      "pitchMaxMm": 2.5,
+      "tpiMin": 9,
+      "tpiMax": 20,
+      "maxRollLengthMm": null,
+      "maxRpm": null,
+      "maxSpeedNote": "F-RN 머리별 한도는 표기가 없다. 카탈로그에는 이송을 리드보다 3% 작게, 0.5 s 머무름만 적혀 있다",
+      "rollDiaMm": null,
+      "shank": "플랜지(D7=140 mm, D5=13 mm 구멍 4개). 생크형은 문의",
+      "opening": "이송을 정지하면 열린다(열릴 때 머리 길이가 늘어남). 이송은 리드보다 3% 작게, 0.5 s 머무른 뒤 저절로 열림(카탈로그). F RN 설명서에는 리드 −5%, 이송 정지 또는 내부 끝 멈춤쇠로 열림. 닫기는 형에 따라 손으로, 터렛을 돌릴 때, 또는 주축 기동으로(카탈로그). F RN 설명서는 닫힘 요소로 손잡이 · 기계 끝 멈춤 · 닫힘 캠을 든다",
+      "rollDesignation": "UNF 7/16 … 1/2 – 20: 1515570 / 1515589 (F3 EVO와 같은 Ident)",
+      "notesKo": "F-RN 계열이다. 주문 번호 7045135. 공작물 지름이 D4(25 mm)보다 작으면 길이 무제한, 크면 L5=108 mm까지. 선택표: 7/16-20과 1/2-20은 무제한이다. 9/16-20은 ■이지만 롤 쪽(PDF 115)에는 9/16-20 롤이 없다.",
+      "openingMovementMm": null,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 112 (PDF 114쪽)",
+          "quote": "F3-1RN X129 7045135"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 112 (PDF 114쪽)",
+          "quote": "<D4 = Rollbare Länge = ∞"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 110 (PDF 112쪽)",
+          "quote": "Vorschub 3 % kleiner als die tatsächliche Gewindesteigung"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 113 (PDF 115쪽)",
+          "quote": "UNF 7/16 … 1/2 – 20 1515570 1515589"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 41 (PDF 44쪽)",
+          "quote": "Feed stop or the use of an internal stop"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 50 (PDF 53쪽)",
+          "quote": "Opening by using an internal stop"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 31 (PDF 34쪽)",
+          "quote": "using the handle manually / end-stop / closing cam"
+        }
+      ]
+    },
+    {
+      "model": "F34-1RN X135",
+      "family": "F-RN (플랜지형 CNC용, F1–F3 EVO와 다른 계열)",
+      "design": "3롤 축방향, 플랜지형, 표준형은 고정 사용, 오른나사용(왼나사는 문의). D=125 mm, γ=1°15', 머리 약 11.40 kg",
+      "threadDiaMinMm": 12,
+      "threadDiaMaxMm": 30,
+      "threadDiaInch": "Ø0.472–1.181\"",
+      "pitchMinMm": 1,
+      "pitchMaxMm": 1.5,
+      "tpiMin": 10,
+      "tpiMax": 28,
+      "maxRollLengthMm": null,
+      "maxRpm": null,
+      "maxSpeedNote": "F-RN 머리별 한도는 표기가 없다",
+      "rollDiaMm": null,
+      "shank": "플랜지(D7=140 mm, D5=13 mm 구멍 4개). 생크형은 문의",
+      "opening": "F3-1RN과 같다. 이송 정지로 열리고, 이송은 리드 −3%, 0.5 s 머무름(카탈로그)",
+      "rollDesignation": "UN 5/8…11/16–20 (2246313/2246319); UNEF 3/4…13/16–20 (2243652/2243658); UNEF 13/16…7/8–20 (2166331/2166820); UNEF 7/8…15/16–20 (2243653/2243659); UNEF 15/16…1–20 (2168615/2243660). Ident는 F34 EVO와 같고, RN 쪽에는 24 mm 각주가 없다",
+      "notesKo": "F-RN 계열이다. 주문 번호 7071242. 공작물이 D4(25 mm)보다 작으면 길이 무제한, 크면 L5=84 mm까지. 선택표에서 9/16-20, 5/8-20, 3/4-20, 7/8-20, 1-20이 모두 무제한(■)이다. 단 9/16-20은 롤 쪽에 UN 롤이 없고 BSFS만 있다.",
+      "openingMovementMm": null,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 116 (PDF 118쪽)",
+          "quote": "F34-1RN X135 7071242"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 116 (PDF 118쪽) 그림표",
+          "quote": "Ø12-30 Ø0,472 – 1,181 ∞"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 117 (PDF 119쪽)",
+          "quote": "UNEF 3/4 … 13/16 –20 2243652 2243658"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 42 (PDF 44쪽) 선택표",
+          "quote": "3/4 – 20 UNEF 19 73"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 43 (PDF 45쪽) 선택표",
+          "quote": "1 – 20 UNEF"
+        }
+      ]
+    }
+  ],
+  "modelNaming": {
+    "f233400Ko": "F233400은 머리 모델(크기) 이름이다. 근거는 네 가지다. (1) 카탈로그에 'Axial-Rollkopf F233400 EVO, K233400 EVO' 쪽이 따로 있고, 주문 번호(Ident No.)는 7자리 숫자 7156345다(F233400L EVO 7169603, K233400 EVO 7169604, K233400L EVO 7169605). (2) 카탈로그의 주문 번호 꼴은 'F2 EVO 7137660'처럼 '모델명 + 7자리 Ident No.'이다. 생크는 'R25-size 3 7139628'처럼 따로 주문한다. 머리·생크·크기 숫자를 이어 붙인 품번은 없다. (3) 설명서는 F233400을 머리 크기 목록(F1, F12, F1223, F2, F23, F233400, F3, F34)과 Tab.3·7·8·9에 F2·F23·F3와 나란히 둔다. (4) 'F2334' 같은 표기는 받은 문서 6개의 텍스트를 모두 찾아도 나오지 않는다.",
+    "isModelName": true,
+    "systemKo": "F = 고정(feststehend) 전용, K = 고정·회전 겸용, 이름 끝 L = 왼나사(예 F2L EVO), EVO = EVOline 세대(바꿈 생크, 중앙 미세조정). EVOline 크기는 1·12·1223·2·23·233400·3·34이고 바꿈 생크 이음부는 size 1/2/3이다. 다른 계열로 F-RN(F3-1RN~F56-1RN, 플랜지형 CNC용), FU(재래식 기계용 플랜지형 계열 — 5·6롤 관용은 그 특수형), AC(2롤, Ø8–102 mm, 최대 피치 2 mm)가 있다. 크기별 롤 경사각: 2=3°, 23=1°25', 233400=1°15', 3=2°40', 34=1°15'. 표준 밖 나사도 리드각이 이 경사각의 ±30% 안이면 전조할 수 있다.",
+    "refs": [
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 96 (PDF 98쪽)",
+        "quote": "F233400 EVO 7156345"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 88 (PDF 90쪽)",
+        "quote": "K2 EVO, K2L EVO feststehend und umlaufend verwendbar"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 96 (PDF 98쪽)",
+        "quote": "R25-size 3 7139628"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 68 (PDF 70쪽) 3.6",
+        "quote": "apply to all standard versions of the following rolling head sizes"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 72 (PDF 74쪽)",
+        "quote": "Designation with L (e. g.: F2L EVO)"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 96 (PDF 98쪽) Tab. 9",
+        "quote": "233400 Size 3 (F233400)"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 237 (PDF 239쪽)",
+        "quote": "233400 1°15'"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 12 (PDF 14쪽)",
+        "quote": "Type AC … 2 … 8 mm –102 mm … max. 2 mm Steigung"
+      }
+    ]
+  },
+  "rollDesignation": {
+    "ruleKo": "롤은 3개가 한 벌이다(번호 1·2·3, 글자 A·C·B). 롤 숫자면에는 나사 치수·리드(예 2k)·롤 재질(HS)·머리 형(Type 2)·번호가 찍히고, 글자면에는 LMT-FETTE·Ident 번호(7자리)·일련번호·글자가 찍힌다. 카탈로그 롤 표는 '나사꼴 지름(범위) – 산 수' 또는 '지름 … 지름 x 피치(mm)'로 적는다. 리드(Anlauf) 1k/2k마다 Ident No.가 따로 있고, 한 칸에 묶인 치수는 롤 한 벌로 전조한다. 1K는 나사끝이 약 2.3×P, 2K는 약 3.3×P다. 대리점 주문서에는 수량, 나사 치수(M12x1,5-6g), 머리 형(F2), 리드(2K), 알면 롤 코드(2/06)와 품번(1509756)을 적는다.",
+    "example": "UNF 7/16 … 1/2 – 20 (F2 EVO): Anlauf 1k 1510744 / Anlauf 2k 1510753",
+    "refs": [
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 65 (PDF 67쪽) Fig. 6 (독일어 PDF 17쪽)",
+        "quote": "M8-10x1 = Thread dimension 2k = Lead number HS = Material of rolls"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 65 (PDF 67쪽)",
+        "quote": "Check that the roll set number is the same for all rolls."
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 90 (PDF 92쪽)",
+        "quote": "UNF 7/16… 1/2 – 20 1510744 1510753"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 94 (PDF 96쪽)",
+        "quote": "Thread dimensions combined in one block can be rolled with one set of rolls."
+      },
+      {
+        "sourceId": "DIST_TECHMAR_ROLLS",
+        "page": "10",
+        "quote": "1 K = approx. 2,3 x p 2 K = approx. 3,3 x p"
+      },
+      {
+        "sourceId": "DIST_TECHMAR_ROLLS",
+        "page": "10",
+        "quote": "Rolling head type F 2 … Roller code no. 2/06 … Item no. 150 9756"
+      }
+    ]
+  },
+  "opening": {
+    "mechanismKo": "F1–F3 EVO: 머리는 서 있고 공작물이 돈다. CNC에서는 이송 거리 x≈lU−a를 프로그램하고, 그 끝에서 '이송 STOP'을 건다. 그러면 머리가 저절로 열린다. a는 열림 행정으로 크기 2·23·233400은 3 mm, 3·34는 4 mm다. 손으로 열 때는 머리를 클램프에서 앞으로 당긴다. 머리가 앞으로 나오며 돌아 클러치가 풀린다. 전조 중 이송은 피치보다 5% 작게 잡는다(f≈P·0.95). 다른 계열인 F RN은 이송 정지 또는 내부 끝 멈춤쇠로 열리고, 열릴 때 머리 길이가 a(4–5 mm)만큼 늘어난다. 카탈로그의 F-RN 안내는 이송 리드 −3%와 0.5 s 머무름이다.",
+    "closingKo": "닫을 때는 머리를 돌려 클러치를 다시 물린다. 오른나사 머리(F2 EVO)는 손잡이를 반시계 방향으로, 왼나사(F2L)는 시계 방향으로 클러치가 물릴 때까지 돌린다. 머리 쪽 닫힘 요소는 손잡이(공장 상태), 닫힘 롤러, 닫힘 핀, 냉각수 닫힘 장치(KSE, 8–16 bar)다. 기계 쪽 요소는 냉각수 압력 포트, 닫힘 캠, 끝 멈춤(end-stop), 작업자 손이다. 닫힘 클립은 360° 어느 자리에나 고정할 수 있다. 닫힘 각 α는 60°이고 F233400만 30°다.",
+    "quote": "Program “Feed STOP” when reaching the travel distance, so that the rolling head opens automatically.",
+    "refs": [
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 84 (PDF 86쪽) Tab. 8 (독일어 PDF 36쪽)",
+        "quote": "Program “Feed STOP” when reaching the travel distance"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 83 (PDF 85쪽)",
+        "quote": "Select the machine feed 5 % smaller than the thread pitch"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 83 (PDF 85쪽)",
+        "quote": "The rolling head moves forward and twists until the clutch disengages."
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 73 (PDF 75쪽)",
+        "quote": "Move the hand grip counterclockwise until the clutch engaged."
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 68 (PDF 70쪽)",
+        "quote": "the closing cam using the processing machine, the end-stop"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 97 (PDF 99쪽) Tab. 10",
+        "quote": "8–16 bar"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 88 (PDF 90쪽)",
+        "quote": "a = Schalthub Pull off for opening"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 110 (PDF 112쪽)",
+        "quote": "Das Öffnen des Rollkopfes erfolgt durch abstoppen des Maschinenvorschubes."
+      },
+      {
+        "sourceId": "FET_OI_FRN",
+        "page": "인쇄 41 (PDF 44쪽)",
+        "quote": "the overall length of the rolling system increases by the value a"
+      }
+    ]
+  },
+  "blankDia": {
+    "ruleKo": "나사 전조 전 지름은 유효지름보다 0.03 mm 작게 잡는다(dV ≈ d2 − 0.03 mm). 전조 전 지름을 키우거나 줄이면 바깥지름은 그 3~5배로 변한다(0.01 mm → 약 0.03 mm). 재료 흐름이나 공차 등급에 따라 위아래로 맞출 수 있다고 함.",
+    "formula": "dV ≈ d2 − 0,03 mm (카탈로그 인치 표기: dA = d2 − 0.03 mm (0.001\"))",
+    "basis": "유효지름(d2) 기준. 카탈로그도 '전조 시작 지름은 바깥지름이 아니라 유효지름'이라고 씀. UN 나사별 전조 전 지름 표는 LMT 문서에 없음. 카탈로그 부록 UNF/UNEF 표(인쇄 409-410)의 2A 유효지름 최대/최소(mm): 7/16-20 UNF 10.254/10.147, 1/2-20 UNF 11.841/11.732, 3/4-20 UNEF 18.191/18.080, 7/8-20 UNEF 21.366/21.255, 1-20 UNEF 24.539/24.425. 9/16-20, 5/8-20(UN 20산)은 표에 없음. 식에 넣을 d2 를 공차 안 어디로 잡는지는 문서에 없음.",
+    "toleranceKo": "F1-F3 설명서에는 공차 없음. 카탈로그 부록: ±0.015 mm. F01/K01 EVO 설명서(작은 계열): ±0.015 mm. F RN 설명서(다른 계열): −0.02 mm.",
+    "rows": [],
+    "refs": [
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 75 (PDF 77쪽)",
+        "quote": "dV ≈ d2 – 0,03 mm"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 75 (PDF 77쪽)",
+        "quote": "increases/decreases by three to five times as much"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 413 (PDF 415쪽)",
+        "quote": "dA = d2 – 0.03 mm (0.001\") [inches]"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 413 (PDF 415쪽)",
+        "quote": "The determined original diameter should be met with a tolerance of ±0.015 mm!"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 15 (PDF 17쪽)",
+        "quote": "is the pitch diameter of the thread"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 409 (PDF 411쪽)",
+        "quote": "Thread limit dimensions and lead angle for bolt threads see ANSI B 1.1"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 410 (PDF 412쪽)",
+        "quote": "Unified thread, extra fine, UNEF (UNRF)"
+      },
+      {
+        "sourceId": "FET_OI_F01K01",
+        "page": "인쇄 29-30 (PDF 32-33쪽)",
+        "quote": "must be adhered to with a tolerance of ± 0.015 mm"
+      },
+      {
+        "sourceId": "FET_OI_FRN",
+        "page": "인쇄 34 (PDF 37쪽)",
+        "quote": "must be complied with a tolerance of -0,02mm"
+      }
+    ],
+    "offsetMm": 0.03
+  },
+  "speeds": [
+    {
+      "material": "Axial rolling – general recommendation",
+      "materialKo": "축방향 전조 일반",
+      "isoGroup": null,
+      "tensileMpa": null,
+      "vMinMpm": 20,
+      "vMaxMpm": 60,
+      "vRecMpm": null,
+      "noteKo": "카탈로그: 축방향 20-60 m/min, 경우에 따라 90 m/min 까지(인쇄 22). 카탈로그 부록: 삼각나사 20-60, 특정 작업은 100 m/min 까지(인쇄 419). UN 같은 삼각나사는 표 값 그대로, 사다리꼴·둥근나사는 50%. 인장강도 높은 재료는 20-30 m/min(F RN·F01/K01 설명서, 다른 계열).",
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 22 (PDF 24쪽)",
+          "quote": "Recommended rolling speed 20–60 m/min."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 419 (PDF 421쪽)",
+          "quote": "we recommend for V-type threads 20–60 m/min"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽)",
+          "quote": "Trapezoidal and round thread: Select 50 % of the stated value"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 35 (PDF 38쪽)",
+          "quote": "Set the rolling speed to 20-60 m/min."
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 44 (PDF 47쪽)",
+          "quote": "For materials with high tensile strength, operate at 20-30 m/min."
+        }
+      ],
+      "materialNo": null
+    },
+    {
+      "material": "Stainless steel X5CrNi18-10 (1.4301)",
+      "materialKo": "스테인리스강 X5CrNi18-10 (1.4301)",
+      "isoGroup": null,
+      "tensileMpa": "500–700",
+      "vMinMpm": 35,
+      "vMaxMpm": 55,
+      "vRecMpm": null,
+      "noteKo": "표 표시 '잘 전조됨'. 원문 ft/min 115-175 도 같이 있음. 카탈로그 부록도 같은 속도, 연신율 50%. 문서에는 AISI 번호가 없음(1.4301 ≈ AISI 304 는 문서 밖 규격 대응이라 확인 필요).",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽); 독어 인쇄 30 (PDF 32쪽)",
+          "quote": "500– 700 X5CrNi18-10 1.4301 35–55 115–175"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 421 (PDF 423쪽)",
+          "quote": "500– 700 50 X 5 CrNi 1810 1.4301 35–55 | 115–175"
+        }
+      ],
+      "materialNo": "1.4301"
+    },
+    {
+      "material": "Stainless steel X5CrNiMo17-12-2 (1.4401)",
+      "materialKo": "스테인리스강 X5CrNiMo17-12-2 (1.4401)",
+      "isoGroup": null,
+      "tensileMpa": "500–700",
+      "vMinMpm": 30,
+      "vMaxMpm": 50,
+      "vRecMpm": null,
+      "noteKo": "표 표시 '전조 가능'(1.4301 보다 한 단계 낮음). 원문 ft/min 100-165. 카탈로그 부록 연신율 30%. 1.4301 ≈ 304 / 1.4401 ≈ 316 대응은 문서 밖이라 확인 필요. 1.4404(316L) 줄은 없음.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽); 독어 인쇄 30 (PDF 32쪽)",
+          "quote": "500– 700 X5CrNiMo17-12-2 1.4401 30–50 100–165"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 421 (PDF 423쪽)",
+          "quote": "500– 700 30 X5CrNiMo 17122 1.4401 30–50 | 100–165"
+        }
+      ],
+      "materialNo": "1.4401"
+    },
+    {
+      "material": "Stainless steel X6CrNiMoTi17-12-2 (1.4571)",
+      "materialKo": "스테인리스강 X6CrNiMoTi17-12-2 (1.4571)",
+      "isoGroup": null,
+      "tensileMpa": "500–700",
+      "vMinMpm": 30,
+      "vMaxMpm": 50,
+      "vRecMpm": null,
+      "noteKo": "표 표시 '전조 가능'. 원문 ft/min 100-165. 카탈로그 부록 연신율 40%.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽)",
+          "quote": "500– 700 X6CrNiMoTi17-12-2 1.4571 30–50"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 421 (PDF 423쪽)",
+          "quote": "500– 700 40 X6CrNiMoTi 17122 1.4571 30–50"
+        }
+      ],
+      "materialNo": "1.4571"
+    },
+    {
+      "material": "Stainless steel X8CrNiS18-9 (1.4305)",
+      "materialKo": "스테인리스강 X8CrNiS18-9 (1.4305)",
+      "isoGroup": null,
+      "tensileMpa": "500–750",
+      "vMinMpm": 35,
+      "vMaxMpm": 55,
+      "vRecMpm": null,
+      "noteKo": "표 표시 '잘 전조됨'. 원문 ft/min 115-175. 카탈로그 부록은 인장 500-700, 연신율 50% 로 적음.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽)",
+          "quote": "500– 750 X8CrNiS18-9 1.4305 35–55"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 421 (PDF 423쪽)",
+          "quote": "500– 700 50 X 10 CrNiS 189 1.4305 35–55"
+        }
+      ],
+      "materialNo": "1.4305"
+    },
+    {
+      "material": "General structural steel S235JRC (1.0120)",
+      "materialKo": "일반 구조용강 S235JRC (1.0120)",
+      "isoGroup": null,
+      "tensileMpa": "500",
+      "vMinMpm": 40,
+      "vMaxMpm": 80,
+      "vRecMpm": null,
+      "noteKo": "표 표시 '잘 전조됨'. 원문 ft/min 130-265.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽)",
+          "quote": "500 S235JRC 1.0120 40–80 130–265"
+        }
+      ],
+      "materialNo": "1.0120"
+    },
+    {
+      "material": "Free cutting steel 11SMnPb30 (1.0718)",
+      "materialKo": "쾌삭강 11SMnPb30 (1.0718)",
+      "isoGroup": null,
+      "tensileMpa": "360–760",
+      "vMinMpm": 30,
+      "vMaxMpm": 60,
+      "vRecMpm": null,
+      "noteKo": "표 표시 '잘 전조됨'. 원문 ft/min 100-200. 카탈로그 부록: 납이 많으면 비늘처럼 벗겨지기 쉬움.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽)",
+          "quote": "360– 760 11SMnPb30 1.0718 30–60 100–200"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 420 (PDF 422쪽)",
+          "quote": "high lead contents causes chipping"
+        }
+      ],
+      "materialNo": "1.0718"
+    },
+    {
+      "material": "Heat treatable steel C45E (1.1191)",
+      "materialKo": "기계구조용 탄소강 C45E (1.1191)",
+      "isoGroup": null,
+      "tensileMpa": "630–850",
+      "vMinMpm": 20,
+      "vMaxMpm": 50,
+      "vRecMpm": null,
+      "noteKo": "표 표시 '잘 전조됨'(일반 구조용강 칸에 있음). 원문 ft/min 65-165.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽)",
+          "quote": "630– 850 C45E 1.1191 20–50 65–165"
+        }
+      ],
+      "materialNo": "1.1191"
+    },
+    {
+      "material": "Heat treatable steel 42CrMo4 (1.7225)",
+      "materialKo": "조질강 42CrMo4 (1.7225)",
+      "isoGroup": null,
+      "tensileMpa": "1100–1300",
+      "vMinMpm": 20,
+      "vMaxMpm": 50,
+      "vRecMpm": null,
+      "noteKo": "표 표시 '전조 가능'. 원문 ft/min 65-165.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽)",
+          "quote": "1100–1300 42CrMo4 1.7225 20–50 65–165"
+        }
+      ],
+      "materialNo": "1.7225"
+    },
+    {
+      "material": "Brass CuZn39Pb3 (CW614N)",
+      "materialKo": "황동 CuZn39Pb3 (CW614N)",
+      "isoGroup": null,
+      "tensileMpa": "430",
+      "vMinMpm": 40,
+      "vMaxMpm": 70,
+      "vRecMpm": null,
+      "noteKo": "표 표시 '전조 가능'. 원문 ft/min 130-230.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 81 (PDF 83쪽)",
+          "quote": "430 CuZn39Pb3 CW614N (R430) 40–70 130–230"
+        }
+      ],
+      "materialNo": "CW614N"
+    },
+    {
+      "material": "Aluminium alloy AlSi1MgMn (EN AW-6082)",
+      "materialKo": "알루미늄 합금 AlSi1MgMn (EN AW-6082)",
+      "isoGroup": null,
+      "tensileMpa": "160–310",
+      "vMinMpm": 40,
+      "vMaxMpm": 70,
+      "vRecMpm": null,
+      "noteKo": "표 표시 '전조 가능'. 원문 ft/min 130-230.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 81 (PDF 83쪽)",
+          "quote": "160– 310 AlSi1MgMn EN AW-6082 40–70 130–230"
+        }
+      ],
+      "materialNo": "EN AW-6082"
+    }
+  ],
+  "speedBasisDia": {
+    "value": "blank",
+    "explanationKo": "F1-F3 설명서 식 n ≈ 1000·v / (dV·π) 의 dV 는 전조 전 지름이다. 전조 전 지름 ≈ 유효지름 − 0.03 mm 이므로 사실상 유효지름 근처다. 카탈로그 예제도 M16×1.5 를 '전조 전 지름(유효지름) 15.03 mm'로, 1/4-20 UNC 를 유효지름 0.2143\"로 계산한다. 호칭 지름을 쓰라는 문장은 없다.",
+    "refs": [
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 81 (PDF 83쪽)",
+        "quote": "dV : Blank diameter [mm]"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 22 (PDF 24쪽)",
+        "quote": "m/min can be calculated using the blank diameter of the thread"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 419 (PDF 421쪽)",
+        "quote": "Blank-Ø (Pitch-Ø) d = 15.03 mm"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 206 (PDF 208쪽)",
+        "quote": "on AISI/020l → v = 130 SFM; pitch Ø = 0.2143 inch"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 418 (PDF 420쪽)",
+        "quote": "Ausgangsdurchmesser Blank diameter"
+      },
+      {
+        "sourceId": "FET_OI_FRN",
+        "page": "인쇄 44 (PDF 47쪽)",
+        "quote": "dA : blank diameter [mm]"
+      },
+      {
+        "sourceId": "FET_OI_F01K01",
+        "page": "인쇄 36 (PDF 39쪽)",
+        "quote": "dA : initial diameter [mm]"
+      }
+    ]
+  },
+  "stainless": {
+    "splits304vs316": true,
+    "explanationKo": "LMT 표는 1.4301(X5CrNi18-10)과 1.4401(X5CrNiMo17-12-2)을 따로 준다: 1.4301 은 35-55 m/min '잘 전조됨', 1.4401 은 30-50 m/min '전조 가능'. 카탈로그 부록은 연신율도 50% / 30%로 다르다. 다만 문서에는 AISI 304/316 이라는 이름이 없어 이 대응(EN 재료번호 ↔ AISI)은 문서 밖이므로 확인이 필요하다. 카탈로그 독어 본문은 '연신율이 높으면 속도를 높인다'는 규칙에 'VA-Stähle'가 예외라고 적는다(영어 본문에는 이 문장이 없고, VA-Stähle 의 정의도 없음).",
+    "refs": [
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 80 (PDF 82쪽); 독어 인쇄 30 (PDF 32쪽)",
+        "quote": "500– 700 X5CrNi18-10 1.4301 35–55"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 80 (PDF 82쪽)",
+        "quote": "500– 700 X5CrNiMo17-12-2 1.4401 30–50"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 421 (PDF 423쪽)",
+        "quote": "X 5 CrNi 1810 1.4301 … X5CrNiMo 17122 1.4401"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 22 (PDF 24쪽)",
+        "quote": "Eine Ausnahme bilden die sogenannten VA-Stähle."
+      }
+    ]
+  },
+  "feed": {
+    "ruleKo": "CNC 에서 나사 전조 때 기계 이송은 피치보다 5% 작게(f ≈ 0.95·P) 준다. 롤이 기울어져 있어 공작물 1회전에 1피치씩 머리가 스스로 당겨 들어가고, 기계는 따라가기만 한다. 성형 중 공작물이 조금 늘어나므로 5% 줄인다는 설명은 F RN·F01/K01 설명서에 있다. F1-F3 설명서 식은 'f ≈ P·0,95/min [mm/min]'로 적혀 있으나 다른 설명서 예제는 1회전당(M20×1.5 → 1.47 mm/rotation)이다. 재래식 기계는 전조 중 이송을 걸지 않는다. s ≈ dV·k (머리 상수 k) 식은 널링·버니싱용이지 나사용이 아니다. 카탈로그의 F-RN 쪽(다른 계열)은 3% 작게 적어 계열마다 다르다.",
+    "quote": "Select the machine feed 5 % smaller than the thread pitch",
+    "ratioMin": null,
+    "ratioMax": null,
+    "ratioRec": 0.95,
+    "refs": [
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 83 (PDF 85쪽)",
+        "quote": "Select the machine feed 5 % smaller than the thread pitch"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "독어 인쇄 33 (PDF 35쪽)",
+        "quote": "Wählen Sie den Maschinenvorschub 5 % kleiner als die Gewindesteigung"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 83 (PDF 85쪽)",
+        "quote": "Do not switch on a feed during rolling process."
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 17 (PDF 19쪽)",
+        "quote": "feeding the component axially one pitch per rotation into the head"
+      },
+      {
+        "sourceId": "FET_OI_FRN",
+        "page": "인쇄 42 (PDF 45쪽)",
+        "quote": "CNC operating feed rate reduced by ca. 5%: 1,47 mm/rotation"
+      },
+      {
+        "sourceId": "FET_OI_FRN",
+        "page": "인쇄 41 (PDF 44쪽)",
+        "quote": "The operation machine only follows the axial movement"
+      },
+      {
+        "sourceId": "FET_OI_F01K01",
+        "page": "인쇄 33-34 (PDF 36-37쪽)",
+        "quote": "the processing machine has “only” a tracking function"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 110 (PDF 112쪽)",
+        "quote": "a feed that is 3 % below the actual lead"
+      }
+    ]
+  },
+  "workpiece": {
+    "elongationMinPct": 5,
+    "tensileMaxMpa": 1700,
+    "hardnessKo": null,
+    "chamferKo": "공작물 축에 대해 10°-30°로 면취하고, 끝면 지름 d1 은 골지름 d3 − 0.1 mm 이하. 30° 면취는 전조 후 약 45° 면취가 되고, 30°보다 큰 면취는 롤 수명을 크게 줄인다(카탈로그 부록). 언더컷이 있으면 양쪽을 면취한다.",
+    "notesKo": "F1-F3 설명서: 파단 연신율 5% 이상, 인장강도 1700 N/mm² 이하(그 근처면 제조사 문의). 카탈로그 부록은 최소 연신율 '약 7%'로 적고, F RN·F01/K01 설명서(다른 계열)는 '7% 이상, 1000 MPa 이하'를 경험값으로 적어 서로 다르다. 카탈로그 부록 표: 1.4301 연신율 50%, 1.4401 30%. 흔들림을 줄이려면 같은 물림에서 전조 직전에 선삭·면취하고, 언더컷 있는 형상(폭 DIN 76-A)을 권한다.",
+    "refs": [
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 69 (PDF 71쪽)",
+        "quote": "an elongation at fracture of δZ ≥ 5 %"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 69 (PDF 71쪽)",
+        "quote": "a tensile strength of δB ≤ 1700 N/mm2"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 76 (PDF 78쪽)",
+        "quote": "Chamfer the workpiece with an angle of γ = 10°–30° to the workpiece axis."
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 76 (PDF 78쪽)",
+        "quote": "d1 ≤ d3 – 0,1 mm"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 413 (PDF 415쪽)",
+        "quote": "A chamfer angle γ = 30° will result in a chamfer of approx. 45°"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 413 (PDF 415쪽)",
+        "quote": "Increased chamfers (γ > 30°) significantly reduce the tool life of the thread rolls."
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 413 (PDF 415쪽)",
+        "quote": "pre-processed and chamfered directly before rolling in the same clamping position"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 19 (PDF 21쪽)",
+        "quote": "it should have a minimum elongation of 5 %"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 420 (PDF 422쪽)",
+        "quote": "the materials should have a minimum elongation factor of 7 %"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 421 (PDF 423쪽)",
+        "quote": "500– 700 50 X 5 CrNi 1810 1.4301"
+      },
+      {
+        "sourceId": "FET_OI_FRN",
+        "page": "인쇄 21 (PDF 24쪽)",
+        "quote": "elongation σB ≥ 7% und tensile strenght σZ ≤ 1000 MPa"
+      },
+      {
+        "sourceId": "FET_OI_F01K01",
+        "page": "인쇄 20 (PDF 23쪽)",
+        "quote": "elongation at break σB ≥ 7% and tensile strength σZ ≤ 1000 MPa"
+      }
+    ]
+  },
+  "lubrication": {
+    "ruleKo": "절삭에 쓰는 액을 그대로 쓴다: 에멀전 1:10~1:20(필요하면 극압 첨가제), 점도 낮은 절삭유, 이황화몰리브덴. 극압 첨가제는 롤과 공작물 사이 미끄럼을 좋게 해 롤 수명을 늘린다. 건식 가공은 제조사 문의. 절삭유에 칩·입자가 없게 하라(F RN 설명서). 머리 부식을 막으려면 이 조건에 맞는 액만 쓴다.",
+    "refs": [
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 61 (PDF 63쪽)",
+        "quote": "emulsions in the dilution 1: 10 to 1: 20"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 61 (PDF 63쪽)",
+        "quote": "low viscosity cutting oils and molybdenum (IV) sulfide."
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 61 (PDF 63쪽)",
+        "quote": "You can increase the service life of the rolls by using high-pressure additives"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 22 (PDF 24쪽)",
+        "quote": "Please consult us if dry machining is needed."
+      },
+      {
+        "sourceId": "FET_OI_FRN",
+        "page": "인쇄 9 (PDF 12쪽)",
+        "quote": "Ensure that the cooling lubricant is free from chips or particles"
+      }
+    ]
+  },
+  "start": {
+    "ruleKo": "F1-F3 설명서(CNC): 시작 위치에서 이동거리 x ≈ lU − a 를 프로그램한다(lU 전조 길이, a 열림 행정: F2·F23·F233400 3 mm, F34 4 mm). F RN·F01/K01 설명서의 순서: 축방향 접근 → 머리를 공작물에 밀어 넣음 → 마찰로 성형 시작, 이후 머리가 스스로 나아감 → 기계는 피치 −5%로 따라감 → 이송 멈춤으로 열림 → 복귀. 턱(칼라) 앞에는 롤의 불완전 산 때문에 최소 언더컷 g 가 필요: 20산에서 1K 1.957 mm(머리 크기 '2/233400/34' 칸), 1.996 mm('1/23' 칸); 2K 3.227 / 3.267 mm. 카탈로그 대략값: 1K 약 2.3×P, 2K 약 3.3×P. 밀어 넣는 길이(물림 길이)의 수치는 없음.",
+    "refs": [
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 84 (PDF 86쪽)",
+        "quote": "x ≈ lU – a"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 84 (PDF 86쪽)",
+        "quote": "Tab. 8: Determining the opening movement a"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 76 (PDF 78쪽)",
+        "quote": "The minimum undercut (thread runout) g depends on"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 78 (PDF 80쪽)",
+        "quote": "20 1 K 1,996 | 0.079 … 1,957 | 0.077"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 206 (PDF 208쪽)",
+        "quote": "Thread runout approx. 2.3 x p"
+      },
+      {
+        "sourceId": "FET_OI_FRN",
+        "page": "인쇄 42 (PDF 45쪽)",
+        "quote": "The friction caused by the pressing force will start the forming process"
+      },
+      {
+        "sourceId": "FET_OI_FRN",
+        "page": "인쇄 41 (PDF 44쪽)",
+        "quote": "Push in of the work piece in to the rolling head"
+      },
+      {
+        "sourceId": "FET_OI_F01K01",
+        "page": "인쇄 33 (PDF 36쪽)",
+        "quote": "Pressing the workpiece into the rolling head"
+      }
+    ]
+  },
+  "endDwell": {
+    "ruleKo": "모든 전조에서 머리가 열릴 만큼 충분한 머묾 시간을 확보하라고 한다(시간 값은 F1-F3 설명서에 없음). CNC 는 이동거리 x 에 닿으면 '이송 STOP'을 프로그램하고, 그러면 머리가 스스로 열린다. 열리면 머리가 a 만큼 길어진다(F2·F23·F233400 3 mm, F34 4 mm). 카탈로그의 F-RN 쪽(다른 계열)은 0.5초 머문 뒤 열린다고 적고, F RN 설명서는 이송 멈춤 또는 내부 스토퍼로 연다고 적는다.",
+    "refs": [
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 79 (PDF 81쪽)",
+        "quote": "ensure that sufficient and suitable residence time for opening the rolling system is maintained"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "독어 인쇄 29 (PDF 31쪽)",
+        "quote": "eine ausreichende und geeignete Verweilzeit zum Öffnen des Rollsystems"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 84 (PDF 86쪽)",
+        "quote": "Program “Feed STOP” when reaching the travel distance"
+      },
+      {
+        "sourceId": "FET_OI_F1F3_EVO",
+        "page": "인쇄 84 (PDF 86쪽)",
+        "quote": "233400 3 … 34 4"
+      },
+      {
+        "sourceId": "FET_CAT_ROLL",
+        "page": "인쇄 110 (PDF 112쪽)",
+        "quote": "A dwell time of 0.5 seconds needs to be programmed"
+      },
+      {
+        "sourceId": "FET_OI_FRN",
+        "page": "인쇄 50 (PDF 53쪽)",
+        "quote": "The stop of the operating feed will pull the clutch apart"
+      }
+    ]
+  },
+  "otherLimits": [
+    {
+      "textKo": "F 형 EVO 머리(F2·F23·F233400·F34)는 고정 사용 전용이다: 머리는 서 있고 공작물이 돈다(회전 사용은 K 형).",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 63 (PDF 65쪽)",
+          "quote": "the rolling system is stationary and the workpiece rotates"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 88 (PDF 90쪽)",
+          "quote": "F2 EVO, F2L EVO nur feststehend verwendbar to be used stationary only"
+        }
+      ]
+    },
+    {
+      "textKo": "허용 전조 속도 밖에서 쓰는 것은 '예상 가능한 오용'으로 적혀 있다. 최대·최소 회전수 수치는 없다.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 62 (PDF 64쪽)",
+          "quote": "Thread rolling outside of the permissible rolling speed."
+        }
+      ]
+    },
+    {
+      "textKo": "표 값은 기준값이다. 기계 상태, 재료 조직, 머리, 형상, 성형량에 따라 맞추라고 한다.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 79 (PDF 81쪽)",
+          "quote": "Adjust the process variables calculated in the subchapters depending on"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 420 (PDF 422쪽)",
+          "quote": "These tables give basic recommendations."
+        }
+      ]
+    },
+    {
+      "textKo": "첫 세팅은 의심되면 머리를 조금 더 열어 둔다. 너무 닫으면 롤이 바로 깨진다. 보통 목표는 산끝이 덜 찬 형태이고, 과성형(산끝이 눌려 반짝임)은 롤 수명을 크게 줄인다.",
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "in case of doubt, the rolling head should be opened slightly more"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "If the rolling head is closed too far, the thread rolls will break immediately."
+        }
+      ]
+    },
+    {
+      "textKo": "미세 조정 눈금: 한 눈금 ≈ 공작물 지름 0.1 mm.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 84 (PDF 86쪽)",
+          "quote": "one line on the scale corresponds to 0,1 mm/0.004“ workpiece diameter"
+        }
+      ]
+    },
+    {
+      "textKo": "전조 시간 tR ≈ 60·L / (n·P) 초 (L 전조 길이 mm, n 회전수 /min, P 피치 mm).",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 82 (PDF 84쪽)",
+          "quote": "Rolling time for threading and cold-forming of rotationally symmetrical workpieces"
+        }
+      ]
+    },
+    {
+      "textKo": "UN 나사도 머리 리드각과 나사 리드각 차이가 ±30% 안이면 같은 머리로 전조할 수 있다(F RN·F01/K01 설명서, 다른 계열).",
+      "refs": [
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 42 (PDF 45쪽)",
+          "quote": "deviation between the rolling head angle and thread lead angle is below ±30%"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 34 (PDF 37쪽)",
+          "quote": "lead angle does not deviate by more than ±30% from the rolling head’s pitch"
+        }
+      ]
+    }
+  ],
+  "tips": [
+    {
+      "group": "RPM_UP",
+      "order": null,
+      "symptomKo": "나사면이 깨끗하지 않거나 두 줄이 겹친(이중 리드) 모양",
+      "causeKo": "전조 속도가 너무 높음. 고장표는 '너무 낮거나 너무 높음'을 한 줄에 함께 적음",
+      "remedyKo": "회전수를 재질 표의 범위 안으로 낮춤. F1-F3 표 6 값은 1.4401(X5CrNiMo17-12-2) 30–50 m/min, 1.4301(X5CrNi18-10) 35–55 m/min (316·304 대응은 조사자 주이며 원문에 AISI 표기는 없음). 설명서는 허용 속도 밖에서 전조하는 것을 '잘못된 사용'으로 꼽음. F RN·F01/K01 계열 고장표도 원인과 대책이 같음.",
+      "quote": "Rollgeschwindigkeit ist zu gering oder auch zu hoch",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 242 (PDF 244쪽)",
+          "quote": "Rollgeschwindigkeit ist zu gering oder auch zu hoch"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 62 (PDF 64쪽)",
+          "quote": "Thread rolling outside of the permissible rolling speed."
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽), Tab. 6",
+          "quote": "X5CrNiMo17-12-2 1.4401 … 30–50"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13",
+          "quote": "Rolling speed too large or too small"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 50 (PDF 53쪽), Table 8",
+          "quote": "Rolling speed is too low or too high"
+        }
+      ]
+    },
+    {
+      "group": "RPM_UP",
+      "order": null,
+      "symptomKo": "강도가 높은 재질에 회전수를 높게 씀",
+      "causeKo": "재료 강도가 높을수록 전조 속도를 낮춰야 한다는 것이 원문의 원칙",
+      "remedyKo": "재질 강도에 맞춰 속도를 낮춤. F RN과 F01/K01 계열 설명서에는 인장강도가 높은 재질은 약 20–30 m/min, 강도가 높으면 낮은 속도로 하라고 적혀 있음.",
+      "quote": "Higher material strengths require lower rolling speeds.",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 22 (PDF 24쪽)",
+          "quote": "Higher material strengths require lower rolling speeds."
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 44 (PDF 47쪽)",
+          "quote": "For materials with high tensile strength, operate at 20-30 m/min."
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 36 (PDF 39쪽)",
+          "quote": "Choose low rolling speeds for high tensile strengths"
+        }
+      ]
+    },
+    {
+      "group": "RPM_UP",
+      "order": null,
+      "symptomKo": "연신(늘음)이 큰 재질이라는 이유로 회전수를 올리려 함",
+      "causeKo": "카탈로그는 연신이 큰 재질일수록 전조 속도를 크게 고르라고 하면서 'VA-Stähle'는 예외로 둠. 이 문장은 독일어 본문에만 있고 영어판에는 없음",
+      "remedyKo": "스테인리스는 연신만 보고 속도를 올리지 말고 재질 표(F1-F3 표 6) 값을 따름. 'VA-Stähle = 오스테나이트계 스테인리스'라는 풀이는 조사자 주임.",
+      "quote": "Eine Ausnahme bilden die sogenannten VA-Stähle.",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 22 (PDF 24쪽)",
+          "quote": "Eine Ausnahme bilden die sogenannten VA-Stähle."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 22 (PDF 24쪽)",
+          "quote": "Rollgeschwindigkeit bei Werkstoffen mit einem höheren Dehnungskoeffizienten größer zu wählen"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽), Tab. 6",
+          "quote": "X5CrNi18-10 1.4301 … 35–55"
+        }
+      ]
+    },
+    {
+      "group": "RPM_DOWN",
+      "order": null,
+      "symptomKo": "나사면이 깨끗하지 않거나 두 줄이 겹친(이중 리드) 모양",
+      "causeKo": "전조 속도가 너무 낮음. 고장표는 '너무 낮거나 너무 높음'을 한 줄에 함께 적음",
+      "remedyKo": "회전수를 재질 표의 범위 안으로 올림. F1-F3 표 6 값은 1.4401 30–50 m/min, 1.4301 35–55 m/min. F RN·F01/K01 계열 고장표도 원인과 대책이 같음.",
+      "quote": "Rolling speed too large or too small",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 242 (PDF 244쪽)",
+          "quote": "Rolling speed too large or too small"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽), Tab. 6",
+          "quote": "X5CrNiMo17-12-2 1.4401 … 30–50"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 50 (PDF 53쪽), Table 8",
+          "quote": "Rolling speed is too low or too high"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13",
+          "quote": "Rolling speed too large or too small"
+        }
+      ]
+    },
+    {
+      "group": "RPM_DOWN",
+      "order": null,
+      "symptomKo": "회전수를 지나치게 낮게 잡음",
+      "causeKo": "소성 변형에서는 재료가 '흘러야' 하므로 높은 전조 속도가 낮은 속도보다 낫다고 원문이 적음",
+      "remedyKo": "재질 표 범위보다 낮추지 않음. 카탈로그의 축방향 권장 전조 속도는 20–60 m/min(경우에 따라 90 m/min까지).",
+      "quote": "higher rolling speeds are better than low speeds",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 22 (PDF 24쪽)",
+          "quote": "higher rolling speeds are better than low speeds"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 22 (PDF 24쪽)",
+          "quote": "Recommended rolling speed 20–60 m/min."
+        }
+      ]
+    },
+    {
+      "group": "RPM_DOWN",
+      "order": null,
+      "symptomKo": "[접선(T형) 머리 고장표이며 축방향이 아님] 나사가 둥글지 않음",
+      "causeKo": "전조 속도(회전수)가 너무 낮음",
+      "remedyKo": "전조 속도를 20 m/min 아래로 두지 않음. 접선 머리용 표라서 축방향 머리에는 참고로만 씀.",
+      "quote": "Rollgeschwindigkeit sollte nicht kleiner als 20 m/min betragen",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 370 (PDF 372쪽)",
+          "quote": "Rollgeschwindigkeit sollte nicht kleiner als 20 m/min betragen"
+        }
+      ]
+    },
+    {
+      "group": "RATIO_UP",
+      "order": null,
+      "symptomKo": "기계 이송을 피치와 같게(또는 더 크게) 줌",
+      "causeKo": "전조하면 공작물이 조금 늘어나므로 그만큼 이송을 줄여야 한다는 것이 F RN·F01/K01 설명서가 적은 까닭. 이송을 크게 줬을 때 생기는 증상은 원문에 없음",
+      "remedyKo": "이송을 피치보다 약 5 % 작게 줌(F1-F3 설명서 f ≈ 0,95·P). 카탈로그의 F-RN 머리 쪽은 3 % 작게 주고 머리가 열리기 전에 0,5초 머물게 하라고 적어 값이 다름.",
+      "quote": "Select the machine feed 5 % smaller than the thread pitch",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 83 (PDF 85쪽)",
+          "quote": "Select the machine feed 5 % smaller than the thread pitch"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 42 (PDF 45쪽)",
+          "quote": "Because of the elongation it is necessary to reduce, the CNC feed rate"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 34 (PDF 37쪽)",
+          "quote": "the machine feed rate should be approx. 5% smaller than the pitch"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 110 (PDF 112쪽)",
+          "quote": "a feed that is 3 % below the actual lead of thread to be rolled"
+        }
+      ]
+    },
+    {
+      "group": "BLANK_BIG",
+      "order": null,
+      "symptomKo": "롤이 부러짐",
+      "causeKo": "전조 전 소재 지름이 너무 큼",
+      "remedyKo": "소재 지름을 계산값(dV ≈ d2 − 0,03 mm)대로 정확히 가공함. F RN·F01/K01 계열 고장표도 원인과 대책이 같음.",
+      "quote": "Rohlingsdurchmesser zu groß",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 242 (PDF 244쪽)",
+          "quote": "Rohlingsdurchmesser zu groß"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13",
+          "quote": "accurate pre-machining of blank diameter (chapter 5.1)"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 50 (PDF 53쪽), Table 8",
+          "quote": "Blank diameter too large"
+        }
+      ]
+    },
+    {
+      "group": "BLANK_BIG",
+      "order": null,
+      "symptomKo": "나사가 공차를 벗어남(바깥지름·유효지름이 큼)",
+      "causeKo": "소재 지름이 큼(고장표는 '크거나 작음'을 함께 적고, 머리 조정이 부정확한 것도 원인으로 꼽음). 소재 지름을 키우면 바깥지름은 그 3–5배만큼 커짐(ΔdA 0,01 mm → 바깥지름 약 0,03 mm)",
+      "remedyKo": "소재 지름을 줄이고 ±0,015 mm 안으로 지킴. 머리 조정도 다시 확인함.",
+      "quote": "Rohling nicht werkstückgerecht vorbereitet, zu groß, zu klein",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 242 (PDF 244쪽)",
+          "quote": "Rohling nicht werkstückgerecht vorbereitet, zu groß, zu klein"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 413 (PDF 415쪽)",
+          "quote": "Vergrößerung des Ausgangs-Ø dA um △dA eine 3- bis 5-fache Erhöhung des Außen-Ø"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 75 (PDF 77쪽)",
+          "quote": "increases/decreases by three to five times as much"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13",
+          "quote": "Incorrect blank diameter (too big / too small)"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 50 (PDF 53쪽), Table 8",
+          "quote": "Blank not prepared according to workpiece"
+        }
+      ]
+    },
+    {
+      "group": "BLANK_BIG",
+      "order": null,
+      "symptomKo": "산 꼭대기가 넘침(덧성형): 꼭대기 둥근 부분이 다 닫히고 눌려서 번들거림",
+      "causeKo": "과압 전조. 재료가 꼭대기로 너무 많이 감. 롤 수명이 크게 줄고 롤 마모가 늘어남",
+      "remedyKo": "유효지름은 맞는데 꼭대기가 넘치면 소재 지름을 줄임(이때 머리를 조금 열 수도 있음). F1-F3 설명서는 산 넘침을 '잘못된 사용'으로 꼽음. F RN·F01/K01 계열 설명서도 같은 대책.",
+      "quote": "In diesem Fall wurde mit Überdruck gerollt.",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "In diesem Fall wurde mit Überdruck gerollt."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "Ausgangs-Ø dA reduzieren, damit weniger Material in die Zahnspitze fließt"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 62 (PDF 64쪽)",
+          "quote": "Overforming the thread."
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 49 (PDF 52쪽)",
+          "quote": "After rolling, the work piece external diameter d must not have a burnished finish"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 40 (PDF 43쪽)",
+          "quote": "reduce the initial diameter dA. Less material flows into the tooth tip."
+        }
+      ]
+    },
+    {
+      "group": "BLANK_BIG",
+      "order": null,
+      "symptomKo": "[접선(T형) 머리 고장표이며 축방향이 아님] 유효지름과 바깥지름이 둘 다 큼",
+      "causeKo": "소재 지름을 크게 고름",
+      "remedyKo": "소재 지름을 줄이고 롤 축 사이 거리도 줄임(접선 머리의 조정 방식). 이 표는 꼭대기가 다 차고 번들거릴 만큼 전조한 상태를 전제로 함.",
+      "quote": "Ausgangs-Ø verkleinern, Achsabstand der Rollen im Rollkopf verkleinern",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 368 (PDF 370쪽)",
+          "quote": "Ausgangs-Ø verkleinern, Achsabstand der Rollen im Rollkopf verkleinern"
+        }
+      ]
+    },
+    {
+      "group": "BLANK_SMALL",
+      "order": null,
+      "symptomKo": "유효지름은 맞는데 바깥지름이 작음(꼭대기가 덜 참)",
+      "causeKo": "소재 지름이 작아 꼭대기로 갈 재료가 모자람",
+      "remedyKo": "소재 지름을 키워 꼭대기로 재료가 더 가게 함. 필요하면 머리도 조금 더 닫음. F RN·F01/K01 계열 설명서도 같은 대책.",
+      "quote": "müssen Sie den Ausgangs-Ø vergrößern. Dadurch fließt mehr Material in die Zahnspitze.",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "müssen Sie den Ausgangs-Ø vergrößern. Dadurch fließt mehr Material in die Zahnspitze."
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 49 (PDF 52쪽)",
+          "quote": "you have to increase the original diameter"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 40 (PDF 43쪽)",
+          "quote": "but the outer diameter is too small, increase the initial diameter"
+        }
+      ]
+    },
+    {
+      "group": "BLANK_SMALL",
+      "order": null,
+      "symptomKo": "나사가 공차를 벗어남(지름이 작음)",
+      "causeKo": "소재 지름이 작음. 머리 조정이 부정확한 것도 원인으로 함께 꼽음",
+      "remedyKo": "소재 지름을 계산값(dV ≈ d2 − 0,03 mm)에 맞게 키우고 ±0,015 mm 안으로 지킴. 머리 조정도 다시 확인함. 소재 지름 변화의 3–5배가 바깥지름에 나타남.",
+      "quote": "Incorrect blank diameter",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 242 (PDF 244쪽)",
+          "quote": "Incorrect blank diameter"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 413 (PDF 415쪽)",
+          "quote": "Toleranz von ±0,015 mm eingehalten werden"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13",
+          "quote": "Incorrect blank diameter (too big / too small)"
+        }
+      ]
+    },
+    {
+      "group": "BLANK_SMALL",
+      "order": null,
+      "symptomKo": "[접선(T형) 머리 고장표이며 축방향이 아님] 유효지름과 바깥지름이 둘 다 작음",
+      "causeKo": "소재 지름을 작게 고르고 롤도 좁게 맞춤",
+      "remedyKo": "소재 지름을 키우고 롤 축 사이 거리도 늘림(접선 머리의 조정 방식).",
+      "quote": "Ausgangs-Ø vergrößern, Achsabstand der Rollen im Rollkopf vergrößern",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 368 (PDF 370쪽)",
+          "quote": "Ausgangs-Ø vergrößern, Achsabstand der Rollen im Rollkopf vergrößern"
+        }
+      ]
+    },
+    {
+      "group": "SETUP",
+      "order": 1,
+      "symptomKo": "처음 설치(4장): 롤 끼우기, 기능 점검, 기계에 고정",
+      "causeKo": null,
+      "remedyKo": "교환 생크를 달고 롤을 끼움. 이름에 L이 없는 머리는 1-2-3 또는 A-B-C 순서로 시계 방향. 롤·조정 스핀들·닫힘 클립·여닫힘이 잘 움직이는지 점검하고 터렛에 고정함. 전조 토크를 받을 수 있도록 공작물을 충분히 물림.",
+      "quote": "Place the rolls on the carbide bushings in a clockwise direction",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 72 (PDF 74쪽)",
+          "quote": "Place the rolls on the carbide bushings in a clockwise direction"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 73 (PDF 75쪽)",
+          "quote": "Ensure the workpiece is sufficiently clamped in the processing machine"
+        }
+      ]
+    },
+    {
+      "group": "SETUP",
+      "order": 2,
+      "symptomKo": "공작물 준비(소재 지름, 모따기)",
+      "causeKo": null,
+      "remedyKo": "소재 지름 dV ≈ d2 − 0,03 mm(d2 = 유효지름). 정한 지름을 ±0,015 mm 안으로 지킴(F RN 계열 설명서는 −0,02 mm). 모따기는 축에 대해 10–30°, 끝면 지름은 d1 ≤ d3 − 0,1 mm(d3 = 골지름). 소재 가공과 모따기는 전조 바로 전에 같은 물림에서 함.",
+      "quote": "dV ≈ d2 – 0,03 mm",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 75 (PDF 77쪽)",
+          "quote": "dV ≈ d2 – 0,03 mm"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 76 (PDF 78쪽)",
+          "quote": "Chamfer the workpiece with an angle of γ = 10°–30° to the workpiece axis."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 413 (PDF 415쪽)",
+          "quote": "Toleranz von ±0,015 mm eingehalten werden"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 413 (PDF 415쪽)",
+          "quote": "directly before rolling in the same clamping position"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 34 (PDF 37쪽)",
+          "quote": "The resulting blank diameter must be complied with a tolerance of -0,02mm."
+        }
+      ]
+    },
+    {
+      "group": "SETUP",
+      "order": 3,
+      "symptomKo": "전조 속도와 회전수 정하기",
+      "causeKo": null,
+      "remedyKo": "재질 표(표 6)에서 전조 속도를 고름. 삼각 나사는 표 값을 그대로 씀. 1.4401(X5CrNiMo17-12-2)은 30–50 m/min, 1.4301(X5CrNi18-10)은 35–55 m/min (316·304 대응은 조사자 주). 회전수는 n ≈ 1000·v / (dV·π).",
+      "quote": "X5CrNiMo17-12-2 1.4401 … 30–50",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽), Tab. 6",
+          "quote": "X5CrNiMo17-12-2 1.4401 … 30–50"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 81 (PDF 83쪽)",
+          "quote": "n ≈ 1000 · ν / (dV · π)"
+        }
+      ]
+    },
+    {
+      "group": "SETUP",
+      "order": 4,
+      "symptomKo": "CNC 이송 정하기",
+      "causeKo": null,
+      "remedyKo": "이송은 피치보다 5 % 작게 줌(f ≈ 0,95·P). 카탈로그의 F-RN 머리 쪽은 3 % 작게로 적혀 값이 다르니 참고로만 봄.",
+      "quote": "Select the machine feed 5 % smaller than the thread pitch",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 83 (PDF 85쪽)",
+          "quote": "Select the machine feed 5 % smaller than the thread pitch"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 110 (PDF 112쪽)",
+          "quote": "a feed that is 3 % below the actual lead of thread to be rolled"
+        }
+      ]
+    },
+    {
+      "group": "SETUP",
+      "order": 5,
+      "symptomKo": "전조 길이와 머리 열림 프로그램",
+      "causeKo": null,
+      "remedyKo": "앞판에 적힌 머리 크기로 표 8에서 열림 이동 a를 찾음(2·23·233400 = 3 mm, 34 = 4 mm). 이동 거리 x ≈ lU − a(lU = 전조 길이)를 프로그램하고, 그 자리에서 'Feed STOP'을 걸면 머리가 저절로 열림. 열리는 데 필요한 머묾 시간을 충분히 둠(카탈로그의 F-RN 예: 0,5초).",
+      "quote": "Program “Feed STOP” when reaching the travel distance",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 84 (PDF 86쪽), Tab. 8",
+          "quote": "Program “Feed STOP” when reaching the travel distance"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 79 (PDF 81쪽)",
+          "quote": "ensure that sufficient and suitable residence time for opening the rolling system is maintained"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 110 (PDF 112쪽)",
+          "quote": "A dwell time of 0.5 seconds needs to be programmed"
+        }
+      ]
+    },
+    {
+      "group": "SETUP",
+      "order": 6,
+      "symptomKo": "머리 미세 조정(맞춤 심봉 또는 게이지)",
+      "causeKo": null,
+      "remedyKo": "머리를 닫고 칩 가드 너트 3개를 풂. 앞판 구멍으로 롤 사이에 심봉을 넣고, 안 들어가면 '+', 틈이 있으면 '−'로 조정 스핀들을 돌려 심봉이 단단히 물리게 함. 너트를 조이고 머리를 열어 심봉을 뺀 뒤, 나사 크기·변형 정도·재질에 따른 차이를 다시 맞추고 눈금 값을 적어 둠. 눈금 1칸은 지름 약 0,1 mm이고 '+'는 지름이 커지는 쪽, '−'는 작아지는 쪽. 조정에는 백래시가 있음. 심봉 지름은 F1-F3 설명서에 없고, 카탈로그의 F-RN 머리 설명은 '나사 골지름'.",
+      "quote": "Readjust possible variances due to the thread size, the degree of deformation",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 86 (PDF 88쪽)",
+          "quote": "Readjust possible variances due to the thread size, the degree of deformation"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 84 (PDF 86쪽)",
+          "quote": "one line on the scale corresponds to 0,1 mm/0.004“ workpiece diameter"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 85 (PDF 87쪽)",
+          "quote": "Note that the fine adjustment is not free of backlash."
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 87 (PDF 89쪽)",
+          "quote": "Note down the set value for future use of the rolling system."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 111 (PDF 113쪽)",
+          "quote": "having the root diameter of the thread to be rolled"
+        }
+      ]
+    },
+    {
+      "group": "SETUP",
+      "order": 7,
+      "symptomKo": "닫힘 요소 맞추기(5.4)",
+      "causeKo": null,
+      "remedyKo": "머리를 연 상태에서 닫힘 클립 나사를 풀고, 머리 쪽 닫힘 요소를 기계 쪽 닫힘 요소(캠, 끝 스톱 등) 위치에 맞춘 뒤 다시 조임.",
+      "quote": "Adjust the position of the closing element on the rolling system",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 87 (PDF 89쪽)",
+          "quote": "Adjust the position of the closing element on the rolling system"
+        }
+      ]
+    },
+    {
+      "group": "SETUP",
+      "order": 8,
+      "symptomKo": "첫 전조와 산 모양 확인",
+      "causeKo": null,
+      "remedyKo": "첫 전조 전에 머리를 정확히 맞춤. 헷갈리면 조금 더 열어 둠(너무 닫으면 롤이 바로 부러짐). 첫 품의 산 모양을 살핌. 대부분의 쓰임은 꼭대기가 덜 찬 '이 1'을 목표로 함.",
+      "quote": "Im Zweifelsfall sollte der Rollkopf etwas mehr geöffnet werden.",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "Im Zweifelsfall sollte der Rollkopf etwas mehr geöffnet werden."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "In der Regel reicht dieser Ausformgrad aus, um ein tragfähiges Gewinde zu erhalten."
+        }
+      ]
+    },
+    {
+      "group": "SETUP",
+      "order": 9,
+      "symptomKo": "첫 품 보정(유효지름과 바깥지름 맞추기)",
+      "causeKo": null,
+      "remedyKo": "유효지름이 조금 크고 바깥지름이 작으면 머리를 조금 닫음. 그러면 유효지름은 작아지고 꼭대기로 재료가 더 가서 바깥지름이 커짐. 그 뒤에도 꼭대기가 넘치면 소재 지름을 줄이고, 바깥지름이 아직 작으면 소재 지름을 키움(BLANK_BIG·BLANK_SMALL 참고). 머리에 맞춘 지름과 실제 지름은 성형력에 따른 휨 때문에 다름(F RN 계열 설명서). 카탈로그의 F-RN 머리 설명은 유효지름이 크면 약 반 눈금 좁히라고 함.",
+      "quote": "Schließen Sie den Rollkopf leicht. Dadurch wird der Rollkopf enger und der Flanken-Ø kleiner.",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "Schließen Sie den Rollkopf leicht. Dadurch wird der Rollkopf enger und der Flanken-Ø kleiner."
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 48 (PDF 51쪽)",
+          "quote": "The adjusted diameter on the rolling head will differ to the produced diameter"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 111 (PDF 113쪽)",
+          "quote": "der Rollkopf um etwa einen halben Teilstrich enger zu stellen"
+        }
+      ]
+    },
+    {
+      "group": "OTHER",
+      "order": null,
+      "symptomKo": "원뿔꼴(테이퍼) 나사",
+      "causeKo": "소재가 이미 원뿔꼴로 가공됨, 앞판 또는 편심 볼트 마모, 머리와 공작물 중심이 어긋남(0,2 mm 오차)",
+      "remedyKo": "소재를 곧게 가공함. 앞판을 바꿈. 편심 볼트(롤 축)는 지름 차가 0,03 mm를 넘으면 바꿈(F01/K01·F RN 계열 설명서). 머리와 공작물 중심을 다시 맞춤.",
+      "quote": "Exzenterbolzen verschlissen, Rollkopf fluchtet nicht mit dem Werkstück (0,2 mm Fehler)",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 242 (PDF 244쪽)",
+          "quote": "Exzenterbolzen verschlissen, Rollkopf fluchtet nicht mit dem Werkstück (0,2 mm Fehler)"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 50 (PDF 53쪽), Table 8",
+          "quote": "Measure bolt, if difference in Ø > 0.03 mm, replace eccentric spindle"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13",
+          "quote": "Replace roll axis if wear Ø > 0,03mm"
+        }
+      ]
+    },
+    {
+      "group": "OTHER",
+      "order": null,
+      "symptomKo": "피치(리드) 오차",
+      "causeKo": "머리와 공작물 중심이 어긋남(0,2 mm), 머리의 롤 경사각이 나사에 맞지 않음, 맞지 않는 롤이나 재질, 이송이 틀림(방향은 적혀 있지 않음)",
+      "remedyKo": "중심을 다시 맞춤. 나사 리드각이 머리 롤 경사각의 ±30 % 안인지 확인하고, 벗어나면 맞는 머리로 바꿈(카탈로그 표: 2 = 3°, 23 = 1°25′, 233400 = 1°15′, 34 = 1°15′). 이송은 설명서 값(피치 −5 %)대로 줌. 재질은 되도록 같은 로트를 씀(F01/K01 계열 설명서).",
+      "quote": "Falscher Rollkopfwinkel",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 242 (PDF 244쪽)",
+          "quote": "Falscher Rollkopfwinkel"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 237 (PDF 239쪽)",
+          "quote": "DOES NOT VARY MORE THAN ± 30 %"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13",
+          "quote": "choose feed rate according to chapter 5.2"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 50 (PDF 53쪽), Table 8",
+          "quote": "use material from same batch if possible"
+        }
+      ]
+    },
+    {
+      "group": "OTHER",
+      "order": null,
+      "symptomKo": "롤이 부러짐(소재 지름이 아닌 다른 원인)",
+      "causeKo": "모따기가 맞지 않음, 머리를 너무 좁게 맞춤, 중심이 어긋남, 재질이 너무 단단함, 성형할 재료가 너무 많음, 과압 전조",
+      "remedyKo": "모따기를 10–30°로 고침. 머리를 더 크게(열어) 맞춤. 너무 닫으면 롤이 곧바로 부러짐. 중심을 맞춤. 재질이 너무 단단하면 바로 멈추고 제조사에 문의함(F01/K01 계열). 재료가 많으면 더 큰 머리를 씀(F RN·F01/K01 계열).",
+      "quote": "Ist der Rollkopf zu weit geschlossen, führt das unmittelbar zum Bruch der Gewinderollen.",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "Ist der Rollkopf zu weit geschlossen, führt das unmittelbar zum Bruch der Gewinderollen."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 242 (PDF 244쪽)",
+          "quote": "Rollkopf zu klein eingestellt"
+        },
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 50 (PDF 53쪽), Table 8",
+          "quote": "Adjust rolling head larger, see section 4.3"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13",
+          "quote": "choose bigger rolling head"
+        }
+      ]
+    },
+    {
+      "group": "OTHER",
+      "order": null,
+      "symptomKo": "롤 마모가 너무 빠름",
+      "causeKo": "전조성이 나쁜 재질, 전조 속도가 맞지 않음(방향은 적혀 있지 않음), 재질 연신 부족, 롤 물림부가 너무 짧음, 냉각 부족, 맞지 않는 모따기",
+      "remedyKo": "속도를 재질 표대로 점검함. 냉각액을 공급하고 노즐을 다시 겨누고 압력을 올림(F RN 계열). 모따기가 30°를 넘으면 롤 수명이 크게 줄어듦. 극압 첨가제를 쓰면 롤 수명이 늘어남. 리드가 긴 롤(2K)이 짧은 롤(1K)보다 오래감. 꼭대기 넘침(과압)도 마모를 늘림(BLANK_BIG 참고).",
+      "quote": "Rollgeschwindigkeit nicht korrekt",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 242 (PDF 244쪽)",
+          "quote": "Rollgeschwindigkeit nicht korrekt"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13",
+          "quote": "start using coolant, readjust coolant nozzles, increase coolant pressure"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 413 (PDF 415쪽)",
+          "quote": "Größere Fasen (γ > 30°) reduzieren die Standmenge der Gewinderollen erheblich."
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 61 (PDF 63쪽)",
+          "quote": "increase the service life of the rolls by using high-pressure additives"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 207 (PDF 209쪽)",
+          "quote": "thread rolls having a longer lead will provide greater roll life"
+        }
+      ]
+    },
+    {
+      "group": "OTHER",
+      "order": null,
+      "symptomKo": "나사면이 깨끗하지 않음(속도가 아닌 다른 원인)",
+      "causeKo": "롤을 머리에 잘못 끼움, 맞지 않는 모따기, 밀어 넣는 힘이 너무 작거나 큼, 공작물 휨(F RN 계열)",
+      "remedyKo": "롤을 순서대로 다시 끼움(1-2-3 또는 A-B-C). 모따기를 다시 함. 밀어 넣는 힘을 조정함. 공작물 받침을 보강함(F RN 계열).",
+      "quote": "Die Aufrollleistung ist zu gering oder zu hoch",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 242 (PDF 244쪽)",
+          "quote": "Die Aufrollleistung ist zu gering oder zu hoch"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13",
+          "quote": "Adjust the pressing/psuhing force"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13",
+          "quote": "increase workpiece support"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 72 (PDF 74쪽)",
+          "quote": "in the order 1-2-3 or A-B-C"
+        }
+      ]
+    },
+    {
+      "group": "OTHER",
+      "order": null,
+      "symptomKo": "전조 결과가 틀림(F1-F3 설명서 고장표)",
+      "causeKo": "원문은 원인을 따로 적지 않고 점검할 곳만 듦",
+      "remedyKo": "머리 부품 마모를 확인한 뒤, 4.2 롤 끼우기, 5.1 공작물 준비, 5.2 공정값, 5.3 미세 조정을 지켰는지 차례로 확인함.",
+      "quote": "Roll result is wrong",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 93 (PDF 95쪽), 12장 표",
+          "quote": "Roll result is wrong"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 43 (PDF 45쪽), 12장 표(독일어)",
+          "quote": "Rollergebnis stimmt nicht"
+        }
+      ]
+    },
+    {
+      "group": "OTHER",
+      "order": null,
+      "symptomKo": "들어가는 쪽과 나오는 쪽의 산이 심하게 처짐",
+      "causeKo": "원문은 공정값(5.2)과 그 값이 재질에 맞는지를 점검하라고만 함",
+      "remedyKo": "5.2 공정값(속도, 이송, 길이)을 지켰는지, 그 값이 재질 요구에 맞는지 확인함.",
+      "quote": "Strongly sloping profile in the inlet and outlet",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 93 (PDF 95쪽), 12장 표",
+          "quote": "Strongly sloping profile in the inlet and outlet"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 43 (PDF 45쪽), 12장 표(독일어)",
+          "quote": "Stark abfallendes Profil im Ein- und Auslauf"
+        }
+      ]
+    },
+    {
+      "group": "OTHER",
+      "order": null,
+      "symptomKo": "전조 길이 lU에 못 미침",
+      "causeKo": "머리 부품 마모, 또는 5.2 값(이동 거리, 열림 이동 a)이 틀림",
+      "remedyKo": "마모를 확인함. x ≈ lU − a로 다시 계산하고(a: 2·23·233400 = 3 mm, 34 = 4 mm) 그 자리에서 Feed STOP을 걺.",
+      "quote": "Length to be reformed of the workpiece lU is not reached",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 93 (PDF 95쪽), 12장 표",
+          "quote": "Length to be reformed of the workpiece lU is not reached"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 84 (PDF 86쪽), Tab. 8",
+          "quote": "x ≈ lU – a"
+        }
+      ]
+    },
+    {
+      "group": "OTHER",
+      "order": null,
+      "symptomKo": "산 꼭대기가 덜 차서 가운데에 홈이나 갈라진 듯한 자국이 남음",
+      "causeKo": "덜 성형된 이(이 1). 원문은 이 정도면 대개 충분하고 대부분의 쓰임이 이것을 목표로 한다고 적음. 다 성형된 이 2도 가운데에 작은 '홈'이 남음",
+      "remedyKo": "그 자체로는 불량이 아님. 바깥지름 공차만 확인함(성형 정도가 지름에 영향을 줌). 꼭대기를 다 채우려고 소재를 키우면 작은 지름 흔들림에도 넘침(과압)이 생길 수 있음.",
+      "quote": "In der Regel reicht dieser Ausformgrad aus, um ein tragfähiges Gewinde zu erhalten.",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "In der Regel reicht dieser Ausformgrad aus, um ein tragfähiges Gewinde zu erhalten."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "Kleinste Schwankungen im Ausgangs-Ø führen zu einem Überformen"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 49 (PDF 52쪽)",
+          "quote": "Bear in mind, that the degree of forming effects the produced diameter."
+        }
+      ]
+    },
+    {
+      "group": "OTHER",
+      "order": null,
+      "symptomKo": "불량 나사를 다시 전조해서 고치려 함",
+      "causeKo": null,
+      "remedyKo": "한 번 전조한 나사는 다시 전조하지 않음(카탈로그의 F-RN 머리 설명).",
+      "quote": "A rolled thread should never be re-rolled.",
+      "secondary": false,
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 111 (PDF 113쪽)",
+          "quote": "A rolled thread should never be re-rolled."
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "RPM_UP": "Fette 공식 3줄. ① 축방향 고장표(카탈로그 인쇄 242, F RN 69, F01/K01 50)의 '전조 속도가 너무 높음/낮음 → 나사면 불량'(두 방향을 한 줄에 함께 적음) ② 카탈로그 인쇄 22의 '강도가 높으면 속도를 낮게'(F RN 44, F01/K01 36: 20–30 m/min) ③ 같은 쪽 독일어 본문의 'VA-Stähle 예외'. F1-F3 설명서 인쇄 62의 '허용 속도 밖 = 잘못된 사용'과 표 6 값을 근거로 붙임. 속도를 올렸을 때의 다른 구체 증상(열, 떨림 등)은 원문에 없음.",
+    "RPM_DOWN": "3줄. ① 같은 고장표의 '너무 낮음' ② 카탈로그 인쇄 22 '낮은 속도보다 높은 속도가 낫다(재료가 흘러야 함)', 축방향 권장 20–60 m/min ③ 접선(T형) 머리 고장표 인쇄 370 '속도 낮음 → 둥글지 않은 나사, 20 m/min 미만 금지'(접선용이라고 표시함).",
+    "RATIO_UP": "1줄(간접). F1-F3 설명서 인쇄 83 '이송을 피치보다 5 % 작게'. 그 까닭은 F RN 42와 F01/K01 34에 있음(전조하면 공작물이 늘어남). 카탈로그 인쇄 110(F-RN)은 '3 % 작게 + 0,5초 머묾'으로 값이 다름. 이송이 피치보다 클 때 생기는 증상을 적은 문장은 없음. 고장표의 '피치 오차 ← 이송 틀림'은 방향이 없어 OTHER에 둠.",
+    "RATIO_DOWN": "없음. F1-F3 설명서 5.2.4(인쇄 83)·12장(인쇄 93), 카탈로그 인쇄 22·110-111·242·368-370·413-414, F RN 인쇄 41-42·69, F01/K01 인쇄 33-34·50, 브로셔·대리점 PDF 전체 글에서 '이송이 피치보다 작을 때/이송을 줄일 때'의 증상이나 대책을 찾지 못함.",
+    "BLANK_BIG": "4줄. ① 축방향 고장표 '롤 부러짐 ← 소재 지름 큼' ② 같은 표 '공차 밖 ← 소재 지름 크거나 작음'(카탈로그 242, F RN 69, F01/K01 50), 카탈로그 413의 '바깥지름이 3–5배로 변함'·±0,015 mm ③ 카탈로그 414 '꼭대기 넘침 = 과압 → 롤 수명이 크게 줆 → 소재 지름 줄임'(F RN 49, F01/K01 40 도 같은 말) ④ 접선 고장표 1줄(접선용이라고 표시함).",
+    "BLANK_SMALL": "3줄. ① 카탈로그 414, F RN 49, F01/K01 40 '유효지름은 맞는데 바깥지름이 작으면 → 소재 지름 키움(필요하면 머리도 닫음)' ② 고장표 '공차 밖 ← 작음' ③ 접선 고장표 1줄(접선용이라고 표시함).",
+    "SETUP": "9단계. F1-F3 설명서 4장(인쇄 71-74)과 5장(인쇄 75-87) 차례를 따르고, 카탈로그 인쇄 413-414(첫 전조 전 맞춤, 산 모양 보정)와 110-111(F-RN 머리, 참고용)을 덧붙임."
+  },
+  "notFound": [
+    {
+      "field": "R1 heads[].rollDiaMm",
+      "reason": "롤 바깥 지름 수치를 찾지 못했다. 카탈로그 머리·롤 쪽(PDF 90-108, 114-119), 설명서 3.2·3.6(PDF 67, 71), 브로셔 PDF 24, 대리점 롤 카탈로그 1-12쪽에는 롤 한 벌 무게(m-Ro)만 있다."
+    },
+    {
+      "field": "R1 heads[].maxRpm",
+      "reason": "머리별 최대 회전수나 전조 속도 한도가 없다. 설명서 5.2.1(PDF 82-83)에는 재질별 권장 전조 속도(Tab.6)와 n 공식만, 카탈로그 PDF 15·24에는 예시 1600 min-1과 축방향 권장 20–60(90) m/min만 있다. 설명서 2.3은 '허용 전조 속도 밖'을 오용으로 적지만 수치는 없다."
+    },
+    {
+      "field": "R1 heads[F2 EVO, F23 EVO, F3 EVO, F34 EVO, F3-1RN, F34-1RN].maxRollLengthMm",
+      "reason": "머리 그림표가 '∞'(무제한)라서 숫자가 없다. 다만 F23 ¹⁾ 롤은 19 mm, F34 ¹⁾ 롤은 24 mm다(롤 쪽 각주와 선택표). F-RN은 공작물이 D4(25 mm)보다 크면 L5까지다."
+    },
+    {
+      "field": "R1 heads[].pitchMinMm/pitchMaxMm/tpiMin/tpiMax (공식 '피치 범위' 칸)",
+      "reason": "카탈로그 머리 쪽과 설명서에 머리별 피치 범위 칸이 없다. 그래서 각 머리 롤 쪽의 표준 나사 롤 목록에서 최소·최대값을 읽어 채웠다(널링·둥근나사·NPT 제외). 설명서 Tab.5(PDF 80-81)는 크기 묶음(1/23, 12, 1223, 2/233400/34, 3)별 나사끝 길이 표라서 범위의 근거로 쓰지 않았다."
+    },
+    {
+      "field": "R1 'F2334' 표기",
+      "reason": "받은 문서 6개(설명서 3종, 카탈로그, 브로셔, 대리점 롤 카탈로그)의 텍스트를 모두 찾았지만 'F2334'는 없다. 'F233400'만 머리 이름으로 나온다."
+    },
+    {
+      "field": "R1 sources: FET_OI_F01K01",
+      "reason": "F01/K01 설명서는 텍스트 검색만 했다. 필요한 칸을 F1–F3 설명서와 카탈로그에서 모두 찾았기 때문에 쪽 그림을 열지 않았고, 근거로도 쓰지 않았다."
+    },
+    {
+      "field": "R2 blankDia.rows",
+      "reason": "UN 20산 일곱 규격의 전조 전 지름 표가 없음. F1-F3 설명서 5.1.1, 카탈로그 부록(인쇄 409-421), F RN·F01/K01 설명서, EVOline 브로셔·대리점 롤 카탈로그(txt 검색)를 찾음. 식(d2 − 0.03 mm)과 d2 표(UNF/UNEF 다섯 규격)만 있어 계산값은 넣지 않음. 9/16-20, 5/8-20 은 d2 표에도 없음."
+    },
+    {
+      "field": "R2 speeds[].vRecMpm",
+      "reason": "모든 표가 범위만 주고 단일 추천값은 없음(F1-F3 Tab. 6, 카탈로그 부록, F RN Table 8, F01/K01 Table 5)."
+    },
+    {
+      "field": "R2 speeds[].isoGroup",
+      "reason": "문서에 ISO 재질군(P/M/N…) 표기가 없음. 기억으로 채우지 않음."
+    },
+    {
+      "field": "R2 stainless (AISI 이름)",
+      "reason": "어떤 문서에도 AISI 304/316 표기 없음(전체 txt 에서 AISI·304·316 검색). EN 번호 1.4301/1.4401 로만 나눔. 1.4404(316L) 줄도 없음."
+    },
+    {
+      "field": "R2 workpiece.hardnessKo",
+      "reason": "경도 한도가 없음. 설명서는 연신율·인장강도로만 판단하고, 카탈로그 부록 표의 브리넬 칸은 스테인리스 줄이 비어 있음."
+    },
+    {
+      "field": "R2 feed.ratioMin / feed.ratioMax",
+      "reason": "F1-F3 설명서는 5%(0.95) 한 값만 줌. 범위 없음. 카탈로그의 F-RN 쪽 3%(0.97)는 다른 계열이라 범위로 넣지 않음."
+    },
+    {
+      "field": "R2 endDwell (머묾 시간 값)",
+      "reason": "F1-F3 설명서는 '충분한 머묾'만 적고 시간 수치가 없음. 0.5초는 카탈로그 F-RN 쪽(인쇄 110)에만 있음."
+    },
+    {
+      "field": "R2 start (물림 길이·접근 위치 수치)",
+      "reason": "F1-F3 설명서·카탈로그 축방향 쪽에 밀어 넣는 길이나 접근 거리 수치가 없음. F RN·F01/K01 설명서도 순서만 적음."
+    },
+    {
+      "field": "R2 otherLimits (최대·최소 회전수)",
+      "reason": "F1-F3 설명서, 카탈로그 F2-F34 EVO 쪽과 기술 부록에 최대·최소 회전수 수치가 없음. 속도는 m/min 범위로만 줌."
+    },
+    {
+      "field": "R3 tips.RATIO_DOWN",
+      "reason": "F1-F3 설명서 5.2.4(인쇄 83)·12장(인쇄 93), 카탈로그 인쇄 22·110-111·242·368-370·413-414, F RN 인쇄 41-42·69, F01/K01 인쇄 33-34·50을 쪽 그림으로 보고, 브로셔와 대리점 PDF는 글 전체를 검색했으나 '이송이 피치보다 작을 때/이송을 줄일 때'의 증상이나 대책 문장이 없음."
+    },
+    {
+      "field": "R3 tips.RATIO_UP (이송이 피치보다 클 때의 증상)",
+      "reason": "원문은 '피치보다 5 % 작게'(카탈로그 F-RN은 3 %)와 그 까닭(공작물이 늘어남)만 적고, 크게 줬을 때 무엇이 생기는지는 적지 않음. 고장표의 '피치 오차 ← 이송 틀림'(F RN 69, F01/K01 50)은 방향이 없어 OTHER에 둠."
+    },
+    {
+      "field": "R3 tips.RPM_UP (속도를 올렸을 때의 구체 증상)",
+      "reason": "축방향 고장표 3종(카탈로그 242, F RN 69, F01/K01 50)은 '너무 낮거나 높음 → 나사면 불량'만 한 줄로 적음. 열, 떨림, 칩 같은 다른 증상 문장은 찾은 모든 쪽에 없음. 롤 마모의 '속도가 맞지 않음'도 방향이 없어 OTHER에 둠."
+    },
+    {
+      "field": "R3 tips.OTHER (산 꼭대기 균열·쪼개짐, 축방향)",
+      "reason": "축방향 자료(F1-F3 설명서, 카탈로그 242·413-414, F RN, F01/K01)에는 꼭대기 균열 항목이 없고 '덜 찬 꼭대기(이 1)'와 '가운데 홈(이 2)' 설명만 있음. 균열·쪼개짐은 접선 머리 고장표 9·9.1(인쇄 369-370)에만 있는데, 원인이 롤 짝 뒤바뀜·톱니바퀴·횡이송 행정 같은 접선 전용이라 넣지 않음."
+    },
+    {
+      "field": "R3 tips.OTHER (머리가 늦게 열림·안 열림)",
+      "reason": "F1-F3 고장표(인쇄 93·43)에는 'lU에 못 미침'만 있고 늦게 열림이나 안 열림 항목은 없음. 5.2의 '열림 머묾 시간 충분히'(인쇄 79)와 카탈로그 F-RN의 0,5초(인쇄 110)만 SETUP 5단계에 넣음."
+    },
+    {
+      "field": "R3 F1-F3 설명서 고장표의 구체 원인",
+      "reason": "F1-F3 EVOline 설명서 12장(인쇄 93, 독일어 인쇄 43)은 3줄뿐이고 '해당 장을 지켰는지 확인'만 적음. 구체 원인은 같은 회사 카탈로그 축방향 고장표(인쇄 242)와 F RN·F01/K01 설명서 고장표로 채웠고, 계열 이름을 글에 밝힘."
+    },
+    {
+      "field": "R3 sources.FET_EVO_BROCHURE / DIST_TECHMAR_ROLLS 의 R3 내용",
+      "reason": "두 PDF의 pdftotext 글 전체에서 고장·원인·대책·조정·속도·이송 낱말을 찾았으나 고장표나 조정 요령이 없음(브로셔는 기능 소개와 닫힘 장치 흐름, 대리점 PDF는 롤 목록뿐)."
+    },
+    {
+      "field": "tips RATIO_DOWN",
+      "reason": "이송을 피치보다 작게(내려) 줄 때의 증상 · 대책은 받은 공식 자료 어디에도 없음(R3 coverage). 다른 회사 자료는 찾지 않음."
+    }
+  ],
+  "corrected": [
+    {
+      "path": "heads[5].opening",
+      "was": "닫기는 손으로(고정형) 또는 주축 기동으로(회전형)",
+      "reason": "대조 X1: 손=고정형 · 주축=회전형 짝짓기는 원문에 없음, 터렛 돌림 닫힘이 빠짐(카탈로그 · FET_OI_FRN 인쇄 31)"
+    },
+    {
+      "path": "modelNaming.systemKo",
+      "was": "FU(5·6롤, 관용)",
+      "reason": "대조 X1: FU 는 재래식 기계용 플랜지형 축방향 머리 계열이고 5·6롤 관용은 특수형('Type FU with 5 and 6 rolls (special for pipes)')"
+    },
+    {
+      "path": "coverage.BLANK_BIG",
+      "was": "F RN 49, F01/K01 40, F1-F3 62도 같은 말",
+      "reason": "대조 X3: F1-F3 인쇄 62 는 산 넘침을 오용으로 꼽기만 하고 '과압 → 롤 수명 → 지름 줄임' 말은 없음"
+    },
+    {
+      "path": "coverage.BLANK_SMALL",
+      "was": "③ 접선 고장표 2줄",
+      "reason": "대조 X3: tips 에 든 접선 줄은 1개(카탈로그 인쇄 368)"
+    }
+  ],
+  "checkerAdded": [
+    {
+      "by": "X1",
+      "textKo": "전조할 수 있는 재질 한계: 파단 연신율 δZ ≥ 5 %, 인장강도 σB ≤ 1700 N/mm². 이 범위 밖이거나 경계에 가까우면 LMT 에 문의하라고 적혀 있다(316·304 모두 500–700 N/mm² 라 범위 안).",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 69 (PDF 71쪽) 3.6.2",
+          "quote": "elongation at fracture of δZ ≥ 5 % and a tensile strength of δB ≤ 1700 N/mm2"
+        }
+      ]
+    },
+    {
+      "by": "X1",
+      "textKo": "Tab.6 전조성 기호: 1.4301(304)은 '전조성 좋음', 1.4401(316)은 '전조 가능'(한 단계 낮음). 인장강도는 둘 다 500–700 N/mm², ft/min 은 304 115–175, 316 100–165. 사다리꼴·둥근 나사는 표 값의 50 %.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 80 (PDF 82쪽) Tab. 6",
+          "quote": "X5CrNiMo17-12-2 1.4401 30–50 100–165"
+        }
+      ]
+    },
+    {
+      "by": "X1",
+      "textKo": "카탈로그 기술 부록: 연신율이 큰 재질은 더 빠른 전조 속도가 가능하지만 VA 강(스테인리스)은 예외이고, 강도가 높을수록 속도를 낮춘다(이 VA 예외 문장은 독일어 쪽에만 있다). 냉각제는 1:10–1:20 에멀션이나 저점도 절삭유를 쓰고, 고압 첨가제가 롤 수명을 늘린다. 건식 가공은 문의.",
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 22 (PDF 24쪽) 13·14항",
+          "quote": "Eine Ausnahme bilden die sogenannten VA-Stähle."
+        }
+      ]
+    },
+    {
+      "by": "X1",
+      "textKo": "20 TPI 최소 언더컷(나사끝) g: 크기 2·233400·34 는 1K 1.957 mm, 2K 3.227 mm. 크기 3 은 1K 1.916, 2K 3.187. 크기 1·23 은 1K 1.996, 2K 3.267.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 78 (PDF 80쪽) Tab. 5",
+          "quote": "20 1 K 1,996 … 1,957 1,916"
+        }
+      ]
+    },
+    {
+      "by": "X1",
+      "textKo": "소재 준비: 모따기 각 γ = 10°–30°(공작물 축 기준), 끝면 지름 d1 ≤ d3(골지름) − 0.1 mm.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 76 (PDF 78쪽)",
+          "quote": "Chamfer the workpiece with an angle of γ = 10°–30°"
+        }
+      ]
+    },
+    {
+      "by": "X1",
+      "textKo": "기계 동력·토크·전조 시간 공식: N ≈ 0.174·10⁻⁶·C·σB·P·d·n [kW](V 나사 C=1, 사다리꼴·둥근 나사 C=2), M ≈ 9740·N/n [Nm], 전조 시간 tR ≈ 60·L/(n·P) [s]. 전조 길이는 동력에 이론상 영향이 없다.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 81–82 (PDF 83–84쪽) 5.2.2–5.2.3",
+          "quote": "N ≈ 0,174 · 10–6 · C · δB · P · d · n"
+        }
+      ]
+    },
+    {
+      "by": "X1",
+      "textKo": "공정 변수 설정 때 머리가 열릴 시간(머무름)을 충분히 주라는 주의가 있다. 재래식 기계에서는 전조 중에 이송을 켜지 않는다.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 79 (PDF 81쪽) 5.2; 인쇄 83 (PDF 85쪽) 5.2.4",
+          "quote": "ensure that sufficient and suitable residence time for opening"
+        }
+      ]
+    },
+    {
+      "by": "X1",
+      "textKo": "미세 조정: 머리 몸통 눈금 한 칸이 공작물 지름 0.1 mm(0.004\")에 해당한다. 맞춘 눈금 값은 다음에 쓰도록 적어 둔다.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 84 (PDF 86쪽) 5.3",
+          "quote": "one line on the scale corresponds to 0,1 mm/0.004“ workpiece diameter"
+        }
+      ]
+    },
+    {
+      "by": "X1",
+      "textKo": "조임 토크: F2·F23 은 닫힘 클립 M4.5 7.5 Nm, 이음부 M6 10 Nm, 정면판 M6 5.9 Nm, 칩 가드 M6 11.3 Nm. F233400 은 이음부 M7 19.3 Nm, 칩 가드 M8 27.3 Nm. F3·F34 는 클립 M5 7.5 Nm, 이음부 M7 19.3 Nm, 정면판 M6 10.1 Nm, 칩 가드 M8 27.3 Nm.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 70 (PDF 72쪽) Tab. 2–4",
+          "quote": "Section point M6x14 10 Nm"
+        }
+      ]
+    },
+    {
+      "by": "X1",
+      "textKo": "나사 전조용 롤은 원통형 공작물이면 양면을 돌려 써서 수명을 늘릴 수 있다. 롤을 넣을 때는 1-A, 2-C, 3-B 순서를 지킨다(L 없는 머리는 시계 방향, L 머리는 반시계 방향).",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 66 (PDF 68쪽); 인쇄 72 (PDF 74쪽)",
+          "quote": "use the rolls on both sides to increase the service life"
+        }
+      ]
+    },
+    {
+      "by": "X1",
+      "textKo": "R1 의 pitchMaxMm 은 모든 머리에서 미터 롤만 기준이다. 같은 롤 쪽의 인치 롤을 mm 로 바꾸면 더 굵다(F2·F233400 2.31 mm, F3·F3-1RN 2.82 mm, F34·F34-1RN 2.54 mm, F23 1.81 mm). 앱에서 머리 피치 한도로 쓰려면 이 점을 밝혀야 한다.",
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 90 (PDF 92쪽)",
+          "quote": "UNC 5/8 – 11 1510646 1510655"
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 106 (PDF 108쪽)",
+          "quote": "BSFS 1 1/16 – 10 2243633 2243648"
+        }
+      ]
+    },
+    {
+      "by": "X2",
+      "textKo": "머리 크기와 Tab.5 칸의 대응: '23'은 '1 / 23' 칸에, '2', '233400', '34'는 '2 / 233400 / 34' 칸에 있다. 그래서 20산 최소 언더컷 g는 F23이 1K 1.996 / 2K 3.267 mm, F2·F233400·F34가 1K 1.957 / 2K 3.227 mm이다. R2는 칸 이름만 적고 회사 머리별로 짝짓지 않았다.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 78 (PDF 80쪽)",
+          "quote": "20 1 K 1,996 | 0.079 … 1,957 | 0.077"
+        }
+      ]
+    },
+    {
+      "by": "X2",
+      "textKo": "전조 후 보정 순서(조정 요령의 핵심): 유효지름이 조금 크고 바깥지름이 작으면 머리를 조금 닫는다. 닫은 뒤 유효지름은 맞는데 과성형이면 전조 전 지름을 줄이고, 머리를 조금 열어야 할 수도 있다. 닫은 뒤 유효지름은 맞는데 바깥지름이 작으면 전조 전 지름을 키우고, 머리를 더 닫아야 할 수도 있다. 바깥지름의 산끝이 눌려 반짝이면 안 된다.",
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "Slightly close the rolling head."
+        },
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 414 (PDF 416쪽)",
+          "quote": "you have to reduce the original diameter dA"
+        }
+      ]
+    },
+    {
+      "by": "X2",
+      "textKo": "카탈로그 부록에 전조 전 지름(mm/inch)과 전조 속도(20-100 m/min)로 회전수를 바로 읽는 표가 있다. 예: 지름 10 mm에서 35 m/min이면 1115, 50 m/min이면 1590 /min. 12 mm에서 35 m/min이면 930 /min. 앱의 회전수 계산을 대조하는 데 쓸 수 있다.",
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 418 (PDF 420쪽)",
+          "quote": "Werkstückdrehzahl in min-1 / Component rotating at r.p.m."
+        }
+      ]
+    },
+    {
+      "by": "X2",
+      "textKo": "기계 동력과 토크 어림식: N ≈ 0,174·10⁻⁶·C·σB·P·d·n [kW](V형 나사는 C = 1, 사다리꼴·둥근나사는 C = 2, d는 호칭 지름), M ≈ 9740·N/n [Nm]. 축방향 전조에서는 나사 길이가 동력에 사실상 영향을 주지 않는다.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 81-82 (PDF 83-84쪽)",
+          "quote": "N ≈ 0,174 · 10–6 · C · δB · P · d · n"
+        }
+      ]
+    },
+    {
+      "by": "X2",
+      "textKo": "나사 과성형(Overforming the thread)도 '예상 가능한 오용'으로 적혀 있다. R2는 같은 목록의 속도 항목만 옮겼다.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 62 (PDF 64쪽)",
+          "quote": "Overforming the thread."
+        }
+      ]
+    },
+    {
+      "by": "X2",
+      "textKo": "카탈로그 본문: 냉간 성형에서는 재료가 '흐르게' 해야 하므로 느린 속도보다 빠른 속도가 낫다. 연신율이 높은 재료는 더 빠르게, 강도가 높은 재료는 더 느리게 한다.",
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 22 (PDF 24쪽)",
+          "quote": "higher rolling speeds are better than low speeds"
+        }
+      ]
+    },
+    {
+      "by": "X3",
+      "textKo": "F RN 설명서 고장표: 재질이 너무 단단해 롤이 부러지면, 인장강도 1000 N/mm² 이하 재질만 전조하라고 함(F RN 계열). tips[25]에 빠짐.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 69 (PDF 72쪽), Table 13 4e",
+          "quote": "only roll on materials with max. material strength of 1000N/mm² or lower"
+        }
+      ]
+    },
+    {
+      "by": "X3",
+      "textKo": "F01/K01 고장표: 과압 전조로 롤이 부러지면 머리를 연다(4.3 참고). F01/K01 계열. tips[25]는 원인만 적고 이 대책은 빠짐.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 50 (PDF 53쪽), Table 8 4g",
+          "quote": "Open rolling head, see section 4.3"
+        }
+      ]
+    },
+    {
+      "by": "X3",
+      "textKo": "F RN 설명서 자체는 F RN 머리에도 이송을 리드보다 약 5 % 작게 하라고 함(예: M20×1,5 → 1,47 mm/rev). 3 %는 카탈로그 인쇄 110에만 있음. tips[6]·[17]에 이 차이를 밝히면 좋음.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 41 (PDF 44쪽)",
+          "quote": "feed rate: thread lead -5%"
+        },
+        {
+          "sourceId": "FET_OI_FRN",
+          "page": "인쇄 42 (PDF 45쪽)",
+          "quote": "CNC operating feed rate reduced by ca. 5%: 1,47 mm/rotation"
+        }
+      ]
+    },
+    {
+      "by": "X3",
+      "textKo": "F1-F3 미세 조정 눈금: 반 칸 ≈ 지름 0,05 mm, 1/4칸 ≈ 0,025 mm. 0,05 mm보다 작게 맞출 때는 눈금 대신 드라이버를 돌린 각도 β를 기준으로 삼음. 미세 조정 전에 숄더 너트 하나를 손으로 조여 두면 감을 잡기 쉬움.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 86 (PDF 88쪽)",
+          "quote": "Half a mark on the scale ≈ 0,05 mm/0.002“ diameter."
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 85 (PDF 87쪽)",
+          "quote": "use the angle of rotation of hexalobular screwdriver for orientation"
+        },
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 85 (PDF 87쪽)",
+          "quote": "Tighten one shoulder nut by hand before fine adjustment."
+        }
+      ]
+    },
+    {
+      "by": "X3",
+      "textKo": "F1-F3 5.2 머리말: 계산한 공정값(속도·이송 등)은 기계 상태, 공작물 구조, 머리, 산 모양, 성형 능력에 따라 조정하라고 함. '회전수·이송 조정 요령'의 바탕 문장.",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F1F3_EVO",
+          "page": "인쇄 79 (PDF 81쪽)",
+          "quote": "Adjust the process variables calculated in the subchapters depending on"
+        }
+      ]
+    },
+    {
+      "by": "X3",
+      "textKo": "F01/K01 설명서: 조정 뒤 눈금을 '−' 쪽으로 조금 보정해야 할 수 있고, 정확한 값은 시험 전조로 정함. 유효지름이 크거나 작으면 −/+ 로 고침(F01/K01 계열).",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 39 (PDF 42쪽)",
+          "quote": "The exact setting should be determined by a rolling test."
+        }
+      ]
+    },
+    {
+      "by": "X3",
+      "textKo": "카탈로그: 모따기 각 γ = 30°로 하면 전조 뒤 공작물에 약 45° 모따기가 생김.",
+      "refs": [
+        {
+          "sourceId": "FET_CAT_ROLL",
+          "page": "인쇄 413 (PDF 415쪽)",
+          "quote": "A chamfer angle γ = 30° will result in a chamfer of approx. 45°"
+        }
+      ]
+    },
+    {
+      "by": "X3",
+      "textKo": "F01/K01 설명서: 전조 속도는 20–60 m/min이고 특정 작업에서는 100 m/min까지 가능(F01/K01 계열. 카탈로그 축방향은 90 m/min까지).",
+      "refs": [
+        {
+          "sourceId": "FET_OI_F01K01",
+          "page": "인쇄 35 (PDF 38쪽)",
+          "quote": "The rolling speed can also be up to 100 m/min. for certain tasks."
+        }
+      ]
+    }
+  ],
+  "crossCheck": {
+    "checkedAt": "2026-11-14",
+    "by": "X1~X3 — 조사한 에이전트와 다른 에이전트",
+    "method": "받은 PDF 의 쪽을 Read(쪽 그림)로 다시 열고, 촘촘한 표는 pdftoppm 으로 확대해 칸마다 ok · mismatch · unverifiable 판정",
+    "result": "X1 {'ok': 113, 'mismatch': 2, 'unverifiable': 0} · X2 {'ok': 45, 'mismatch': 0, 'unverifiable': 0} · X3 {'ok': 43, 'mismatch': 2, 'unverifiable': 0}. mismatch 는 모두 corrected 에서 고침",
+    "summaries": {
+      "X1": "PDF 쪽을 Read 로 다시 열어 대조했다. 선택표는 확대해서 칸 위치까지 봤다. 머리 7개의 지름 범위, γ, a, α, D, Ident, 생크, 롤 Ident, 각주(19/24/73 mm), 선택표 표시가 모두 원문과 맞았다. Tab.6 속도, Tab.8 a, Tab.9, Tab.10, 열림/닫힘 절차, 대리점 주문서, 쪽 번호(인쇄 = PDF − 2, F RN 은 − 3)도 맞았다. 틀린 곳은 두 군데다. (1) heads[5].opening: F-RN 닫기를 '손=고정형, 주축 기동=회전형'으로 짝지었는데 원문에 없는 내용이다. 카탈로그는 형에 따라 손, 터렛 인덱싱, 주축 기동을 들고, F RN 설명서는 손잡이, 끝 멈춤, 닫힘 캠을 든다. (2) modelNaming.systemKo: FU 를 '5·6롤 관용'으로 적었지만, FU 는 재래식 기계용 플랜지형 계열이고 5·6롤은 그 특수형이다. 참고로 모든 pitchMaxMm 은 미터 롤만 기준이라, 같은 쪽 인치 롤(최대 2.82 mm)보다 작다. 놓친 값도 있다. 재질 한계(연신율 ≥5 %, 강도 ≤1700 N/mm²), 316 '전조 가능'과 304 '좋음'의 차이, VA 강 예외, 20 TPI 언더컷 g, 모따기 10–30°, 동력·시간 공식, 눈금 0.1 mm, 조임 토크다.",
+      "X2": "R2가 근거로 쓴 공식 자료 네 개(F1-F3 EVO 설명서, Rollsysteme 카탈로그, F RN 설명서, F01/K01 설명서)를 모두 Read 쪽 그림으로 다시 열었다. 숫자가 촘촘한 표(Tab.6 속도와 기호, 카탈로그 스테인리스 줄, UNF/UNEF 20산 d2)는 pdftoppm으로 확대해 확인했다. 판정한 칸은 모두 ok이고 mismatch는 없다. 확인한 값은 dV ≈ d2 − 0.03 mm, 공차(카탈로그·F01K01 ±0.015, F RN −0.02), 2A d2 다섯 쌍, 1.4301 35-55와 1.4401 30-50을 비롯한 재질별 속도·인장강도·기호·연신율, 이송 0.95·P, 연신율 5% 이상·인장강도 1700 이하, 면취 10-30°와 d1 ≤ d3−0.1, Tab.5 20산 언더컷, Tab.8 열림 행정 a, 눈금 0.1 mm다. 쪽 번호(인쇄 = PDF−2 또는 −3)와 인용도 맞다. 놓친 것으로는 Tab.5에서 F23만 '1/23' 칸에 속한다는 대응, 카탈로그 인쇄 414의 전조 후 보정 순서, 인쇄 418의 지름-속도-회전수 표, 동력·토크 식, '과성형'도 오용이라는 문장을 missedKo에 적었다. 브로셔와 대리점 롤 카탈로그는 R2가 쓰지 않아 열지 않았다.",
+      "X3": "R3 결과의 tips 33개 모두를 PDF 쪽 그림을 열어 대조했다(카탈로그 인쇄 22·110-111·207·237·242·368-370·413-414, F1-F3 설명서 인쇄 43·61-62·71-76·79-87·93, F RN 인쇄 34·41-44·48-49·69, F01/K01 인쇄 34-36·39-40·50). 숫자·쪽 번호·인용·계열 표시가 모두 맞아 tips 33개는 전부 ok다. 주요 값으로 1.4401은 30–50 m/min, 1.4301은 35–55 m/min, 이송은 피치의 −5 %(카탈로그 F-RN만 3 %), 열림 이동 a는 2·23·233400이 3 mm이고 34가 4 mm다. 롤 경사각은 2 = 3°, 23 = 1°25′, 233400과 34 = 1°15′이고, 소재 지름은 dA = d2 − 0,03, 허용차는 ±0,015 mm다. 모두 secondary 자료가 아니라 official 자료이고, 표시도 맞다. 맞지 않는 것은 coverage 요약 두 곳이다. BLANK_BIG 요약은 F1-F3 인쇄 62가 '같은 말'을 한다고 부풀렸고, BLANK_SMALL 요약은 '접선 2줄'이라 적었지만 tips에는 1줄뿐이다. 빠진 것은 여덟 가지다. F RN 계열의 1000 N/mm² 상한, F01/K01 계열의 '과압이면 머리를 연다', F RN 설명서 자체의 이송 −5 %(카탈로그 3 %와 다름)가 있다. F1-F3의 눈금 반 칸 0,05 mm·1/4칸 0,025 mm와 회전각 β 조정, 5.2의 '계산값을 조건에 맞춰 조정하라'도 빠졌다. 그 밖에 F01/K01 계열의 '시험 전조로 정함', γ = 30°면 전조 뒤 약 45° 모따기, F01/K01 계열의 100 m/min까지가 있다. 브로셔와 대리점 PDF는 글만 검색했다."
+    }
+  },
+  "confidence": "높음 — 숫자(지름 범위 · 열림 행정 · 속도 · 이송 · 전조 전 지름 식)는 공식 PDF 쪽 그림으로 두 번(조사 · 대조) 확인. 피치 · 산수 범위는 롤 목록에서 읽은 값(공식 범위 칸 아님). 이송을 내릴 때의 요령은 자료가 없다."
+}
