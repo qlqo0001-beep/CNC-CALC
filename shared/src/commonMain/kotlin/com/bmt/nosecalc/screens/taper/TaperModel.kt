@@ -258,7 +258,7 @@ internal data class SlopeForm(
     val flip: Boolean = false,
     /** [angle] 을 잰 축(화면 스위치 AppState.angleRef). 기본이 없다 — 부르는 쪽이 늘 밝힌다(calc 에는 [zAngle]) */
     val angleRef: AngleRef,
-    /** T1–T2 사이를 직선 대신 원호로(홑테이퍼만 — calc 의 TaperInput.arc). 그때 [angle] 은 읽지 않고 네 좌표와 [arcR] 을 모두 넣는다 */
+    /** T1–T2 사이를 직선 대신 원호로(홑테이퍼만 — calc 의 TaperInput.arc). 그때 [angle] 은 읽지 않고 [arcR] 과 네 좌표 가운데 셋 이상(빈 하나는 접하는 자리로)을 넣는다 */
     val arc: Boolean = false,
     /** 그 호의 R(빈칸 = null) */
     val arcR: Double? = null,
@@ -465,20 +465,24 @@ internal object Mirror {
 
 /**
  * 경고 글. 계산을 멈춘 것(solution = null)은 빨강, 나머지는 노랑. 값이 모자란 것(MISSING_INPUT)은 파란 안내 글.
- * 형상 불일치가 Z 를 거꾸로 넣은 탓이면([SlopeForm.zBackward]) 방향마다 Z 가 어느 쪽으로 가는지 예를 든다
+ * 형상 불일치가 Z 를 거꾸로 넣은 탓이면([SlopeForm.zBackward]) 방향마다 Z 가 어느 쪽으로 가는지 예를 든다.
+ * [others] = 같이 난 경고(ENTRY_PAST_AXIS 의 바닥 시작 글이 기계 보정 진입 길을 못 찾았는지 — ENTRY_NOT_FOUND — 를 본다)
  */
-internal fun taperWarningText(w: TaperWarning, f: SlopeForm): String = if (f.arc) arcWarningText(w, f) ?: straightWarningText(w, f) else straightWarningText(w, f)
+internal fun taperWarningText(w: TaperWarning, f: SlopeForm, others: List<TaperWarning> = emptyList()): String =
+    if (f.arc) arcWarningText(w, f) ?: straightWarningText(w, f, others) else straightWarningText(w, f, others)
 
 /**
  * T1–T2 를 원호로 냈을 때([SlopeForm.arc]) 글이 달라지는 경고(나머지는 null — 직선 글 그대로). 직선의 '경사' · '각도' 말을 원호 · R 로 바꾸고,
- * R 이 작아 멈춘 것(ARC_R_TOO_SMALL)은 이 두 점의 가장 작은 R 을 적는다
+ * R 이 작아 멈춘 것(ARC_R_TOO_SMALL)은 이 두 점의 가장 작은 R 을(빈 좌표를 접하는 자리로 풀다 멈췄으면 넣은 쪽 차를) 적는다
  */
 private fun arcWarningText(w: TaperWarning, f: SlopeForm): String? = when (w) {
-    TaperWarning.MISSING_INPUT -> "값을 넣으면 바로 계산합니다 — X1 · Z1 · X2 · Z2 와 R (원호는 네 좌표를 모두 넣습니다)."
+    TaperWarning.MISSING_INPUT -> "값을 넣으면 바로 계산합니다 — R 과 X1 · Z1 · X2 · Z2 가운데 셋 (빈 좌표 하나는 원호가 앞뒤 요소에 접하는 자리로 계산합니다)."
     TaperWarning.BAD_ANGLE -> "두 점이 같은 자리이거나 수평 · 수직으로 놓였습니다. T1 · T2 는 그림처럼 X · Z 가 모두 달라야 합니다."
     TaperWarning.BAD_INPUT ->
         "입력이 잘못됐습니다. 지름과 T1–T2 원호의 R 은 0 보다 크고, 노즈R·모서리 R·Z 여유는 0 이상이어야 합니다(노즈R 이 0 이면 Z 여유를 넣으세요 — 진입 거리가 없습니다). " +
-            "좌표·치수는 ±${MAX_MM.toInt()} mm 안이어야 합니다."
+            "좌표·치수는 ±${MAX_MM.toInt()} mm 안이어야 합니다." +
+            // 넣은 값이 모두 맞으면 빈 좌표를 접하는 자리로 푼 값이 그 밖이다(칸을 짚지 않는다)
+            (if ((f.x + f.z).count { it == null } == 1) " 빈 좌표를 원호가 접하는 자리로 계산한 지름이 0 이하이거나 한도 밖이면 이 글이 납니다 — 값과 R 을 확인하세요." else "")
     TaperWarning.CORNER_R_TOO_BIG ->
         "모서리 R 이 들어가지 않습니다. 접점이 T1–T2 원호나 앞뒤 요소(시작·끝점까지)를 넘거나, 두 R 의 접점이 원호 위에서 겹칩니다. 모서리 R 을 줄이세요."
     TaperWarning.ARC_R_TOO_SMALL -> {
@@ -488,19 +492,39 @@ private fun arcWarningText(w: TaperWarning, f: SlopeForm): String? = when (w) {
         val x2 = f.x[1]
         val z2 = f.z[1]
         val len = if (x1 != null && z1 != null && x2 != null && z2 != null) Pt((z2 - z1), (x2 - x1) / 2).length else null
+        // 빈 좌표를 접하는 자리로 풀다 멈춘 것: 넣은 쪽 차(빈 칸이 Z 면 반경 차, X 면 Z 거리)가 R 보다 크다 — 1/4 원보다 큰 호가 된다
+        val gap = when {
+            x1 != null && x2 != null && (z1 == null) != (z2 == null) -> "두 점의 반경 차 ${Fmt.fixed3(abs(x2 - x1) / 2)}"
+            z1 != null && z2 != null && (x1 == null) != (x2 == null) -> "두 점의 Z 거리 ${Fmt.fixed3(abs(z2 - z1))}"
+            else -> null
+        }
         "R 이 너무 작습니다. " +
-            (if (min != null && len != null) "이 두 점 사이 원호는 R ${Fmt.fixed3(min)} 이상이어야 합니다(두 점 사이 거리 ${Fmt.fixed3(len)}). " else "") +
+            when {
+                gap != null -> "빈 좌표를 원호가 앞뒤 요소에 접하는 자리로 풀려면 R 이 $gap 이상이어야 합니다. "
+                min != null && len != null -> "이 두 점 사이 원호는 R ${Fmt.fixed3(min)} 이상이어야 합니다(두 점 사이 거리 ${Fmt.fixed3(len)}). "
+                else -> ""
+            } +
             "그보다 작으면 호가 T1 · T2 너머로 부풀어 앞뒤 요소를 넘습니다. 꼭짓점을 둥글리는 R 은 점 줄의 '모서리 R' 칸에 넣으세요."
     }
+    TaperWarning.ARC_NO_TANGENT ->
+        "빈 좌표를 계산할 수 없습니다. 이 형상의 ${if (f.arcConcave) "오목" else "볼록"} 원호는 앞뒤 요소(수평 · 단면) 어느 쪽에도 접하지 않아 접점이 정해지지 않습니다. " +
+            "네 좌표를 모두 넣거나 볼록 · 오목을 확인하세요."
     TaperWarning.NOSE_UNREACHABLE ->
         "노즈R 에 비해 T1–T2 원호(또는 앞뒤 요소)가 짧거나 오목 원호의 R 이 작아 공구가 닿지 못합니다. 도면 형상이 안 나옵니다 — 노즈R 을 줄이거나 원호의 R 을 키우세요."
-    TaperWarning.NOSE_GT_SLOPE -> "노즈R 이 T1–T2 사이 거리보다 큽니다. 숫자는 맞지만 오목 모서리 쪽에 노즈R 이 남아 원호가 거의 안 남을 수 있습니다. 도면을 확인하세요."
+    // 노즈R 이 두 점 사이보다 크거나, 오목 원호 전체가 오목 꼭짓점 뒤 노즈 그늘이라 원호의 노즈 길이 없어진 것(calc 의 같은 경고)
+    TaperWarning.NOSE_GT_SLOPE -> "노즈R 에 비해 T1–T2 원호가 짧거나 오목 꼭짓점 바로 뒤에 있습니다. 숫자는 맞지만 오목 모서리 쪽에 노즈R 이 남아 원호가 거의(또는 전혀) 안 남을 수 있습니다. 도면을 확인하세요."
     TaperWarning.CONCAVE_R_LE_NOSE ->
         "오목 R(모서리 R · T1–T2 원호)이 노즈R 이하입니다. 같으면 꼭 맞고, 작으면 그 자리에 노즈R 만큼의 R 이 남습니다. G41/G42 프로그램은 기계가 간섭 알람을 낼 수 있습니다."
     else -> null
 }
 
-private fun straightWarningText(w: TaperWarning, f: SlopeForm): String = when (w) {
+/**
+ * 내경 바닥 단면의 시작 · 끝 X(직경) [x] 를 중심(X0)부터 · 까지로 깎나 — 0, 또는 인선을 그 X 에 두면 노즈 중심이 중심 너머인 X(팁 벡터 X 가 바깥인 팁 —
+ * 표준 · 1 · 2 · 6 — 의 X < 2r). calc 는 그때도 직접 보정의 노즈 중심을 축에 세운다(재확인2 B2-V2-1 2026-11-14)
+ */
+private fun SlopeForm.bottomAtAxis(x: Double?) = x == 0.0 || (x != null && x < 2 * noseR && (tip ?: 2) in listOf(1, 2, 6))
+
+private fun straightWarningText(w: TaperWarning, f: SlopeForm, others: List<TaperWarning>): String = when (w) {
     TaperWarning.MISSING_INPUT ->
         if (f.kind.double) "세 점의 X · Z 를 모두 넣으면 바로 계산합니다."
         else "값을 넣으면 바로 계산합니다 — X1 · Z1 · X2 · Z2 · 각도 가운데 넷."
@@ -508,6 +532,7 @@ private fun straightWarningText(w: TaperWarning, f: SlopeForm): String = when (w
     TaperWarning.BAD_ANGLE -> "각도는 0° 보다 크고 90° 보다 작아야 합니다. 두 점이 수평·수직으로 놓이면 경사가 아닙니다."
     // T1–T2 원호에서만 난다(글은 arcWarningText)
     TaperWarning.ARC_R_TOO_SMALL -> "T1–T2 원호의 R 이 너무 작습니다. 호가 T1 · T2 너머로 부풉니다."
+    TaperWarning.ARC_NO_TANGENT -> "T1–T2 원호가 앞뒤 요소에 접하지 않아 빈 좌표를 계산할 수 없습니다. 네 좌표를 모두 넣으세요."
     TaperWarning.SHAPE_MISMATCH -> when {
         !f.zBackward -> "값이 고른 형상 그림과 맞지 않습니다. 점의 좌우 순서(그림의 T1·T2 자리)와 X 가 커지는 쪽을 확인하세요."
         f.flip && f.reverse -> "Z 부호 · 순서를 확인하세요. T1 ⇄ T${f.x.size} 를 바꿔 T1 이 척 반대쪽이라 Z 가 작아집니다 (예: Z1 −25 → Z${f.x.size} −30)."
@@ -540,11 +565,15 @@ private fun straightWarningText(w: TaperWarning, f: SlopeForm): String = when (w
     // X −2r) Z 로 뺀다(2026-11-12 통합 고침 · 검증 F1 2026-11-13 — 전에는 직접 보정이 축 너머로 가 노즈가 맞은편을 팠다).
     // 뒤집어 척 쪽 · 구멍 안에서 시작하면(화면 역방향이 아닐 때) G41/G42 진입이 급송을 소재에서 떼려고 일부러 중심 너머로 돌아 들어갈 수 있다(검증 F4) — Z 여유를 줄이라는
     // 말만으로는 맞지 않는다
+    // 내경 바닥의 시작 · 끝 X 가 0 이 아니어도 노즈R 안이라 노즈 중심이 축 너머로 가는 값([bottomAtAxis])은 calc 가 X0 처럼 다루니 같은 글에 그 X 를 밝힌다
+    // (재확인2 B2-V2-1 — 전에는 그 값이 아래 일반 글로 가 'Z 여유를 줄이세요' 라는 맞지 않는 처방이 났다)
     TaperWarning.ENTRY_PAST_AXIS ->
-        if (legsVertical(f.kind, f.type, f.flip).second && f.end == 0.0) {
+        if (legsVertical(f.kind, f.type, f.flip).second && (if (f.kind.inner) f.bottomAtAxis(f.end) else f.end == 0.0)) {
             if (f.kind.inner) {
-                "바닥 단면을 중심(X0)까지 깎아 공구가 중심 너머로 갑니다(노즈 끝이 중심을 다 깎게 — 중심에 살이 남지 않습니다). " +
-                    "기계 보정(G41/G42)은 X−${Fmt.nc(2 * f.noseR)} 까지, 직접 보정(G40)은 노즈 중심이 중심에 서는 데까지" +
+                (if (f.end == 0.0) "바닥 단면을 중심(X0)까지 깎아" else "바닥 단면 끝(X${Fmt.nc(f.end!!)})이 중심에서 노즈R 안이라 중심(X0)까지 깎는 것과 같이") +
+                    " 공구가 중심 너머로 갑니다(노즈 끝이 중심을 다 깎게 — 중심에 살이 남지 않습니다). " +
+                    "기계 보정(G41/G42)은 " + (if (f.end == 0.0) "X−${Fmt.nc(2 * f.noseR)} 까지" else "단면을 이어 중심 너머까지") +
+                    ", 직접 보정(G40)은 노즈 중심이 중심에 서는 데까지" +
                     (if (f.tip == null) "(표준 팁이면 인선 X${Fmt.nc(2 * f.noseR)})" else "") +
                     " 간 뒤 Z 로 빠집니다(노즈 중심이 중심 너머로 가지 않아 맞은편을 건드리지 않습니다). " +
                     "기계가 X− 로 그만큼 갈 수 있는지 확인하세요."
@@ -552,11 +581,25 @@ private fun straightWarningText(w: TaperWarning, f: SlopeForm): String = when (w
                 "단면을 중심(X0)까지 깎아 인선이 중심 너머 X−${Fmt.nc(2 * f.noseR)} 까지 간 뒤 Z 로 빠집니다(노즈 끝이 중심을 다 깎게 — 중심에 살이 남지 않습니다). " +
                     "기계가 X− 로 그만큼 갈 수 있는지 확인하세요."
             }
+        } else if (f.kind.inner && legsVertical(f.kind, f.type, f.flip).first && f.bottomAtAxis(f.start)) {
+            // 내경 바닥 단면을 중심(X0)부터: 직접 보정은 노즈 중심이 축에서 시작하고(표준 팁은 인선 X +2r — 재확인 RC-2 2026-11-14, 전에는 인선 X0 이라 노즈 중심이
+            // 축 너머 r 로 맞은편 벽을 팠다), 기계 보정은 노즈 중심이 축에 서게 단면을 축 너머에서부터 쓰고 들어온다 — 경사 연장선 · Z 여유 말은 맞지 않는다.
+            // 다만 기계 보정 진입 길을 못 찾았거나(ENTRY_NOT_FOUND — 작은 구멍) 화면 역방향(부품 앞 쪽 진입이 중심 너머에서 내려옴)이면 그 진입이 맞은편 구멍 벽에
+            // 닿을 수 있어 그 주의를 남긴다(재확인2 B2-V2-3 · R2-R2V-1)
+            val machineSafe = !f.reverse && TaperWarning.ENTRY_NOT_FOUND !in others
+            (if (f.start == 0.0) "바닥 단면을 중심(X0)부터 깎습니다. " else "바닥 단면 시작(X${Fmt.nc(f.start!!)})이 중심에서 노즈R 안이라 중심(X0)부터 깎는 것과 같이 깎습니다. ") +
+                "직접 보정(G40)은 노즈 중심이 중심에 선 자리" +
+                (if (f.tip == null) "(표준 팁이면 인선 X${Fmt.nc(2 * f.noseR)})" else "") +
+                (if (machineSafe) "에서 시작해 맞은편을 건드리지 않고, 기계 보정(G41/G42)은 노즈 중심이 중심에 서게 단면을 중심 너머에서부터 쓰고 들어옵니다. "
+                else "에서 시작해 맞은편을 건드리지 않습니다. 기계 보정(G41/G42) 진입은 중심 너머에서 내려와 노즈가 맞은편 구멍 벽에 닿을 수 있으니 진입 줄을 확인하거나 직접 보정을 쓰세요. ") +
+                "기계가 X− 로 그만큼 갈 수 있는지 확인하세요."
         } else if (f.flip && !f.reverse) {
             "진입점이나 후퇴점이 중심(X0)을 넘습니다. 뒤집어 " + (if (f.kind.inner) "구멍 안" else "척 쪽") + "에서 시작하면 기계 보정(G41/G42) 진입이 급송을 소재에서 " +
-                "떼려고 일부러 중심 너머로 돌아 들어갈 수 있습니다 — 기계가 X− 로 그만큼 갈 수 있는지 확인하세요. 경사 연장선이 중심을 넘는 것이면 Z 여유를 줄이세요."
+                "떼려고 일부러 중심 너머로 돌아 들어갈 수 있습니다 — 기계가 X− 로 그만큼 갈 수 있는지 확인하세요. 경사 연장선이 중심을 넘는 것이면" +
+                // 내경은 중심 너머가 맞은편 구멍 벽이다(검증 뒤 고침 2026-11-14 F1)
+                (if (f.kind.inner) " 노즈가 맞은편 구멍 벽에 닿을 수 있으니" else "") + " Z 여유를 줄이세요."
         } else {
-            "진입점이나 후퇴점이 중심(X0)을 넘습니다. Z 여유를 줄이세요."
+            "진입점이나 후퇴점이 중심(X0)을 넘습니다." + (if (f.kind.inner) " 내경은 노즈가 중심 너머 맞은편 구멍 벽에 닿을 수 있습니다." else "") + " Z 여유를 줄이세요."
         }
     // 짧은 막힌 끝 · 시작 요소를 뺄 수 없는 꼴(calc '진입점과 NC' 끝 · 진입 — 앞뒤 요소에 직각 빼기 · 들어가기 교점이 남지 않음)
     TaperWarning.SHORT_END_PAST ->

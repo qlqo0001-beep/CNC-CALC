@@ -302,6 +302,123 @@ class TaperFlipEntryTest {
     }
 
     /**
+     * 재확인 RC-2(2026-11-14): 뒤집어 내경 바닥 단면을 중심(시작 X0)부터 깎는 직접 보정이 인선을 X0 에 두어 표준 팁은 노즈 중심이 축 너머 r 로 내려가
+     * 구멍 반지름 < 2r 이면 맞은편 벽을 팠다(바닥 Ø4 Z−4 → Ø5.2 Z−2 · 오목 R3.634 · 노즈 1.6 · Z 여유 5 의 `G0X0.Z1.` `G1Z-4.` 가 0.630, 직선은 노즈 1.2 에서 0.089).
+     * 끝 쪽 X0(위)과 같이 어느 팁이든 노즈 중심을 축에 세워 시작한다 — 표준 팁은 인선 X +2r, 비표준 팁(3 · 4 · 8)은 X −2r.
+     * 형상 2 · 4 × 원호(오목 · 볼록) · 직선 × 노즈 0.4~1.6 × 팁 × Z 여유: 직접 보정은 맞은편 · 도면을 파지 않고 노즈 중심이 축에서 시작, 기계 보정도 파지 않는다
+     * (기계 보정의 G40 은 반대 끝 — 입구 쪽 — 이라 바닥 반지름과 상관없어 노즈 1.2 · 1.6 도 본다. 재확인2 R2-R2V-2: 전에는 끝 X0 시험의 G40 조건을 옮겨 와 건너뛰었다.
+     * 다만 형상 4 · 노즈 1.6 은 그 끝이 Ø5.2 내경 — G40 자리 규칙 반지름 3.882 보다 좁아 빼는 길을 못 짜고 EXIT_NOT_FOUND(Z 여유 5 는 ENTRY_NOT_FOUND 도)로 알린다.
+     * 그렇게 알린 글의 기계 보정 파고듦은 알려진 한계라 세기만 한다)
+     */
+    @Test
+    fun innerAxisStartCenterOnAxis() {
+        val base = TaperInput(
+            inner = true, type = 2, noseR = 1.6, x1 = 4.0, z1 = -4.0, x2 = 5.2, z2 = -2.0, zClear = 5.0, start = 0.0, flip = true,
+            arc = true, arcR = 3.634, arcConvex = false,
+        )
+        // 진입: 인선 X3.2(노즈 중심 X0)에서 Z 로 바닥까지
+        assertEquals(listOf("G0X3.2Z1.", "G1Z-4."), ok(TaperCalc.calc(base)).ncG40.filter { !it.startsWith("(") }.take(2))
+        val fails = mutableListOf<String>()
+        var runs = 0
+        var machineBig = 0 // 노즈 1.2 · 1.6 의 기계 보정을 잰 글
+        var warned = 0 // 진입 · 빼는 길 못 찾음을 알린 기계 보정 파고듦
+        for (type in listOf(2, 4)) for (shape in 0..2) for (r in listOf(0.4, 0.8, 1.2, 1.6)) for (tip in listOf(null, 1, 3, 4, 8)) for (zc in listOf(0.0, 1.0, 5.0)) {
+            val i = base.copy(type = type, noseR = r, tip = tip, zClear = zc, arc = shape < 2, arcR = if (shape < 2) 3.634 else null, arcConvex = shape == 1)
+            val res = TaperCalc.calc(i)
+            val s = res.solution ?: continue
+            if (TaperWarning.CONCAVE_R_LE_NOSE in res.warnings || TaperWarning.NOSE_GT_SLOPE in res.warnings) continue
+            runs++
+            val nose0 = s.center.segs.first().start
+            if (abs(nose0.x) > 1e-9) fails += "$i: 노즈 중심이 X${nose0.xDia} 에서 시작\n${s.ncG40.joinToString(" ")}"
+            for (m in listOf(false, true)) {
+                val (g, at) = gouge(s, r, m)
+                if (m && r >= 1.2) machineBig++
+                if (g > 1e-3 && m && (TaperWarning.ENTRY_NOT_FOUND in res.warnings || TaperWarning.EXIT_NOT_FOUND in res.warnings)) warned++
+                else if (g > 1e-3) fails += "$i ${if (m) "기계" else "직접"}: $at 이 $g 팜 ${res.warnings}\n${(if (m) s.ncG41G42 else s.ncG40).joinToString(" ")}"
+            }
+        }
+        println("내경 축 시작: 푼 글 $runs · 노즈 1.2 · 1.6 기계 보정 $machineBig · 길 못 찾음을 알린 기계 보정 파고듦 $warned · 실패 ${fails.size}")
+        assertTrue(runs > 200 && machineBig > 100, "푼 글 $runs · 노즈 1.2 · 1.6 기계 보정 $machineBig")
+        assertEquals(emptyList(), fails, fails.take(6).joinToString("\n\n"))
+    }
+
+    /**
+     * 재확인2 B2-V2-1(2026-11-14): 내경 바닥 단면의 시작 · 끝 X 가 0 은 아니지만 인선을 거기 두면 노즈 중심이 축 너머인 값(팁 벡터 X 가 바깥인 팁 —
+     * 표준 · 1 · 2 · 6 — 의 X < 2r. 화면에 칠 수 있는 X0.001 등)은 X0 고침 밖이라 옛 글처럼 맞은편 벽을 팠다(바닥 Ø4 → Ø5.2 · 오목 R3.634 · 노즈 1.6 의
+     * `G0X.001Z1.` `G1Z-4.` 가 0.630 · 직선 노즈 1.6 에서 0.756, 끝 X0.001 의 `G1X.001` 도 같다). X0 과 같이 노즈 중심을 축에 세운다.
+     * 노즈 중심이 축 너머로 가지 않는 X · 팁(팁 벡터 X 가 0 · 축 쪽)은 그대로 인선이 넣은 X 에. 형상 2 × 원호(오목 · 볼록) · 직선 × 노즈 0.8~1.6 × X × 팁 1~8:
+     * 직접 보정은 맞은편 · 도면을 파지 않는다. 기계 보정도 본다(끝 쪽은 G40 이 바닥 둘레라 위 `innerAxisEndSweep` 처럼 G40 자리 규칙 반지름보다 좁은 바닥을 뺀다)
+     */
+    @Test
+    fun innerBottomNearAxisCenterOnAxis() {
+        val start = TaperInput(
+            inner = true, type = 2, noseR = 1.6, x1 = 4.0, z1 = -4.0, x2 = 5.2, z2 = -2.0, zClear = 5.0, start = 0.001, flip = true,
+            arc = true, arcR = 3.634, arcConvex = false,
+        )
+        val end = start.copy(x1 = 5.2, z1 = -2.0, x2 = 4.0, z2 = -4.0, start = null, end = 0.001, flip = false)
+        // 재현: X0.001 도 X0 과 같은 글(인선 X3.2 — 노즈 중심 X0)
+        assertEquals(listOf("G0X3.2Z1.", "G1Z-4."), ok(TaperCalc.calc(start)).ncG40.filter { !it.startsWith("(") }.take(2))
+        assertEquals(listOf("G1X3.2", "G0Z1."), ok(TaperCalc.calc(end)).ncG40.filter { !it.startsWith("(") }.takeLast(2))
+        val fails = mutableListOf<String>()
+        var runs = 0
+        var warned = 0 // 진입 · 빼는 길 못 찾음을 알린 기계 보정 파고듦(위 시험과 같은 알려진 한계)
+        for (atStart in listOf(true, false)) for (shape in 0..2) for (r in listOf(0.8, 1.2, 1.6)) for (x in listOf(0.0005, 0.001, 0.002, 0.01, 0.5, 2.0))
+            for (tip in listOf(null, 1, 2, 3, 4, 5, 6, 7, 8)) {
+                val i = (if (atStart) start.copy(start = x) else end.copy(end = x))
+                    .copy(noseR = r, tip = tip, arc = shape < 2, arcR = if (shape < 2) 3.634 else null, arcConvex = shape == 1)
+                val res = TaperCalc.calc(i)
+                val s = res.solution ?: continue
+                if (TaperWarning.CONCAVE_R_LE_NOSE in res.warnings || TaperWarning.NOSE_GT_SLOPE in res.warnings) continue
+                runs++
+                val tv = NoseComp.tipVector(s.tip, r)
+                val nose = if (atStart) s.center.segs.first().start else s.center.segs.last().end
+                // 인선을 넣은 X 에 두면 노즈 중심이 축 너머면 축에, 아니면 그대로
+                val want = max(0.0, x / 2 - tv.x)
+                if (abs(nose.x - want) > 1e-9) fails += "$i: 노즈 중심 X${nose.xDia} (기대 X${want * 2})\n${s.ncG40.joinToString(" ")}"
+                for (m in listOf(false, true)) {
+                    if (m && !atStart && 2.0 < CompFrame.g40Radius(r)) continue
+                    val (g, at) = gouge(s, r, m)
+                    if (g > 1e-3 && m && (TaperWarning.ENTRY_NOT_FOUND in res.warnings || TaperWarning.EXIT_NOT_FOUND in res.warnings)) warned++
+                    else if (g > 1e-3) fails += "$i ${if (m) "기계" else "직접"}: $at 이 $g 팜 ${res.warnings}\n${(if (m) s.ncG41G42 else s.ncG40).joinToString(" ")}"
+                }
+            }
+        println("내경 바닥 축 가까이: 푼 글 $runs · 길 못 찾음을 알린 기계 보정 파고듦 $warned · 실패 ${fails.size}")
+        assertTrue(runs > 300, "푼 글 $runs")
+        assertEquals(emptyList(), fails, fails.take(6).joinToString("\n\n"))
+    }
+
+    /**
+     * 재확인2 B2-V2-2(2026-11-14): 축으로 끝나는 단면(내경 바닥 끝 · 외경 앞면 끝 X0)은 노즈 중심을 축에 세우는데, 팁 벡터 X 가 축 쪽인 팁(내경 3 · 4 · 8,
+     * 외경 표준 3 · 8)은 그 옮김 전의 끝점(인선 X0 — 노즈 중심 +r)으로 BAD_LEG 를 봐 마지막 꺾임의 노즈 중심 X 가 r 보다 작으면 멈췄다(뒤집은 시작 X0 은 옮긴 뒤
+     * 봐 풀림). 옮긴 끝점으로 본다 — 내경 형상 2 · Ø3.2 Z−4 → Ø2 Z−6(오목 R5.451 · 직선) · 노즈 0.8 · Z 여유 0, 외경 형상 1 뒤집기 · Ø3 Z−1 → Ø1(· 1.4) Z0 ·
+     * 노즈 0.8 · Z 여유 1: 풀리고 노즈 중심이 축에서 끝나며 직접 보정이 도면 · 맞은편을 파지 않는다. 외경은 기계 보정도(내경 Ø2 바닥은 G40 자리 규칙 반지름보다 좁아 뺀다)
+     */
+    @Test
+    fun axisEndTipTowardAxisSolves() {
+        val inner = TaperInput(inner = true, type = 2, noseR = 0.8, x1 = 3.2, z1 = -4.0, x2 = 2.0, z2 = -6.0, zClear = 0.0, end = 0.0, arc = true, arcR = 5.451, arcConvex = false)
+        val outer = TaperInput(type = 1, noseR = 0.8, x1 = 3.0, z1 = -1.0, x2 = 1.0, z2 = 0.0, zClear = 1.0, end = 0.0, flip = true)
+        val cases = listOf(inner, inner.copy(arc = false, arcR = null)).flatMap { b -> listOf(3, 4, 8).map { b.copy(tip = it) } } +
+            listOf(1.0, 1.4).flatMap { x2 -> listOf(null, 8).map { outer.copy(x2 = x2, tip = it) } }
+        val fails = mutableListOf<String>()
+        for (i in cases) {
+            val res = TaperCalc.calc(i)
+            val s = res.solution
+            if (s == null) {
+                fails += "$i: 멈춤 ${res.warnings}"
+                continue
+            }
+            val nose = s.center.segs.last().end
+            if (abs(nose.x) > 1e-9) fails += "$i: 노즈 중심이 X${nose.xDia} 에서 끝남\n${s.ncG40.joinToString(" ")}"
+            for (m in listOf(false, true)) {
+                if (m && i.inner) continue
+                val (g, at) = gouge(s, i.noseR, m)
+                if (g > 1e-3) fails += "$i ${if (m) "기계" else "직접"}: $at 이 $g 팜 ${res.warnings}\n${(if (m) s.ncG41G42 else s.ncG40).joinToString(" ")}"
+            }
+        }
+        assertEquals(emptyList(), fails, fails.joinToString("\n\n"))
+    }
+
+    /**
      * 격자: 내경 바닥 단면을 축(X0)까지 깎는 끝(형상 2 · 4 × 직선 · 원호 × 노즈 0.2~1.2 × Z 여유 0 · 1 · 5 × 바닥 지름 4 · 10 · 20 × 모서리 R 0 · 0.5 —
      * 뒤집으면 축에서 시작하는 진입):
      * 직접 · 기계 보정 모두 어느 이동도 맞은편(축 거울)과 도면을 파지 않는다. 기계 보정은 바닥 반지름이 G40 자리 규칙 반지름보다 좁은 구멍(G40 옮김이 팁에 따라

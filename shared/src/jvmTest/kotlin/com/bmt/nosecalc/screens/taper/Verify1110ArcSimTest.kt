@@ -2,6 +2,7 @@ package com.bmt.nosecalc.screens.taper
 
 import com.bmt.nosecalc.AngleRef
 import com.bmt.nosecalc.calc.Arc
+import com.bmt.nosecalc.calc.Fmt
 import com.bmt.nosecalc.calc.Line
 import com.bmt.nosecalc.calc.Pt
 import com.bmt.nosecalc.calc.Seg
@@ -388,8 +389,16 @@ class Verify1110ArcSimTest {
         val e = expect(f)
         run {
             drawingError(f, s, e)?.let { msg ->
-                t.fail("DRAW_" + msg.substringBefore(' ')) { "${desc(f)}\n$msg\n${s.drawing.segs.joinToString("\n")}" }
-                return
+                // 호의 노즈 길이 없어지거나 0.001 아래라 직접 보정 글에서 호 줄이 빠지면 계산기는 보정 R 을 null 로 두고 NOSE_GT_SLOPE 로 알린다(검증 뒤 고침 F4 ·
+                // 재확인 RC-1 2026-11-14 — 아래 D_NOARC 의 '짧은 오목 호' 꼴). 그 글에 호 줄이 남으면 실패, 아니면 세고 시뮬은 돌린다
+                val progWord = "R" + Fmt.word(f.arcR!! + if (f.arcConcave) -f.noseR else f.noseR)
+                val noArcLine = s.ncG40.none { l -> ncWords(l).any { it == progWord } }
+                if (msg.startsWith("PROGR") && s.arc?.progR == null && TaperWarning.NOSE_GT_SLOPE in res.warnings && noArcLine) {
+                    t.note("호의 노즈 길 없음(직접 보정 글에서 빠짐) — NOSE_GT_SLOPE")
+                } else {
+                    t.fail("DRAW_" + msg.substringBefore(' ')) { "${desc(f)}\n$msg\n${s.drawing.segs.joinToString("\n")}" }
+                    return
+                }
             }
         }
         if (f.tip == null) {
@@ -982,8 +991,30 @@ class Verify1110ArcSimTest {
                             bad += "경고 칸 던짐 $w ${desc(f)} → $e"
                         }
                     }
+                    // 빈 좌표 변형의 멈춤은 그 까닭이 맞아야 한다(고침 단계 2026-11-14 R-VR5 — 전에는 종류를 안 봐 MISSING_INPUT 으로 잘못 멈춰도 통과): 넣은 차는 5
+                    if (variant in 4..5) {
+                        val want = when {
+                            rr == null -> setOf(TaperWarning.MISSING_INPUT)
+                            !(rr > 0 && rr.isFinite()) || rr > 1e4 -> setOf(TaperWarning.BAD_INPUT)
+                            (type == 1 && f.arcConcave) || (type == 4 && !f.arcConcave) -> setOf(TaperWarning.ARC_NO_TANGENT)
+                            // R 을 조금 넘는 차(R4.999 · 4.9999 — 0.001 반올림 띠 √(8 · 5e-6 · R) 안)는 1/4 원으로 받아 그 뒤 멈춤(모서리 R 50)도 날 수 있다
+                            rr < 5.0 && 5.0 - rr > sqrt(8 * 5e-6 * rr) -> setOf(TaperWarning.ARC_R_TOO_SMALL)
+                            rr < 5.0 -> setOf(TaperWarning.ARC_R_TOO_SMALL, TaperWarning.CORNER_R_TOO_BIG, TaperWarning.NOSE_UNREACHABLE, TaperWarning.BAD_LEG)
+                            // 접하는 자리로 푼 지름이 0 이하(큰 R) · 모서리 R 50 · 노즈가 못 닿음
+                            else -> setOf(TaperWarning.BAD_INPUT, TaperWarning.CORNER_R_TOO_BIG, TaperWarning.NOSE_UNREACHABLE, TaperWarning.BAD_LEG)
+                        }
+                        if (res.warnings.size == 1 && res.warnings.single() !in want) bad += "빈 좌표 변형 $variant 의 멈춤 ${res.warnings} ∉ $want — ${desc(f)}"
+                    }
                 } else if (variant == 0 && (rr == null || !(rr >= 4.993) || rr > 1e4)) {
                     bad += "풀리면 안 되는 R 이 풀림 ${desc(f)}"
+                } else if (variant in 4..5) {
+                    // 빈 좌표 하나는 호가 앞뒤 요소에 접하는 자리로(2026-11-14 사용자 피드백) — 풀렸으면 R 이 풀린 두 점의 가장 작은 R 과 같다.
+                    // 넣은 차(5)가 R 을 조금 넘어 받은 것(0.001 반올림 띠 — 고침 단계 R-VR3)은 빈 쪽 차가 R(1/4 원)
+                    val p = res.solution!!.points.map { it.vertex }
+                    val m = TaperCalc.arcMinR(p[0].xDia, p[0].z, p[1].xDia, p[1].z)
+                    val filled = if (variant == 4) abs(p[0].x - p[1].x) else abs(p[0].z - p[1].z)
+                    val okFill = rr != null && if (rr >= 5.0) m != null && abs(m - rr) <= 1e-6 * rr else abs(filled - rr) <= 1e-9 * max(1.0, rr)
+                    if (!okFill) bad += "빈 좌표가 접하는 자리가 아님(variant $variant) 최소 R $m · 푼 차 $filled ${desc(f)}"
                 } else if (variant in 1..7) {
                     bad += "풀리면 안 되는 점이 풀림(variant $variant) ${desc(f)}"
                 }

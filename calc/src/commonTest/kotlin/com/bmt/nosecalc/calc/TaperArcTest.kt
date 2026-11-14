@@ -318,10 +318,11 @@ class TaperArcTest {
     fun arcStops() {
         val b = TaperInput(x1 = 40.0, z1 = 0.0, x2 = 50.0, z2 = -5.0, arc = true, arcR = 10.0)
         ok(TaperCalc.calc(b))
-        // 빈칸: R, 좌표 하나(호는 네 좌표를 모두 — 각도로 채우지 않는다)
+        // 빈칸: R, 좌표 둘(빈 좌표 하나는 접하는 자리로 채운다 — [blankCoordinateIsTangentPoint]. 각도로 채우지 않는다)
         stops(TaperWarning.MISSING_INPUT, TaperCalc.calc(b.copy(arcR = null)))
-        stops(TaperWarning.MISSING_INPUT, TaperCalc.calc(b.copy(x2 = null, angleDeg = 45.0)))
-        stops(TaperWarning.MISSING_INPUT, TaperCalc.calc(b.copy(z1 = null)))
+        stops(TaperWarning.MISSING_INPUT, TaperCalc.calc(b.copy(x2 = null, z2 = null, angleDeg = 45.0)))
+        stops(TaperWarning.MISSING_INPUT, TaperCalc.calc(b.copy(z1 = null, x1 = null)))
+        assertEquals(TaperCalc.calc(b.copy(x2 = null)), TaperCalc.calc(b.copy(x2 = null, angleDeg = 45.0)))
         // 각도 칸은 읽지 않는다(점과 안 맞아도 · 범위 밖이어도)
         assertEquals(TaperCalc.calc(b), TaperCalc.calc(b.copy(angleDeg = 12.0)))
         assertEquals(TaperCalc.calc(b), TaperCalc.calc(b.copy(angleDeg = 95.0)))
@@ -370,6 +371,243 @@ class TaperArcTest {
         // CAD 값을 0.001 로 반올림해 접하던 호가 아주 조금 넘는 것은 받는다(X50 이 50.01 — 넘은 깊이 2.5e-6)
         ok(TaperCalc.calc(TaperInput(x1 = 40.0, z1 = 0.0, x2 = 50.01, z2 = -5.0, arc = true, arcR = 5.0)))
         ok(TaperCalc.calc(TaperInput(x1 = 40.0, z1 = 0.0, x2 = 50.01, z2 = -5.0, arc = true, arcR = 5.0, arcConvex = false)))
+    }
+
+    /**
+     * 빈 좌표 하나는 호가 앞뒤 요소에 접하는 자리로(사용자 피드백 2026-11-14 "z값이 자동으로 안나타나" — 원호에서 Z 칸을 비워도 자동 값이 없었다).
+     * 볼록은 소재 쪽 점에서 단면 · 반대 점에서 수평에, 오목은 그 반대로 — 그 방향의 앞뒤 요소가 있는 끝에서 접하고, 두 끝 다 되면 두 좌표를 다 넣은 점에서.
+     * 접한 끝은 호의 중심이 그 점의 법선 위(수평이면 같은 Z, 단면이면 같은 X)에 있고 R 이 풀린 두 점의 가장 작은 R 과 같다. 채운 값을 넣어 다시 풀어도 같다
+     */
+    @Test
+    fun blankCoordinateIsTangentPoint() {
+        // 사용자 화면: 내경 형상 3 · T1 ⇄ T2 · X1 6.3 · Z1 빈칸 · X2 7.5 · Z2 −10.1 · 오목 R3.75 → Ø7.5 쪽에서 구멍 벽에 접한 볼 자리(중심이 축 위)
+        val user = TaperInput(true, 3, x1 = 6.3, x2 = 7.5, z2 = -10.1, flip = true, arc = true, arcR = 3.75, arcConvex = false)
+        val us = ok(TaperCalc.calc(user))
+        assertEquals(-10.1 - sqrt(0.6 * 6.9), us.points[0].vertex.z, 1e-9)
+        assertEquals(-10.1, us.arc!!.center.z, 1e-9)
+        assertEquals(0.0, us.arc!!.center.x, 1e-9)
+        // 접한 점은 칸 T2(Ø7.5 — 뒤집어 그림 T1)
+        assertEquals(2, us.arc!!.tangentAt)
+        assertNull(ok(TaperCalc.calc(user.copy(z1 = us.points[0].vertex.z))).arc!!.tangentAt)
+        // 볼록을 고르면 그 형상에서 접할 끝은 Ø6.3 쪽(수평) — 같은 Z 거리, 중심은 공구 쪽 반대
+        assertEquals(us.points[0].vertex.z, ok(TaperCalc.calc(user.copy(arcConvex = true))).points[0].vertex.z, 1e-9)
+        // R 이 반경 차(0.6)보다 작으면 1/4 원보다 큰 호라 멈춘다, 꼭 같으면 1/4 원(Ø6.3 쪽 90° 볼록 꼭짓점에 닿는 오목 호라 노즈는 R/2 까지 — '못 받는 꼴')
+        stops(TaperWarning.ARC_R_TOO_SMALL, TaperCalc.calc(user.copy(arcR = 0.59)))
+        assertEquals(-10.7, ok(TaperCalc.calc(user.copy(arcR = 0.6, noseR = 0.2))).points[0].vertex.z, 1e-9)
+
+        var solved = 0
+        var noTangent = 0
+        var badDia = 0
+        for (s0 in shapes()) for (flip in listOf(false, true)) for (blank in 0..3) {
+            val full = if (flip) s0.flipped() else s0
+            val i = when (blank) {
+                0 -> full.copy(x1 = null)
+                1 -> full.copy(z1 = null)
+                2 -> full.copy(x2 = null)
+                else -> full.copy(z2 = null)
+            }
+            val tag = "$i"
+            val res = TaperCalc.calc(i)
+            // 그 볼록 · 오목이 접할 앞뒤 요소가 없는 형상: 1 의 오목, 4 의 볼록(외경 · 내경 같다)
+            if ((i.type == 1 && !i.arcConvex) || (i.type == 4 && i.arcConvex)) {
+                stops(TaperWarning.ARC_NO_TANGENT, res, tag)
+                noTangent++
+                continue
+            }
+            val s = res.solution
+            if (s == null) {
+                // R ≥ 가장 작은 R ≥ 넣은 차라 ARC_R_TOO_SMALL 은 없다 — 멈춤은 빈 X 를 푼 지름이 0 이하인 것뿐(넣은 X 는 모두 0 보다 크고 한도 안)
+                assertEquals(listOf(TaperWarning.BAD_INPUT), res.warnings, tag)
+                assertTrue(blank % 2 == 0, "빈 Z 가 멈춤 $tag")
+                badDia++
+                continue
+            }
+            solved++
+            val p = s.points.map { it.vertex }
+            // 넣은 값은 그대로
+            if (blank != 0) assertEquals(full.x1!!, p[0].xDia, 1e-9, tag)
+            if (blank != 1) assertEquals(full.z1!!, p[0].z, 1e-9, tag)
+            if (blank != 2) assertEquals(full.x2!!, p[1].xDia, 1e-9, tag)
+            if (blank != 3) assertEquals(full.z2!!, p[1].z, 1e-9, tag)
+            assertEquals(i.arcR!!, TaperCalc.arcMinR(p[0].xDia, p[0].z, p[1].xDia, p[1].z)!!, 1e-6 * i.arcR, tag)
+            // 접한 끝: 칸의 점 k 의 그림 자리(뒤집으면 T1 이 그림 왼쪽) · 그 앞뒤 요소가 단면인가
+            fun vertAt(k: Int) = if ((k == 0) != flip) i.type <= 2 else i.type == 2 || i.type == 4
+            val c = s.arc!!.center
+            val touches = (0..1).filter { k -> if (vertAt(k)) abs(c.x - p[k].x) < 1e-7 else abs(c.z - p[k].z) < 1e-7 }
+            assertTrue(touches.isNotEmpty(), "접한 끝 없음 $tag")
+            // 두 끝 다 될 수 있는 형상(1 의 볼록 · 4 의 오목)은 두 좌표를 다 넣은 점에서(검증 뒤 고침 2026-11-14 — 처음에는 빈 좌표의 점)
+            if (i.type == 1 || i.type == 4) assertTrue(1 - blank / 2 in touches, "다 넣은 점에서 안 접함 $touches $tag")
+            // 결과가 알리는 접한 점(칸 순서)
+            assertTrue(s.arc!!.tangentAt!! - 1 in touches, "tangentAt ${s.arc!!.tangentAt} · 접한 $touches $tag")
+            // 채운 값을 넣어 다시 풀어도 같다
+            val again = TaperCalc.calc(i.copy(x1 = p[0].xDia, z1 = p[0].z, x2 = p[1].xDia, z2 = p[1].z))
+            assertEquals(s.ncG41G42, ok(again, tag).ncG41G42, tag)
+            assertEquals(s.ncG40, again.solution!!.ncG40, tag)
+        }
+        assertEquals(2 * 3 * 3 * 2 * 4 * 2, noTangent)
+        // 따로 옮긴 풀이(py)로 센 수: 풀림 1134 · 빈 X 의 지름 ≤ 0 18 (검증 뒤 고침 2026-11-14 — 전에는 'solved > 700' 만 봤다)
+        assertEquals(1134, solved)
+        assertEquals(18, badDia)
+    }
+
+    /**
+     * 두 끝 다 접할 수 있는 형상(1 볼록 · 4 오목)은 두 좌표를 다 넣은 점에서 접한다 — 사용자 예(접점 Ø7.5 의 X · Z 를 적고 반대 끝 Z 를 비움)와 같은 습관(검증 뒤 고침 2026-11-14 R-VR1).
+     * 숫자는 원 중심 기하로 따로 푼 것: 내경 형상 4 는 사용자 예의 뒤를 바닥 단면으로 바꾼 꼴이라 같은 볼(Z −10.1 − √(0.6 × 6.9))
+     */
+    @Test
+    fun twoEndShapesTouchAtTheFullyGivenPoint() {
+        val inner4 = ok(TaperCalc.calc(TaperInput(true, 4, x1 = 7.5, z1 = -10.1, x2 = 6.3, arc = true, arcR = 3.75, arcConvex = false)))
+        assertEquals(-10.1 - sqrt(0.6 * 6.9), inner4.points[1].vertex.z, 1e-9)
+        assertEquals(1, inner4.arc!!.tangentAt)
+        // 외경 형상 1 볼록: 외경 접점 Z−8(= 중심 Z) → X1 42 (단면에 접하면 30.404)
+        val outer1 = ok(TaperCalc.calc(TaperInput(false, 1, z1 = 0.0, x2 = 50.0, z2 = -8.0, arc = true, arcR = 10.0, arcConvex = true)))
+        assertEquals(42.0, outer1.points[0].vertex.xDia, 1e-9)
+        assertEquals(2, outer1.arc!!.tangentAt)
+        // 외경 형상 4 오목: Ø30 에 접함 → X2 32 (단면에 접하면 39.165)
+        val outer4 = ok(TaperCalc.calc(TaperInput(false, 4, x1 = 30.0, z1 = -3.0, z2 = -6.0, arc = true, arcR = 5.0, arcConvex = false)))
+        assertEquals(32.0, outer4.points[1].vertex.xDia, 1e-9)
+        assertEquals(1, outer4.arc!!.tangentAt)
+        // 뒤집어 넣어도 같은 실제 점에서(칸 순서가 바뀌어 tangentAt 도 바뀜)
+        val flipped = ok(TaperCalc.calc(TaperInput(false, 4, x2 = 30.0, z2 = -3.0, z1 = -6.0, flip = true, arc = true, arcR = 5.0, arcConvex = false)))
+        assertEquals(32.0, flipped.points[0].vertex.xDia, 1e-9)
+        assertEquals(2, flipped.arc!!.tangentAt)
+    }
+
+    /**
+     * 넣은 차가 R 을 조금 넘으면(CAD 값을 0.001 로 반올림) 빈 좌표도 네 좌표(1/4 원 자리)처럼 받는다 — 부푼 깊이를 같은 ARC_OVER_TOL(5e-6 mm)로 본다
+     * (검증 뒤 고침 2026-11-14 R-VR3: 전에는 1e-9 만 넘어도 ARC_R_TOO_SMALL). 내경 형상 3 오목 X1 7.5 + e · Z1 −10.1 · X2 6.3 · Z2 빈칸 · R0.6 ↔ Z2 −10.7
+     */
+    @Test
+    fun blankFillTakesRoundedQuarterLikeFourCoordinates() {
+        var taken = 0
+        for (e in listOf(0.0, 0.001, 0.002, 0.004, 0.006, 0.01, 0.05)) {
+            val blank = TaperInput(true, 3, noseR = 0.2, x1 = 7.5 + e, z1 = -10.1, x2 = 6.3, arc = true, arcR = 0.6, arcConvex = false)
+            val a = TaperCalc.calc(blank)
+            val b = TaperCalc.calc(blank.copy(z2 = -10.7))
+            assertEquals(b.warnings, a.warnings, "e $e")
+            assertEquals(b.solution?.ncG41G42, a.solution?.ncG41G42, "e $e")
+            assertEquals(b.solution?.ncG40, a.solution?.ncG40, "e $e")
+            if (a.solution != null) taken++ else assertEquals(listOf(TaperWarning.ARC_R_TOO_SMALL), a.warnings, "e $e")
+        }
+        // 반경 차가 0.0005 · 0.001 · 0.002 넘는 것(깊이 ≈ 넘은 몫² / 2R ≤ 3.4e-6)까지 받고 0.003 부터 멈춘다
+        assertEquals(4, taken)
+        assertEquals(-10.7, ok(TaperCalc.calc(TaperInput(true, 3, noseR = 0.2, x1 = 7.501, z1 = -10.1, x2 = 6.3, arc = true, arcR = 0.6, arcConvex = false))).points[1].vertex.z, 1e-9)
+    }
+
+    /**
+     * 범위 밖으로 넣은 좌표는 접하는 자리로 풀기 전에 BAD_INPUT(검증 뒤 고침 2026-11-14 R-VR6 — 전에는 X2 30000 오타에 'R 이 반경 차 14980 이상' ARC_R_TOO_SMALL 이 먼저).
+     * 접하는 자리로 푼 지름이 0 이하인 것은 전처럼 BAD_INPUT
+     */
+    @Test
+    fun blankFillChecksGivenRangeFirst() {
+        stops(TaperWarning.BAD_INPUT, TaperCalc.calc(TaperInput(false, 3, x1 = 40.0, z1 = 0.0, x2 = 30000.0, arc = true, arcR = 10.0)))
+        stops(TaperWarning.BAD_INPUT, TaperCalc.calc(TaperInput(false, 1, x1 = 40.0, z1 = 0.0, x2 = 30000.0, arc = true, arcR = 10.0, arcConvex = false)))
+        stops(TaperWarning.BAD_INPUT, TaperCalc.calc(TaperInput(false, 3, x1 = -40.0, z1 = 0.0, z2 = -5.0, arc = true, arcR = 10.0)))
+        stops(TaperWarning.BAD_INPUT, TaperCalc.calc(TaperInput(true, 2, x1 = 6.0, z1 = 0.0, z2 = -3.4, arc = true, arcR = 3.5)))
+    }
+
+    /**
+     * 사용자 화면(내경 형상 3 · 뒤집기 · X1 6.3 · Z1 빈칸 · X2 7.5 · Z2 −10.1 · 오목 R3.75)의 직접 보정 진입: 호의 처음 접선을 거꾸로 늘인 진입점이 축을 넘으면
+     * 노즈 중심이 축에서 멈춘다(검증 뒤 고침 2026-11-14 F1 — 노즈 1.2 · Z 여유 5 · 시작 빈칸에서 `G0X-2.127Z-5.1` `Z-17.943` 의 노즈가 맞은편 Ø6.3 벽을 0.31 팠다).
+     * 노즈R 넷 × Z 여유 셋 × 화면 역방향(Z 거울 · 접근 줄 끔) × 시작 · 끝 넷 — 직접 보정 글을 시뮬레이터로 돌려 노즈가 맞은편 가장 좁은 벽(Ø6.3 의 거울 X −3.15)에 닿지 않는다
+     */
+    @Test
+    fun userScreenDirectEntryStaysOffTheFarWall() {
+        val dz = sqrt(0.6 * 6.9)
+        for (r in listOf(0.2, 0.4, 0.8, 1.2)) for (zc in listOf(0.0, 1.0, 5.0)) for (mirror in listOf(false, true)) for (legs in 0..3) {
+            fun z(v: Double) = if (mirror) 30.0 + v else v
+            val inp = TaperInput(
+                true, 3, noseR = r, x1 = 6.3, x2 = 7.5, z2 = z(-10.1), zClear = zc, flip = true, approach = !mirror, arc = true, arcR = 3.75, arcConvex = false,
+                start = if (legs and 1 != 0) z(-10.1 - dz - 3.0) else null, end = if (legs and 2 != 0) z(-5.0) else null,
+            )
+            val tag = inp.toString()
+            val s = ok(TaperCalc.calc(inp), tag)
+            // 직접 보정 글은 이송 F 를 넣지 않는다 — 머리에 G99F.1
+            val run = GSim.run(SimInput((pre.dropLast(1) + "G99F.1" + s.ncG40 + "M30").joinToString("\n"), MachineSetup(), mapOf(1 to ToolOffset(r, s.tip))))
+            assertNull(run.stop, "시뮬레이터 멈춤 ${run.stop} $tag")
+            // 첫 이동(공구 교환 자리에서 오는 줄)의 끝부터 — 이음점이 모두 그 안이면 직선 토막도 그렇다(호의 노즈 길은 축 위 중심의 원이라 축 이쪽)
+            for (m in run.steps.filterIsInstance<MoveStep>()) {
+                assertTrue(m.nose.end.x >= r - 3.15 - 1e-6, "노즈가 맞은편 벽에 닿음 ${m.nose.end} — ${m.line}줄 $tag\n${s.ncG40.joinToString("\n")}")
+            }
+        }
+    }
+
+    /**
+     * 오목 T1–T2 호가 볼록 꺾임(β = 70.53°)에서 깎는 직선과 만나고 노즈R 이 '못 받는 꼴' 경계 2r / (1 + cos β) = R 에 붙으면 G41/G42 의 보정선 교점이 보정 원 꼭대기의 겹근이라
+     * NC 0.001 반올림(Z −2.56569 → −2.566)이 교점을 없앤다 — 경계 너머(노즈 0.401)처럼 멈춘다(검증 뒤 고침 2026-11-14 F2: 전에는 경고 없이 내고 시뮬레이터가 COMP_ACUTE_OUTER).
+     * 외경 형상 3 · X1 30 Z1 −2 · X2 30.8 · Z2 빈칸 · 오목 R0.6 · 노즈 0.4 · 끝 Z −5.566
+     */
+    @Test
+    fun roundedBoundaryJunctionStops() {
+        val base = TaperInput(false, 3, noseR = 0.4, x1 = 30.0, z1 = -2.0, x2 = 30.8, end = -5.566, arc = true, arcR = 0.6, arcConvex = false)
+        stops(TaperWarning.NOSE_UNREACHABLE, TaperCalc.calc(base))
+        // 같은 점을 네 좌표로 넣어도
+        stops(TaperWarning.NOSE_UNREACHABLE, TaperCalc.calc(base.copy(z2 = -2.0 - sqrt(0.4 * 0.8))))
+        stops(TaperWarning.NOSE_UNREACHABLE, TaperCalc.calc(base.copy(noseR = 0.401)))
+        // 경계 아래는 풀리고 시뮬레이터(형식 C · A/B)도 멈추지 않는다
+        val s = ok(TaperCalc.calc(base.copy(noseR = 0.399)))
+        for (form in listOf(CompStartup.C, CompStartup.AB)) simCut(s, 0.399, s.tip, form, "노즈 0.399")
+    }
+
+    /**
+     * 넣은 반경 차가 노즈R 과 같은 오목 호가 단면에 접한 꼴은 호 전체가 T1 의 날카로운 오목 꼭짓점 뒤 노즈 그늘이라 호의 노즈 길이 0 — 그 자리에 r 이 남는다.
+     * 숫자는 맞지만 호가 안 남으므로 NOSE_GT_SLOPE(노랑)로 알린다(검증 뒤 고침 2026-11-14 F4 — 전에는 경고 없음).
+     * 외경 형상 4 · X1 30 Z1 −2 · X2 30.8 · 오목 R1.2(단면에 접하는 Z2 = −2 − (1.2 − √1.28)) · 노즈 0.4 · 끝 X36.8
+     */
+    @Test
+    fun concaveArcInTheNoseShadowWarns() {
+        val inp = TaperInput(false, 4, noseR = 0.4, x1 = 30.0, z1 = -2.0, x2 = 30.8, z2 = -2.0 - (1.2 - sqrt(1.28)), end = 36.8, zClear = 5.0, arc = true, arcR = 1.2, arcConvex = false)
+        val res = TaperCalc.calc(inp)
+        val s = ok(res)
+        assertNull(s.arc!!.progR)
+        assertTrue(TaperWarning.NOSE_GT_SLOPE in res.warnings, "${res.warnings}")
+        // 노즈가 조금 작으면 호가 남아 알리지 않는다
+        val small = TaperCalc.calc(inp.copy(noseR = 0.3))
+        assertNotNull(ok(small).arc!!.progR)
+        assertTrue(TaperWarning.NOSE_GT_SLOPE !in small.warnings, "${small.warnings}")
+    }
+
+    /**
+     * 재확인 RC-1(2026-11-14): 위 꼴을 0.001 로 적은 네 좌표(Z2 −2.069)는 호의 노즈 길이 0.001 아래로 남아 직접 보정 글에서 호 줄이 빠지는데(글이 정확한 꼴과
+     * 글자까지 같다) 경고가 없고 결과는 보정 R 0.8 이었다. 글에서 빠지는 호(끝점이 앞 점과 0.001 로 같은 글)도 그늘로 본다 — 정확한 값 둘레 ±0.002 를
+     * 0.0001 씩: 직접 보정 글에 호 줄이 없음 = NOSE_GT_SLOPE = 보정 R 없음
+     */
+    @Test
+    fun roundedShadowArcWarnsLikeExact() {
+        val exact = -2.0 - (1.2 - sqrt(1.28))
+        val inp = TaperInput(false, 4, noseR = 0.4, x1 = 30.0, z1 = -2.0, x2 = 30.8, z2 = -2.069, end = 36.8, zClear = 5.0, arc = true, arcR = 1.2, arcConvex = false)
+        val res = TaperCalc.calc(inp)
+        val s = ok(res)
+        assertEquals(ok(TaperCalc.calc(inp.copy(z2 = exact))).ncG40, s.ncG40)
+        assertNull(s.arc!!.progR)
+        assertTrue(TaperWarning.NOSE_GT_SLOPE in res.warnings, "${res.warnings}")
+        var gone = 0
+        var kept = 0
+        val fails = mutableListOf<String>()
+        for (k in -20..20) {
+            val z2 = exact + k * 1e-4
+            val r = TaperCalc.calc(inp.copy(z2 = z2))
+            val t = r.solution ?: continue
+            val arcLine = t.ncG40.any { l -> ncWords(l).any { it == "G2" || it == "G3" } }
+            val warned = TaperWarning.NOSE_GT_SLOPE in r.warnings
+            if (arcLine) kept++ else gone++
+            if (arcLine == warned || arcLine != (t.arc!!.progR != null)) fails += "Z2 $z2: 호 줄 $arcLine · 경고 $warned · 보정 R ${t.arc!!.progR}\n${t.ncG40.joinToString(" ")}"
+        }
+        assertTrue(gone > 1 && kept > 1, "빠짐 $gone · 남음 $kept")
+        assertEquals(emptyList(), fails, fails.joinToString("\n\n"))
+    }
+
+    /**
+     * 재확인 B-F3(2026-11-14): R 한도(MAX_MM)의 볼록 원호는 직접 보정 글의 합성 R 이 R10000.4 라 앱 시뮬레이터가 NUMBER_TOO_BIG 로 멈췄다(FANUC 지령 한도 안).
+     * 시뮬레이터의 R 낱말 한도를 FANUC 의 ±99999.999 로 따로 두어 두 글 모두 돈다
+     */
+    @Test
+    fun maxConvexArcRunsInSimulator() {
+        val s = ok(TaperCalc.calc(TaperInput(false, 3, noseR = 0.4, x1 = 30.0, z1 = -2.0, x2 = 31.0, z2 = -6.0, end = -10.0, arc = true, arcR = MAX_MM, arcConvex = true)))
+        assertTrue(s.ncG40.any { l -> ncWords(l).any { it == "R10000.4" } }, "${s.ncG40}")
+        val run = GSim.run(SimInput((pre.dropLast(1) + "G99F.1" + s.ncG40 + "M30").joinToString("\n"), MachineSetup(), mapOf(1 to ToolOffset(0.4, s.tip))))
+        assertNull(run.stop, "직접 보정 멈춤 ${run.stop}\n${s.ncG40.joinToString("\n")}")
+        simCut(s, 0.4, s.tip, CompStartup.C, "R 10000 볼록")
     }
 
     // ------------------------------------------------------------ G41/G42 글을 시뮬레이터로
