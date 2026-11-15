@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 /**
  * 전조 다이스 글(RollHeadCalc). 기대값은 손 계산(파이썬 — 식과 수를 주석에). 끝 Z −16.37 등 치수는 새로 지은 값이다.
  * 근거: dV = 2A(6g) 유효지름 가운데 − 0.03, n = 1000·v/(π·dV), v = 재질 표 아래 끝(STS316 30 · STS304 35 m/min), 20산 F1.22, 그 밖 0.95 × P,
- * 열림 행정 a(F2 · F23 · F233400 3, F34 4). 회사 지름 · S 는 아직 null 이라 회전수는 Fette 추천이다.
+ * 열림 행정 a(F2 · F23 · F233400 3, F3 · F34 4). 회사 지름 · S 는 아직 null 이라 회전수는 Fette 추천이다.
  */
 class RollHeadCalcTest {
     private fun un(size: String, tpi: Int) = ThreadTable.UN.single { it.size == size && it.tpi == tpi }
@@ -150,7 +150,8 @@ class RollHeadCalcTest {
 
     /**
      * 넣은 회전수가 범위의 S(527 ~ 879 — 아래 끝 · 위 끝을 반올림) 밖이면 노랑 + 방향: S880 → RPM_OUT_OF_RANGE · RPM_UP, S879 → 안 · RPM_UP,
-     * S526 → 밖 · RPM_DOWN, S527(기준과 같음 — v 29.976 이 30 아래지만 반올림한 아래 끝 그대로) → 경고 · 방향 없음
+     * 아래 경계는 STS304 범위(615 ~ 967)로 본다: S614 → 밖 · RPM_DOWN, S615(기준과 같음 — v 34.981 이 35 아래지만 반올림한 아래 끝 그대로) → 경고 · 방향 없음,
+     * S967 → 안 · RPM_UP, S968 → 밖 · RPM_UP
      */
     @Test
     fun rpmBoundsAndDirection() {
@@ -158,8 +159,11 @@ class RollHeadCalcTest {
         assertEquals(RollTipGroup.RPM_UP, up.rpmDirection)
         assertEquals(527L, up.baseRpm)
         assertEquals(RollTipGroup.RPM_UP, ok(base.copy(rpm = 879.0)).rpmDirection)
-        assertEquals(RollTipGroup.RPM_DOWN, ok(base.copy(rpm = 526.0), listOf(RollWarning.RPM_OUT_OF_RANGE)).rpmDirection)
-        assertNull(ok(base.copy(rpm = 527.0)).rpmDirection)
+        val s304 = base.copy(steel = RollSteel.STS304)
+        assertEquals(RollTipGroup.RPM_DOWN, ok(s304.copy(rpm = 614.0), listOf(RollWarning.RPM_OUT_OF_RANGE)).rpmDirection)
+        assertNull(ok(s304.copy(rpm = 615.0)).rpmDirection)
+        assertEquals(RollTipGroup.RPM_UP, ok(s304.copy(rpm = 967.0)).rpmDirection)
+        assertEquals(RollTipGroup.RPM_UP, ok(s304.copy(rpm = 968.0), listOf(RollWarning.RPM_OUT_OF_RANGE)).rpmDirection)
         // 1.4 는 반올림해 S1(범위 아래)
         assertEquals("G97S1", ok(base.copy(rpm = 1.4), listOf(RollWarning.RPM_OUT_OF_RANGE)).program[0])
     }

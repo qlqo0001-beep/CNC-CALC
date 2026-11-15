@@ -276,11 +276,13 @@ internal class ThreadState(
 
     /**
      * 가공 방식 고르기 — 다이스 헤드 · 전조 다이스는 [dieAllowed] 일 때만 받는다. 전조를 고를 때 규격을 아직 안 골랐으면 종류 UN · 20UN 묶음으로 둔다
-     * (결정 D15 — 회사 롤 일곱이 모두 UN 20산). 규격이 있으면 건드리지 않는다
+     * (결정 D15 — 회사 롤 일곱이 모두 UN 20산). 규격이 있으면 건드리지 않는다. 이미 전조인데 그 칸을 다시 누르면(Segmented 는 고른 칸도 onSelect)
+     * 아무것도 바꾸지 않는다 — 전조에서 고른 종류(M) · 묶음이 말없이 UN · 20UN 으로 돌아가지 않게(검토 V3-1-4)
      */
     fun pickMethod(m: ThreadMethod) {
+        val wasRoll = isRoll
         method = if (m != ThreadMethod.BITE && !dieAllowed) ThreadMethod.BITE else m
-        if (method == ThreadMethod.ROLL && spec == null) {
+        if (!wasRoll && method == ThreadMethod.ROLL && spec == null) {
             switchFamily(ThreadFamily.UN)
             unGroup = UnGroup.UN20
         }

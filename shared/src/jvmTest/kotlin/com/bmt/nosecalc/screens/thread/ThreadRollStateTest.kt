@@ -17,6 +17,7 @@ import com.bmt.nosecalc.calc.RollWarning
 import com.bmt.nosecalc.calc.ThreadKind
 import com.bmt.nosecalc.calc.ThreadTable
 import com.bmt.nosecalc.calc.UnGroup
+import com.bmt.nosecalc.screens.ThreadHelp
 import java.io.File
 import kotlin.math.abs
 import kotlin.test.Test
@@ -304,6 +305,26 @@ class ThreadRollStateTest {
         // 절삭 다이스 · 바이트는 종류를 바꾸지 않는다
         val d = ThreadState().apply { pickMethod(ThreadMethod.DIE) }
         assertEquals(ThreadFamily.METRIC, d.family)
+        // 이미 전조인데 '전조 다이스' 칸을 다시 누르면 그대로(V3-1-4 — Segmented 는 고른 칸도 onSelect): 전조에서 M 으로 바꿔 사이즈가 빈 상태
+        val m = ThreadState().apply { pickMethod(ThreadMethod.ROLL) }
+        m.switchFamily(ThreadFamily.METRIC)
+        assertNull(m.spec)
+        m.pickMethod(ThreadMethod.ROLL)
+        assertTrue(m.isRoll)
+        assertEquals(ThreadFamily.METRIC, m.family)
+        assertNull(m.spec)
+        // 되살린 빈 전조(골든 thread-roll-empty — 미터 · 빈 규격)도, UN · UNF 묶음 · 빈 규격 전조도 그대로
+        val restored = threadRollEmpty()
+        restored.pickMethod(ThreadMethod.ROLL)
+        assertEquals(ThreadFamily.METRIC, restored.family)
+        val unfRoll = ThreadState(family = ThreadFamily.UN, unGroup = UnGroup.UNF, method = ThreadMethod.ROLL)
+        unfRoll.pickMethod(ThreadMethod.ROLL)
+        assertEquals(UnGroup.UNF, unfRoll.unGroup)
+        // 다른 방식에 갔다가 전조로 들어오면 다시 D15
+        m.pickMethod(ThreadMethod.BITE)
+        m.pickMethod(ThreadMethod.ROLL)
+        assertEquals(ThreadFamily.UN, m.family)
+        assertEquals(UnGroup.UN20, m.unGroup)
         // 회사 롤 규격 일곱(지름 순): 누르면 그 20산 줄, 묶음 20UN
         assertEquals(listOf("7/16", "1/2", "9/16", "5/8", "3/4", "7/8", "1"), CompanyRolls.specs.map { it.size })
         for (spec in CompanyRolls.specs) {
@@ -586,7 +607,7 @@ class ThreadRollStateTest {
         assertEquals(emptyList(), dir())
         assertEquals(
             listOf(
-                "이송 비율을 기준 0.961 보다 올렸습니다(1) — 올리면: 기계 이송을 피치와 같게(또는 더 크게) 줌 → 이송을 피치보다 약 5 % 작게 줌(F1-F3 설명서 f ≈ 0,95·P) (F1–F3 설명서 인쇄 83)",
+                "이송 비율을 기준 0.961 보다 올렸습니다(1) — 올리면: 기계 이송을 피치와 같게(또는 더 크게) 줌 → 이송을 피치보다 약 5 % 작게 줌(f ≈ 0.95·P) (F1–F3 설명서 인쇄 83)",
             ),
             dir(ratio = "1"),
         )
@@ -635,6 +656,17 @@ class ThreadRollStateTest {
         for (g in ROLL_TIP_GROUPS + RollTipGroup.OTHER) {
             for (t in rollTipsText(g) + rollTipsFull(g)) assertTrue(t == "Fette 자료에 없음" || (t.endsWith(")") && " (" in t), "$g: $t")
         }
+        // 검토 V3-1-2: 화면 · 도움말 요령 글은 소수점이 점(0.95 · ±0.015 — 독일식 쉼표 0,95 가 아니게, 같은 화면의 '× 0.95' 와 같은 표기)
+        val decimalComma = Regex("\\d,\\d")
+        for (g in ROLL_TIP_GROUPS + RollTipGroup.OTHER) {
+            for (t in rollTipsText(g) + rollTipsFull(g)) assertTrue(!decimalComma.containsMatchIn(t), "$g: $t")
+        }
+        assertTrue(rollTipsText(RollTipGroup.BLANK_BIG).any { "±0.015 mm" in it })
+        // 검토 V1-1-3: 요령 글의 열림 행정 · 롤 경사각에 F3(a 4 mm · 2°40′ — 설명서 Tab. 8 · 카탈로그 인쇄 237)도
+        assertTrue(setup[4].contains("(2·23·233400 = 3 mm, 3·34 = 4 mm)"), setup[4])
+        val other = rollTipsFull(RollTipGroup.OTHER)
+        assertTrue(other.any { "233400 = 1°15′, 3 = 2°40′, 34 = 1°15′" in it }, "롤 경사각")
+        assertTrue(other.any { "(a: 2·23·233400 = 3 mm, 3·34 = 4 mm)" in it }, "lU 에 못 미침")
         // 출처 표: PDF 쪽 · 독어판 쪽(';' 뒤)을 뺀다
         assertEquals("카탈로그 인쇄 242", rollSourceText(RollRef("FET_CAT_ROLL", "인쇄 242 (PDF 244쪽)")))
         assertEquals("F1–F3 설명서 인쇄 80", rollSourceText(RollRef("FET_OI_F1F3_EVO", "인쇄 80 (PDF 82쪽); 독어 인쇄 30 (PDF 32쪽)")))
@@ -658,5 +690,64 @@ class ThreadRollStateTest {
         assertEquals(listOf(true, false), listOf(s.isDie, s.isRoll))
         s.pickMethod(METHOD_ORDER[1])
         assertEquals(listOf(false, true), listOf(s.isDie, s.isRoll))
+    }
+
+    /**
+     * 검토 V3-1-3: 줄표(–)로 이은 출처 · 범위는 화면 · 전조 도움말 · 머리 시트에서 줄 끝에 갈리지 않는다 — 줄표 양옆에 낱말 이음(\u2060).
+     * 360dp 130% 전조 조건 참고 글이 'F1– / F3 설명서', 412dp 도움말이 'F3 Ø12– / 22' 로 갈렸다. 골든 · 시험이 보는 글 함수(rollReferenceText · rollHeadRow)는 그대로
+     */
+    @Test
+    fun dashKeptTogether() {
+        val wj = "\u2060"
+        assertEquals("F1$wj–${wj}F3 설명서 · Ø12$wj–${wj}22", keepDash("F1–F3 설명서 · Ø12–22"))
+        val ref = rollReferenceText(threadRoll())
+        assertTrue("F1–F3 설명서" in ref && "30–50" in ref, ref)
+        val shown = screenText(ref)
+        assertTrue("F1$wj–${wj}F3 설명서" in shown && "30$wj–${wj}50 m/${wj}min" in shown, shown)
+        // 결과 칸 아래 글(screenText 를 거침): '범위 30–50 m/min' · '카탈로그 Ø12–30'
+        assertEquals("범위 30$wj–${wj}50 m/${wj}min", screenText("범위 30–50 m/min"))
+        // 도움말 '전조 다이스' 묶음: 모든 줄표가 이음 사이 — 머리 범위 'F3 Ø12–22' · 'F1–F3 설명서 Tab. 6' · 속도 '30–50' · 요령 전문의 '10–30°'
+        val help = ThreadHelp.single { it.title == "전조 다이스" }.items
+        val loose = Regex("(?<!$wj)–|–(?!$wj)")
+        for (p in help) assertFalse(loose.containsMatchIn(p), p)
+        val all = help.joinToString(" ")
+        assertTrue("F3 Ø12$wj–${wj}22" in all && "F1$wj–${wj}F3 설명서 Tab. 6" in all, "도움말 범위 · 출처")
+        // 다른 도움말 묶음(테이퍼 'T1–T2' 등 — 공용 글)은 건드리지 않는다
+        assertTrue(ThreadHelp.filter { it.title != "전조 다이스" }.all { sec -> sec.items.none { wj + "–" in it } })
+        // 머리 시트 아래 글(화면은 keepDash 를 거침 — rollHeadRow 글 자체는 그대로)
+        assertEquals("F3" to "회사 롤 없음 · Ø12–22", rollHeadRow(un("3/4", 20), "F3"))
+        // 검토 V3-2-1: 요령 카드 '자세히' 펼친 글도 screenText 를 거쳐 줄표가 이음 사이(412dp 'F1– / F3 설명서 인쇄 85' 로 갈렸다) — 글 자체는 rollTipsText 그대로
+        val hint = rollTipsHint()
+        assertFalse(loose.containsMatchIn(hint), hint)
+        assertTrue("F1$wj–${wj}F3 설명서 인쇄 85" in hint, "요령 카드 출처")
+        assertEquals(
+            ROLL_TIP_GROUPS.joinToString("\n\n") { g -> rollTipGroupTitle(g) + "\n" + rollTipsText(g).joinToString("\n") { "· $it" } },
+            hint.replace(wj, "").replace(' ', ' '),
+        )
+        // 검토 V3-2-2 · V3-2-4: 요령 카드 · 도움말 글에 붙임표 'F1-F3'(keepDash 가 못 묶어 'F1- / F3' 로 갈렸다) · 코드 이름(BLANK_BIG 등)이 없다
+        val codeName = Regex("[A-Z]+_[A-Z]+")
+        for (t in help + hint) {
+            assertFalse("F1-F3" in t, t)
+            assertFalse(codeName.containsMatchIn(t), t)
+        }
+        assertTrue("('전조 전 지름이 크면' · '작으면' 참고)" in all && "('전조 전 지름이 크면' 참고)" in all, "도움말 묶음 이름")
+        // 검토 V3-2-3: '그 밖' 의 '전조 결과가 틀림' — 증상 뒤에 출처 이름을 다시 적지 않는다(설명서 이름은 끝 출처 괄호에 두 번만)
+        val wrong = rollTipsFull(RollTipGroup.OTHER).single { it.startsWith("전조 결과가 틀림") }
+        assertTrue(wrong.startsWith("전조 결과가 틀림 → "), wrong)
+        assertEquals(2, wrong.split("F1–F3 설명서").size - 1, wrong)
+        // 검토 V3-3-1: 영숫자 사이 빗금('F01/K01' · 'm/min') 뒤에 낱말 이음, 출처 이름 'F RN' 은 줄 안 바꿈 빈칸 — 412dp 도움말 'F01/ / K01 설명서',
+        // 360dp 130% 요령 카드 '20 m/ / min', 도움말 'F / RN·F01/K01' 로 갈렸다. 앞뒤 빈칸이 있는 빗금('STS304 / STS316')과 글 함수(rollSourceText)는 그대로
+        val nb = "\u00A0"
+        assertEquals(
+            "F${nb}RN 설명서 · F01/${wj}K01 설명서 · 30$wj–${wj}50 m/${wj}min · STS304 / STS316",
+            keepDash("F RN 설명서 · F01/K01 설명서 · 30–50 m/min · STS304 / STS316"),
+        )
+        val looseSlash = Regex("[A-Za-z0-9]/(?!$wj)[A-Za-z0-9]")
+        for (t in help + hint) {
+            assertFalse(looseSlash.containsMatchIn(t), t)
+            assertFalse("F RN" in t, t)
+        }
+        assertTrue("F${nb}RN·F01/${wj}K01 계열" in all && "Table 13 · F01/${wj}K01 설명서 인쇄 50" in all && "35$wj–${wj}55 m/${wj}min" in all, "도움말 출처 이름 · 단위")
+        assertTrue("전조 속도를 20 m/${wj}min 아래로" in hint, "요령 카드 단위")
     }
 }

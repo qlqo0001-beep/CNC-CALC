@@ -90,6 +90,7 @@ import com.bmt.nosecalc.screens.thread.fieldHint
 import com.bmt.nosecalc.screens.thread.g76Words
 import com.bmt.nosecalc.screens.thread.insertSource
 import com.bmt.nosecalc.screens.thread.insertText
+import com.bmt.nosecalc.screens.thread.keepDash
 import com.bmt.nosecalc.screens.thread.kindNote
 import com.bmt.nosecalc.screens.thread.kindText
 import com.bmt.nosecalc.screens.thread.leadText
@@ -834,7 +835,7 @@ internal val ThreadHelp: List<HelpSection> by lazy { listOf(
 
 /**
  * 도움말 '전조 다이스' 묶음: 고르기 · 머리 · 롤 표(회사 짝 · 카탈로그 지름 범위 · 열림 행정) · 전조 전 지름 읽는 법(NC 에 안 들어감 — 앞 공정 정삭 X) ·
- * 회전수 · 이송 사슬 · STS304 / STS316 · 결과와 경고 · 요령 전문(출처마다)
+ * 회전수 · 이송 사슬 · STS304 / STS316 · 결과와 경고 · 요령 전문(출처마다). 줄표로 이은 출처 · 범위('F1–F3' · 'Ø12–22' · '30–50') · 빗금 이름 · 단위('F01/K01' · 'm/min') · 'F RN' 은 [keepDash] 로 한 덩이(검토 V3-1-3 · V3-3-1)
  */
 private fun rollHelp(): HelpSection {
     val pairs = CompanyRolls.ALL.joinToString(", ") { r ->
@@ -852,7 +853,7 @@ private fun rollHelp(): HelpSection {
     }
     return HelpSection(
         "전조 다이스",
-        listOf(
+        (listOf(
             "미터 · UN 숫나사는 맨 위 가공 방식에서 '전조 다이스'(LMT Fette 축방향 전조 머리 EVOline — 머리는 터렛에 서 있고 공작물이 돎)를 고를 수 있습니다. " +
                 "사이즈를 아직 안 골랐으면 UN · 20UN 묶음으로 바뀌고(회사 롤은 모두 UN 20산), UN 사이즈 시트 맨 위의 '회사 롤 규격' 을 누르면 그 20산 줄이 바로 들어갑니다. " +
                 "꼭 넣을 값은 사이즈 · 가공 목표점 둘입니다 — Z축 시작점 빈칸은 ${plain(RollHeadCalc.Z_START_DEFAULT)}, 끝면 Z 빈칸은 0. 내경이나 PT · NPT 로 바꾸면 바이트로 돌아갑니다.",
@@ -875,6 +876,6 @@ private fun rollHelp(): HelpSection {
                 "빨강 = 범위 밖 값 · 맞는 머리 없음(고른 머리의 지름 범위 밖) · Z 순서(절삭 다이스와 같음), " +
                 "노랑 = 이송 비율 > 1 · 넣은 회전수가 Fette 범위 밖 · 회사 짝이 카탈로그 지름 범위 밖 · 산수(피치)가 롤 목록 밖 · 전조 길이가 선택표 최대보다 김 · 끝 멈춤 0. " +
                 "열린 머리는 다음 공작물 전에 닫습니다.",
-        ) + tips.mapIndexed { i, t -> if (i == 0) "요령(LMT Fette 설명서 · 카탈로그 — 글마다 출처, 출처 없는 글은 넣지 않음). $t" else t },
+        ) + tips.mapIndexed { i, t -> if (i == 0) "요령(LMT Fette 설명서 · 카탈로그 — 글마다 출처, 출처 없는 글은 넣지 않음). $t" else t }).map(::keepDash),
     )
 }

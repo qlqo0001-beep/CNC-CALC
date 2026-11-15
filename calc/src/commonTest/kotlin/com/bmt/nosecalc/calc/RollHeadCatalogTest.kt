@@ -91,4 +91,42 @@ class RollHeadCatalogTest {
         assertNotNull(RollHeadCatalog.source("FET_OI_F1F3_EVO"))
         assertNull(RollHeadCatalog.source("NONE"))
     }
+
+    /**
+     * 우리가 쓴 한국어 글(검토 V3-1-2 · V1-1-3 · V4-1-4): 화면에 나가는 요령 글 · 시작 · 끝 멈춤 · 그 밖 한계는 소수점이 점이다(출처 원문을 옮긴 quote 는 원문 그대로).
+     * 열림 행정 a 의 4 mm 머리는 F3 · F34 둘(설명서 Tab. 8 '3 → 4'), F 형 EVO 고정 전용 목록에도 F3. 조사 JSON 에는 회사 맥락(회사 나사 · 회사 머리 · 일곱 규격)을 적지 않는다
+     */
+    @Test
+    fun koreanTexts() {
+        val d = RollHeadCatalog.data
+        val decimalComma = Regex("\\d,\\d")
+        val texts = d.tips.flatMap { listOfNotNull(it.symptomKo, it.causeKo, it.remedyKo) } +
+            listOfNotNull(d.start.ruleKo, d.endDwell.ruleKo) + d.otherLimits.map { it.textKo }
+        for (t in texts) assertFalse(decimalComma.containsMatchIn(t), t)
+        assertTrue(d.start.ruleKo!!.contains("F2·F23·F233400 3 mm, F3·F34 4 mm"))
+        assertTrue(d.endDwell.ruleKo!!.contains("F2·F23·F233400 3 mm, F3·F34 4 mm"))
+        assertTrue(d.otherLimits.first().textKo.contains("(F2·F23·F233400·F3·F34)"))
+        val json = RollHeadCatalogJson.text()
+        for (w in listOf("회사 나사", "회사 머리", "일곱 규격")) assertFalse(w in json, w)
+        // 검토 V1-2-2: 시작 규칙의 20산 최소 언더컷 g 에 크기 3 칸(설명서 Tab. 5 — 1K 1.916, 2K 3.187)도
+        assertTrue(d.start.ruleKo!!.contains("1.916 mm('3' 칸)") && d.start.ruleKo!!.contains("2K 3.227 / 3.187 / 3.267 mm"), d.start.ruleKo)
+        // 검토 V1-2-1: 못 찾은 칸 'R2 blankDia.rows' — d2 표(2A, UNC 인쇄 408 · UNF 409 · UNEF 410)의 20산 여덟(13/16 · 15/16 도), 표에 없는 UN 계열에 11/16-20 도
+        val blankRows = d.notFound.single { it.field == "R2 blankDia.rows" }.reason
+        assertFalse("다섯 규격" in blankRows, blankRows)
+        for (w in listOf("1/4 UNC", "13/16", "15/16", "11/16-20")) assertTrue(w in blankRows, w)
+        // 검토 V1-3-1: 찾은 범위 · 읽은 쪽에 1/4-20 UNC 표(인쇄 408 = PDF 410)도 — 'UNC 인쇄 408' 을 들면서 범위는 409 부터라 앞뒤가 어긋났다
+        assertTrue("카탈로그 부록(인쇄 408-421)" in blankRows && "UNC 인쇄 408" in blankRows, blankRows)
+        assertFalse("409-421" in blankRows, blankRows)
+        assertTrue("206, 408-410, 413-414, 418-421 (PDF 17-24, 90, 112, 208, 410-412, 415-416, 420-423쪽)" in json, "meta pages R2")
+        // 검토 V3-2-2 · V3-2-3 · V3-2-4: 화면 · 도움말에 나가는 요령 글 — 설명서 이름은 줄표 'F1–F3'(붙임표 'F1-F3' 은 keepDash 가 못 묶어 'F1- / F3' 로 갈렸다),
+        // 증상에 출처 이름을 다시 적지 않음(끝 출처 괄호와 겹침), 코드 이름(BLANK_BIG 등) 대신 화면 묶음 이름
+        val codeName = Regex("[A-Z]+_[A-Z]+")
+        for (t in d.tips) {
+            for (x in listOfNotNull(t.symptomKo, t.causeKo, t.remedyKo)) {
+                assertFalse("F1-F3" in x, x)
+                assertFalse(codeName.containsMatchIn(x), x)
+            }
+            assertFalse("설명서" in t.symptomKo, t.symptomKo)
+        }
+    }
 }

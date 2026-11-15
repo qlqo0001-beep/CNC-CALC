@@ -230,10 +230,7 @@ internal fun RollThreadBody(s: ThreadState, roll: RollStore, chain: FieldChain, 
 
             AppCard(Modifier.fillMaxWidth(), padding = Space.cardPad) {
                 CardHeader(keepWords("회전수 · 이송 조정 요령"), keepWords("LMT Fette 설명서 · 카탈로그 — 글마다 출처"))
-                ExpandableHint(
-                    "회전수 · 이송 비율을 올리거나 내리면 생기는 일과 대책, 처음 맞추는 차례.",
-                    ROLL_TIP_GROUPS.joinToString("\n\n") { g -> rollTipGroupTitle(g) + "\n" + rollTipsText(g).joinToString("\n") { "· $it" } },
-                )
+                ExpandableHint("회전수 · 이송 비율을 올리거나 내리면 생기는 일과 대책, 처음 맞추는 차례.", rollTipsHint())
             }
             if (chain.sheetOpen) Spacer(Modifier.height(440.dp))
         }
@@ -275,9 +272,21 @@ private fun BlankCard(s: ThreadState) {
 
 /**
  * 화면에 쓸 때만: 범위 'Ø18.050 ~ 18.162' 와 '× 0.95' · '× 피치' 를 줄 안 바꿈 빈칸으로 묶는다(412dp 에서 '~ / 18.162', 360dp 130% 에서 '(× / 0.95)' 로 갈렸다).
+ * 줄표로 이은 출처 · 범위('F1–F3 설명서' · '30–50' · 'Ø12–30') · 빗금 단위('m/min')도 [keepDash] 로 한 덩이.
  * 골든 · 시험이 보는 글 함수는 그대로 둔다. 결과 칸 아래 글은 [keepWords] 도 — ResultCell 은 낱말을 지키지 않아 '아 / 래 끝' 으로 갈렸다
  */
-private fun screenText(t: String): String = t.replace(" ~ ", "\u00A0~\u00A0").replace("× ", "×\u00A0")
+internal fun screenText(t: String): String = keepDash(t.replace(" ~ ", "\u00A0~\u00A0").replace("× ", "×\u00A0"))
+
+/**
+ * 전조 화면 · 전조 도움말 · 머리 시트에 쓸 때만: 줄표(–) 양옆에 낱말 이음(\u2060)을 넣어 'F1– / F3' · 'Ø12– / 22' 로 갈리지 않게 한다(검토 V3-1-3 —
+ * 360dp 130% 전조 조건 참고 글 · 412dp 도움말). 영숫자 사이 빗금 뒤에도 낱말 이음('F01/K01' · 'm/min' 이 'F01/ / K01' · 'm/ / min' 으로 갈렸다),
+ * 출처 이름 'F RN' 은 줄 안 바꿈 빈칸으로 묶는다('F / RN·…' — 검토 V3-3-1). 공용 [keepWords] 와 테이퍼 화면('T1–T2')은 건드리지 않는다
+ */
+internal fun keepDash(t: String): String =
+    t.replace("–", "\u2060–\u2060").replace(SLASH_IN_WORD, "/\u2060").replace("F RN", "F\u00A0RN")
+
+/** 영숫자 사이의 빗금('F01/K01' · 'm/min' · '1.22/1.27') — 앞뒤에 빈칸이 있는 'STS304 / STS316' 은 아님 */
+private val SLASH_IN_WORD = Regex("(?<=[A-Za-z0-9])/(?=[A-Za-z0-9])")
 
 /** 전조 화면 가공 소재 칸의 빈칸 글(비우면 스테인리스로 본다 — 결정 D6) */
 internal const val ROLL_MATERIAL_EMPTY = "고르지 않음 (스테인리스로 봄)"
@@ -323,6 +332,13 @@ internal fun rollTipsText(g: RollTipGroup): List<String> {
     if (tips.isEmpty()) return listOf("Fette 자료에 없음")
     return tips.map { t -> "${t.order?.let { "$it. " } ?: ""}${t.symptomKo} → ${firstKo(t.remedyKo)} (${tipSources(t)})" }
 }
+
+/**
+ * 요령 카드 '자세히' 펼친 글(화면): 묶음마다 이름 한 줄 + 줄마다 '· ' [rollTipsText]. [screenText] 를 거쳐 줄표로 이은 출처('F1–F3 설명서')가
+ * 한 덩이 — 검토 V3-2-1: 412dp 에서 'F1– / F3 설명서 인쇄 85' 로 갈렸다
+ */
+internal fun rollTipsHint(): String =
+    screenText(ROLL_TIP_GROUPS.joinToString("\n\n") { g -> rollTipGroupTitle(g) + "\n" + rollTipsText(g).joinToString("\n") { "· $it" } })
 
 /** 요령 묶음의 글(도움말 — 전문): "증상 → 대책 전문 (출처 …)" */
 internal fun rollTipsFull(g: RollTipGroup): List<String> {
@@ -697,7 +713,7 @@ internal fun RollHeadSheet(s: ThreadState, onDismiss: () -> Unit) {
         val first = RollHeadCalc.pickHead(spec, null)?.key
         s.rollHeadChoices.forEach { key ->
             val (text, sub) = rollHeadRow(spec, key)
-            ChoiceRow(text, sub, key == shown) {
+            ChoiceRow(text, keepDash(sub), key == shown) {
                 s.rollHead = if (key == first) null else key
                 onDismiss()
             }
