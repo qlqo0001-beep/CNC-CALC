@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
+import com.bmt.nosecalc.calc.CompanyRolls
 import com.bmt.nosecalc.calc.DieHeadCalc
 import com.bmt.nosecalc.calc.DieHeadCatalog
 import com.bmt.nosecalc.calc.DieInput
@@ -24,6 +25,12 @@ import com.bmt.nosecalc.calc.PipeSolution
 import com.bmt.nosecalc.calc.PipeSpec
 import com.bmt.nosecalc.calc.PipeTable
 import com.bmt.nosecalc.calc.PipeThreadCalc
+import com.bmt.nosecalc.calc.RollDefaults
+import com.bmt.nosecalc.calc.RollHeadCalc
+import com.bmt.nosecalc.calc.RollInput
+import com.bmt.nosecalc.calc.RollRpmBasis
+import com.bmt.nosecalc.calc.RollSteel
+import com.bmt.nosecalc.calc.RollStock
 import com.bmt.nosecalc.calc.ThreadClass
 import com.bmt.nosecalc.calc.ThreadDir
 import com.bmt.nosecalc.calc.ThreadInsert
@@ -38,6 +45,7 @@ import com.bmt.nosecalc.calc.WorkMaterials
 import com.bmt.nosecalc.calc.ncWords
 import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.roundToLong
 import kotlin.math.sqrt
 
 /**
@@ -106,20 +114,42 @@ private fun naturalGroup(s: ThreadSpec): UnGroup? = when (s.series) {
     ThreadSeries.M_COARSE, ThreadSeries.M_FINE -> null
 }
 
-/** 고르기 시트(드롭다운) 종류. INSERT = 인서트(고급 설정), DIE_SPEED = 다이스 카탈로그 절삭 속도 줄 */
-internal enum class Pick { CLASS, KIND, SIZE, PITCH, MATERIAL, ANGLE, CHAMFER, INSERT, DIE_SPEED }
+/** 고르기 시트(드롭다운) 종류. INSERT = 인서트(고급 설정), DIE_SPEED = 다이스 카탈로그 절삭 속도 줄, ROLL_HEAD = 전조 머리 · 롤 */
+internal enum class Pick { CLASS, KIND, SIZE, PITCH, MATERIAL, ANGLE, CHAMFER, INSERT, DIE_SPEED, ROLL_HEAD }
 
 /** NC 카드 탭: G92 다회(회사 흐름 — 처음 값, 사용자 결정 10-29) · G76 두 줄 */
 internal enum class ThreadNc { G92, G76 }
 
 /**
- * 가공 방식: 바이트(G92 · G76 — 처음) · 다이스 헤드(고정형 자동 열림 — 사용자 결정 2026-11-05: M · UN 숫나사만, 나사 화면 안에서 고른다).
- * 내경이나 관용 테이퍼로 가면 바이트로 돌아간다([ThreadState.switchInner] · [ThreadState.switchFamily])
+ * 가공 방식: 바이트(G92 · G76 — 처음) · 다이스 헤드(절삭 다이스 — 고정형 자동 열림, 사용자 결정 2026-11-05: M · UN 숫나사만, 나사 화면 안에서 고른다) ·
+ * 전조 다이스(LMT Fette 축방향 전조 머리 — 사용자 결정 2026-11-11, 같은 규칙). 내경이나 관용 테이퍼로 가면 바이트로 돌아간다([ThreadState.switchInner] · [ThreadState.switchFamily]).
+ * ROLL 은 끝에 붙인다 — 저장 글이 이름(valueOf)으로 읽고, 화면 칸 차례는 [METHOD_ORDER] 로 따로 둔다
  */
-internal enum class ThreadMethod { BITE, DIE }
+internal enum class ThreadMethod { BITE, DIE, ROLL }
+
+/** 가공 방식 세 칸의 화면 차례 [바이트 | 전조 다이스 | 절삭 다이스](결정 D9 — enum 차례와 다르다). 고른 칸 번호 · 누른 칸 번호 모두 이 목록으로 */
+internal val METHOD_ORDER = listOf(ThreadMethod.BITE, ThreadMethod.ROLL, ThreadMethod.DIE)
+
+/** 가공 방식 칸 이름(결정 D9). narrow = 좁은 폰 · 큰 글꼴 — 바이트 칸을 '바이트' 만 */
+internal fun methodText(m: ThreadMethod, narrow: Boolean = false): String = when (m) {
+    ThreadMethod.BITE -> if (narrow) "바이트" else "바이트 (G92 · G76)"
+    ThreadMethod.ROLL -> "전조 다이스"
+    ThreadMethod.DIE -> "절삭 다이스"
+}
 
 /** 다이스 헤드 화면의 숫자칸(끝면 Z 는 관용 테이퍼의 기준면 Z 칸과 같은 값 — 둘 다 공작물 끝면) */
 private val DIE_FIELDS = listOf(ThreadField.Z_START, ThreadField.RPM, ThreadField.Z_END, ThreadField.Z_REF)
+
+/** 전조 다이스 화면의 숫자칸 — 다이스와 같은 넷(시작 Z 빈칸 = 5, 끝면 Z 빈칸 = 0). 전조 전 지름은 넣는 칸이 없다(결정 F9 — NC 에 안 들어감) */
+private val ROLL_FIELDS = listOf(ThreadField.Z_START, ThreadField.RPM, ThreadField.Z_END, ThreadField.Z_REF)
+
+/**
+ * 전조 머리 · 롤 시트의 줄(머리 회사 표기 "F34") — 회사 짝(처음 값이 먼저, [CompanyRolls]) 다음 지름 범위(카탈로그)에 드는 다른 EVOline 머리([RollHeadCalc.headsFor])
+ */
+internal fun rollHeadChoices(spec: ThreadSpec): List<String> {
+    val company = CompanyRolls.of(spec)?.heads?.map { it.model }.orEmpty()
+    return company + RollHeadCalc.headsFor(spec).map { it.key }.filter { it !in company }
+}
 
 /**
  * 나사 G76 화면 상태. 숫자칸 값은 쓴 그대로의 글(빈칸 = 안 넣음 · 기본값).
@@ -146,13 +176,16 @@ internal class ThreadState(
     method: ThreadMethod = ThreadMethod.BITE,
     insert: String? = null,
     dieSpeed: String? = null,
+    rollHead: String? = null,
+    rollStock: RollStock = RollStock.HEX,
+    rollSteel: RollSteel = RollSteel.STS316,
 ) {
     var inner by mutableStateOf(inner)
         private set
     var family by mutableStateOf(family)
         private set
 
-    /** 가공 방식 — 다이스 헤드는 곧은 나사 숫나사에서만(되살린 상태도 같다) */
+    /** 가공 방식 — 다이스 헤드 · 전조 다이스는 곧은 나사 숫나사에서만(되살린 상태도 같다) */
     var method by mutableStateOf(if (!inner && family.kind != null) method else ThreadMethod.BITE)
         private set
 
@@ -164,6 +197,15 @@ internal class ThreadState(
     var dieSpeed by mutableStateOf(dieSpeed)
     var spec by mutableStateOf(spec)
         private set
+
+    /** 전조 머리 회사 표기("F34") — null = 계산 처음 값(회사 짝 첫째 → 지름 범위에 드는 첫 EVOline 머리). 규격의 선택지([rollHeadChoices])에 없으면 처음 값 — 되살린 상태도 같다 */
+    var rollHead by mutableStateOf(rollHead?.takeIf { h -> spec == null || h in rollHeadChoices(spec) })
+
+    /** 전조 소재 종류(자동단조 · 자동핵사 — 회사 프로그램이 둘로 나뉨, 처음 자동핵사 — 결정 D16). 규격을 바꿔도 그대로 */
+    var rollStock by mutableStateOf(rollStock)
+
+    /** 전조 스테인리스 강종(Fette 재질 표 1.4401 · 1.4301 — 처음 STS316, 사용자 결정 2026-11-14). 가공 소재가 스테인리스(M)이거나 비었을 때만 쓴다 */
+    var rollSteel by mutableStateOf(rollSteel)
 
     /** 관용 테이퍼 크기(PT · NPT 일 때) */
     var pipe by mutableStateOf(pipe)
@@ -223,15 +265,27 @@ internal class ThreadState(
         if (!dieAllowed) method = ThreadMethod.BITE
     }
 
-    /** 다이스 헤드를 고를 수 있나 — M · UN 숫나사(사용자 결정 2026-11-05) */
+    /** 다이스 헤드 · 전조 다이스를 고를 수 있나 — M · UN 숫나사(사용자 결정 2026-11-05) */
     val dieAllowed: Boolean get() = !inner && family.kind != null
 
-    /** 다이스 헤드 화면인가 */
+    /** 다이스 헤드(절삭 다이스) 화면인가 */
     val isDie: Boolean get() = method == ThreadMethod.DIE && dieAllowed
 
-    /** 가공 방식 고르기 — 다이스 헤드는 [dieAllowed] 일 때만 받는다 */
+    /** 전조 다이스 화면인가 */
+    val isRoll: Boolean get() = method == ThreadMethod.ROLL && dieAllowed
+
+    /**
+     * 가공 방식 고르기 — 다이스 헤드 · 전조 다이스는 [dieAllowed] 일 때만 받는다. 전조를 고를 때 규격을 아직 안 골랐으면 종류 UN · 20UN 묶음으로 둔다
+     * (결정 D15 — 회사 롤 일곱이 모두 UN 20산). 규격이 있으면 건드리지 않는다. 이미 전조인데 그 칸을 다시 누르면(Segmented 는 고른 칸도 onSelect)
+     * 아무것도 바꾸지 않는다 — 전조에서 고른 종류(M) · 묶음이 말없이 UN · 20UN 으로 돌아가지 않게(검토 V3-1-4)
+     */
     fun pickMethod(m: ThreadMethod) {
-        method = if (m == ThreadMethod.DIE && !dieAllowed) ThreadMethod.BITE else m
+        val wasRoll = isRoll
+        method = if (m != ThreadMethod.BITE && !dieAllowed) ThreadMethod.BITE else m
+        if (!wasRoll && method == ThreadMethod.ROLL && spec == null) {
+            switchFamily(ThreadFamily.UN)
+            unGroup = UnGroup.UN20
+        }
     }
 
     /** 인서트 자료의 나사 꼴 — 미터는 자료가 없다(VARDEX · Carmex 의 UN 20산 · NPT · BSPT 만). PT 는 BSPT 인서트(같은 55° 꼴) */
@@ -283,12 +337,38 @@ internal class ThreadState(
         }
     }
 
-    /** 고른 급수가 새 규격의 계열에 없으면(UNEF · UN 에는 1A · 1B 가 없다) 기본으로. UN 줄이 지금 묶음에 없으면 묶음이 그 줄의 계열로 따라간다 */
+    /**
+     * 고른 급수가 새 규격의 계열에 없으면(UNEF · UN 에는 1A · 1B 가 없다) 기본으로. UN 줄이 지금 묶음에 없으면 묶음이 그 줄의 계열로 따라간다.
+     * 고른 전조 머리가 새 규격의 선택지([rollHeadChoices])에 없으면 처음 값으로(U-7)
+     */
     fun pickSpec(s: ThreadSpec) {
         spec = s
         if (cls?.let { it !in ThreadClass.choices(s.series, inner) } == true) cls = null
         if (s !in ThreadTable.group(unGroup)) naturalGroup(s)?.let { unGroup = it }
+        if (rollHead?.let { it !in rollHeadChoices(s) } == true) rollHead = null
     }
+
+    /** 전조 사이즈 시트의 '회사 롤 규격' 줄 고르기([CompanyRolls.specs] — 모두 20UN 묶음 줄): 그 20산 줄, 묶음도 20UN */
+    fun pickCompanyRoll(s: ThreadSpec) {
+        unGroup = UnGroup.UN20
+        pickSpec(s)
+    }
+
+    /** 전조 머리 · 롤 시트의 줄 — 사이즈를 안 골랐으면 비었다 */
+    val rollHeadChoices: List<String> get() = spec?.let(::rollHeadChoices).orEmpty()
+
+    /** 전조에서 가공 소재를 스테인리스로 보나(M 이거나 비움 — 결정 D6). 회사 S · Fette 추천 회전수는 스테인리스만 */
+    val rollStainless: Boolean get() = (material ?: IsoGroup.M) == IsoGroup.M
+
+    /** 전조 계산의 처음 값(자리표시 · 머리 칸 · 전조 전 지름) — 회사 값 저장소와 숫자칸을 안 쓴다(계산이 멈춰도 낸다) */
+    val rollDefaults: RollDefaults
+        get() = RollHeadCalc.defaults(RollInput(spec = spec, material = material, steel = rollSteel, head = rollHead, stock = rollStock))
+
+    /**
+     * 회전수 사슬(회사 S → Fette 추천)이 비었나 — 넣은 회전수가 없으면 계산이 멈춘다. 사이즈를 안 골랐으면 소재로 본다
+     * (회사 S · Fette 추천이 스테인리스만이라 다른 소재는 어느 규격이든 비었다)
+     */
+    val rollRpmMissing: Boolean get() = spec?.let { rollDefaults.rpm == null } ?: !rollStainless
 
     /** 관용 테이퍼 크기 고르기(산수는 크기에 딸려 있다) */
     fun pickPipe(p: PipeSpec) {
@@ -364,6 +444,26 @@ internal class ThreadState(
         zFace = num(ThreadField.Z_REF) ?: 0.0,
     )
 
+    /**
+     * 전조 다이스 계산기 입력 — 시작 Z(빈칸 = null → 계산이 5) · 끝 Z · 회전수(직접)는 이 상태의 칸, 끝면 Z 는 기준면 Z 칸(빈칸 = 0 — 다이스와 같이),
+     * 가공 소재 · 강종 · 머리 · 소재 종류는 이 상태, 전조 조건(비율 · 멈춤 · 물러남)은 회사 값 저장소. 비율 빈칸 = null(사슬 — 20산 회사 F1.22 → Fette 0.95),
+     * 멈춤 · 물러남 빈칸 = 처음 값(1 초 · Z150)
+     */
+    fun rollInput(r: RollStore): RollInput = RollInput(
+        spec = spec,
+        material = material,
+        steel = rollSteel,
+        head = rollHead,
+        stock = rollStock,
+        rpm = num(ThreadField.RPM),
+        zStart = num(ThreadField.Z_START),
+        zEnd = num(ThreadField.Z_END),
+        ratio = r.num(RollField.RATIO),
+        dwell = r.num(RollField.DWELL) ?: RollHeadCalc.DWELL_DEFAULT,
+        retractZ = r.num(RollField.RETRACT) ?: RollHeadCalc.RETRACT_Z_DEFAULT,
+        zFace = num(ThreadField.Z_REF) ?: 0.0,
+    )
+
     private fun finishCount(): Int? = num(ThreadField.FINISH_COUNT)?.let { if (it == floor(it) && abs(it) <= 1000) it.toInt() else 0 }
 
     /** 관용 테이퍼인가 */
@@ -382,12 +482,13 @@ internal class ThreadState(
 
     /**
      * 이 종류의 화면에 있는 칸(곧은 나사는 기준면 Z · 게이지 면 옮김이 없고, 관용 테이퍼는 공차 목표 · 인선 R 이 없다 — 풀 프로파일 인서트).
-     * 다이스 헤드는 Z 시작 · 회전수 · Z 끝 · 끝면 Z 넷(다이스 조건 칸은 [DieStore])
+     * 다이스 헤드 · 전조 다이스는 Z 시작 · 회전수 · Z 끝 · 끝면 Z 넷(조건 칸은 [DieStore] · [RollStore])
      */
     val fields: List<ThreadField>
         get() = when {
             isPipe -> ThreadField.entries.filter { it.pipe }
             isDie -> DIE_FIELDS
+            isRoll -> ROLL_FIELDS
             else -> ThreadField.entries.filter { it.straight }
         }
 
@@ -403,15 +504,16 @@ internal class ThreadState(
     }
 
     /**
-     * 범위 밖 칸 — 계산기의 BAD_INPUT 과 같은 규칙(G76Calc.calc · PipeThreadCalc.calc). 값 부족과 따로 보아 넣자마자 빨갛게 짚는다.
-     * 이 종류의 화면에 없는 칸은 보지 않는다(다른 종류에서 넣은 값이 남아 있어도)
+     * 범위 밖 칸 — 계산기의 BAD_INPUT 과 같은 규칙(G76Calc.calc · PipeThreadCalc.calc · DieHeadCalc.calc · RollHeadCalc.calc). 값 부족과 따로 보아 넣자마자 빨갛게 짚는다.
+     * 이 종류의 화면에 없는 칸은 보지 않는다(다른 종류에서 넣은 값이 남아 있어도).
+     * 다이스 헤드 · 전조 다이스의 회전수는 계산기와 같이 아래 한도는 넣은 값(< 1), 위 한도는 찍힐 S(반올림)로 본다 — 100000.3 은 G97S100000 으로 풀리니 짚지 않는다
      */
     fun bad(): Set<ThreadField> = fields.filter { f ->
         val v = num(f) ?: return@filter false
         if (!v.isFinite()) return@filter true
         when (f) {
             ThreadField.Z_START, ThreadField.Z_END, ThreadField.Z_REF -> abs(v) > MAX_MM
-            ThreadField.RPM -> v < 1 || v > MAX_RPM
+            ThreadField.RPM -> v < 1 || (if (isDie || isRoll) v.roundToLong() > MAX_RPM else v > MAX_RPM)
             ThreadField.TARGET -> v < 0 || v > 100
             ThreadField.FINISH_COUNT -> v != floor(v) || v < 1 || v > 99
             ThreadField.FIRST_CUT -> v <= 0 || um(v) < 1 || v > MAX_MM
@@ -440,9 +542,23 @@ internal class ThreadState(
         }
     }
 
-    /** 자리표시: 가공 값은 '기본 …'(빈칸이면 그 값으로 계산), 회전수는 '안 씀'(다이스 헤드는 'Vc 로' — 비우면 Vc 로 계산), 도면 값은 비움 */
+    /**
+     * 자리표시: 가공 값은 '기본 …'(빈칸이면 그 값으로 계산), 회전수는 '안 씀'(다이스 헤드는 'Vc 로' — 비우면 Vc 로 계산), 도면 값은 비움.
+     * 전조 다이스: 시작 Z '기본 5', 회전수는 쓰일 값의 숫자(U-3 — '회사 S…' · '추천 …', 사슬이 비면 '넣으세요', 사이즈 전 스테인리스는 '자동')
+     */
     fun placeholder(f: ThreadField): String = when (f) {
-        ThreadField.RPM -> if (isDie) "Vc 로" else "안 씀"
+        ThreadField.Z_START -> if (isRoll) "기본 ${plain(RollHeadCalc.Z_START_DEFAULT)}" else ""
+        ThreadField.RPM -> when {
+            isDie -> "Vc 로"
+            isRoll -> rollDefaults.let { d ->
+                when (d.rpmBasis) {
+                    RollRpmBasis.COMPANY -> "회사 S${d.rpm}"
+                    RollRpmBasis.FETTE -> "추천 ${d.rpm}"
+                    RollRpmBasis.INPUT, null -> if (rollRpmMissing) "넣으세요" else "자동"
+                }
+            }
+            else -> "안 씀"
+        }
         ThreadField.TARGET -> "기본 ${plain(G76Calc.TARGET_DEFAULT)}"
         ThreadField.TIP_R -> spec?.let { "기본 ${Fmt.fixed3(defaultTipR(it, inner))}" } ?: "기본 규격값"
         ThreadField.FINISH_COUNT -> "기본 ${G76Calc.FINISH_COUNT_DEFAULT}"
@@ -462,7 +578,7 @@ internal class ThreadState(
         /**
          * 앞 9칸(내외 · 종류 · 규격 · 급수 · 소재 · 방향 · 각도 · 면취량 · 고급 펼침) + 칸 10개 + NC 탭은 옛 글과 같은 자리 — 종류 이름(METRIC · UN)도 같아
          * 옛 글을 그대로 읽는다(붙인 칸이 없으면 처음 값). 그 뒤 관용 테이퍼 크기 · UN 묶음 · 테이퍼 낱말 · 새 칸 둘(2026-11-05),
-         * 가공 방식 · 인서트 · 카탈로그 절삭 속도 줄(2026-11-06)을 붙인다
+         * 가공 방식 · 인서트 · 카탈로그 절삭 속도 줄(2026-11-06), 전조 머리 · 소재 종류 · 강종(2026-11-14)을 붙인다 — 모두 31칸
          */
         val Saver = listSaver<ThreadState, String>(
             save = { s ->
@@ -473,7 +589,8 @@ internal class ThreadState(
                     s.advOpen.toString(),
                 ) + old.map { s.value(it) } + s.nc.name +
                     listOf(s.pipe?.let { "${it.kind.name}|${it.size}" } ?: "", s.unGroup.name, s.taperWord.toString()) + added.map { s.value(it) } +
-                    listOf(s.method.name, s.insert ?: "", s.dieSpeed ?: "")
+                    listOf(s.method.name, s.insert ?: "", s.dieSpeed ?: "") +
+                    listOf(s.rollHead ?: "", s.rollStock.name, s.rollSteel.name)
             },
             restore = { l ->
                 val family = ThreadFamily.valueOf(l[1])
@@ -484,8 +601,9 @@ internal class ThreadState(
                 val pipe = l.getOrNull(tail)?.split('|')?.takeIf { it.size == 2 }?.let { (kind, size) ->
                     PipeTable.of(PipeKind.valueOf(kind)).firstOrNull { it.size == size }
                 }
-                // 가공 방식 · 인서트 · 카탈로그 줄(2026-11-06 — 새 칸 뒤)
+                // 가공 방식 · 인서트 · 카탈로그 줄(2026-11-06 — 새 칸 뒤), 전조 머리 · 소재 종류 · 강종(2026-11-14 — 그 뒤)
                 val more = tail + 3 + ThreadField.entries.size - OLD_FIELDS
+                val roll = more + 3
                 ThreadState(
                     inner = l[0].toBoolean(),
                     family = family,
@@ -507,6 +625,9 @@ internal class ThreadState(
                     method = l.getOrNull(more)?.let { ThreadMethod.valueOf(it) } ?: ThreadMethod.BITE,
                     insert = l.getOrNull(more + 1)?.takeIf { it.isNotEmpty() },
                     dieSpeed = l.getOrNull(more + 2)?.takeIf { it.isNotEmpty() },
+                    rollHead = l.getOrNull(roll)?.takeIf { it.isNotEmpty() },
+                    rollStock = l.getOrNull(roll + 1)?.let { RollStock.valueOf(it) } ?: RollStock.HEX,
+                    rollSteel = l.getOrNull(roll + 2)?.let { RollSteel.valueOf(it) } ?: RollSteel.STS316,
                 )
             },
         )

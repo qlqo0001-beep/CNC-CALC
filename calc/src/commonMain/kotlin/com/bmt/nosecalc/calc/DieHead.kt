@@ -160,7 +160,7 @@ object DieHeadCalc {
         // 회전 수 = (물림 Z − 끝 Z)/(비율 × P), 회전마다 머리 앞쪽이 (1 − 비율)P 씩 끌려 나간다
         val pull = (1 - i.ratio) / i.ratio * (engage - i.zEnd)
         val fullEnd = i.throatThreads?.let { i.zEnd + it * p }
-        val g4 = G76Calc.um(i.dwell) >= 1
+        val g4 = headDwells(i.dwell)
         val dwellTravel = if (g4) s / 60.0 * i.dwell * p else 0.0
         val floatExceeded = i.floatTravel != null && pull > i.floatTravel + EPS
         val warnings = buildList {
@@ -171,14 +171,7 @@ object DieHeadCalc {
             if (!floatExceeded && noOpen) add(DieWarning.DWELL_SHORT)
             if (i.zFace != null && i.zStart - i.zFace < p - EPS) add(DieWarning.START_NEAR)
         }
-        val program = listOfNotNull(
-            "G97S$s",
-            "G0X0.Z${Fmt.word(i.approachZ)}",
-            "Z${Fmt.word(i.zStart)}",
-            "G1Z${Fmt.word(i.zEnd)}F${Fmt.word(feed)}",
-            "G4U${Fmt.word(i.dwell)}".takeIf { g4 },
-            "G0Z${Fmt.word(i.retractZ)}",
-        )
+        val program = headProgram(s, i.approachZ, i.zStart, i.zEnd, feed, i.dwell, i.retractZ)
         val sol = DieSolution(
             s, Cutting.vc(s.toDouble(), spec.d), feed, feedPerMin, 60 * len / feedPerMin + i.dwell, pull, fullEnd, dwellTravel,
             i.floatTravel?.let { i.zEnd - it }, program, CATALOG_FEED_NOTE.takeIf { abs(i.ratio - 1) > EPS },
@@ -188,3 +181,20 @@ object DieHeadCalc {
 
     private fun stop(w: DieWarning) = DieResult(null, listOf(w))
 }
+
+/** 끝 멈춤 줄(G4)을 쓰나 — 찍힐 값(0.001)이 0 이면 쓰지 않는다. 다이스 헤드 · 전조 다이스가 같이 쓴다 */
+internal fun headDwells(dwell: Double): Boolean = G76Calc.um(dwell) >= 1
+
+/**
+ * 머리(다이스 헤드 · 전조 다이스) 글 — 머리가 X0 에서 Z 로만 움직인다:
+ * `G97S…` · `G0X0.Z(진입)` · `Z(시작)` · `G1Z(끝)F(이송)` · (`G4U(멈춤)` — [headDwells] 일 때) · `G0Z(물러남)`. 공구 호출 · M03 은 넣지 않는다
+ */
+internal fun headProgram(s: Long, approachZ: Double, zStart: Double, zEnd: Double, feed: Double, dwell: Double, retractZ: Double): List<String> =
+    listOfNotNull(
+        "G97S$s",
+        "G0X0.Z${Fmt.word(approachZ)}",
+        "Z${Fmt.word(zStart)}",
+        "G1Z${Fmt.word(zEnd)}F${Fmt.word(feed)}",
+        "G4U${Fmt.word(dwell)}".takeIf { headDwells(dwell) },
+        "G0Z${Fmt.word(retractZ)}",
+    )

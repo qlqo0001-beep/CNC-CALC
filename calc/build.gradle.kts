@@ -8,9 +8,9 @@ plugins {
 
 // 카탈로그 자료 catalog/*.json(docs/research 의 검증 끝난 조사 결과를 바이트 그대로 복사한 것)을 Kotlin 문자열로 만든다 —
 // 리소스 파일을 플랫폼마다 따로 읽지 않고 JVM · 안드로이드가 같은 코드로 읽게. 클래스 파일의 문자열 상수 하나는 64KB 까지라 나눠 붙인다.
-// (JSON 파일, 만들 object 이름): 드릴 카탈로그 → DrillCatalogJson, 다이스 헤드 → DieHeadCatalogJson
+// (JSON 파일, 만들 object 이름): 드릴 카탈로그 → DrillCatalogJson, 다이스 헤드 → DieHeadCatalogJson, 전조 머리 → RollHeadCatalogJson
 val generateCatalogs = tasks.register("generateCatalogs") {
-    val catalogs = listOf("drill-catalog.json" to "DrillCatalogJson", "die-heads.json" to "DieHeadCatalogJson")
+    val catalogs = listOf("drill-catalog.json" to "DrillCatalogJson", "die-heads.json" to "DieHeadCatalogJson", "roll-heads.json" to "RollHeadCatalogJson")
         .map { (json, name) -> Triple(file("catalog/$json"), json, name) }
     val outDir = layout.buildDirectory.dir("generated/catalogs/kotlin")
     inputs.files(catalogs.map { it.first })

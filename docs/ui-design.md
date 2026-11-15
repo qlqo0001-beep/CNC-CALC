@@ -532,12 +532,14 @@
 ## 나사 G76 화면 (`screens/ThreadScreen.kt`, `screens/thread/`)
 | 파일 | 내용 |
 |---|---|
-| `ThreadScreen.kt` | `ThreadScreen()` — 외경/내경 → (파란 안내 · 빨간 멈춤) → '스레드 및 소재 설정'(접이 '고급 공차 및 인선 설정' 포함) → (노란 확인 · 역가공 안내) → 'G76 파라미터 입력 및 분석' → 회차별 분석 → 나사 단면 → NC(탭 G92 다회 · G76 두 줄, G92 면 다듬질 블록 카드). 종류가 PT · NPT 면 같은 틀에 `PipeThreadBody`, 가공 방식이 다이스 헤드면 `DieThreadBody`(다이스 조건 저장소 `DieStore(app.store)` 를 화면을 열 때 만든다). 고르기 시트 `ThreadSheet`(UN 사이즈 시트 안 `UnSizePicker` · 인서트 · 다이스 카탈로그 `DieSpeedSheet`), 결과 칸 `resultCells`(골든도 씀), 도움말 `ThreadHelp`(일곱 묶음) |
-| `thread/ThreadModel.kt` | `ThreadField`(숫자칸 12 · `advanced` · `straight` · `pipe` — 관용 테이퍼의 기준면 Z · 게이지 면 옮김은 맨 끝), 종류 `ThreadFamily`(METRIC · UN · PT · NPT — `kind` · `pipeKind`), `Pick`(고르기 시트 9 — 인서트 `INSERT` · 다이스 카탈로그 `DIE_SPEED`), NC 탭 `ThreadNc`(G92 · G76), 가공 방식 `ThreadMethod`(BITE · DIE), `ThreadState`(+ Saver · `family` · `pipe` · `unGroup` · `taperWord` · `nc` · `method` · `insert` · `dieSpeed` · `input` · `pipeInput` · `dieInput(DieStore)` · `fields` · `missing` · `bad` · `flagged` · `placeholder` · `switchInner` · `switchFamily` · `pickSize` · `pickSpec` · `pickPipe` · `dieAllowed` · `isDie` · `pickMethod` · `hasInsertData` · `insertChoices` · `shownInsert` · `pickInsert` · `shownDieSpeed`), 20UN 위로 올릴 크기 `COMPANY_20UN` · 묶음 격자 `unSizes`, G76 낱말 `g76Words` · `NcWord` · `ncText`, 경고 글 `threadWarningText`, 칸 안내 `fieldHint`, 종류 글 `kindText` · `kindNote` · `pitchLabel` · `standardText`, 급수 이름 `classText` · `classNote`, 게이지 공차 산 글 `turnsText`, 최소 나사 길이 이름 `needLenName`, 인서트 글 `insertKey` · `insertMaker` · `insertText` · `insertSource`, 카탈로그 줄 열쇠 `dieSpeedKey`, 다이스 칸 안내 `dieFieldHint` |
+| `ThreadScreen.kt` | `ThreadScreen()` — 외경/내경 → (파란 안내 · 빨간 멈춤) → '스레드 및 소재 설정'(접이 '고급 공차 및 인선 설정' 포함) → (노란 확인 · 역가공 안내) → 'G76 파라미터 입력 및 분석' → 회차별 분석 → 나사 단면 → NC(탭 G92 다회 · G76 두 줄, G92 면 다듬질 블록 카드). 종류가 PT · NPT 면 같은 틀에 `PipeThreadBody`, 가공 방식이 절삭 다이스(다이스 헤드)면 `DieThreadBody`(다이스 조건 저장소 `DieStore(app.store)` 를 화면을 열 때 만든다), 전조 다이스면 `RollThreadBody`(전조 조건 저장소 `RollStore(app.store)` 도 같이). 고르기 시트 `ThreadSheet`(UN 사이즈 시트 안 `UnSizePicker` — 전조면 맨 위 '회사 롤 규격 (20산)' · 인서트 · 다이스 카탈로그 `DieSpeedSheet` · 전조 머리 · 롤 `RollHeadSheet`), 결과 칸 `resultCells`(골든도 씀), 도움말 `ThreadHelp`(여덟 묶음 — 전조 묶음이 카탈로그 자료로 글을 만들어 `by lazy`) |
+| `thread/ThreadModel.kt` | `ThreadField`(숫자칸 12 · `advanced` · `straight` · `pipe` — 관용 테이퍼의 기준면 Z · 게이지 면 옮김은 맨 끝), 종류 `ThreadFamily`(METRIC · UN · PT · NPT — `kind` · `pipeKind`), `Pick`(고르기 시트 10 — 인서트 `INSERT` · 다이스 카탈로그 `DIE_SPEED` · 전조 머리 · 롤 `ROLL_HEAD`), NC 탭 `ThreadNc`(G92 · G76), 가공 방식 `ThreadMethod`(BITE · DIE · ROLL — ROLL 은 끝에 붙임, 저장 글을 이름으로 읽음) · 화면 칸 차례 `METHOD_ORDER`(BITE · ROLL · DIE) · 칸 이름 `methodText`, 전조 머리 시트 줄 `rollHeadChoices(spec)`, `ThreadState`(+ Saver 31칸 · `family` · `pipe` · `unGroup` · `taperWord` · `nc` · `method` · `insert` · `dieSpeed` · `rollHead` · `rollStock` · `rollSteel` · `input` · `pipeInput` · `dieInput(DieStore)` · `rollInput(RollStore)` · `rollDefaults` · `rollRpmMissing` · `rollStainless` · `rollHeadChoices` · `fields` · `missing` · `bad` · `flagged` · `placeholder` · `switchInner` · `switchFamily` · `pickSize` · `pickSpec` · `pickCompanyRoll` · `pickPipe` · `dieAllowed` · `isDie` · `isRoll` · `pickMethod` · `hasInsertData` · `insertChoices` · `shownInsert` · `pickInsert` · `shownDieSpeed`), 20UN 위로 올릴 크기 `COMPANY_20UN` · 묶음 격자 `unSizes`, G76 낱말 `g76Words` · `NcWord` · `ncText`, 경고 글 `threadWarningText`, 칸 안내 `fieldHint`, 종류 글 `kindText` · `kindNote` · `pitchLabel` · `standardText`, 급수 이름 `classText` · `classNote`, 게이지 공차 산 글 `turnsText`, 최소 나사 길이 이름 `needLenName`, 인서트 글 `insertKey` · `insertMaker` · `insertText` · `insertSource`, 카탈로그 줄 열쇠 `dieSpeedKey`, 다이스 칸 안내 `dieFieldHint` |
 | `thread/PipeCards.kt` | 관용 테이퍼 화면 `PipeThreadBody`(설정 · 게이지 공차 상자 `GaugeTolBox` · 게이지 표 `GaugeTableBox` · 고급 설정의 인서트 칸 · G92 절입 및 분석 · 분석표 · 단면 · G92 테이퍼 NC + I/R 고르기 · 다듬질), 사이즈 시트 `PipeSizeSheet`, 결과 칸 `pipeResultCells` · 결과 아래 글 `pipeResultNote` · 게이지 표 줄 `gaugeRows`(골든도 씀) |
 | `thread/DieCards.kt` | 다이스 헤드 화면 `DieThreadBody`(다이스 헤드 설정 · 다이스 조건 · 다이스 결과 · 카탈로그 안내 · 체이서 규격 `ChaserCard` · NC), 카탈로그 시트 `DieSpeedSheet`, 글 함수(골든도 씀) `dieWarningText` · `dieMissing` · `dieFlagged` · `dieResultCells` · `chaserRows`(`ChaserRow`) · `chaserSources` · `dieSpeedNote` · `dieSourceText` · `speedShort` · `speedRange` · `dieCatalogFeedText` · NC 설명 `dieNcExplain`, 칸 글 `dieFieldLabel` · `diePlaceholder` · `dieConditionHint` |
 | `thread/DieStore.kt` | 다이스 조건 칸 `DieField`(VC · RATIO · DWELL · RETRACT · FLOAT · THROAT), 회사 값 저장소 `DieStore(KeyValueStore)`(`value` · `num` · `set` · 열쇠 `DieStore.key` — `thread/die/…`, Vc 는 소재마다), 범위 밖 칸 `dieBad` |
-| `thread/ThreadParts.kt` | 맨 위 카드 `ThreadTopCard`(외경/내경 + 가공 방식), 인서트 칸 `InsertField` · 아래 한 줄 `insertNote` · 노란 띠 `insertBoreWarning`, 드롭다운 칸 `ChoiceField`(onClick = null 이면 읽기만) · 시트 `ChoiceSheet` · `ChoiceRow` · 칩 격자 `ChoiceGrid`, 색 띠 칸 `Marked`, 접이 막대 `AdvancedBar`(이름 바꿈 가능), G76 한 줄 `G76Line`, 결과 칸 `ResultCell`, 분석표 `PassTable`, 자동 값 색 `AppColors.threadAuto()` |
+| `thread/RollCards.kt` | 전조 다이스 화면 `RollThreadBody`(전조 다이스 설정 · 전조 전 지름 `BlankCard` · 노랑 · 요령 방향 · 전조 결과 · NC · 전조 조건 · 조정 요령), 머리 · 롤 시트 `RollHeadSheet`, 글 함수(골든도 씀) `rollWarningText` · `rollMissing` · `rollFlagged` · `rollResultCells` · `rollBlankCells` · `rollDirectionText` · `rollTipsText`(접힌 글 — 대책 첫 문장) · `rollTipsFull`(도움말 — 전문) · `rollSourceText` · `rollTipGroupTitle` · `ROLL_TIP_GROUPS` · `rollFeedFact` · NC 설명 `rollNcExplain` · 참고 줄 `rollReferenceText`, 칸 글 `rollFieldHint` · `rollPlaceholder` · `rollConditionHint` · 머리 칸 `rollHeadText` · 시트 줄 `rollHeadRow` · 범위 글 `rollHeadRange` · 소재 종류 `rollStockText`, 쓴 시작 Z `rollZStart` |
+| `thread/RollStore.kt` | 전조 조건 칸 `RollField`(RATIO · DWELL · RETRACT), 회사 값 저장소 `RollStore(KeyValueStore)`(`value` · `num` · `set` · 열쇠 `RollStore.key` — `thread/roll/…`, 다이스 조건과 따로), 범위 밖 칸 `rollBad` |
+| `thread/ThreadParts.kt` | 맨 위 카드 `ThreadTopCard`(외경/내경 + 가공 방식 세 칸), 인서트 칸 `InsertField` · 아래 한 줄 `insertNote` · 노란 띠 `insertBoreWarning`, 드롭다운 칸 `ChoiceField`(onClick = null 이면 읽기만) · 시트 `ChoiceSheet` · `ChoiceRow` · 칩 격자 `ChoiceGrid`, 색 띠 칸 `Marked`, 접이 막대 `AdvancedBar`(이름 바꿈 가능), G76 한 줄 `G76Line`, 결과 칸 `ResultCell`, 분석표 `PassTable`, 자동 값 색 `AppColors.threadAuto()` |
 | `thread/ThreadArt.kt` | 나사 단면 `ThreadSection(SectionGeom)`, 자료 `sectionGeom(inner, sol)` · 관용 테이퍼 `pipeSectionGeom(kind, inner, spec, sol)`, 날 단면 반폭 `toolHalfWidth`, 관용 테이퍼 모양 `PipeProfile` · 윤곽 `pipeOutline` · 홈 반폭 `pipeGrooveHalf` |
 
 - 순서 · 이름은 원본 08 그대로(글은 한글): ② 외경 가공 (OD) / 내경 가공 (ID) → ③ 스레드 및 소재 설정 → ④ 공차 급수 상자(이름 + 오른쪽 드롭다운 '2A (보통)') →
@@ -571,9 +573,16 @@
   a + f / l / L2 / L1 + L3 · 고칠 목표 Z — 0.001 내림 · M23 끝 빼기 몫) · START_NEAR(노랑 — 기준면에서 2 × 피치 안, 2P 값) · Z_ORDER(정가공만) · BAD_INPUT(게이지 면 옮김 ± 공차 산, 칸이 다 맞으면 '숫나사 끝 골 X 가 0 이하').
   빨간 테: START_INSIDE → Z축 시작점 · 기준면 Z, 끝 골 X ≤ 0 → 가공 목표점 · 기준면 Z. SHORT_THREAD · START_NEAR 는 노랑이라 테를 두르지 않는다(빨강 = 멈춤).
   게이지 공차 상자의 규격 이름(`standardText`)은 NPT 가 'ANSI B2.1 (ASME B1.20.1)'(값의 출처가 H28 1957 = ANSI B2.1 — 2026-11-06).
-- **가공 방식**(2026-11-06 — 사용자 결정 2026-11-05): 맨 위 카드 `ThreadTopCard` 의 외경/내경 아래 [바이트 (G92 · G76) | 다이스 헤드](파랑 48dp · 15sp).
-  좁은 폰 · 큰 글꼴(글꼴 배율로 나눈 폭 300dp 미만)은 [바이트 | 다이스 헤드](360dp 130% 에서 '바이트 (G92 · …' 로 잘렸다). `ThreadState.dieAllowed`(M · UN 외경)일 때만 보이고, 내경 · 관용 테이퍼로 가면 `switchInner` · `switchFamily` 가 바이트로 돌린다(되살린 상태도 같은 규칙, `pickMethod` 는
-  못 고르는 상태에서 다이스를 받지 않는다). 고름은 화면 상태(Saver).
+- **가공 방식**(2026-11-06 — 사용자 결정 2026-11-05, 세 칸은 2026-11-14 결정 D9): 맨 위 카드 `ThreadTopCard` 의 외경/내경 아래 세 칸
+  [바이트 (G92 · G76) | 전조 다이스 | 절삭 다이스](파랑 48dp). 화면 칸 차례는 `METHOD_ORDER`(BITE · ROLL · DIE — enum 차례 BITE · DIE · ROLL 과 다름)이고 고른 칸 번호 ·
+  누른 칸 번호 모두 이 목록으로 바꾼다. 칸 글 자리(`methodRoom` — ((칸 줄 폭 − 10) ÷ 3 − 12) ÷ 글꼴 배율)가 134 미만이면(412dp 폰도 · 화면 약 490dp 미만) 첫 칸은 '바이트' 만
+  (`METHOD_LONG_ROOM` — '바이트 (G92 · G76)' 굵게 15sp 가 128.7 + 약 4 % 여유. 옛 문턱 '글꼴 배율로 나눈 폭 420dp' 는 그 바로 위 420 ~ 432dp — 360dp 폰 · 글꼴 0.85배도 —
+  에서 자리가 125 뿐이라 '바이트 (G92 · …' 로 잘렸다, 검토 a4 · `ThreadLabelFitTest`). 글 크기는 칸 글 자리에서 정한다 —
+  칸 글 자리 ÷ 5 를 11 ~ 15sp 로 자름('전조 다이스' 가 글 크기의 약 4.8배 폭). Segmented 의 자동 줄임은 '…' 와 같이 쓰면 PC(JVM)에서 줄지 않고 잘려서
+  (Skia 문단의 `isLineEllipsized` 가 늘 false — 안드로이드는 줆) 360dp 130% 샷에서 '전조 다…' 로 잘렸다. `ThreadState.dieAllowed`(M · UN 외경)일 때만 보이고,
+  내경 · 관용 테이퍼로 가면 `switchInner` · `switchFamily` 가 바이트로 돌린다(되살린 상태도 같은 규칙, `pickMethod` 는 못 고르는 상태에서 다이스 · 전조를 받지 않는다).
+  전조를 고를 때 사이즈가 비었으면 종류를 UN · 묶음 20UN 으로 둔다(결정 D15 — 회사 롤 일곱이 모두 UN 20산, 사이즈가 있으면 그대로). 다른 방식에서 전조로 들어올 때만이고,
+  이미 전조인데 그 칸을 다시 누르면(`Segmented` 는 고른 칸도 `onSelect`) 아무것도 바꾸지 않는다 — 전조에서 고른 종류(M) · 묶음이 말없이 돌아가지 않게(검토 V3-1-4). 고름은 화면 상태(Saver).
 - **다이스 헤드 꼴**(`thread/DieCards.kt`): 같은 틀(키패드 묶음 · 결과 띠 '시작' · '끝' = X0 · 시작 Z / G1 끝 Z)에
   '다이스 헤드 설정'([나사 종류][사이즈][피치] → [가공 소재] 한 줄 전체 → [Z축 시작점][회전수 — 자리표시 'Vc 로'] → [가공 목표점][끝면 Z — `ThreadField.Z_REF` 칸을
   이름만 바꿔 씀(관용 테이퍼의 기준면 Z 와 같은 값 — 공작물 끝면), 빈칸 0] → 규격 한 줄) → '다이스 조건'([절삭 속도 Vc][이송 비율] → [카탈로그 절삭 속도 (Wagner)] 한 줄
@@ -589,6 +598,41 @@
 - **다이스 조건 저장**(`thread/DieStore.kt`): `DieStore(LocalAppState.current.store)` — 화면을 열 때 열쇠 12개(`thread/die/ratio` · `dwell` · `retract` · `float` · `throat` ·
   `vc` · `vc/P` … `vc/H`)를 읽고, 칸을 고치면(키패드가 누를 때마다) 바로 쓴다. 값은 쓴 그대로의 글, 빈칸 = 사용자 결정 처음 값(비율 0.96 · 멈춤 1 · 물러남 150) · 없음
   (Vc · 플로트 · 목). Vc 는 가공 소재(ISO 군)마다 — 소재를 안 고르면 `vc`. 카탈로그 절삭 속도 줄(`ThreadState.dieSpeed` — 출처 · 원문 재질 열쇠)은 견주기만 하는 화면 상태.
+- **전조 다이스 꼴**(`thread/RollCards.kt` — 2026-11-14, 사용자 결정 2026-11-11: 회사의 LMT Fette 축방향 전조 머리 EVOline, 계산은 `calc-design.md` '전조 다이스 헤드 (LMT Fette)'):
+  다이스와 같은 틀(키패드 묶음 · 결과 띠 '시작' · '끝' = X0 · 쓴 시작 Z(빈칸 5) / G1 끝 Z)에 결과를 위로(결정 D17):
+  (파랑 남은 값 · 빨강 멈춤) → '전조 다이스 설정'(부제 '단위 mm · X0 (머리가 중심)' 는 제목 아래 — 다이스처럼 오른쪽에 두면 360dp 130% 에서 제목이 세 줄로 갈렸다 —
+  [나사 종류][사이즈][피치] → [가공 소재] 한 줄 전체(비우면
+  '고르지 않음 (스테인리스로 봄)' — 뜻을 가르는 '고르지 않음' 을 앞에: '스테인리스 (STS316 등) — 고르지 않음' 은 360dp 130% 에서 '스테인리스 (STS316 등) — …' 로 잘려 고른 것처럼 읽혔다) → 소재가 스테인리스(M)이거나 비었을 때만 '스테인리스 강종 (Fette 재질 표)' [STS316 | STS304](처음 STS316) →
+  [머리 · 롤 ▾] 한 줄 전체(고를 것이 하나뿐이면 읽기만) → '소재 종류' [자동단조 | 자동핵사](처음 자동핵사 — '가공 소재' 와 헷갈리지 않게 이름을 따로) →
+  [Z축 시작점 — '기본 5'][회전수 — 쓰일 값의 숫자 '추천 527' · '회사 S…' · 사슬이 비면 '넣으세요' · 사이즈 전 스테인리스는 '자동'] → [가공 목표점][끝면 Z — '기본 0'] →
+  규격 한 줄 '… · 호칭 Ø… · 피치 … — 전조는 숫나사 · 정가공(Z−)만') → '전조 전 지름 (앞 공정 정삭 X)'(부제 '추천 값 — 회전수도 이 지름으로' / '회사 값 — …',
+  큰 글 'X18.106'(0.001 자리, 자동 값 색 28sp) + '이 프로그램에는 안 들어갑니다 — 앞 공정 정삭 X 에 쓰는 값', 선 아래 칸 셋 `rollBlankCells`: '회사 값 (자동핵사)'
+  ('Ø…' + 'YM · n개' / 회사 표 규격인데 아직 없으면 '—' + '확인 전 — 없음' / 회사 표 밖 '회사 롤 없음') · '추천 값'('Ø18.106' + 'Fette d2 − 0.03 · Ø18.050 ~ 18.162') ·
+  '전조 뒤 바깥지름'(급수 기본 2A · 6g 범위), 사이즈 전에는 안내 한 줄) → (노랑 — 숫자와 함께 나온 경고) → (파랑 요령 방향 `rollDirectionText` — 넣은 회전수 · 비율이
+  기준과 다르면 그 묶음 첫 요령 '회전수를 기준 527 보다 올렸습니다(620) — 올리면: 증상 → 대책 첫 문장 (카탈로그 인쇄 242)', 출처 있는 글이 없는 비율 내림은 안 띄움) →
+  '전조 결과'(8칸 `rollResultCells` — 회전수 S(아래 근거: 'Fette 추천 · STS316 30 m/min 아래 끝' · '회사 값 (자동핵사 · n개)' · '넣은 값' — 스테인리스가 아니면
+  '넣은 값 · 이 소재는 Fette 추천 없음'), 전조 속도 v(아래 '범위 30–50 m/min'), 이송 F('비율 0.961 · 회사 20산' · '비율 0.95 · Fette' · '넣은 비율 …'), 분당 이송,
+  가공 시간 (초), 머리 · 롤('F34 · AT08' / 'F2 · 회사 롤 없음', 아래 '회사 롤 · 카탈로그 Ø12–30'), 실제 전조 끝(끝 Z − 열림 행정 a), 전조 길이(끝면부터 + a · 선택표 최대)) →
+  NC `NcCard`('전조 다이스 프로그램' — 칩 '전조 구간만 — T · M03 없음' · 'G99 회전당 이송 상태로' · 'F1.22 = 회사 20산'(그 밖 'F = 피치 × 0.95'), 설명 `rollNcExplain`:
+  이송을 멈추면 머리가 a 만큼 더 나가며 열림 · 다음 공작물 전에 닫기 · G97 S 는 근거 값 · 전조 전 지름은 NC 에 없음) → '전조 조건'(부제 '회사 값 — 고치면 바로 저장 ·
+  빈칸은 처음 값': [이송 비율 F/P — '기본 0.961 (F1.22)' · 20산이 아니면 '기본 0.95'][끝 멈춤 '기본 1' 초] / [물러남 Z '기본 150'][빈 반 칸], 아래 참고 한 줄
+  `rollReferenceText` 'Fette 이송 0.95 × 피치 — 출처 · 고른 강종 속도 범위 — 출처'(회사 값과 섞지 않음)) → '회전수 · 이송 조정 요령'(`ExpandableHint` `rollTipsHint` — 묶음 일곱
+  `ROLL_TIP_GROUPS`, 줄마다 'roll-heads.json 의 증상 → 대책 첫 문장 (출처 표)', 비율 내림은 'Fette 자료에 없음', 출처 없는 글은 넣지 않음).
+  화면에 쓸 때만 범위 '~' · '× 수' 를 줄 안 바꿈 빈칸으로 묶고(`screenText`), 줄표로 이은 출처 · 범위('F1–F3 설명서' · '30–50' · 'Ø12–30')는 줄표 양옆에,
+  영숫자 사이 빗금('F01/K01' · 'm/min')은 빗금 뒤에 낱말 이음, 출처 이름 'F RN' 은 줄 안 바꿈 빈칸(`keepDash` — 전조 화면(요령 카드 펼친 글도) · 머리 시트 아래 글 · 전조 도움말에만, 공용 `keepWords` · 테이퍼 'T1–T2' 는 그대로), 결과 칸 아래 글은 `keepWords`(골든이 보는 글 함수는 그대로).
+  요령 글의 소수점은 점, 설명서 이름은 줄표 'F1–F3'(붙임표 'F1-F3' 은 `keepDash` 가 못 묶음), 다른 묶음은 화면 묶음 이름('전조 전 지름이 크면')으로 가리키고
+  증상에 출처 이름을 다시 적지 않음(roll-heads.json 의 우리 한국어 글 칸 — 출처 원문 quote 는 그대로).
+  사람이 넣는 전조 전 지름 칸은 없다(결정 F9 — NC 에 안 들어감). `fields` 는 다이스와 같은 넷(Z 시작 · 회전수 · Z 끝 · 끝면 Z)이고 `bad()` 도 그 넷, 전조 조건 칸은
+  `rollBad`(비율 ≤ 0 · 찍힐 F 0 · 멈춤 < 0 · 크기 한도 — 계산기 BAD_INPUT 규칙). 남은 값(파랑)은 사이즈 · 가공 목표점 둘(시작 Z 는 빈칸 5 — F4), 회전수 사슬이 비면
+  '회전수 (이 소재는 추천 값이 없음)'. Z 순서 멈춤은 다이스와 같은 다섯 까닭(`rollFlagged`)이고, 글 · 빨간 테의 'Z축 시작점(Z…)' 은 쓴 시작 Z(빈칸 5).
+  칸 묶음: Z축 시작점 → 회전수 → 가공 목표점 → 끝면 Z → 이송 비율 → 끝 멈춤 → 물러남 Z(키패드 id `roll.…`). 키패드 결과 한 줄은 G1 줄.
+  머리 · 롤 시트(`Pick.ROLL_HEAD` — 결정 U-7): 회사 짝 먼저('F34 · AT08' + '회사 롤 · 처음 값' / '회사 롤'), 그다음 지름 범위(카탈로그)에 드는 다른 EVOline 머리
+  ('F23' + '회사 롤 없음 · Ø8–22', 처음 값이면 뒤에 '· 처음 값'). 규격의 처음 값을 고르면 `rollHead` = null(처음 값을 따름), 사이즈를 바꿔 고른 머리가 새 선택지에 없으면 null.
+  사이즈 시트(UN · 전조일 때만): 맨 위 '회사 롤 규격 (20산)' 칩 일곱(`CompanyRolls.specs` — 누르면 그 20산 줄 · 묶음 20UN, `pickCompanyRoll`), 아래는 바이트 · 절삭 다이스와 같은 시트.
+  가공 소재 시트 설명 글은 전조 갈래 '전조: 회사 회전수는 스테인리스(M) 기준입니다. 다른 소재를 고르면 Fette 추천이 없어 회전수를 넣어야 합니다. 고르지 않으면 스테인리스로 봅니다.'
+- **전조 조건 저장**(`thread/RollStore.kt`): `RollStore(LocalAppState.current.store)` — 화면을 열 때 열쇠 셋(`thread/roll/ratio` · `dwell` · `retract`)을 읽고 칸을 고치면
+  바로 쓴다. 빈칸 = 처음 값(비율은 사슬 — 20산 회사 F1.22 → Fette 0.95, 멈춤 1 · 물러남 150). 다이스 조건(`thread/die/…`)과 섞지 않는다.
+  전조 머리 · 소재 종류 · 강종은 화면 상태(Saver 끝 세 칸 — 31칸, 옛 글 28 · 25 · 20칸은 처음 값 null · 자동핵사 · STS316).
 - **인서트**: 바이트 고급 설정의 [공차 목표][인선 R] 아래 한 줄 전체 `InsertField`(관용 테이퍼는 [시작 X 여유] 아래) — `ThreadState.insertChoices` =
   `ThreadInserts.match(내외, 꼴(UN · BSPT(PT) · NPT), 산수)`, 미터는 자료가 없어 칸이 없다(`hasInsertData`), 맞는 줄이 없으면 읽기만 '맞는 줄 없음' + 자료 범위 한 줄.
   시트 줄 '3ER20UN · VARDEX' · '16 ER 20 UN · Carmex'(아래 왼손 이름 · 날 끝 R · 출처). 고르면(`pickInsert`) 카탈로그 R 이 있으면 곧은 나사의 인선 R 칸에 넣고
@@ -596,7 +640,9 @@
   넣으세요. 풀 프로파일이라 산봉우리도 만듦(…) · IC 3/8" · 출처 …'). 내경이면 시트 줄에 '최소 구멍 Ø…'(`ThreadInsert.minBore`)과 `ThreadState.insertBore`(곧은 나사 =
   급수 안지름 최소, 관용 = 끝 Z 안지름)가 더 작을 때 '(구멍 Ø… 에 안 들어감)', 칸 아래 노란 `WarningBanner` `insertBoreWarning`(구멍 < 최소 구멍 · (구멍 − 최소 구멍)/2 < 시작 X 여유).
   고른 인서트는 열쇠(`insertKey`)로 저장하고 지금 내외 · 종류 · 산수에 맞을 때만 보인다(`shownInsert`).
-- **도움말** `ThreadHelp` 일곱 묶음: 나사 고르기 · 값 넣기 · 고급 공차 및 인선 설정(+ 인서트) · G92 · G76 프로그램과 분석 · 관용 테이퍼 나사 (PT · NPT) · 다이스 헤드 · 경고(+ 다이스).
+- **도움말** `ThreadHelp` 여덟 묶음: 나사 고르기 · 값 넣기 · 고급 공차 및 인선 설정(+ 인서트) · G92 · G76 프로그램과 분석 · 관용 테이퍼 나사 (PT · NPT) · 전조 다이스 ·
+  다이스 헤드(첫 글 '절삭(체이서) 다이스') · 경고(+ 다이스). '전조 다이스' 묶음은 고르기 · 머리 · 롤 표(회사 짝 · 카탈로그 지름 범위 · 열림 행정 a) · 전조 전 지름 읽는 법
+  (NC 에 안 들어감 — 앞 공정 정삭 X) · 회전수 · 이송 사슬 · STS316 / STS304 · 결과와 경고 · 요령 전문(출처마다, '그 밖' 묶음도) — 회사 롤 표 · 카탈로그 자료에서 만든다.
 - 칸 묶음('다음'): Z축 시작점 → 회전수 → 가공 목표점 → (고급 설정을 펴면 공차 목표 → 인선 R → 정삭 횟수 → 최소 절입 → 정삭 여유 → 시작 X 여유) → 첫 절입.
   키패드 결과 한 줄은 G76 둘째 줄. 멈춘 경고가 고급 설정 칸을 짚으면 접이가 저절로 펴진다.
 - **G76 카드**(원본 ⑫ 'G76 [P 02] 1060 [Q 35] [R 0.02]'): 두 줄을 낱말 상자로 — **테두리 칸 = 눌러서 고치는 값**(첫 줄 P m · Q Δdmin · R d, 둘째 줄 Z · Q Δd — 누르면 그 칸
@@ -647,7 +693,15 @@
   `ThreadShotsTest.die`(`thread-die` · `thread-die-chasers` · `thread-die-empty` · `thread-die-speed-sheet` · `thread-insert-sheet` · `thread-insert`, 360dp 130% 넷) ·
   `help`(일곱 묶음 단언 + `thread-help-pipe` · `thread-help-die`), `Stage3RobustnessTest.dieThread`(다이스 흔들기) · `drawRandom` · `drawExtremes`(다이스 화면 그리기),
   `UiMonkeyTest.thread`(다이스 · 카탈로그 시트 · 인서트 시트 시작점).
-  상태는 jvmTest `screens/thread/ThreadExample.kt`.
+  전조 다이스(2026-11-14): `ThreadRollStateTest`(칸 넷 · 3/4-20 손 계산 = dV 18.105604 · S527 · F1.22 · 비율 0.960630 · 시간 2.994276 · F34 · AT08 · 실제 끝 −20.37 ·
+  STS304 S615, 결과 칸 · 지름 칸 글 · 자리표시(추천 527 · 기본 5 · 비율 0.961) · 회전수 · 비율 사슬 · 저장소 왕복(열쇠 셋, 다이스 열쇠와 따로) · 바이트로 돌아감(내경 · 관용) ·
+  D15 · 회사 롤 규격 고르기 · U-7 머리 되돌림 · 저장 31칸 + 옛 글 셋 · 범위 밖 칸 ⇔ 계산기 BAD_INPUT · Z 순서 다섯 까닭 · 맞는 머리 없음 · 숫자 든 노랑 · 요령 방향 글
+  (올림 · 내림 · 같음 × 회전수 · 비율, 비율 내림은 안내 없음) · 요령 카드 글 · 출처 표 · 세 칸 차례 ↔ method), 골든 `thread-roll` · `thread-roll-empty`(18개째 — 입력 · 세 칸 ·
+  자리표시 · 머리 칸과 시트 줄 · 경고 글 · 지름 칸 · 참고 줄 · 요령 · S · v · F · NC · 결과 칸 · 요령 방향, 3/4-20 은 회전수 620 · 비율 1.04 · 멈춤 0 으로 고친 노랑 ·
+  방향도), `ThreadShotsTest.roll`(`thread-roll` · `thread-roll-nc` · `thread-roll-empty`(세 칸) · `thread-roll-head-sheet` · `thread-roll-size-sheet` · `thread-roll-warn` ·
+  `thread-roll-other` · 메뉴 `thread-menu` · `thread-menu-round`, 각 `-w360-fs130`) · `help`(여덟 묶음 + `thread-help-roll`), `Stage3RobustnessTest.rollThread`
+  (`randomRoll` 흔들기 1만 번) · `drawRandom`(전조 40 회 — 키패드 · 머리 · 사이즈 · 소재 시트) · `drawExtremes`(전조 칸 넷 · 전조 조건 칸 셋), `UiMonkeyTest.thread`(전조 시작점 둘).
+  상태는 jvmTest `screens/thread/ThreadExample.kt`(`threadRoll` · `threadRollEmpty`).
 
 ## 턴밀 극좌표 화면 (`screens/PolarScreen.kt`, `screens/polar/`)
 | 파일 | 내용 |

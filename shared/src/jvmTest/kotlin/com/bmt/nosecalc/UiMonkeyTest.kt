@@ -110,6 +110,8 @@ import com.bmt.nosecalc.screens.thread.threadPtExt
 import com.bmt.nosecalc.screens.thread.threadPtInt
 import com.bmt.nosecalc.screens.thread.threadOriginal
 import com.bmt.nosecalc.screens.thread.threadReverse
+import com.bmt.nosecalc.screens.thread.threadRoll
+import com.bmt.nosecalc.screens.thread.threadRollEmpty
 import com.bmt.nosecalc.screens.thread.threadWarn
 import com.bmt.nosecalc.screens.thread.threadZOrder
 import com.bmt.nosecalc.screens.triangle.TriangleState
@@ -1218,7 +1220,7 @@ class UiMonkeyTest {
         cfgShift = 1,
     )
 
-    /** 나사 G76(규격 · 급수 · 방향 · 고급 설정 접이 · 분석표 · 관용 테이퍼 · 다이스 헤드 · 인서트) */
+    /** 나사 G76(규격 · 급수 · 방향 · 고급 설정 접이 · 분석표 · 관용 테이퍼 · 다이스 헤드 · 전조 다이스 · 인서트) */
     @Test
     fun thread() = monkey(
         "thread",
@@ -1241,6 +1243,8 @@ class UiMonkeyTest {
             } to mid,
             screen("다이스 헤드 처음", Feature.THREAD) { ThreadScreen(threadDieEmpty()) } to shallow,
             screen("다이스 카탈로그 시트", Feature.THREAD) { ThreadScreen(threadDie(), sheet = Pick.DIE_SPEED) } to shallow,
+            screen("전조 다이스 3/4-20", Feature.THREAD) { ThreadScreen(threadRoll()) } to mid,
+            screen("전조 다이스 처음", Feature.THREAD) { ThreadScreen(threadRollEmpty()) } to shallow,
             screen("인서트 시트", Feature.THREAD) { ThreadScreen(threadOriginal(), sheet = Pick.INSERT) } to shallow,
             screen("나사 극단", Feature.THREAD) {
                 ThreadScreen(

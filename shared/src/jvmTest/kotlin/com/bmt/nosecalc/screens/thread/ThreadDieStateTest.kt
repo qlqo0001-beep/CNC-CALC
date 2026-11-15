@@ -179,7 +179,7 @@ class ThreadDieStateTest {
         // 2026-11-05 글: 앞 20칸 + 관용 크기 · 묶음 · 낱말 + 새 칸 둘 = 25칸
         val saved = with(ThreadState.Saver) { scope.save(threadPtInt()) } as List<*>
         val old = saved.take(25)
-        assertEquals(28, saved.size)
+        assertEquals(31, saved.size)
         val back3 = ThreadState.Saver.restore(old)!!
         assertEquals(ThreadMethod.BITE, back3.method)
         assertNull(back3.insert)
@@ -190,7 +190,10 @@ class ThreadDieStateTest {
     /** 칸마다 범위 밖 값: 화면이 짚는 칸(숫자칸 bad · 다이스 조건 dieBad)이 있으면 계산기가 BAD_INPUT, 없으면 BAD_INPUT 이 아니다 */
     @Test
     fun badFieldsMatchCalc() {
-        val values = listOf("-20000", "-1", "-0.1", "0", "0.0002", "0.5", "1", "3", "100000", "100001", "6000", "20000", "2000000", "NaN", "Infinity")
+        // 회전수 경계(검토 a1 — 전조와 같은 꼴): 위 한도는 찍힐 S(반올림)로 — 100000.3 은 S100000 으로 풀리고 100000.5 는 멈춘다
+        val values = listOf(
+            "-20000", "-1", "-0.1", "0", "0.0002", "0.5", "0.99", "1", "3", "100000", "100000.3", "100000.5", "100001", "6000", "20000", "2000000", "NaN", "Infinity",
+        )
         var checked = 0
         var flagged = 0
         for (v in values) {

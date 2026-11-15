@@ -131,3 +131,24 @@ internal fun threadDieStore(): Map<String, String> = mapOf(
 
 /** 다이스 헤드 처음(사이즈 · 값 없음) — 파란 안내 */
 internal fun threadDieEmpty() = ThreadState(method = ThreadMethod.DIE)
+
+/*
+ * 전조 다이스(2026-11-14)의 상태. 회사 값(전조 전 지름 · S)은 아직 없어(null) 회전수는 Fette 추천, 전조 전 지름은 Fette 추천 한 값으로 나온다.
+ * 끝 Z −16.37 은 새로 지은 값이다(회사 프로그램 값을 옮기지 않는다). 전조 조건(회사 값)은 저장소라 이 상태에 없다 — 비우면 처음 값.
+ */
+
+/**
+ * 전조 다이스: 외경 3/4-20 UNEF (20UN — 회사 롤 규격 줄, 묶음 20UN) · 소재 비움(스테인리스로 봄 · STS316) · Z 시작 빈칸(5) · 끝 −16.37 · 끝면 빈칸(0).
+ * 손 계산(calc RollHeadCalcTest 와 같음): dV = 2A 유효지름 가운데 − 0.03 = 18.105604, S = 1000 × 30 / (π × 18.105604) = 527.4 → S527,
+ * F1.22(회사 20산 — 비율 1.22 / 1.27 = 0.960630), 시간 = 60 × 21.37 / (527 × 1.22) + 1 = 2.994276 초, 머리 F34 · AT08(회사 처음 값) · a 4 → 실제 끝 −20.37
+ */
+internal fun threadRoll() = ThreadState(
+    family = ThreadFamily.UN,
+    spec = un("3/4", 20),
+    unGroup = UnGroup.UN20,
+    values = mapOf("zEnd" to "-16.37"),
+    method = ThreadMethod.ROLL,
+)
+
+/** 전조 다이스 처음(가공 방식만 — 사이즈 · 값 없음): 파란 안내 · 가공 방식 세 칸 */
+internal fun threadRollEmpty() = ThreadState(method = ThreadMethod.ROLL)
